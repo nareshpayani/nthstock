@@ -138,6 +138,7 @@ nthstock/
 │   ├── tokens/                # design tokens → CSS variables + Tailwind preset
 │   ├── contracts/             # Zod schemas, API + WS message types
 │   ├── marketData/            # feed adapters: mock (faker + GBM), vendor (later)
+│   ├── paperEngine/           # order state machine, fill matching, funds ledger, P&L (ADR 0004)
 │   ├── apiClient/             # typed REST + WS client (web and mobile)
 │   ├── config/                # eslint, tsconfig, prettier, vitest presets
 │   └── utils/                 # INR formatting, market hours, IST dates

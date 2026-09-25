@@ -66,7 +66,7 @@ API shapes are nthstock's own contracts, not copies of Paytm Money's.
 
 ## E1: Foundation + app shell
 
-- [ ] T-001 [INT] Write ADR 0004 "Mock backend and paper engine" covering isomorphic packages/marketData and new packages/paperEngine, in-memory repos in apps/api, apps/realtime with Redis pub/sub, and the VITE_API_MODE switch. Depends: none. Done when: docs/adr/0004-mock-backend-and-paper-engine.md has Status, Context, Decision and Consequences, and owner approval is recorded in the PR.
+- [x] T-001 [INT] Write ADR 0004 "Mock backend and paper engine" covering isomorphic packages/marketData and new packages/paperEngine, in-memory repos in apps/api, apps/realtime with Redis pub/sub, and the VITE_API_MODE switch. Depends: none. Done when: docs/adr/0004-mock-backend-and-paper-engine.md has Status, Context, Decision and Consequences, and owner approval is recorded in the PR.
 - [ ] T-002 [INT] Scaffold packages/utils with the shared tsconfig, Vitest, a dist build and a named-export index. Depends: none. Done when: @nthstock/utils imports from both apps/web and apps/api and npm run check is green.
 - [ ] T-003 [INT] Add formatInr(paise), formatInrCompact(paise) for L and Cr, and parseRupeesToPaise(text), integer-only. Depends: T-002. Done when: tests cover 0, negatives, 10000050 → "₹1,00,000.50" and 1.2 Cr compact, and "12.345" is rejected.
 - [ ] T-004 [INT] Add formatPct and formatChange returning text, direction and a screen-reader label. Depends: T-002. Done when: formatChange(125) returns text "▲ 1.25%", direction "up" and srLabel "up 1.25 percent", and zero returns a flat marker.
