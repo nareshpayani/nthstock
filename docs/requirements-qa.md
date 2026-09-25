@@ -106,3 +106,15 @@
 | WF-07 | Observability? | OpenTelemetry → Grafana stack (Prometheus, Loki, Tempo); Sentry for frontend errors (free tier) | As recommended. | Default accepted |
 | WF-08 | Paid tools and cloud budget? | Free tiers until Phase 6; owner approves any paid service before it is added | As recommended. | Default accepted |
 | WF-09 | Branch protection on main? | Owner enables: PR required, CI checks required, no force-push | As recommended. | Default accepted |
+
+## Round 8: Web UI architecture (answered 2026-09-25)
+Recorded as ADR 0005 (`docs/adr/0005-web-ui-architecture.md`).
+| ID | Question | Recommended default | Answer | Status |
+|---|---|---|---|---|
+| UI-01 | File-based or code-based routes? | File-based (TanStack Router Vite plugin) | As recommended. | Default accepted |
+| UI-02 | Separate orders/positions/holdings/funds features, or one portfolio feature? | Separate, one per epic | As recommended. | Default accepted |
+| UI-03 | Where does the live quote store live? | `packages/apiClient`, shared with the mobile app | As recommended. | Default accepted |
+| UI-04 | How are import boundaries enforced? | ESLint built-in `no-restricted-imports`, no new dependency | As recommended. | Default accepted |
+| UI-05 | Component variant styling? | `class-variance-authority` + `tailwind-merge` | As recommended. | Default accepted |
+| UI-06 | Import alias inside the app? | `@/` → `apps/web/src` | As recommended. | Default accepted |
+| UI-07 | Storybook scope? | `packages/ui` plus feature components on MSW data | As recommended. | Default accepted |

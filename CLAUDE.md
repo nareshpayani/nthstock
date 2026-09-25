@@ -124,10 +124,11 @@ nthstock/
 ├── apps/
 │   ├── web/                   # Vite React SPA
 │   │   └── src/
-│   │       ├── app/           # router, providers, layout
-│   │       ├── features/      # dashboard, watchlist, search, indices, orders, portfolio…
-│   │       │   └── <feature>/ { components/, hooks/, api/, store/, *.test.tsx }
-│   │       ├── shared/        # cross-feature hooks, utils
+│   │       ├── app/           # providers, layouts (AppShell), router, queryClient
+│   │       ├── routes/        # TanStack Router file routes; thin: loader prefetch → feature page
+│   │       ├── features/      # dashboard, watchlist, search, stockDetail, orderTicket, orders… (ADR 0005)
+│   │       │   └── <feature>/ { index.ts, components/, hooks/, api/, store/, model/, strings.ts }
+│   │       ├── shared/        # cross-feature components, hooks, lib
 │   │       └── mocks/         # MSW handlers
 │   ├── api/                   # Fastify modular monolith
 │   │   └── src/modules/<module>/ { routes.ts, service.ts, repo.ts, schema.ts, *.test.ts }
@@ -159,6 +160,9 @@ nthstock/
 - Money: never floats. Store paise as integers; format with `Intl.NumberFormat('en-IN')` (₹, lakh/crore grouping).
 - Time: store UTC, display IST (`Asia/Kolkata`). Market hours and holidays live in `packages/utils`.
 - Every API and WS message is typed from `packages/contracts`.
+- Web UI layers and patterns follow ADR 0005: imports go routes → features → shared → packages;
+  features are imported only through their `index.ts`; server state in TanStack Query, URL state in
+  search params, UI-only state in Zustand; live prices only through `useQuote` / `<PriceCell>`.
 - UI strings kept in one place per feature (no i18n library in v1).
 - Accessibility: WCAG 2.2 AA. Colour is never the only up/down signal (▲▼ + text).
 
