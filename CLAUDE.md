@@ -2,7 +2,7 @@
 
 > Status: **v0.3** (2026-09-25). All requirement questions settled; full Q&A log in `docs/requirements-qa.md`.
 > Owner: Naresh Payani (@nareshpayani). Every agent working on this project reads this file first.
-> No app code yet. Execution starts with Phase 1 after owner sign-off.
+> Phase 1 (Foundation and design system) in progress.
 
 ## 0. Decisions (confirmed by owner, 2026-09-25)
 | # | Topic | Decision |

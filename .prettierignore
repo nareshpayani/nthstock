@@ -1,0 +1,7 @@
+node_modules
+dist
+coverage
+.turbo
+package-lock.json
+# Markdown tables stay hand-formatted
+*.md
