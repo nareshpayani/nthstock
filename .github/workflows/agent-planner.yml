@@ -1,0 +1,50 @@
+name: 'Agent: Planner'
+
+# Breaks an approved phase/feature into a spec PR + story issues.
+# Starts when the owner labels an issue `plan:approved`, or manually.
+
+on:
+  issues:
+    types: [labeled]
+  workflow_dispatch:
+    inputs:
+      request:
+        description: 'What to plan (e.g. "Phase 1 step 2: design tokens")'
+        required: true
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+  id-token: write
+
+concurrency:
+  group: agent-planner
+  cancel-in-progress: false
+
+jobs:
+  plan:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.label.name == 'plan:approved' && github.event.sender.login == (vars.OWNER_LOGIN || 'nareshpayani'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      HAS_AGENT_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN != '' }}
+    steps:
+      - uses: actions/checkout@v4
+      - if: env.HAS_AGENT_TOKEN != 'true'
+        run: echo "::notice::CLAUDE_CODE_OAUTH_TOKEN is not set; agent skipped. See docs/agent-workflow.md."
+      - if: env.HAS_AGENT_TOKEN == 'true'
+        uses: anthropics/claude-code-action@v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          prompt: |
+            REPO: ${{ github.repository }}
+            TRIGGER ISSUE: ${{ github.event.issue.number || 'none (manual run)' }}
+            REQUEST: ${{ github.event.inputs.request || 'see the trigger issue title and body' }}
+
+            Act as the Planner. Follow .claude/agents/planner.md exactly.
+          claude_args: |
+            --max-turns 40
+            --allowedTools "Read,Glob,Grep,Edit,Write,Bash(git:*),Bash(gh issue:*),Bash(gh pr create:*),Bash(gh pr view:*),Bash(gh label list:*)"

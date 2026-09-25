@@ -1,0 +1,98 @@
+name: 'Agent: Fixer'
+
+# Fixes blocking review findings (label `agent:fix-needed`) or a red CI run on an agent PR,
+# pushing to the same branch. The push re-triggers the Reviewer.
+
+on:
+  pull_request:
+    types: [labeled]
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+  actions: read
+  id-token: write
+
+jobs:
+  resolve-target:
+    runs-on: ubuntu-latest
+    outputs:
+      pr: ${{ steps.target.outputs.pr }}
+      branch: ${{ steps.target.outputs.branch }}
+      reason: ${{ steps.target.outputs.reason }}
+    steps:
+      - id: target
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVENT: ${{ github.event_name }}
+          LABEL: ${{ github.event.label.name }}
+          SENDER: ${{ github.event.sender.login }}
+          OWNER: ${{ (vars.OWNER_LOGIN || 'nareshpayani') }}
+          BOT: ${{ (vars.AGENT_BOT_LOGIN || 'claude[bot]') }}
+          LABEL_PR: ${{ github.event.pull_request.number }}
+          LABEL_BRANCH: ${{ github.event.pull_request.head.ref }}
+          LABEL_HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
+          RUN_CONCLUSION: ${{ github.event.workflow_run.conclusion }}
+          RUN_BRANCH: ${{ github.event.workflow_run.head_branch }}
+          RUN_EVENT: ${{ github.event.workflow_run.event }}
+          RUN_HEAD_REPO: ${{ github.event.workflow_run.head_repository.full_name }}
+        run: |
+          if [ "$EVENT" = "pull_request" ]; then
+            if [ "$LABEL" = "agent:fix-needed" ] && [ "$LABEL_HEAD_REPO" = "$GITHUB_REPOSITORY" ] \
+               && { [ "$SENDER" = "$OWNER" ] || [ "$SENDER" = "$BOT" ]; }; then
+              echo "pr=$LABEL_PR" >> "$GITHUB_OUTPUT"
+              echo "branch=$LABEL_BRANCH" >> "$GITHUB_OUTPUT"
+              echo "reason=review findings" >> "$GITHUB_OUTPUT"
+            fi
+          elif [ "$RUN_CONCLUSION" = "failure" ] && [ "$RUN_EVENT" = "pull_request" ] \
+               && [ "$RUN_HEAD_REPO" = "$GITHUB_REPOSITORY" ] \
+               && [[ "$RUN_BRANCH" == claude/* ]]; then
+            pr=$(gh pr list --repo "$GITHUB_REPOSITORY" --head "$RUN_BRANCH" --state open \
+              --json number --jq '.[0].number')
+            if [ -n "$pr" ]; then
+              echo "pr=$pr" >> "$GITHUB_OUTPUT"
+              echo "branch=$RUN_BRANCH" >> "$GITHUB_OUTPUT"
+              echo "reason=failing CI (run ${{ github.event.workflow_run.html_url }})" >> "$GITHUB_OUTPUT"
+            fi
+          fi
+
+  fix:
+    needs: resolve-target
+    if: needs.resolve-target.outputs.pr != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      HAS_AGENT_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN != '' }}
+    concurrency:
+      group: agent-fixer-${{ needs.resolve-target.outputs.pr }}
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.resolve-target.outputs.branch }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - if: env.HAS_AGENT_TOKEN != 'true'
+        run: echo "::notice::CLAUDE_CODE_OAUTH_TOKEN is not set; agent skipped. See docs/agent-workflow.md."
+      - if: env.HAS_AGENT_TOKEN == 'true'
+        uses: anthropics/claude-code-action@v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          allowed_bots: ${{ (vars.AGENT_BOT_LOGIN || 'claude[bot]') }}
+          prompt: |
+            REPO: ${{ github.repository }}
+            PR NUMBER: ${{ needs.resolve-target.outputs.pr }}
+            BRANCH: ${{ needs.resolve-target.outputs.branch }}
+            REASON: ${{ needs.resolve-target.outputs.reason }}
+
+            Act as the Fixer. Follow .claude/agents/fixer.md exactly.
+          claude_args: |
+            --max-turns 60
+            --allowedTools "Read,Glob,Grep,Edit,Write,Bash(npm:*),Bash(npx:*),Bash(node:*),Bash(git:*),Bash(gh pr:*),Bash(gh run view:*),Bash(gh api:*)"

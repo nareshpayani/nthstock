@@ -1,0 +1,36 @@
+name: 'Agent: Sync labels'
+
+# Creates or updates the labels the agent team uses. Run once manually, and on changes to this file.
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: [.github/workflows/agent-labels.yml]
+
+permissions:
+  issues: write
+
+jobs:
+  labels:
+    runs-on: ubuntu-latest
+    steps:
+      - env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -e
+          create() { gh label create "$1" --repo "$GITHUB_REPOSITORY" --color "$2" --description "$3" --force; }
+          create "plan:approved"     "0E8A16" "Owner approved: Planner breaks this into a spec + stories"
+          create "spec"              "5319E7" "PR containing a feature spec; merging it releases its stories"
+          create "story"             "1D76DB" "A user story"
+          create "bug"               "D73A4A" "Something is broken"
+          create "agent:backlog"     "C5DEF5" "Waiting for its spec PR to be merged"
+          create "agent:ready"       "FBCA04" "Developer agent will pick this up"
+          create "agent:in-progress" "F9D0C4" "Developer agent is working on it"
+          create "agent:pr"          "BFD4F2" "PR opened by the Developer agent"
+          create "agent:fix-needed"  "E99695" "Reviewer found blocking issues; Fixer agent will fix"
+          create "ready-to-merge"    "0E8A16" "Reviewer approved and CI green: owner can merge"
+          create "needs-human"       "B60205" "Agents stopped; owner decision needed"
+          for area in web api ui infra docs; do
+            create "area:$area" "EDEDED" "Touches $area"
+          done

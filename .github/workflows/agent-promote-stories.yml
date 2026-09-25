@@ -1,0 +1,29 @@
+name: 'Agent: Promote stories'
+
+# When the owner merges a spec PR, its stories move from `agent:backlog` to `agent:ready`,
+# which starts the Developer. Merging the spec is the approval.
+
+on:
+  pull_request:
+    types: [closed]
+
+permissions:
+  issues: write
+  pull-requests: read
+  actions: write
+
+jobs:
+  promote:
+    if: github.event.pull_request.merged && contains(github.event.pull_request.labels.*.name, 'spec')
+    runs-on: ubuntu-latest
+    steps:
+      - env:
+          GH_TOKEN: ${{ github.token }}
+          SPEC_PR: ${{ github.event.pull_request.number }}
+        run: |
+          gh issue list --repo "$GITHUB_REPOSITORY" --label agent:backlog --state open --limit 100 \
+            --search "\"Spec PR: #$SPEC_PR\" in:body" --json number --jq '.[].number' |
+          while read -r issue; do
+            gh issue edit "$issue" --repo "$GITHUB_REPOSITORY" --add-label agent:ready --remove-label agent:backlog
+            gh workflow run agent-developer.yml --repo "$GITHUB_REPOSITORY" -f issue="$issue"
+          done
