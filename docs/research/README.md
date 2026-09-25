@@ -27,4 +27,4 @@ Guardrails: order placement, modification and cancellation requests are blocked 
 Cookies, headers and tokens are never written. Values under sensitive keys, and anything that
 looks like a token, email or phone number, are redacted. The browser session is not saved.
 
-Document 1 (`paytm-money-equity.md`) is written from this output.
+Document 1 (the Paytm Money research) is written from this output and kept out of this public repo.

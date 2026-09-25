@@ -2,7 +2,7 @@
 
 > Status: draft for owner review, 2026-09-25. Inputs: CLAUDE.md §0 and §4 (decisions D1–D11),
 > `docs/requirements-qa.md` (all 7 rounds), the owner's Paytm Money screenshot, and Document 1
-> (`paytm-money-equity.md`, the Paytm Money capture). The broker comparison in §4 is based on public,
+> (the Paytm Money capture, kept private and outside this repo). The broker comparison in §4 is based on public,
 > general knowledge of each product and was not re-verified against their live apps.
 > Items marked **Open** still need an owner decision. Everything else was already agreed in the Q&A rounds.
 
