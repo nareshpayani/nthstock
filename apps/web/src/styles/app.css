@@ -2,6 +2,7 @@
 @import '@nthstock/tokens/fonts.css';
 @import '@nthstock/tokens/tokens.css';
 @import '@nthstock/tokens/tailwind.css';
+@import '@nthstock/ui/styles.css';
 
 @layer base {
   html {
