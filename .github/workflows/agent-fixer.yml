@@ -1,7 +1,11 @@
 name: 'Agent: Fixer'
 
-# Fixes blocking review findings (label `agent:fix-needed`) or a red CI run on an agent PR,
-# pushing to the same branch. The push re-triggers the Reviewer.
+# Self-healing CI. Fixes, on the PR's own branch:
+#   - blocking review findings (label `agent:fix-needed`),
+#   - red CI on any owner, agent or Dependabot PR,
+# and when CI goes red on main, opens a `claude/fix-main-*` PR (main itself is never pushed to).
+# An hourly sweep catches what events miss: Dependabot-triggered runs get no secrets, and a PR
+# that went red because main was broken needs another look once main is green again.
 
 on:
   pull_request:
@@ -9,6 +13,9 @@ on:
   workflow_run:
     workflows: [CI]
     types: [completed]
+  schedule:
+    - cron: '17 * * * *'
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -21,6 +28,7 @@ jobs:
   resolve-target:
     runs-on: ubuntu-latest
     outputs:
+      mode: ${{ steps.target.outputs.mode }}
       pr: ${{ steps.target.outputs.pr }}
       branch: ${{ steps.target.outputs.branch }}
       reason: ${{ steps.target.outputs.reason }}
@@ -33,52 +41,122 @@ jobs:
           SENDER: ${{ github.event.sender.login }}
           OWNER: ${{ (vars.OWNER_LOGIN || 'nareshpayani') }}
           BOT: ${{ (vars.AGENT_BOT_LOGIN || 'claude[bot]') }}
+          MAX_ATTEMPTS: ${{ (vars.AGENT_MAX_CI_FIX_ATTEMPTS || '3') }}
           LABEL_PR: ${{ github.event.pull_request.number }}
           LABEL_BRANCH: ${{ github.event.pull_request.head.ref }}
           LABEL_HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
           RUN_CONCLUSION: ${{ github.event.workflow_run.conclusion }}
           RUN_BRANCH: ${{ github.event.workflow_run.head_branch }}
+          RUN_SHA: ${{ github.event.workflow_run.head_sha }}
           RUN_EVENT: ${{ github.event.workflow_run.event }}
+          RUN_URL: ${{ github.event.workflow_run.html_url }}
           RUN_HEAD_REPO: ${{ github.event.workflow_run.head_repository.full_name }}
         run: |
+          set -euo pipefail
+          repo="$GITHUB_REPOSITORY"
+          emit() { # mode pr branch reason
+            { echo "mode=$1"; echo "pr=$2"; echo "branch=$3"; echo "reason=$4"; } >> "$GITHUB_OUTPUT"
+            echo "Target: mode=$1 pr=$2 branch=$3 ($4)"
+          }
+          fix_main_pr_open() {
+            [ -n "$(gh pr list --repo "$repo" --state open --limit 100 --json headRefName \
+              --jq '.[] | select(.headRefName | startswith("claude/fix-main-")) | .headRefName')" ]
+          }
+          main_is_red() {
+            [ "$(gh run list --repo "$repo" --workflow ci.yml --branch main --event push \
+              --status completed --limit 1 --json conclusion --jq '.[0].conclusion // ""')" = "failure" ]
+          }
+          # Prints "ok" when the PR is one agents may fix; flags it needs-human when out of attempts.
+          eligible() {
+            local pr="$1" info author cross labels attempts
+            info=$(gh pr view "$pr" --repo "$repo" --json author,isCrossRepository,labels,state)
+            [ "$(jq -r .state <<< "$info")" = "OPEN" ] || return 0
+            cross=$(jq -r .isCrossRepository <<< "$info")
+            author=$(jq -r .author.login <<< "$info")
+            labels=$(jq -r '[.labels[].name] | join(",")' <<< "$info")
+            [ "$cross" = "false" ] || return 0
+            case ",$labels," in *,needs-human,*) return 0 ;; esac
+            case "$author" in
+              "$OWNER"|"$BOT"|app/claude|app/dependabot|dependabot\[bot\]) ;;
+              *) return 0 ;;
+            esac
+            attempts=$(gh api "repos/$repo/issues/$pr/comments" --paginate \
+              --jq '[.[] | select(.body | contains("<!-- nthstock-agent-ci-fix -->"))] | length' \
+              | awk '{s+=$1} END {print s+0}')
+            if [ "$attempts" -ge "$MAX_ATTEMPTS" ]; then
+              gh pr edit "$pr" --repo "$repo" --add-label needs-human >/dev/null
+              gh pr comment "$pr" --repo "$repo" --body "Agents tried to fix CI $attempts times without success, so this PR needs a human look."
+              return 0
+            fi
+            echo ok
+          }
+
           if [ "$EVENT" = "pull_request" ]; then
-            if [ "$LABEL" = "agent:fix-needed" ] && [ "$LABEL_HEAD_REPO" = "$GITHUB_REPOSITORY" ] \
+            if [ "$LABEL" = "agent:fix-needed" ] && [ "$LABEL_HEAD_REPO" = "$repo" ] \
                && { [ "$SENDER" = "$OWNER" ] || [ "$SENDER" = "$BOT" ]; }; then
-              echo "pr=$LABEL_PR" >> "$GITHUB_OUTPUT"
-              echo "branch=$LABEL_BRANCH" >> "$GITHUB_OUTPUT"
-              echo "reason=review findings" >> "$GITHUB_OUTPUT"
+              emit pr "$LABEL_PR" "$LABEL_BRANCH" "review findings"
             fi
-          elif [ "$RUN_CONCLUSION" = "failure" ] && [ "$RUN_EVENT" = "pull_request" ] \
-               && [ "$RUN_HEAD_REPO" = "$GITHUB_REPOSITORY" ] \
-               && [[ "$RUN_BRANCH" == claude/* ]]; then
-            pr=$(gh pr list --repo "$GITHUB_REPOSITORY" --head "$RUN_BRANCH" --state open \
-              --json number --jq '.[0].number')
-            if [ -n "$pr" ]; then
-              echo "pr=$pr" >> "$GITHUB_OUTPUT"
-              echo "branch=$RUN_BRANCH" >> "$GITHUB_OUTPUT"
-              echo "reason=failing CI (run ${{ github.event.workflow_run.html_url }})" >> "$GITHUB_OUTPUT"
-            fi
+            exit 0
           fi
+
+          if [ "$EVENT" = "workflow_run" ]; then
+            [ "$RUN_CONCLUSION" = "failure" ] && [ "$RUN_HEAD_REPO" = "$repo" ] || exit 0
+            if [ "$RUN_EVENT" = "push" ] && [ "$RUN_BRANCH" = "main" ]; then
+              fix_main_pr_open && { echo "A fix-main PR is already open."; exit 0; }
+              emit main "" "claude/fix-main-${RUN_SHA:0:7}" "CI is red on main ($RUN_URL)"
+              exit 0
+            fi
+            [ "$RUN_EVENT" = "pull_request" ] || exit 0
+            # A PR that is red because main is red is fixed by the fix-main PR, not on its own branch.
+            main_is_red && { echo "main is red; the fix-main PR handles this."; exit 0; }
+            pr=$(gh pr list --repo "$repo" --head "$RUN_BRANCH" --state open --json number --jq '.[0].number // ""')
+            [ -n "$pr" ] || exit 0
+            [ "$(eligible "$pr")" = "ok" ] && emit pr "$pr" "$RUN_BRANCH" "failing CI ($RUN_URL)"
+            exit 0
+          fi
+
+          # schedule / workflow_dispatch: sweep. main first, then the oldest red PR.
+          if main_is_red; then
+            fix_main_pr_open || emit main "" "claude/fix-main-$(git ls-remote "https://github.com/$repo" refs/heads/main | cut -c1-7)" "CI is red on main"
+            exit 0
+          fi
+          for row in $(gh pr list --repo "$repo" --state open --limit 100 \
+              --json number,headRefName,headRefOid --jq 'sort_by(.number) | .[] | "\(.number):\(.headRefName):\(.headRefOid)"'); do
+            pr=${row%%:*}; rest=${row#*:}; branch=${rest%%:*}; sha=${rest#*:}
+            conclusion=$(gh run list --repo "$repo" --workflow ci.yml --commit "$sha" --event pull_request \
+              --status completed --limit 1 --json conclusion --jq '.[0].conclusion // ""')
+            [ "$conclusion" = "failure" ] || continue
+            if [ "$(eligible "$pr")" = "ok" ]; then
+              emit pr "$pr" "$branch" "failing CI on the PR head ($sha)"
+              exit 0
+            fi
+          done
 
   fix:
     needs: resolve-target
-    if: needs.resolve-target.outputs.pr != ''
+    if: needs.resolve-target.outputs.mode != ''
     runs-on: ubuntu-latest
     timeout-minutes: 60
     env:
       HAS_AGENT_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN != '' }}
     concurrency:
-      group: agent-fixer-${{ needs.resolve-target.outputs.pr }}
+      group: agent-fixer-${{ needs.resolve-target.outputs.pr || 'main' }}
       cancel-in-progress: false
     steps:
       - uses: actions/checkout@v7
         with:
-          ref: ${{ needs.resolve-target.outputs.branch }}
-      - uses: actions/setup-node@v4
+          ref: ${{ needs.resolve-target.outputs.mode == 'main' && 'main' || needs.resolve-target.outputs.branch }}
+          fetch-depth: 0
+      - name: Block pushes to main
+        run: |
+          printf '#!/bin/sh\nwhile read -r _ _ ref _; do [ "$ref" = refs/heads/main ] && { echo "Pushing to main is not allowed." >&2; exit 1; }; done\nexit 0\n' > .git/hooks/pre-push
+          chmod +x .git/hooks/pre-push
+      - uses: actions/setup-node@v7
         with:
           node-version-file: .nvmrc
           cache: npm
-      - run: npm ci
+      # Installing can be the very thing that is broken (e.g. a bad dependency bump), so do not fail here.
+      - run: npm ci || echo "::warning::npm ci failed; the Fixer will diagnose it."
       - if: env.HAS_AGENT_TOKEN != 'true'
         run: echo "::notice::CLAUDE_CODE_OAUTH_TOKEN is not set; agent skipped. See docs/agent-workflow.md."
       - if: env.HAS_AGENT_TOKEN == 'true'
@@ -88,6 +166,7 @@ jobs:
           allowed_bots: ${{ (vars.AGENT_BOT_LOGIN || 'claude[bot]') }}
           prompt: |
             REPO: ${{ github.repository }}
+            MODE: ${{ needs.resolve-target.outputs.mode }}
             PR NUMBER: ${{ needs.resolve-target.outputs.pr }}
             BRANCH: ${{ needs.resolve-target.outputs.branch }}
             REASON: ${{ needs.resolve-target.outputs.reason }}
@@ -95,4 +174,4 @@ jobs:
             Act as the Fixer. Follow .claude/agents/fixer.md exactly.
           claude_args: |
             --max-turns 60
-            --allowedTools "Read,Glob,Grep,Edit,Write,Bash(npm:*),Bash(npx:*),Bash(node:*),Bash(git:*),Bash(gh pr:*),Bash(gh run view:*),Bash(gh api:*)"
+            --allowedTools "Read,Glob,Grep,Edit,Write,Bash(npm:*),Bash(npx:*),Bash(node:*),Bash(git:*),Bash(gh pr:*),Bash(gh run view:*),Bash(gh run list:*),Bash(gh api:*)"
