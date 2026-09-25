@@ -71,7 +71,7 @@ jobs:
       group: agent-fixer-${{ needs.resolve-target.outputs.pr }}
       cancel-in-progress: false
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: ${{ needs.resolve-target.outputs.branch }}
       - uses: actions/setup-node@v4
