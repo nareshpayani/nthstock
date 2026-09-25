@@ -1,0 +1,125 @@
+name: 'Agent: Resolve conflicts'
+
+# When main moves, finds open PRs that no longer merge cleanly and resolves them on the PR branch.
+# main is never modified: the job merges main INTO the PR branch (no rebase, no force-push)
+# and a pre-push hook refuses any push to main.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+  id-token: write
+
+concurrency:
+  group: agent-conflicts
+  cancel-in-progress: false
+
+jobs:
+  find:
+    runs-on: ubuntu-latest
+    outputs:
+      prs: ${{ steps.scan.outputs.prs }}
+    steps:
+      - id: scan
+        env:
+          GH_TOKEN: ${{ github.token }}
+          OWNER: ${{ vars.OWNER_LOGIN || 'nareshpayani' }}
+          BOT: ${{ vars.AGENT_BOT_LOGIN || 'claude[bot]' }}
+        run: |
+          # GitHub computes mergeability lazily after a push to main; retry while any PR is UNKNOWN.
+          for attempt in 1 2 3 4 5 6; do
+            prs=$(gh pr list --repo "$GITHUB_REPOSITORY" --state open --limit 100 \
+              --json number,mergeable,headRefName,isCrossRepository,author,labels)
+            unknown=$(jq '[.[] | select(.mergeable == "UNKNOWN")] | length' <<< "$prs")
+            [ "$unknown" -eq 0 ] && break
+            sleep 20
+          done
+          # Dependabot rebases its own PRs automatically, so they are skipped here.
+          targets=$(jq -c --arg owner "$OWNER" --arg bot "$BOT" '[.[]
+            | select(.mergeable == "CONFLICTING")
+            | select(.isCrossRepository | not)
+            | select(.author.login == $owner or .author.login == $bot or .author.login == "app/claude")
+            | select([.labels[].name] | index("needs-human") | not)
+            | {number, branch: .headRefName}]' <<< "$prs")
+          echo "Conflicting PRs: $targets"
+          echo "prs=$targets" >> "$GITHUB_OUTPUT"
+
+  resolve:
+    needs: find
+    if: needs.find.outputs.prs != '[]' && needs.find.outputs.prs != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        pr: ${{ fromJSON(needs.find.outputs.prs) }}
+    env:
+      HAS_AGENT_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN != '' }}
+      GH_TOKEN: ${{ github.token }}
+      PR: ${{ matrix.pr.number }}
+      BRANCH: ${{ matrix.pr.branch }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ matrix.pr.branch }}
+          fetch-depth: 0
+      - name: Refuse any push to main
+        run: |
+          cat > .git/hooks/pre-push <<'HOOK'
+          #!/bin/sh
+          while read -r _local_ref _local_sha remote_ref _remote_sha; do
+            if [ "$remote_ref" = "refs/heads/main" ]; then
+              echo "pre-push: pushing to main is not allowed for agents" >&2
+              exit 1
+            fi
+          done
+          HOOK
+          chmod +x .git/hooks/pre-push
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - name: Try a clean merge of main
+        id: merge
+        run: |
+          git config user.name "nthstock-agent"
+          git config user.email "nthstock-agent@users.noreply.github.com"
+          gh pr edit "$PR" --repo "$GITHUB_REPOSITORY" --add-label agent:conflict
+          if git merge --no-edit origin/main; then
+            echo "clean=true" >> "$GITHUB_OUTPUT"
+          else
+            git merge --abort
+            echo "clean=false" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Push the clean merge after checks pass
+        if: steps.merge.outputs.clean == 'true'
+        run: |
+          npm ci
+          npm run check
+          git push origin "HEAD:$BRANCH"
+          gh pr edit "$PR" --repo "$GITHUB_REPOSITORY" --remove-label agent:conflict
+      - if: steps.merge.outputs.clean == 'false' && env.HAS_AGENT_TOKEN != 'true'
+        run: |
+          echo "::notice::CLAUDE_CODE_OAUTH_TOKEN is not set; conflict on #$PR left for the owner."
+          gh pr edit "$PR" --repo "$GITHUB_REPOSITORY" --add-label needs-human
+      - if: steps.merge.outputs.clean == 'false' && env.HAS_AGENT_TOKEN == 'true'
+        uses: anthropics/claude-code-action@v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          allowed_bots: ${{ vars.AGENT_BOT_LOGIN || 'claude[bot]' }}
+          prompt: |
+            REPO: ${{ github.repository }}
+            PR NUMBER: ${{ matrix.pr.number }}
+            BRANCH: ${{ matrix.pr.branch }}
+            REASON: merge conflict with main
+
+            Act as the Fixer and follow the "Merge conflicts" section of .claude/agents/fixer.md exactly.
+          claude_args: |
+            --max-turns 60
+            --allowedTools "Read,Glob,Grep,Edit,Write,Bash(npm:*),Bash(npx:*),Bash(node:*),Bash(git merge:*),Bash(git status:*),Bash(git diff:*),Bash(git log:*),Bash(git add:*),Bash(git commit:*),Bash(git checkout:*),Bash(git push:*),Bash(git fetch:*),Bash(gh pr:*)"

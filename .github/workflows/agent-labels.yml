@@ -29,6 +29,7 @@ jobs:
           create "agent:in-progress" "F9D0C4" "Developer agent is working on it"
           create "agent:pr"          "BFD4F2" "PR opened by the Developer agent"
           create "agent:fix-needed"  "E99695" "Reviewer found blocking issues; Fixer agent will fix"
+          create "agent:conflict"    "D93F0B" "PR conflicts with main; conflict agent is resolving it on the PR branch"
           create "ready-to-merge"    "0E8A16" "Reviewer approved and CI green: owner can merge"
           create "needs-human"       "B60205" "Agents stopped; owner decision needed"
           for area in web api ui infra docs; do
