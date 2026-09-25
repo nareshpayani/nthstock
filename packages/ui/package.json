@@ -24,8 +24,8 @@
     "test": "vitest run --coverage",
     "storybook": "storybook dev -p 6006",
     "build-storybook": "storybook build --test",
-    "test-storybook": "test-storybook --excludeTags a11y-canary",
-    "test-storybook:canary": "test-storybook --includeTags a11y-canary"
+    "test-storybook": "test-storybook --index-json --excludeTags a11y-canary",
+    "test-storybook:canary": "test-storybook --index-json --includeTags a11y-canary"
   },
   "peerDependencies": {
     "react": "^19.0.0",

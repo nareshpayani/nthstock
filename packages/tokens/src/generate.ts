@@ -54,6 +54,7 @@ export function toTailwindTheme(): string {
   for (const name of Object.keys(typeScale)) {
     lines.push(`--text-${name}: var(--nth-text-${name});`);
     lines.push(`--text-${name}--line-height: var(--nth-text-${name}-line-height);`);
+    lines.push(`--text-${name}--font-weight: var(--nth-text-${name}-weight);`);
   }
   lines.push('--spacing: var(--nth-space-unit);');
   lines.push('--radius-*: initial;');

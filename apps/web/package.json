@@ -8,17 +8,23 @@
     "build": "vite build && node scripts/checkBuild.mjs",
     "preview": "vite preview",
     "lint": "eslint . && node scripts/checkNoHex.mjs src",
-    "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.e2e.json",
+    "test": "vitest run --coverage",
+    "e2e": "playwright test"
   },
   "devDependencies": {
     "@nthstock/config": "0.0.0",
+    "@playwright/test": "1.63.0",
+    "@storybook/react-vite": "10.6.0",
     "@tailwindcss/vite": "4.3.3",
+    "@tanstack/router-plugin": "1.168.40",
     "@testing-library/jest-dom": "7.0.1",
     "@testing-library/react": "16.3.3",
+    "@types/node": "22.20.4",
     "@types/react": "19.3.0",
     "@types/react-dom": "19.3.0",
     "@vitejs/plugin-react": "6.1.1",
+    "@vitest/coverage-v8": "5.0.2",
     "eslint": "10.11.0",
     "eslint-plugin-react-hooks": "7.1.1",
     "globals": "17.12.0",
@@ -33,7 +39,10 @@
     "@nthstock/tokens": "0.0.0",
     "@nthstock/ui": "0.0.0",
     "@nthstock/utils": "0.0.0",
+    "@tanstack/react-query": "5.103.2",
+    "@tanstack/react-router": "1.170.39",
     "react": "19.3.0",
-    "react-dom": "19.3.0"
+    "react-dom": "19.3.0",
+    "zustand": "5.0.15"
   }
 }

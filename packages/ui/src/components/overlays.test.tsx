@@ -1,4 +1,5 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { useRef } from 'react';
 import { describe, expect, it } from 'vitest';
 import { Button } from './Button.js';
 import { Dialog, Sheet } from './Dialog.js';
@@ -146,5 +147,21 @@ describe('Toast', () => {
 
   it('throws outside a provider', () => {
     expect(() => render(<ToastButton />)).toThrow(/ToastProvider/);
+  });
+});
+
+describe('initialFocus', () => {
+  it('focuses the given element when the sheet opens', async () => {
+    function Drawer() {
+      const ref = useRef<HTMLInputElement>(null);
+      return (
+        <Sheet title="Menu" side="left" defaultOpen initialFocus={ref}>
+          <button type="button">First</button>
+          <input aria-label="Search" ref={ref} />
+        </Sheet>
+      );
+    }
+    render(<Drawer />);
+    await waitFor(() => expect(screen.getByRole('textbox', { name: 'Search' })).toHaveFocus());
   });
 });

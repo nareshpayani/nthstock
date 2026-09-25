@@ -1,5 +1,5 @@
 import { Dialog as DialogPrimitive } from 'radix-ui';
-import type { ReactNode } from 'react';
+import type { ReactNode, RefObject } from 'react';
 import { IconClose } from '../icons/icons.js';
 import { cn } from '../lib/cn.js';
 
@@ -15,7 +15,18 @@ export type DialogProps = {
   footer?: ReactNode;
   children?: ReactNode;
   className?: string;
+  /** Element to focus when opening (defaults to the first focusable element). */
+  initialFocus?: RefObject<HTMLElement | null>;
 };
+
+function focusInitial(initialFocus: DialogProps['initialFocus']) {
+  if (!initialFocus) return undefined;
+  return (event: Event) => {
+    if (!initialFocus.current) return;
+    event.preventDefault();
+    initialFocus.current.focus();
+  };
+}
 
 const overlayClass =
   'fixed inset-0 z-(--nth-z-overlay) bg-ink/40 data-[state=open]:animate-overlay-in';
@@ -34,6 +45,7 @@ export function Dialog({
   footer,
   children,
   className,
+  initialFocus,
   ...root
 }: DialogProps) {
   return (
@@ -43,6 +55,7 @@ export function Dialog({
         <DialogPrimitive.Overlay className={overlayClass} />
         <DialogPrimitive.Content
           {...(description ? {} : { 'aria-describedby': undefined })}
+          onOpenAutoFocus={focusInitial(initialFocus)}
           className={cn(
             'fixed top-1/2 left-1/2 z-(--nth-z-overlay) grid max-h-[calc(100dvh-32px)] w-[calc(100vw-32px)] max-w-md -translate-x-1/2 -translate-y-1/2 gap-4 overflow-y-auto rounded-lg bg-surface p-6 shadow-overlay outline-none data-[state=open]:animate-pop-in',
             className,
@@ -83,6 +96,7 @@ export function Sheet({
   children,
   className,
   side = 'right',
+  initialFocus,
   ...root
 }: SheetProps) {
   return (
@@ -92,6 +106,7 @@ export function Sheet({
         <DialogPrimitive.Overlay className={overlayClass} />
         <DialogPrimitive.Content
           {...(description ? {} : { 'aria-describedby': undefined })}
+          onOpenAutoFocus={focusInitial(initialFocus)}
           className={cn(
             'fixed inset-y-0 z-(--nth-z-overlay) flex w-[min(420px,calc(100vw-48px))] flex-col bg-surface shadow-overlay outline-none',
             side === 'right'

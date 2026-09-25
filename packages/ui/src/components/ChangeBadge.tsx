@@ -3,7 +3,7 @@ import { cva } from 'class-variance-authority';
 import { cn } from '../lib/cn.js';
 
 const badge = cva(
-  'inline-flex items-center gap-1 font-mono font-medium tabular-nums whitespace-nowrap',
+  'relative inline-flex items-center gap-1 font-mono font-medium tabular-nums whitespace-nowrap',
   {
     variants: {
       direction: { up: 'text-up', down: 'text-down', flat: 'text-ink-muted' },

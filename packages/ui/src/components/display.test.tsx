@@ -87,3 +87,12 @@ describe('Skeleton, EmptyState, ErrorState', () => {
     expect(screen.queryByRole('button')).not.toBeInTheDocument();
   });
 });
+
+describe('Sparkline fluid area', () => {
+  it('stretches and shades the area when asked', () => {
+    const { container } = render(<Sparkline points={[1, 3, 2]} label="area" fluid area />);
+    const svg = screen.getByRole('img', { name: 'area' });
+    expect(svg).toHaveAttribute('preserveAspectRatio', 'none');
+    expect(container.querySelectorAll('path')).toHaveLength(2);
+  });
+});

@@ -1,6 +1,7 @@
 // Post-build budget checks for apps/web (T-010, CLAUDE.md §3):
 // - fonts are self-hosted: no external font URLs, total woff2 under 100 KB;
 // - initial JS (entry script plus modulepreloads) under 200 KB gzipped;
+// - every page route is code-split into its own chunk (T-022);
 // - icons are tree-shaken: only icons imported somewhere in src end up in the bundle (T-021).
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
@@ -15,7 +16,7 @@ function* walk(dir) {
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
     const path = join(dir, entry.name);
     if (entry.isDirectory()) yield* walk(path);
-    else if (/\.tsx?$/.test(entry.name)) yield path;
+    else if (/\.(tsx?|js)$/.test(entry.name)) yield path;
   }
 }
 const FONT_BUDGET = 100 * 1024;
@@ -48,12 +49,25 @@ if (initialJs > INITIAL_JS_BUDGET) {
   failures.push(`initial JS ${String(initialJs)} B gzipped > ${String(INITIAL_JS_BUDGET)} B`);
 }
 
+const ROUTE_CHUNKS = ['dashboard', 'portfolio', 'positions', 'orders', 'funds', 'login', '_symbol'];
+const missingChunks = ROUTE_CHUNKS.filter(
+  (name) => !assets.some((file) => file.startsWith(`${name}-`) && file.endsWith('.js')),
+);
+if (missingChunks.length > 0)
+  failures.push(`routes without their own chunk: ${missingChunks.join(', ')}`);
+
 const allJs = assets
   .filter((file) => file.endsWith('.js'))
   .map((file) => readFileSync(join(DIST, 'assets', file), 'utf8'))
   .join('\n');
+// Icons the app imports, plus icons that @nthstock/ui components use internally
+// (EmptyState's inbox, Dialog's close button, …).
+const uiComponents = new URL('./components/', import.meta.resolve('@nthstock/ui'));
 const importedIcons = new Set();
-for (const file of walk('src')) {
+for (const file of [
+  ...walk('src'),
+  ...readdirSync(uiComponents).map((name) => new URL(name, uiComponents).pathname),
+]) {
   for (const match of readFileSync(file, 'utf8').matchAll(/\bIcon[A-Z]\w*/g))
     importedIcons.add(match[0]);
 }
@@ -69,6 +83,9 @@ const bundledIcons = allIcons
 const strayIcons = bundledIcons.filter((name) => !importedIcons.has(name));
 if (strayIcons.length > 0) failures.push(`unused icons in the bundle: ${strayIcons.join(', ')}`);
 
+console.log(
+  `checkBuild: route chunks ${String(ROUTE_CHUNKS.length - missingChunks.length)}/${String(ROUTE_CHUNKS.length)}`,
+);
 console.log(`checkBuild: icons bundled [${bundledIcons.join(', ')}]`);
 console.log(
   `checkBuild: fonts ${(fontBytes / 1024).toFixed(1)} KB woff2, initial JS ${(initialJs / 1024).toFixed(1)} KB gzipped (${String(initialScripts.length)} files)`,

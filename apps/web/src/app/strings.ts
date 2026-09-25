@@ -1,0 +1,51 @@
+export const strings = {
+  skipToContent: 'Skip to main content',
+  nav: {
+    label: 'Main',
+    dashboard: 'Dashboard',
+    portfolio: 'Portfolio',
+    positions: 'Positions',
+    orders: 'Orders',
+    funds: 'Funds',
+  },
+  header: {
+    openMenu: 'Open menu',
+    support: 'Help and support',
+    more: 'More',
+    logIn: 'Log in',
+    account: (name: string) => `Account: ${name}`,
+    profile: 'Profile',
+    logOut: 'Log out',
+    shortcuts: 'Keyboard shortcuts',
+    holidays: 'Market holidays',
+    about: 'About paper trading',
+    soon: 'soon',
+  },
+  rail: {
+    label: 'Watchlist and search',
+    paperTitle: 'Paper trading only',
+    paperBody: 'Practise with ₹10,00,000 of virtual cash. No real money moves.',
+  },
+  drawer: { title: 'Menu' },
+  shortcuts: {
+    title: 'Keyboard shortcuts',
+    description: 'Single keys work anywhere except while typing in a field.',
+    list: [
+      { keys: ['/'], action: 'Search stocks' },
+      { keys: ['?'], action: 'Show keyboard shortcuts' },
+      { keys: ['Esc'], action: 'Close a dialog, menu or panel' },
+    ],
+    later: 'B and S for buy and sell arrive with the order ticket.',
+  },
+  errors: {
+    routeTitle: 'This page could not load',
+    routeBody: 'Something went wrong on our side. Try again, or go back to the dashboard.',
+    retry: 'Try again',
+  },
+  notFound: {
+    title: 'Page not found',
+    body: 'The page you opened does not exist or has moved.',
+    back: 'Go to dashboard',
+  },
+  loading: 'Loading page',
+} as const;

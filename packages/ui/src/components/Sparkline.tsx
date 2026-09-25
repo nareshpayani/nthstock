@@ -9,6 +9,10 @@ export type SparklineProps = {
   height?: number;
   /** Colour direction; defaults to last point vs first. */
   direction?: 'up' | 'down' | 'flat';
+  /** Stretch to the CSS size (e.g. w-full) instead of keeping the aspect ratio. */
+  fluid?: boolean;
+  /** Shade the area under the line. */
+  area?: boolean;
   className?: string;
 };
 
@@ -39,6 +43,8 @@ export function Sparkline({
   width = 96,
   height = 32,
   direction,
+  fluid = false,
+  area = false,
   className,
 }: SparklineProps) {
   const first = points[0] ?? 0;
@@ -54,7 +60,16 @@ export function Sparkline({
       viewBox={`0 0 ${String(width)} ${String(height)}`}
       className={cn('shrink-0 overflow-visible', tone, className)}
       data-direction={dir}
+      {...(fluid ? { preserveAspectRatio: 'none' } : {})}
     >
+      {area && points.length > 1 ? (
+        <path
+          d={`${sparklinePath(points, width, height)}L${String(width - 1)} ${String(height)}L1 ${String(height)}Z`}
+          fill="currentColor"
+          fillOpacity={0.08}
+          stroke="none"
+        />
+      ) : null}
       <path
         d={sparklinePath(points, width, height)}
         fill="none"

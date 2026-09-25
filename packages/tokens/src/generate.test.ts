@@ -39,6 +39,7 @@ describe('toTailwindTheme', () => {
     expect(out).toMatch(/\.text-up\s*{\s*color: var\(--nth-color-up\);/);
     expect(out).toContain('var(--nth-radius-md)');
     expect(out).toContain('var(--nth-text-title)');
+    expect(out).toContain('var(--nth-text-title-weight)');
     expect(out).toContain('calc(var(--nth-space-unit) * 4)');
   });
 
