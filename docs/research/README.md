@@ -8,7 +8,8 @@ nthstock's API follows its own contracts in `packages/contracts` (CLAUDE.md D3).
 Run on your own machine, because the page needs your login:
 
 ```
-npx -y -p playwright@1.58.0 node tools/research/paytmCapture.mjs
+npm install --no-save playwright@1.58.0
+node tools/research/paytmCapture.mjs
 ```
 
 1. A visible browser opens on the Paytm Money stocks dashboard. Log in yourself: type your

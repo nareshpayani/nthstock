@@ -1,7 +1,7 @@
 // Paytm Money equity research capture. Observe only: learning and design reference.
 //
 // Run on your own machine (the page needs your login):
-//   npx -y -p playwright@1.58.0 node tools/research/paytmCapture.mjs
+//   npm install --no-save playwright@1.58.0 && node tools/research/paytmCapture.mjs
 //
 // A visible Chrome window opens. Log in yourself (credentials and OTP stay with you),
 // then browse the stocks section. Every screen you visit is screenshotted, and API calls
