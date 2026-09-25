@@ -9,6 +9,9 @@ updates:
       # @types/node must match the Node major pinned in .nvmrc (22).
       - dependency-name: '@types/node'
         update-types: [version-update:semver-major]
+      # typescript-eslint supports TypeScript < 6.1; move to 7 together with typescript-eslint.
+      - dependency-name: 'typescript'
+        update-types: [version-update:semver-major]
     groups:
       minor-and-patch:
         update-types: [minor, patch]
