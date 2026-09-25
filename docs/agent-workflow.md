@@ -14,8 +14,13 @@ PR opened or updated
   └─► Reviewer ─┬─ no blocking findings ─► `ready-to-merge` ─► owner merges
                 ├─ blocking findings ─► `agent:fix-needed` ─► Fixer pushes to the same PR ─► Reviewer again
                 └─ bug outside the PR's scope ─► new `bug` issue (`agent:ready`) ─► Developer
-CI red on an agent PR (`claude/*` branch)
-  └─► Fixer pushes a fix to the same PR
+CI red on an owner, agent or Dependabot PR
+  └─► Fixer finds the root cause and pushes a fix to the same PR (3 attempts, then `needs-human`)
+      └─ Dependabot bump the stack can't take ─► `@dependabot ignore this major version`
+CI red on main
+  └─► Fixer opens a `claude/fix-main-*` PR (never pushes to main) ─► Reviewer ─► owner merges
+Hourly sweep
+  └─► catches red PRs the events missed (Dependabot runs get no secrets; PRs red only because main was red)
 Push to main makes an open PR conflict
   └─► Conflict resolver merges main INTO the PR branch ─┬─ clean ─► checks pass ─► push to PR
                                                         ├─ conflicts ─► Fixer resolves, checks pass ─► push to PR
@@ -24,7 +29,8 @@ Push to main makes an open PR conflict
 
 `main` is never modified by agents: conflicts are always resolved on the PR branch by merging
 `main` in (no rebase, no force-push), a pre-push hook blocks pushes to `main`, and branch
-protection is the final guard. Dependabot PRs are skipped because Dependabot rebases its own PRs.
+protection is the final guard. Dependabot PRs are skipped by the conflict resolver because
+Dependabot rebases its own PRs, but their CI failures go to the Fixer.
 
 | Agent | Workflow | Role definition |
 |---|---|---|
@@ -40,6 +46,7 @@ protection is the final guard. Dependabot PRs are skipped because Dependabot reb
   by the owner (`OWNER_LOGIN`, default `nareshpayani`) or the Claude app (`AGENT_BOT_LOGIN`,
   default `claude[bot]`), and the Reviewer only runs on PRs from this repo by those two authors.
   Strangers opening issues or PRs on this public repo cannot spend usage or inject prompts.
+- **Loop limits:** after 3 CI-fix attempts on a PR it gets `needs-human`; only one fix-main PR is open at a time.
 - **Loop limit:** after 3 agent reviews (`AGENT_MAX_REVIEW_ROUNDS`) a PR gets `needs-human` and agents stop.
 - **Agents never merge, never push to `main`, never touch secrets or deploy.**
 - **Cost caps:** `--max-turns` per agent, job timeouts, one run per issue/PR at a time.
@@ -52,7 +59,8 @@ protection is the final guard. Dependabot PRs are skipped because Dependabot reb
 4. Settings → Branches → add a rule for `main`: require a pull request, require status checks
    ("Lint, typecheck, test, build", "Dependency audit", "Secret scan"), block force pushes.
 
-Optional repository variables: `OWNER_LOGIN`, `AGENT_BOT_LOGIN`, `AGENT_MAX_REVIEW_ROUNDS`.
+Optional repository variables: `OWNER_LOGIN`, `AGENT_BOT_LOGIN`, `AGENT_MAX_REVIEW_ROUNDS`,
+`AGENT_MAX_CI_FIX_ATTEMPTS` (default 3).
 
 ## Everyday use
 - **Plan something:** open an issue describing the phase step or feature, add `plan:approved`.
