@@ -16,7 +16,15 @@ PR opened or updated
                 └─ bug outside the PR's scope ─► new `bug` issue (`agent:ready`) ─► Developer
 CI red on an agent PR (`claude/*` branch)
   └─► Fixer pushes a fix to the same PR
+Push to main makes an open PR conflict
+  └─► Conflict resolver merges main INTO the PR branch ─┬─ clean ─► checks pass ─► push to PR
+                                                        ├─ conflicts ─► Fixer resolves, checks pass ─► push to PR
+                                                        └─ can't keep both sides ─► `needs-human`
 ```
+
+`main` is never modified by agents: conflicts are always resolved on the PR branch by merging
+`main` in (no rebase, no force-push), a pre-push hook blocks pushes to `main`, and branch
+protection is the final guard. Dependabot PRs are skipped because Dependabot rebases its own PRs.
 
 | Agent | Workflow | Role definition |
 |---|---|---|
@@ -24,6 +32,7 @@ CI red on an agent PR (`claude/*` branch)
 | Developer | `.github/workflows/agent-developer.yml` | `.claude/agents/developer.md` |
 | Reviewer | `.github/workflows/agent-reviewer.yml` | `.claude/agents/reviewer.md` |
 | Fixer | `.github/workflows/agent-fixer.yml` | `.claude/agents/fixer.md` |
+| Conflict resolver | `.github/workflows/agent-conflicts.yml` | `.claude/agents/fixer.md` (Merge conflicts) |
 | (glue) | `agent-promote-stories.yml`, `agent-labels.yml` | — |
 
 ## Guardrails
