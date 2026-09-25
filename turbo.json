@@ -10,9 +10,11 @@
       "dependsOn": ["^build"]
     },
     "test": {
-      "outputs": []
+      "dependsOn": ["^build"],
+      "outputs": ["coverage/**"]
     },
     "dev": {
+      "dependsOn": ["^build"],
       "cache": false,
       "persistent": true
     }
