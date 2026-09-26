@@ -75,4 +75,20 @@ describe('PriceCell + quote store (T-056, T-057)', () => {
     act(() => quotes.push(testQuote('SENSEX', 8309215, { exchange: 'BSE' })));
     expect(screen.getByText('83,092.15')).toBeInTheDocument();
   });
+
+  it('shows a REST snapshot price until the first live quote', () => {
+    const quotes = createTestQuoteStore();
+    render(
+      <QuoteStoreContext.Provider value={quotes.store}>
+        <div data-testid="cell">
+          <PriceCell symbol="INFY" initial={150000} />
+        </div>
+      </QuoteStoreContext.Provider>,
+    );
+    const cell = screen.getByTestId('cell');
+    expect(cell).toHaveTextContent('₹1,500.00');
+    expect(cell.querySelector('[data-tick]')).toHaveAttribute('data-tick', 'flat');
+    act(() => quotes.push(testQuote('INFY', 150500)));
+    expect(cell).toHaveTextContent('₹1,505.00');
+  });
 });

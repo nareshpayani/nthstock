@@ -1,5 +1,6 @@
 import './styles/app.css';
 import { createApiClient } from '@nthstock/apiClient';
+import { systemClock } from '@nthstock/utils';
 import { RouterProvider } from '@tanstack/react-router';
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
@@ -27,19 +28,29 @@ async function boot() {
   }
 
   const queryClient = createQueryClient();
-  const router = createAppRouter(queryClient);
+  const apiClient = createApiClient({ baseUrl: config.apiBaseUrl });
+  const router = createAppRouter({ queryClient, apiClient });
   const { wsClient, quoteStore } = createLiveQuotes(config, window.location);
   // Background tabs keep only the active watchlist live; focus and reconnects resync (T-077).
   startVisibilitySync({
     document,
     quoteStore,
     wsClient,
-    fetchSnapshot: restSnapshot(createApiClient({ baseUrl: config.apiBaseUrl })),
+    fetchSnapshot: restSnapshot(apiClient),
   });
 
   createRoot(rootElement).render(
     <StrictMode>
-      <AppProviders queryClient={queryClient} quoteStore={quoteStore}>
+      <AppProviders
+        queryClient={queryClient}
+        quoteStore={quoteStore}
+        apiClient={apiClient}
+        // The forced-open mock market (VITE_MOCK_MARKET_OPEN) shows LIVE badges at any hour.
+        marketSession={{
+          clock: systemClock,
+          alwaysOpen: config.apiMode === 'msw' && config.mockMarketOpen,
+        }}
+      >
         <RouterProvider router={router} />
       </AppProviders>
     </StrictMode>,
