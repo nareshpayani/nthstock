@@ -1,4 +1,4 @@
-import { CandleRange, StockListId } from '@nthstock/contracts';
+import { CandleRange, MoverDirection, StockListId, TradingSymbol } from '@nthstock/contracts';
 import { createFileRoute } from '@tanstack/react-router';
 import { z } from 'zod';
 import { DashboardPage, prefetchDashboard } from '@/features/dashboard';
@@ -9,6 +9,8 @@ import { DashboardPage, prefetchDashboard } from '@/features/dashboard';
 const dashboardSearch = z.object({
   range: CandleRange.optional().catch(undefined),
   list: StockListId.optional().catch(undefined),
+  movers: MoverDirection.optional().catch(undefined),
+  moversIndex: TradingSymbol.optional().catch(undefined),
 });
 
 export const Route = createFileRoute('/_app/dashboard')({

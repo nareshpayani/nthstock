@@ -3,6 +3,12 @@ import type { QueryClient } from '@tanstack/react-query';
 import { DEFAULT_CHART_RANGE, NIFTY, candlesQuery } from '@/features/charts';
 import { listQuery, resolveListId } from '@/features/collections';
 import { indicesQuery } from '@/features/indices';
+import {
+  DEFAULT_MOVERS_DIRECTION,
+  MOVERS_ROWS,
+  moversQuery,
+  resolveMoversIndex,
+} from '@/features/movers';
 import type { DashboardSearch } from './dashboardSearch';
 
 /**
@@ -20,4 +26,11 @@ export function prefetchDashboard(
   );
   void queryClient.prefetchQuery(indicesQuery(api));
   void queryClient.prefetchQuery(listQuery(api, resolveListId(search.list)));
+  void queryClient.prefetchQuery(
+    moversQuery(api, {
+      index: resolveMoversIndex(search.moversIndex).value,
+      direction: search.movers ?? DEFAULT_MOVERS_DIRECTION,
+      limit: MOVERS_ROWS,
+    }),
+  );
 }

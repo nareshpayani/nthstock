@@ -53,4 +53,26 @@ describe('dashboard URL state', () => {
     fireEvent.mouseDown(giants);
     await waitFor(() => expect(router.state.location.search).toEqual({ list: 'market-giants' }));
   });
+
+  it('keeps the movers index and direction in the URL', async () => {
+    const { router } = renderApp('/dashboard?movers=losers&moversIndex=NIFTYIT', {
+      apiClient: api.apiClient,
+    });
+    const losers = await screen.findByRole('tab', { name: 'Top losers' });
+    expect(losers).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByRole('radio', { name: 'IT' })).toHaveAttribute('aria-checked', 'true');
+    await waitFor(() =>
+      expect(
+        api.requestsTo('/market/movers').map((url) => url.searchParams.get('index')),
+      ).toContain('NIFTYIT'),
+    );
+    fireEvent.click(screen.getByRole('radio', { name: 'Bank' }));
+    await waitFor(() =>
+      expect(router.state.location.search).toEqual({ movers: 'losers', moversIndex: 'NIFTYBANK' }),
+    );
+    fireEvent.mouseDown(screen.getByRole('tab', { name: 'Top gainers' }));
+    await waitFor(() =>
+      expect(router.state.location.search).toEqual({ movers: 'gainers', moversIndex: 'NIFTYBANK' }),
+    );
+  });
 });

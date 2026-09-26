@@ -172,7 +172,7 @@ API shapes are nthstock's own contracts, not copies of Paytm Money's.
 - [x] T-095 [FE] Build the Nifty 50 chart card with area series, range tabs and a LIVE badge while the market is open. Depends: T-094, T-052, T-029. Done when: the LIVE badge is hidden on a holiday clock and switching range refetches.
 - [x] T-096 [FE] Build the Market Indices cards with sparklines, horizontal scroll snap and keyboard scrolling. Depends: T-020, T-052, T-057. Done when: at least 5 cards render with live values and ▲▼ change.
 - [x] T-097 [FE] Build the Stocks Lists section with a tab per curated list and rows that tick live and open stock detail. Depends: T-017, T-052, T-057. Done when: switching tabs fetches that list and clicking a row navigates to /stocks/<symbol>.
-- [ ] T-098 [FE] Build Market Movers with a gainers/losers toggle and an index selector. Depends: T-017, T-052. Done when: changing the index refetches and losers show ▼ with negative text.
+- [x] T-098 [FE] Build Market Movers with a gainers/losers toggle and an index selector. Depends: T-017, T-052. Done when: changing the index refetches and losers show ▼ with negative text.
 - [ ] T-099 [FE] Add per-section skeletons and error isolation on the dashboard. Depends: T-093, T-095, T-096, T-097, T-098. Done when: a 500 from movers shows ErrorState only in the movers card (test).
 - [ ] T-100 [TEST] Add dashboard component tests on MSW and a Playwright screenshot at 1440 px. Depends: T-099. Done when: tests pass in CI and the screenshot is attached to the PR.
 - [ ] T-101 [TEST] Measure dashboard CLS during load in Playwright. Depends: T-100. Done when: CLS is under 0.05.
