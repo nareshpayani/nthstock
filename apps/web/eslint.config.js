@@ -34,7 +34,15 @@ const restrict = (...patterns) => ({
 });
 
 export default tseslint.config(
-  { ignores: ['src/routeTree.gen.ts', 'playwright-report/**', 'test-results/**'] },
+  {
+    ignores: [
+      'src/routeTree.gen.ts',
+      'playwright-report/**',
+      'test-results/**',
+      'public/mockServiceWorker.js',
+      'dist-api/**',
+    ],
+  },
   ...baseConfig,
   {
     files: ['**/*.{ts,tsx}'],

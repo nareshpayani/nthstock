@@ -74,6 +74,7 @@ jobs:
       - run: npx turbo run build --filter=@nthstock/web^...
       - name: Install Chrome for Testing (Chromium)
         run: npx playwright install --with-deps chromium
+      # playwright.config.ts builds in msw mode with VITE_MOCK_MARKET_OPEN=true; no env needed here.
       - run: npm run e2e
       - if: failure()
         uses: actions/upload-artifact@v4
