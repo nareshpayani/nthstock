@@ -1,12 +1,13 @@
 import type { FastifyPluginAsync } from 'fastify';
+import { registerRoute } from '../../http/registerRoute.js';
 
-export interface HealthResponse {
-  status: 'ok';
-  uptimeSeconds: number;
-}
+/** Version string the health route reports; bumped with releases. */
+export const API_VERSION = '0.0.0';
 
 export const healthRoutes: FastifyPluginAsync = async (app) => {
-  app.get('/health', async (): Promise<HealthResponse> => {
-    return { status: 'ok', uptimeSeconds: Math.round(process.uptime()) };
-  });
+  registerRoute(app, 'health', () => ({
+    status: 'ok',
+    version: API_VERSION,
+    time: new Date().toISOString(),
+  }));
 };
