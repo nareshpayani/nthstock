@@ -1,0 +1,51 @@
+/*
+ * Import after tailwindcss and the @nthstock/tokens stylesheets. Registers this package's source
+ * with Tailwind so its classes are generated, and adds the motion the components use.
+ */
+@source './src';
+
+@theme inline {
+  --animate-overlay-in: nth-fade-in var(--nth-duration-panel) var(--nth-ease-standard);
+  --animate-sheet-in: nth-slide-in-right var(--nth-duration-panel) var(--nth-ease-standard);
+  --animate-drawer-in: nth-slide-in-left var(--nth-duration-panel) var(--nth-ease-standard);
+  --animate-pop-in: nth-pop-in var(--nth-duration-panel) var(--nth-ease-standard);
+  --animate-shimmer: nth-shimmer 1.4s ease-in-out infinite;
+  --animate-spin: nth-spin 0.8s linear infinite;
+}
+
+@keyframes nth-fade-in {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes nth-slide-in-right {
+  from {
+    transform: translateX(100%);
+  }
+}
+
+@keyframes nth-slide-in-left {
+  from {
+    transform: translateX(-100%);
+  }
+}
+
+@keyframes nth-pop-in {
+  from {
+    opacity: 0;
+    transform: scale(0.97);
+  }
+}
+
+@keyframes nth-shimmer {
+  50% {
+    opacity: 0.55;
+  }
+}
+
+@keyframes nth-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}

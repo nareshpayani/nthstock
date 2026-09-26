@@ -1,0 +1,10 @@
+@import 'tailwindcss';
+@import '@nthstock/tokens/fonts.css';
+@import '@nthstock/tokens/tokens.css';
+@import '@nthstock/tokens/tailwind.css';
+@import '../styles.css';
+@source '../../../apps/web/src';
+
+html {
+  @apply bg-canvas text-ink font-sans text-body antialiased;
+}

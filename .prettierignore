@@ -5,3 +5,6 @@ coverage
 package-lock.json
 # Markdown tables stay hand-formatted
 *.md
+routeTree.gen.ts
+playwright-report
+test-results

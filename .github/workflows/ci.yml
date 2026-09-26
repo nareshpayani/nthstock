@@ -30,6 +30,56 @@ jobs:
       - run: npm run test
       - run: npm run build
 
+  storybook:
+    name: Storybook build and a11y
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - run: npm run build-storybook
+      - name: Install Chromium for the Storybook test runner
+        run: npx playwright install --with-deps chromium
+      - name: Serve the static Storybook
+        run: |
+          python3 -m http.server 6006 -d packages/ui/storybook-static >/dev/null 2>&1 &
+          for _ in $(seq 1 30); do curl -sf http://127.0.0.1:6006/index.json >/dev/null && exit 0; sleep 1; done
+          echo "Storybook did not start" >&2; exit 1
+      # axe runs on every story (@storybook/addon-a11y, a11y.test = 'error').
+      - run: npm run test-storybook -w @nthstock/ui -- --url http://127.0.0.1:6006
+      - name: The deliberately low-contrast canary story must fail
+        run: |
+          if npm run test-storybook:canary -w @nthstock/ui -- --url http://127.0.0.1:6006; then
+            echo "::error::The a11y canary passed, so axe is not running on stories." >&2
+            exit 1
+          fi
+
+  e2e:
+    name: Playwright smoke (Chrome)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - run: npx turbo run build --filter=@nthstock/web^...
+      - name: Install Chrome for Testing (Chromium)
+        run: npx playwright install --with-deps chromium
+      - run: npm run e2e
+      - if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: apps/web/playwright-report
+          retention-days: 7
+
   audit:
     name: Dependency audit
     runs-on: ubuntu-latest

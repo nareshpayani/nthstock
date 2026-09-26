@@ -1,0 +1,14 @@
+{
+  "extends": "@nthstock/config/tsconfig.base.json",
+  "compilerOptions": {
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "jsx": "react-jsx",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "types": ["@testing-library/jest-dom/vitest"],
+    "outDir": "dist",
+    "rootDir": ".",
+    "noEmit": true
+  },
+  "include": ["src", ".storybook", "vitest.config.ts"]
+}
