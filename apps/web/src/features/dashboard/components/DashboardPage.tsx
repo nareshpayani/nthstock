@@ -1,8 +1,8 @@
 import { getRouteApi } from '@tanstack/react-router';
 import { DEFAULT_CHART_RANGE, IndexChartCard } from '@/features/charts';
+import { IndicesRow } from '@/features/indices';
 import type { DashboardSearch } from '../model/dashboardSearch';
 import { Hero } from './Hero';
-import { IndicesRow } from './IndicesRow';
 import { MarketMoversCard } from './MarketMoversCard';
 import { StocksListsCard } from './StocksListsCard';
 

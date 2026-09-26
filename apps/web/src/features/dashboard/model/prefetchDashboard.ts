@@ -1,6 +1,7 @@
 import type { ApiClient } from '@nthstock/apiClient';
 import type { QueryClient } from '@tanstack/react-query';
 import { DEFAULT_CHART_RANGE, NIFTY, candlesQuery } from '@/features/charts';
+import { indicesQuery } from '@/features/indices';
 import type { DashboardSearch } from './dashboardSearch';
 
 /**
@@ -16,4 +17,5 @@ export function prefetchDashboard(
   void queryClient.prefetchQuery(
     candlesQuery(api, { ...NIFTY, range: search.range ?? DEFAULT_CHART_RANGE }),
   );
+  void queryClient.prefetchQuery(indicesQuery(api));
 }

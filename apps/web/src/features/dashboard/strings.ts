@@ -5,7 +5,6 @@ export const strings = {
     'Practise investing on NSE and BSE stocks with ₹10,00,000 of virtual cash. No real money.',
   heroCta: 'View funds',
   paperTag: 'Paper trading',
-  indicesTitle: 'Market indices',
   listsTitle: 'Stocks lists',
   lists: ['Market Giants', 'Best Returns', 'Highest Dividends', 'Top IT'] as const,
   moversTitle: 'Market movers',

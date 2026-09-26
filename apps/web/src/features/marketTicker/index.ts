@@ -6,4 +6,3 @@ export {
   type MarketStatusView,
 } from './model/marketStatusText';
 export { headerIndices, type HeaderIndex } from './model/headerIndices';
-export { sampleIndices, type SampleIndex } from './model/sampleIndices';
