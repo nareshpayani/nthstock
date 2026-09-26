@@ -117,7 +117,9 @@ describe('MockMarketDataAdapter market hours', () => {
     const after = Quote.parse(await adapter.getQuote('RELIANCE'));
     expect(after.volume).toBeGreaterThan(before.volume);
     expect(after.prevClose).toBe(before.prevClose);
-  });
+    // 300 full-market ticks (~5,000 symbols each): under 1 s alone, but CI runs every
+    // package's tests plus Redis containers at once, and one run passed 5 s.
+  }, 30_000);
 });
 
 describe('MockMarketDataAdapter timers', () => {
