@@ -9,4 +9,20 @@ export const strings = {
     back: 'Go to dashboard',
   },
   instrumentType: { EQUITY: 'Equity', INDEX: 'Index' },
+  header: {
+    exchangeLabel: 'Exchange',
+    notListed: (symbol: string, exchange: string) => `${symbol} is not listed on ${exchange}.`,
+    priceLabel: 'Last traded price',
+    changeLabel: 'Day change',
+    tradeLabel: (symbol: string) => `Trade ${symbol}`,
+    buy: 'Buy',
+    sell: 'Sell',
+    buyLabel: (symbol: string) => `Buy ${symbol}`,
+    sellLabel: (symbol: string) => `Sell ${symbol}`,
+    paperNote: 'Paper trading: virtual cash only.',
+    ticketSoon: {
+      title: (side: string, symbol: string) => `${side} ${symbol}`,
+      body: 'The paper order ticket opens here in an upcoming release.',
+    },
+  },
 } as const;

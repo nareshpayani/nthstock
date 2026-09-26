@@ -1,7 +1,11 @@
 import type { Instrument } from '@nthstock/contracts';
-import type { StockDetailSearch } from '../model/stockDetailSearch';
+import { useQuery } from '@tanstack/react-query';
 import { useDocumentTitle } from '@/shared/hooks/useDocumentTitle';
+import { useApiClient } from '@/shared/lib/apiClientContext';
+import { quoteSnapshotQuery } from '../api/stockDetailQueries';
+import type { StockDetailSearch } from '../model/stockDetailSearch';
 import { strings } from '../strings';
+import { StockHeader } from './StockHeader';
 
 export type StockDetailPageProps = {
   instrument: Instrument;
@@ -10,17 +14,22 @@ export type StockDetailPageProps = {
   onSearchChange?: (patch: StockDetailSearch) => void;
 };
 
+const ignore = () => undefined;
+
 /** Stock detail (E5): header, chart and key stats for one instrument on one exchange. */
-export function StockDetailPage({ instrument }: StockDetailPageProps) {
+export function StockDetailPage({ instrument, onSearchChange = ignore }: StockDetailPageProps) {
   useDocumentTitle(strings.pageTitle(instrument.name, instrument.symbol));
+  const api = useApiClient();
+  const listing = { symbol: instrument.symbol, exchange: instrument.exchange };
+  const snapshot = useQuery(quoteSnapshotQuery(api, listing));
+
   return (
     <div className="mx-auto grid w-full max-w-[1200px] grid-cols-[minmax(0,1fr)] gap-4 lg:gap-6">
-      <div className="grid gap-1">
-        <h1 className="text-title text-ink">{instrument.name}</h1>
-        <p className="text-body text-ink-muted">
-          {instrument.symbol} · {instrument.exchange} · {strings.instrumentType[instrument.type]}
-        </p>
-      </div>
+      <StockHeader
+        instrument={instrument}
+        snapshot={snapshot.data}
+        onExchangeChange={(exchange) => onSearchChange({ exchange })}
+      />
     </div>
   );
 }

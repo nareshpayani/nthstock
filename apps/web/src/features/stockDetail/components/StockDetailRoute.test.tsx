@@ -29,7 +29,9 @@ describe('stock detail route (T-105)', () => {
       await screen.findByRole('heading', { level: 1, name: 'Infosys Ltd' }),
     ).toBeInTheDocument();
     expect(document.title).toBe('Infosys Ltd (INFY) · nthstock');
-    expect(api.requestsTo('/instruments/INFY')).toHaveLength(1);
+    // The page loader asks once; the exchange toggle's lookup of BSE is a separate request.
+    const loads = api.requestsTo('/instruments/INFY').filter((url) => !url.search);
+    expect(loads).toHaveLength(1);
   });
 
   it('/stocks/NOPE shows not-found with the symbol and a way back', async () => {
