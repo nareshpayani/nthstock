@@ -2,6 +2,7 @@ import rateLimit from '@fastify/rate-limit';
 import Fastify, { type FastifyInstance, type FastifyServerOptions } from 'fastify';
 import { createDeps, type AppDeps, type DepsOverrides } from './deps.js';
 import { installErrorHandling } from './http/errorHandler.js';
+import { authRoutes } from './modules/auth/routes.js';
 import { healthRoutes } from './modules/health/routes.js';
 import { marketRoutes } from './modules/market/routes.js';
 import type { Publisher } from './ticks/publisher.js';
@@ -55,5 +56,6 @@ export function buildApp(options: AppOptions = {}): App {
   }
   app.register(healthRoutes(deps));
   app.register(marketRoutes(deps));
+  app.register(authRoutes(deps));
   return Object.assign(app, { deps });
 }

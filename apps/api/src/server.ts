@@ -12,7 +12,12 @@ const tickLog = {
 
 const app = buildApp({
   logger: true,
-  deps: { marketAlwaysOpen: config.mockMarketAlwaysOpen },
+  deps: {
+    marketAlwaysOpen: config.mockMarketAlwaysOpen,
+    production: config.production,
+    // The mock SMS provider's dev log line (the OTP, outside production only).
+    smsLog: (line) => process.stdout.write(`${line}\n`),
+  },
   ...(config.redisUrl ? { tickPublisher: createRedisPublisher(config.redisUrl, tickLog) } : {}),
 });
 

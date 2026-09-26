@@ -6,6 +6,7 @@ const Flag = z
   .transform((value) => value === 'true' || value === '1');
 
 const EnvSchema = z.object({
+  NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
   PORT: z.coerce.number().int().min(1).max(65_535).default(4000),
   HOST: z.string().min(1).default('0.0.0.0'),
   MOCK_MARKET_ALWAYS_OPEN: Flag,
@@ -20,6 +21,8 @@ const EnvSchema = z.object({
 });
 
 export type ApiConfig = {
+  /** `NODE_ENV=production`: random OTPs, no dev OTP or dev CAPTCHA. */
+  production: boolean;
   port: number;
   host: string;
   /** Tick the mock market outside NSE hours (documented in `.env.example`). */
@@ -35,6 +38,7 @@ export function loadConfig(env: Readonly<Record<string, string | undefined>>): A
     throw new Error(`Invalid apps/api environment: ${z.prettifyError(parsed.error)}`);
   }
   return {
+    production: parsed.data.NODE_ENV === 'production',
     port: parsed.data.PORT,
     host: parsed.data.HOST,
     mockMarketAlwaysOpen: parsed.data.MOCK_MARKET_ALWAYS_OPEN,

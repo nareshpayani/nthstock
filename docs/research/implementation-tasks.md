@@ -150,7 +150,7 @@ API shapes are nthstock's own contracts, not copies of Paytm Money's.
 
 ## E3: Auth
 
-- [ ] T-079 [MOCK] Add OTP request and verify in apps/api: mock SMS provider logs the OTP, fixed dev OTP 123456 outside production, 30 s resend throttle, captchaRequired after 3 wrong attempts. Depends: T-059, T-033. Done when: a resend within 30 s returns 429 and the 3rd wrong OTP sets captchaRequired (tests).
+- [x] T-079 [MOCK] Add OTP request and verify in apps/api: mock SMS provider logs the OTP, fixed dev OTP 123456 outside production, 30 s resend throttle, captchaRequired after 3 wrong attempts. Depends: T-059, T-033. Done when: a resend within 30 s returns 429 and the 3rd wrong OTP sets captchaRequired (tests).
 - [ ] T-080 [MOCK] Add sessions: 15-min access JWT, rotating refresh token in an httpOnly SameSite=Strict cookie, refresh and logout routes, reuse detection. Depends: T-079. Done when: reusing a refresh token returns 401 and revokes the token family (test).
 - [ ] T-081 [MOCK] Add PIN set and verify with Argon2id, a trusted-device cookie, lockout after 5 wrong attempts and unlock via OTP. Depends: T-080. Done when: the 5th wrong PIN locks the account and a verified OTP clears the lock (tests).
 - [ ] T-082 [MOCK] Add CSRF checks on state-changing routes and per-IP rate limits on auth routes. Depends: T-080. Done when: a POST without the CSRF header returns 403 and the 21st OTP request in a minute from one IP returns 429.

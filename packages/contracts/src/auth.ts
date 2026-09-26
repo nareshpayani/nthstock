@@ -90,3 +90,35 @@ export type PinSetResponse = z.infer<typeof PinSetResponse>;
 /** PIN login on a trusted device; the device is identified by its trusted-device cookie. */
 export const PinVerifyRequest = z.object({ pin: Pin });
 export type PinVerifyRequest = z.infer<typeof PinVerifyRequest>;
+
+// ---- Auth rules ------------------------------------------------------------------------------
+// Both mock backends (apps/api and the MSW handlers) enforce these, so the scenario suite can
+// hold them to the same behaviour.
+
+/** Seconds before another OTP may be requested for the same mobile. */
+export const OTP_RESEND_AFTER_SEC = 30;
+/** Seconds an OTP stays valid. */
+export const OTP_TTL_SEC = 300;
+/** Wrong OTP attempts after which a CAPTCHA is required (CLAUDE.md security baseline). */
+export const OTP_CAPTCHA_AFTER_FAILURES = 3;
+/** Wrong OTP attempts after which the OTP is burnt and a new one must be requested. */
+export const OTP_MAX_FAILURES = 5;
+/**
+ * The fixed OTP the mock SMS provider uses outside production. Not a secret: production draws a
+ * random OTP and never accepts this one.
+ */
+export const DEV_OTP = '123456';
+/** The CAPTCHA token the mock CAPTCHA verifier accepts outside production. Never in production. */
+export const DEV_CAPTCHA_TOKEN = 'dev-captcha-pass';
+
+/**
+ * `details` on auth errors (OTP_INVALID, CAPTCHA_REQUIRED, PIN_INVALID, PIN_LOCKED, RATE_LIMITED),
+ * so the UI can show attempts left, a CAPTCHA, a countdown or "Unlock with OTP".
+ */
+export const AuthErrorDetails = z.object({
+  captchaRequired: z.boolean().optional(),
+  attemptsLeft: z.number().int().min(0).optional(),
+  retryAfterSec: z.number().int().min(0).optional(),
+  unlockWith: z.literal('OTP').optional(),
+});
+export type AuthErrorDetails = z.infer<typeof AuthErrorDetails>;

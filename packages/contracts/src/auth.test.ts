@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import {
+  AuthErrorDetails,
+  DEV_OTP,
   Device,
+  OTP_CAPTCHA_AFTER_FAILURES,
+  OTP_MAX_FAILURES,
+  OTP_RESEND_AFTER_SEC,
+  OTP_TTL_SEC,
   Mobile,
   Otp,
   OtpRequest,
@@ -99,5 +105,21 @@ describe('OtpRequest', () => {
 describe('User', () => {
   it('only carries a masked mobile', () => {
     expect(User.safeParse({ ...userFixture, mobileMasked: '9876543210' }).success).toBe(false);
+  });
+});
+
+describe('auth rules', () => {
+  it('keeps the dev OTP a valid OTP and the throttles consistent', () => {
+    expect(Otp.parse(DEV_OTP)).toBe(DEV_OTP);
+    expect(OTP_CAPTCHA_AFTER_FAILURES).toBeLessThan(OTP_MAX_FAILURES);
+    expect(OTP_RESEND_AFTER_SEC).toBeLessThan(OTP_TTL_SEC);
+  });
+
+  it('parses auth error details', () => {
+    expect(AuthErrorDetails.parse({ captchaRequired: true, attemptsLeft: 2 })).toEqual({
+      captchaRequired: true,
+      attemptsLeft: 2,
+    });
+    expect(AuthErrorDetails.safeParse({ unlockWith: 'PIN' }).success).toBe(false);
   });
 });
