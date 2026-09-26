@@ -37,7 +37,7 @@ export function StockHeader({ instrument, snapshot, onExchangeChange }: StockHea
   };
 
   return (
-    <header className="grid gap-4 rounded-lg border border-line bg-surface p-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end lg:p-5">
+    <div className="grid gap-4 rounded-lg border border-line bg-surface p-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end lg:p-5">
       <div className="grid min-w-0 gap-3">
         <div className="grid gap-1">
           <h1 className="text-title break-words text-ink">{instrument.name}</h1>
@@ -120,6 +120,6 @@ export function StockHeader({ instrument, snapshot, onExchangeChange }: StockHea
           <p className="text-label text-ink-muted">{strings.header.paperNote}</p>
         </div>
       ) : null}
-    </header>
+    </div>
   );
 }
