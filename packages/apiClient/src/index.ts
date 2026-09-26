@@ -2,6 +2,7 @@ export { ApiError, codeForStatus, isApiError, type ApiErrorKind } from './apiErr
 export {
   CSRF_HEADER,
   createApiClient,
+  trimTrailingSlashes,
   type ApiClient,
   type ApiClientOptions,
   type FetchLike,

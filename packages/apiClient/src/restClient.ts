@@ -75,12 +75,19 @@ async function readBody(response: Response): Promise<unknown> {
   }
 }
 
+/** Linear-time `replace(/\/+$/, '')`; the regex backtracks on long runs of '/' (CodeQL). */
+export function trimTrailingSlashes(url: string): string {
+  let end = url.length;
+  while (end > 0 && url.charCodeAt(end - 1) === 47) end -= 1;
+  return url.slice(0, end);
+}
+
 /**
  * Typed REST client over the contracts route map, shared by web and (later) mobile. Isomorphic:
  * only fetch, no DOM. Cookies ride along (`credentials: 'include'`); every failure is an ApiError.
  */
 export function createApiClient(options: ApiClientOptions = {}): ApiClient {
-  const baseUrl = (options.baseUrl ?? '').replace(/\/+$/, '');
+  const baseUrl = trimTrailingSlashes(options.baseUrl ?? '');
 
   const urlFor = (name: RouteName, args: { params?: unknown; query?: unknown } = {}) => {
     const route = routes[name];

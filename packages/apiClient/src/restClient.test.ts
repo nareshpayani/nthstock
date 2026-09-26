@@ -1,7 +1,7 @@
 import type { IndicesResponse } from '@nthstock/contracts';
 import { describe, expect, it, vi } from 'vitest';
 import { ApiError, codeForStatus, isApiError } from './apiError.js';
-import { CSRF_HEADER, createApiClient, type FetchLike } from './restClient.js';
+import { CSRF_HEADER, createApiClient, trimTrailingSlashes, type FetchLike } from './restClient.js';
 
 const TS = '2026-09-25T04:00:00.000Z';
 const indices: IndicesResponse = {
@@ -163,5 +163,23 @@ describe('codeForStatus', () => {
     [500, 'INTERNAL_ERROR'],
   ] as const)('%i → %s', (status, code) => {
     expect(codeForStatus(status)).toBe(code);
+  });
+});
+
+describe('trimTrailingSlashes', () => {
+  it('drops every trailing slash and nothing else', () => {
+    expect(trimTrailingSlashes('https://api.example.test/v1///')).toBe(
+      'https://api.example.test/v1',
+    );
+    expect(trimTrailingSlashes('/api')).toBe('/api');
+    expect(trimTrailingSlashes('///')).toBe('');
+    expect(trimTrailingSlashes('')).toBe('');
+  });
+
+  it('stays fast on a long run of slashes', () => {
+    const input = `a${'/'.repeat(100_000)}b${'/'.repeat(100_000)}`;
+    const start = performance.now();
+    expect(trimTrailingSlashes(input)).toBe(`a${'/'.repeat(100_000)}b`);
+    expect(performance.now() - start).toBeLessThan(100);
   });
 });

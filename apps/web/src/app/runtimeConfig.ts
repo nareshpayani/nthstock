@@ -1,3 +1,4 @@
+import { trimTrailingSlashes } from '@nthstock/apiClient';
 import { z } from 'zod';
 
 /**
@@ -40,7 +41,7 @@ export const runtimeEnvSchema = z.object({
     z.enum(API_MODES, { error: `must be one of: ${API_MODES.join(', ')}` }),
   ).transform((value) => value ?? 'msw'),
   /** Origin of the REST API. Empty means the page's own origin (the Vite proxy in api mode). */
-  VITE_API_BASE_URL: optional(httpUrl).transform((value) => (value ?? '').replace(/\/+$/, '')),
+  VITE_API_BASE_URL: optional(httpUrl).transform((value) => trimTrailingSlashes(value ?? '')),
   /** Realtime WebSocket URL. Empty means `ws(s)://<page host>/ws`. */
   VITE_WS_URL: optional(wsUrl).transform((value) => value ?? null),
   /** msw mode only: tick the mock market even outside NSE hours, for demos and e2e. */
