@@ -236,7 +236,7 @@ export function SearchBox({ ref, onNavigate }: SearchBoxProps) {
         hidden={!expanded}
         // Keep focus in the input while the pointer picks an option.
         onMouseDown={(event) => event.preventDefault()}
-        className="absolute inset-x-0 top-full z-(--nth-z-popover) mt-1 max-h-[min(70vh,28rem)] overflow-y-auto rounded-md border border-line bg-surface p-1 shadow-overlay"
+        className="absolute inset-x-0 top-full z-(--nth-z-popover) mt-1 rounded-md border border-line bg-surface p-1 shadow-overlay"
       >
         {message === null ? null : <p className="px-3 py-2 text-label text-ink-muted">{message}</p>}
         <div
