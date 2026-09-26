@@ -41,4 +41,16 @@ describe('dashboard URL state', () => {
     await waitFor(() => expect(router.state.location.search).toEqual({ range: '5Y' }));
     await waitFor(() => expect(candleRanges()).toContain('5Y'));
   });
+
+  it('opens the curated list named in the URL and writes the tab back', async () => {
+    const { router } = renderApp('/dashboard?list=top-it', { apiClient: api.apiClient });
+    const tab = await screen.findByRole('tab', { name: 'Top IT' });
+    expect(tab).toHaveAttribute('aria-selected', 'true');
+    await waitFor(() =>
+      expect(api.requests.map((url) => url.pathname)).toContain('/v1/market/lists/top-it'),
+    );
+    const giants = screen.getByRole('tab', { name: 'Market Giants' });
+    fireEvent.mouseDown(giants);
+    await waitFor(() => expect(router.state.location.search).toEqual({ list: 'market-giants' }));
+  });
 });

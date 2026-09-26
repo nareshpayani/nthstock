@@ -1,4 +1,4 @@
-import { CandleRange } from '@nthstock/contracts';
+import { CandleRange, StockListId } from '@nthstock/contracts';
 import { createFileRoute } from '@tanstack/react-router';
 import { z } from 'zod';
 import { DashboardPage, prefetchDashboard } from '@/features/dashboard';
@@ -8,6 +8,7 @@ import { DashboardPage, prefetchDashboard } from '@/features/dashboard';
 // feature, so the feature's code stays out of the initial chunk.
 const dashboardSearch = z.object({
   range: CandleRange.optional().catch(undefined),
+  list: StockListId.optional().catch(undefined),
 });
 
 export const Route = createFileRoute('/_app/dashboard')({

@@ -1,10 +1,10 @@
 import { getRouteApi } from '@tanstack/react-router';
 import { DEFAULT_CHART_RANGE, IndexChartCard } from '@/features/charts';
+import { StocksListsCard } from '@/features/collections';
 import { IndicesRow } from '@/features/indices';
 import type { DashboardSearch } from '../model/dashboardSearch';
 import { Hero } from './Hero';
 import { MarketMoversCard } from './MarketMoversCard';
-import { StocksListsCard } from './StocksListsCard';
 
 const route = getRouteApi('/_app/dashboard');
 
@@ -30,7 +30,7 @@ export function DashboardPage({ now = new Date() }: DashboardPageProps) {
       />
       <IndicesRow />
       <div className="grid grid-cols-[minmax(0,1fr)] gap-4 lg:gap-6 xl:grid-cols-2">
-        <StocksListsCard />
+        <StocksListsCard listId={search.list} onListChange={(list) => setSearch({ list })} />
         <MarketMoversCard />
       </div>
     </div>
