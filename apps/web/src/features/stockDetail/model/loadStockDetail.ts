@@ -1,8 +1,9 @@
 import { isApiError, type ApiClient } from '@nthstock/apiClient';
 import type { CandleRange, Exchange, Instrument } from '@nthstock/contracts';
 import type { QueryClient } from '@tanstack/react-query';
-import { DEFAULT_CHART_RANGE, candlesQuery } from '@/features/charts';
+import { candlesQuery } from '@/features/charts';
 import { instrumentQuery, quoteSnapshotQuery, statsQuery } from '../api/stockDetailQueries';
+import { DEFAULT_STOCK_RANGE } from './stockDetailSearch';
 
 export type LoadStockDetailParams = {
   symbol: string;
@@ -36,7 +37,7 @@ export async function loadStockDetail(
   const listed = { symbol: instrument.symbol, exchange: instrument.exchange };
   void queryClient.prefetchQuery(quoteSnapshotQuery(api, listed));
   void queryClient.prefetchQuery(
-    candlesQuery(api, { ...listed, range: range ?? DEFAULT_CHART_RANGE }),
+    candlesQuery(api, { ...listed, range: range ?? DEFAULT_STOCK_RANGE }),
   );
   if (instrument.type === 'EQUITY') void queryClient.prefetchQuery(statsQuery(api, listed));
   return instrument;

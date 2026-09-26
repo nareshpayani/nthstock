@@ -12,6 +12,14 @@ export const strings = {
   errorTitle: 'Chart unavailable',
   errorBody: 'The NIFTY 50 chart could not load.',
   retry: 'Retry',
+  tooltip: {
+    price: 'Price',
+    level: 'Level',
+    open: 'Open',
+    high: 'High',
+    low: 'Low',
+    close: 'Close',
+  },
   ranges: {
     '1D': '1 day',
     '1W': '1 week',

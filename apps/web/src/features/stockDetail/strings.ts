@@ -9,6 +9,23 @@ export const strings = {
     back: 'Go to dashboard',
   },
   instrumentType: { EQUITY: 'Equity', INDEX: 'Index' },
+  sectionError: {
+    title: 'This section could not load',
+    body: 'Something went wrong here. The rest of the page still works.',
+    retry: 'Try again',
+  },
+  chart: {
+    title: 'Price chart',
+    rangeLabel: 'Chart range',
+    typeLabel: 'Chart type',
+    types: { area: 'Area', candle: 'Candles' },
+    label: (symbol: string, type: string, range: string) => `${symbol} ${type} chart over ${range}`,
+    typeNames: { area: 'area', candle: 'candlestick' },
+    loading: 'Loading chart',
+    errorTitle: 'Chart unavailable',
+    errorBody: 'The price chart could not load.',
+    retry: 'Retry',
+  },
   header: {
     exchangeLabel: 'Exchange',
     notListed: (symbol: string, exchange: string) => `${symbol} is not listed on ${exchange}.`,
