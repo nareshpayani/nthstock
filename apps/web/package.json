@@ -40,6 +40,7 @@
     "@nthstock/apiClient": "0.0.0",
     "@nthstock/contracts": "0.0.0",
     "@nthstock/marketData": "0.0.0",
+    "@nthstock/paperEngine": "0.0.0",
     "@nthstock/tokens": "0.0.0",
     "@nthstock/ui": "0.0.0",
     "@nthstock/utils": "0.0.0",
