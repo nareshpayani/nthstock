@@ -15,9 +15,7 @@ async function renderDashboard() {
     testQuote('SENSEX', 8309215, { exchange: 'BSE', prevClose: 8319185 }),
   );
   const view = renderApp('/dashboard', { quoteStore: quotes.store });
-  // The first render also transforms the dashboard's lazy route chunk; on a busy CI runner that
-  // took longer than findBy's 1 s default, so wait for the page itself for up to 10 s.
-  await screen.findByRole('heading', { level: 1, name: /^Good/ }, { timeout: 10_000 });
+  await screen.findByRole('heading', { level: 1, name: /^Good/ });
   return view;
 }
 
