@@ -13,6 +13,7 @@
     "test": "vitest run --coverage"
   },
   "dependencies": {
+    "@fastify/rate-limit": "11.2.0",
     "@nthstock/contracts": "0.0.0",
     "@nthstock/marketData": "0.0.0",
     "@nthstock/utils": "0.0.0",
