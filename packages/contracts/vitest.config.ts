@@ -6,7 +6,14 @@ export default defineConfig({
     coverage: {
       provider: 'v8',
       include: ['src/**/*.ts'],
-      exclude: ['src/**/*.test.ts', 'src/index.ts', 'src/fixtures.ts'],
+      // Scenario files are exercised by the backend runners (apps/api, apps/web), not here.
+      exclude: [
+        'src/**/*.test.ts',
+        'src/index.ts',
+        'src/fixtures.ts',
+        'src/testing/index.ts',
+        'src/testing/scenarios/**',
+      ],
       thresholds: { lines: 80, functions: 80, branches: 80, statements: 80 },
     },
   },

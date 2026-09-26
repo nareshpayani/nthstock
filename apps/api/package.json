@@ -10,16 +10,21 @@
     "start": "node dist/server.js",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run --coverage"
   },
   "dependencies": {
+    "@fastify/rate-limit": "11.2.0",
+    "@nthstock/contracts": "0.0.0",
+    "@nthstock/marketData": "0.0.0",
     "@nthstock/paperEngine": "0.0.0",
     "@nthstock/utils": "0.0.0",
-    "fastify": "5.12.5"
+    "fastify": "5.12.5",
+    "zod": "4.6.5"
   },
   "devDependencies": {
     "@nthstock/config": "0.0.0",
     "@types/node": "22.20.4",
+    "@vitest/coverage-v8": "5.0.2",
     "eslint": "10.11.0",
     "globals": "17.12.0",
     "tsx": "4.23.15",
