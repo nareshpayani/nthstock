@@ -1,4 +1,5 @@
 import type { Instrument } from '@nthstock/contracts';
+import { cn } from '@nthstock/ui';
 import { useQuery } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 import { SectionBoundary } from '@/shared/components/SectionBoundary';
@@ -11,6 +12,7 @@ import {
   type StockDetailSearch,
 } from '../model/stockDetailSearch';
 import { strings } from '../strings';
+import { KeyStatsCard } from './KeyStatsCard';
 import { StockChartCard } from './StockChartCard';
 import { StockHeader } from './StockHeader';
 
@@ -47,6 +49,7 @@ export function StockDetailPage({
   const api = useApiClient();
   const listing = { symbol: instrument.symbol, exchange: instrument.exchange };
   const snapshot = useQuery(quoteSnapshotQuery(api, listing));
+  const equity = instrument.type === 'EQUITY';
 
   return (
     <div className="mx-auto grid w-full max-w-[1200px] grid-cols-[minmax(0,1fr)] gap-4 lg:gap-6">
@@ -55,15 +58,27 @@ export function StockDetailPage({
         snapshot={snapshot.data}
         onExchangeChange={(exchange) => onSearchChange({ exchange })}
       />
-      <Section label={strings.chart.title}>
-        <StockChartCard
-          instrument={instrument}
-          range={search.range ?? DEFAULT_STOCK_RANGE}
-          chartType={search.chart ?? DEFAULT_CHART_TYPE}
-          onRangeChange={(range) => onSearchChange({ range })}
-          onChartTypeChange={(chart) => onSearchChange({ chart })}
-        />
-      </Section>
+      <div
+        className={cn(
+          'grid grid-cols-[minmax(0,1fr)] gap-4 lg:gap-6',
+          equity && 'xl:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]',
+        )}
+      >
+        <Section label={strings.chart.title}>
+          <StockChartCard
+            instrument={instrument}
+            range={search.range ?? DEFAULT_STOCK_RANGE}
+            chartType={search.chart ?? DEFAULT_CHART_TYPE}
+            onRangeChange={(range) => onSearchChange({ range })}
+            onChartTypeChange={(chart) => onSearchChange({ chart })}
+          />
+        </Section>
+        {equity ? (
+          <Section label={strings.stats.title}>
+            <KeyStatsCard instrument={instrument} snapshot={snapshot.data} />
+          </Section>
+        ) : null}
+      </div>
     </div>
   );
 }
