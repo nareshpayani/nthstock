@@ -1,24 +1,39 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { TooltipProvider } from '@nthstock/ui';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import {
   createMemoryHistory,
   createRootRoute,
   createRouter,
   RouterProvider,
 } from '@tanstack/react-router';
-import { Header, type HeaderProps } from './Header';
+import { useState } from 'react';
+import { signIn, signOut, testSession } from '@/test/session';
+import { Header } from './Header';
 
-// Header needs a router for its links; each story mounts it in a one-route memory router.
-function WithRouter(props: HeaderProps) {
-  const root = createRootRoute({ component: () => <Header {...props} /> });
-  const router = createRouter({
-    routeTree: root,
-    history: createMemoryHistory({ initialEntries: ['/dashboard'] }),
+type DemoProps = { signedInAs: string | null };
+
+// Header needs a router for its links and a query client for logout; each story mounts both.
+function WithRouter({ signedInAs }: DemoProps) {
+  const [setup] = useState(() => {
+    if (signedInAs) signIn(testSession({ name: signedInAs }));
+    else signOut();
+    const root = createRootRoute({
+      component: () => <Header onOpenMenu={() => undefined} onOpenHelp={() => undefined} />,
+    });
+    const router = createRouter({
+      routeTree: root,
+      history: createMemoryHistory({ initialEntries: ['/dashboard'] }),
+    });
+    return { router, queryClient: new QueryClient() };
   });
   return (
-    <TooltipProvider>
-      <RouterProvider router={router} />
-    </TooltipProvider>
+    <QueryClientProvider client={setup.queryClient}>
+      <TooltipProvider>
+        {/* A story router, not the app's registered router type. */}
+        <RouterProvider router={setup.router as never} />
+      </TooltipProvider>
+    </QueryClientProvider>
   );
 }
 
@@ -26,11 +41,11 @@ const meta = {
   title: 'App/Header',
   component: WithRouter,
   parameters: { layout: 'fullscreen' },
-  args: { user: null, onOpenMenu: () => undefined, onOpenHelp: () => undefined },
+  args: { signedInAs: null },
 } satisfies Meta<typeof WithRouter>;
 
 export default meta;
 type Story = StoryObj<typeof meta>;
 
 export const SignedOut: Story = {};
-export const SignedIn: Story = { args: { user: { name: 'Asha Rao' } } };
+export const SignedIn: Story = { args: { signedInAs: 'Asha Rao' } };

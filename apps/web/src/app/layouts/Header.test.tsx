@@ -13,7 +13,8 @@ import { describe, expect, it, vi } from 'vitest';
 import { createTestQuoteStore, testQuote } from '@/test/quotes';
 import { AppProviders } from '../providers/AppProviders';
 import { createQueryClient } from '../queryClient';
-import { Header, type HeaderUser } from './Header';
+import { signIn, signOut, testSession } from '@/test/session';
+import { Header } from './Header';
 
 // Render counters: Logo renders only when Header itself re-renders; IndexTicker once per ticker.
 const counts = vi.hoisted(() => ({ logo: 0, tickers: new Map<string, number>() }));
@@ -32,10 +33,12 @@ vi.mock('@nthstock/ui', async (importOriginal) => {
   };
 });
 
-function renderHeader(user: HeaderUser | null, quoteStore?: QuoteStore) {
+function renderHeader(user: { name: string } | null, quoteStore?: QuoteStore) {
+  if (user) signIn(testSession({ name: user.name }));
+  else signOut();
   const onOpenHelp = vi.fn();
   const root = createRootRoute({
-    component: () => <Header user={user} onOpenMenu={vi.fn()} onOpenHelp={onOpenHelp} />,
+    component: () => <Header onOpenMenu={vi.fn()} onOpenHelp={onOpenHelp} />,
   });
   const router = createRouter({
     routeTree: root,
