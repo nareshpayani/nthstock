@@ -15,6 +15,8 @@ describe('public entry point', () => {
       'PlaceOrderRequest',
       'FundsSummary',
       'WsServerMessage',
+      'TickBatch',
+      'encodeQuoteFrame',
       'routes',
     ]) {
       expect(contracts, name).toHaveProperty(name);

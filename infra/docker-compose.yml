@@ -1,0 +1,20 @@
+# Local infrastructure for nthstock (CLAUDE.md D7: Docker Compose locally through Phase 5).
+# Start: npm run infra:up   (or: docker compose -f infra/docker-compose.yml up -d --wait)
+# Stop:  npm run infra:down
+name: nthstock
+
+services:
+  redis:
+    # Redis 7 (CLAUDE.md D6): quote pub/sub between apps/api and apps/realtime (ADR 0004 §4).
+    image: redis:7-alpine
+    # No persistence: pub/sub and caches only, state resets on restart like the in-memory repos.
+    command: ['redis-server', '--save', '', '--appendonly', 'no']
+    ports:
+      # Bound to loopback only: this Redis has no password and must not be reachable from the LAN.
+      - '127.0.0.1:6379:6379'
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 2s
+      timeout: 3s
+      retries: 15
+    restart: unless-stopped

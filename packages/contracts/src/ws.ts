@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { Exchange, TradingSymbol } from './primitives.js';
+import { Exchange, InstrumentToken, NonNegativePaise, TradingSymbol } from './primitives.js';
 import { Quote } from './market.js';
 import { Order } from './orders.js';
 
@@ -8,6 +8,15 @@ export const WS_PROTOCOL_VERSION = 1;
 
 /** Maximum symbols one connection may subscribe to. */
 export const WS_MAX_SUBSCRIPTIONS = 200;
+
+/** The server closes a connection it has heard nothing from (no message, no pong) for this long. */
+export const WS_IDLE_TIMEOUT_MS = 60_000;
+
+/** Close codes the server uses (4000–4999 is the application range). */
+export const WS_CLOSE_CODES = {
+  /** Idle for `WS_IDLE_TIMEOUT_MS`. The client reconnects as for any drop. */
+  idleTimeout: 4408,
+} as const;
 
 const v = z.literal(WS_PROTOCOL_VERSION);
 
@@ -41,7 +50,32 @@ export type WsPing = z.infer<typeof WsPing>;
 export const WsClientMessage = z.discriminatedUnion('type', [WsSubscribe, WsUnsubscribe, WsPing]);
 export type WsClientMessage = z.infer<typeof WsClientMessage>;
 
-/** A conflated batch of quotes (at most 4 updates/sec/symbol). */
+/**
+ * The per-instrument part of a quote that changes at most once a session: what a binary quote
+ * frame's token stands for, plus the open and previous close the frame leaves out (T-074). The
+ * server sends it, as an `instruments` message, before the first binary frame that needs it and
+ * again whenever it changes.
+ */
+export const WsInstrument = z.object({
+  token: InstrumentToken,
+  symbol: TradingSymbol,
+  exchange: Exchange,
+  open: NonNegativePaise,
+  prevClose: NonNegativePaise,
+});
+export type WsInstrument = z.infer<typeof WsInstrument>;
+
+export const WsInstruments = z.object({
+  v,
+  type: z.literal('instruments'),
+  instruments: z.array(WsInstrument).min(1).max(WS_MAX_SUBSCRIPTIONS),
+});
+export type WsInstruments = z.infer<typeof WsInstruments>;
+
+/**
+ * A conflated batch of quotes (at most 4 updates/sec/symbol) as JSON. apps/realtime sends quotes
+ * as binary frames instead (`quoteFrame.ts`) and falls back to this; the MSW mock sends this.
+ */
 export const WsQuotes = z.object({
   v,
   type: z.literal('quotes'),
@@ -86,6 +120,7 @@ export type WsError = z.infer<typeof WsError>;
 /** Messages the server sends. */
 export const WsServerMessage = z.discriminatedUnion('type', [
   WsQuotes,
+  WsInstruments,
   WsOrderUpdate,
   WsPong,
   WsError,

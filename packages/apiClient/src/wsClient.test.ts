@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { encodeQuoteFrame, instrumentOf } from '@nthstock/contracts';
 import { FakeWebSocket, quote } from './test/fakes.js';
 import { backoffDelay, createWsClient, globalTimers, type WsStatus } from './wsClient.js';
 
@@ -98,6 +99,39 @@ describe('ws client subscriptions', () => {
     stopQuotes();
     socket.receive({ v: 1, type: 'quotes', quotes: [q] });
     expect(onQuotes).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('ws client binary quote frames', () => {
+  it('decodes binary frames once it has learned their instruments', () => {
+    const client = makeClient();
+    const onQuotes = vi.fn();
+    client.onQuotes(onQuotes);
+    client.subscribe('INFY');
+    const socket = FakeWebSocket.last();
+    expect(socket.binaryType).toBe('arraybuffer');
+    socket.open();
+
+    const q = quote('INFY', 151000);
+    const frame = encodeQuoteFrame([q]);
+    socket.onmessage?.({ data: frame.buffer }); // token not learned yet: nothing to deliver
+    expect(onQuotes).not.toHaveBeenCalled();
+    socket.receive({ v: 1, type: 'instruments', instruments: [instrumentOf(q)] });
+    socket.onmessage?.({ data: frame.buffer });
+    socket.onmessage?.({ data: frame }); // a typed-array view decodes too
+    expect(onQuotes.mock.calls).toEqual([[[q]], [[q]]]);
+  });
+
+  it('ignores binary data that is not a quote frame, and Blobs', () => {
+    const client = makeClient();
+    const onQuotes = vi.fn();
+    client.onQuotes(onQuotes);
+    client.subscribe('INFY');
+    const socket = FakeWebSocket.last();
+    socket.open();
+    socket.onmessage?.({ data: new Uint8Array([0x51, 9, 0, 0]) });
+    socket.onmessage?.({ data: { size: 12 } });
+    expect(onQuotes).not.toHaveBeenCalled();
   });
 });
 

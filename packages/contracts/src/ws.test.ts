@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { quoteFixture, wsClientFixtures, wsServerFixtures } from './fixtures.js';
 import {
+  WS_CLOSE_CODES,
+  WS_IDLE_TIMEOUT_MS,
   WS_MAX_SUBSCRIPTIONS,
   WS_PROTOCOL_VERSION,
   WsClientMessage,
@@ -11,6 +13,12 @@ describe('WS protocol', () => {
   it('is version 1 with a 200-symbol cap', () => {
     expect(WS_PROTOCOL_VERSION).toBe(1);
     expect(WS_MAX_SUBSCRIPTIONS).toBe(200);
+  });
+
+  it('idles out after 60 s with an application close code', () => {
+    expect(WS_IDLE_TIMEOUT_MS).toBe(60_000);
+    expect(WS_CLOSE_CODES.idleTimeout).toBeGreaterThanOrEqual(4000);
+    expect(WS_CLOSE_CODES.idleTimeout).toBeLessThan(5000);
   });
 
   it.each(wsClientFixtures.map((m) => [m.type, m] as const))(

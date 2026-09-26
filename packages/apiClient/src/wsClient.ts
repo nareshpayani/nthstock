@@ -2,6 +2,7 @@ import {
   WS_MAX_SUBSCRIPTIONS,
   WS_PROTOCOL_VERSION,
   WsServerMessage,
+  createQuoteFrameDecoder,
   type Exchange,
   type Quote,
   type WsClientMessage,
@@ -10,6 +11,8 @@ import {
 /** The parts of a browser WebSocket the client uses, so tests can pass a fake. */
 export type WebSocketLike = {
   readonly readyState: number;
+  /** Set to 'arraybuffer' so binary quote frames arrive as ArrayBuffers, not Blobs. */
+  binaryType?: string;
   send(data: string): void;
   close(code?: number, reason?: string): void;
   onopen: ((event: unknown) => void) | null;
@@ -95,7 +98,8 @@ const keyOf = (symbol: string, exchange: Exchange) => `${exchange}:${symbol}`;
 /**
  * Live-quote WebSocket client (T-054). Connects on the first subscription, reconnects with
  * jittered exponential backoff, resends every subscription after a reconnect and keeps the socket
- * honest with a ping/pong heartbeat.
+ * honest with a ping/pong heartbeat. Quotes arrive as binary frames from apps/realtime (T-074) or
+ * as JSON `quotes` messages from the MSW mock; listeners see the same `Quote[]` either way.
  */
 export function createWsClient(options: WsClientOptions): WsClient {
   const timers = options.timers ?? globalTimers;
@@ -109,6 +113,8 @@ export function createWsClient(options: WsClientOptions): WsClient {
   const quoteListeners = new Set<(quotes: readonly Quote[]) => void>();
   const messageListeners = new Set<(message: WsServerMessage) => void>();
   const statusListeners = new Set<(status: WsStatus) => void>();
+  /** Binary quote frames (T-074) are keyed by token; `instruments` messages teach it the rest. */
+  const decoder = createQuoteFrameDecoder();
 
   let socket: WebSocketLike | null = null;
   let status: WsStatus = 'idle';
@@ -173,8 +179,27 @@ export function createWsClient(options: WsClientOptions): WsClient {
     awaitingPong = null;
   };
 
+  const emitQuotes = (quotes: readonly Quote[]) => {
+    if (quotes.length === 0) return;
+    for (const listener of [...quoteListeners]) listener(quotes);
+  };
+
+  const handleBinary = (data: ArrayBuffer | ArrayBufferView) => {
+    let quotes: Quote[];
+    try {
+      quotes = decoder.decode(data);
+    } catch {
+      return; // Not a quote frame of this version: ignore it, as with unknown JSON.
+    }
+    emitQuotes(quotes);
+  };
+
   const handleMessage = (data: unknown) => {
-    if (typeof data !== 'string') return; // Binary quote frames arrive with T-074.
+    if (data instanceof ArrayBuffer || ArrayBuffer.isView(data)) {
+      handleBinary(data);
+      return;
+    }
+    if (typeof data !== 'string') return;
     let json: unknown;
     try {
       json = JSON.parse(data);
@@ -185,9 +210,8 @@ export function createWsClient(options: WsClientOptions): WsClient {
     if (!parsed.success) return;
     const message = parsed.data;
     if (message.type === 'pong' && message.id === awaitingPong) awaitingPong = null;
-    if (message.type === 'quotes') {
-      for (const listener of [...quoteListeners]) listener(message.quotes);
-    }
+    if (message.type === 'instruments') decoder.learn(message.instruments);
+    if (message.type === 'quotes') emitQuotes(message.quotes);
     for (const listener of [...messageListeners]) listener(message);
   };
 
@@ -245,6 +269,7 @@ export function createWsClient(options: WsClientOptions): WsClient {
       return;
     }
     socket = next;
+    next.binaryType = 'arraybuffer';
     next.onopen = () => {
       attempt = 0;
       sent.clear();

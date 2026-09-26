@@ -158,3 +158,62 @@ describe('animationFrameScheduler', () => {
     vi.useRealTimers();
   });
 });
+
+describe('quote store pause and resume (T-077)', () => {
+  it('keeps only pinned symbols subscribed while paused and resubscribes on resume', () => {
+    const { source, subscribed } = fakeSource();
+    const store = createQuoteStore({ source, schedule: manualFrames().schedule });
+    store.subscribe('INFY', 'NSE', () => undefined);
+    store.subscribe('TCS', 'NSE', () => undefined);
+    const unpin = store.pin('INFY', 'NSE');
+    store.pin('INFY', 'NSE'); // pins are ref-counted
+    store.pause();
+    store.pause(); // idempotent
+    expect(store.isPaused()).toBe(true);
+    expect(Object.fromEntries(subscribed)).toEqual({ 'NSE:INFY': 1, 'NSE:TCS': 0 });
+
+    // A symbol first watched while paused waits for resume unless pinned.
+    store.subscribe('WIPRO', 'NSE', () => undefined);
+    expect(subscribed.get('NSE:WIPRO')).toBeUndefined();
+    store.pin('HDFCBANK', 'NSE');
+    store.subscribe('HDFCBANK', 'NSE', () => undefined);
+    expect(subscribed.get('NSE:HDFCBANK')).toBe(1);
+
+    unpin();
+    unpin(); // releasing twice is harmless
+    expect(subscribed.get('NSE:INFY')).toBe(1); // still pinned once
+
+    store.resume();
+    store.resume();
+    expect(store.isPaused()).toBe(false);
+    expect(Object.fromEntries(subscribed)).toEqual({
+      'NSE:INFY': 1,
+      'NSE:TCS': 1,
+      'NSE:WIPRO': 1,
+      'NSE:HDFCBANK': 1,
+    });
+  });
+
+  it('releases a pinned symbol on unpin while paused', () => {
+    const { source, subscribed } = fakeSource();
+    const store = createQuoteStore({ source, schedule: manualFrames().schedule });
+    store.subscribe('INFY', 'NSE', () => undefined);
+    const unpin = store.pin('INFY', 'NSE');
+    store.pause();
+    unpin();
+    expect(subscribed.get('NSE:INFY')).toBe(0);
+  });
+
+  it('never lets an older quote replace a newer one', () => {
+    const frames = manualFrames();
+    const store = createQuoteStore({ schedule: frames.schedule });
+    const newer = { ...quote('INFY', 151000), ts: '2026-09-25T04:00:02.000Z' };
+    const older = { ...quote('INFY', 150000), ts: '2026-09-25T04:00:01.000Z' };
+    store.ingest([newer]);
+    store.ingest([older]); // older than pending
+    frames.runFrame();
+    store.ingest([older]); // older than committed: nothing is even scheduled
+    expect(frames.pending()).toBe(0);
+    expect(store.get('INFY')?.quote).toBe(newer);
+  });
+});
