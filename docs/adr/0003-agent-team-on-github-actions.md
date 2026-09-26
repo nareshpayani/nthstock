@@ -21,3 +21,12 @@ Review findings inside a PR are fixed on the same PR; only out-of-scope bugs bec
   next workflow. Where `GITHUB_TOKEN` must be used, `workflow_dispatch` hands off instead.
 - Usage counts against the owner's Claude plan; turn limits, timeouts and the 3-round loop limit bound it.
 - Public-repo safety depends on the actor checks in each workflow; changes to those checks need owner review.
+
+## Amendment (2026-09-26): auto-merge
+
+The owner asked for agent PRs to merge automatically once CI is green, instead of waiting for a manual
+merge. `agent-automerge.yml` squash-merges one owner or agent PR per run when every check on its head
+commit is green and it has no `spec`, `needs-human`, `agent:fix-needed` or `do-not-merge` label.
+Spec PRs still need the owner, because merging a spec is what approves it. Setting the repository
+variable `AGENT_AUTOMERGE=false` turns it off. If `main`'s branch protection requires an approving
+review, the merge step fails until that requirement is relaxed.
