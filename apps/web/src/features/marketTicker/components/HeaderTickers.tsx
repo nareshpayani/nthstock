@@ -1,8 +1,41 @@
-import { IndexTicker, cn } from '@nthstock/ui';
-import { sampleIndices } from '../model/sampleIndices';
+import { IndexTicker, Skeleton, cn } from '@nthstock/ui';
+import { memo } from 'react';
+import { useQuote } from '@/shared/hooks/useQuote';
+import { headerIndices, type HeaderIndex } from '../model/headerIndices';
 import { strings } from '../strings';
 
-/** Nifty 50 and Sensex in the header. SAMPLE values, driven by props once E4 wires live data. */
+type LiveIndexTickerProps = HeaderIndex & { compact: boolean };
+
+/** One live index. Memoised and subscribed on its own, so a tick re-renders only this ticker. */
+const LiveIndexTicker = memo(function LiveIndexTicker({
+  symbol,
+  exchange,
+  name,
+  compact,
+}: LiveIndexTickerProps) {
+  const live = useQuote(symbol, exchange);
+  if (!live) {
+    return (
+      <div className="flex items-baseline gap-2 whitespace-nowrap" aria-busy="true">
+        <span className="text-label font-semibold text-ink-muted">{name}</span>
+        <span className="sr-only">{strings.loading}</span>
+        <Skeleton className="h-4 w-28 self-center" />
+      </div>
+    );
+  }
+  const { ltp, change, changeBp } = live.quote;
+  return (
+    <IndexTicker
+      name={name}
+      level={ltp}
+      change={change}
+      changeBasisPoints={changeBp}
+      compact={compact}
+    />
+  );
+});
+
+/** Nifty 50 and Sensex in the header, live from the quote store (T-092). */
 export function HeaderTickers({
   className,
   compact = false,
@@ -10,25 +43,14 @@ export function HeaderTickers({
   className?: string;
   compact?: boolean;
 }) {
-  const shown = sampleIndices.filter(
-    (index) => index.symbol === 'NIFTY 50' || index.symbol === 'SENSEX',
-  );
   return (
     <div
       role="group"
       aria-label={strings.tickersLabel}
-      title={strings.sampleNote}
       className={cn('flex items-center gap-5', className)}
     >
-      {shown.map((index) => (
-        <IndexTicker
-          key={index.symbol}
-          name={index.name}
-          level={index.level}
-          change={index.change}
-          changeBasisPoints={index.changeBasisPoints}
-          compact={compact}
-        />
+      {headerIndices.map((index) => (
+        <LiveIndexTicker key={index.symbol} {...index} compact={compact} />
       ))}
     </div>
   );

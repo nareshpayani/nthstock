@@ -57,3 +57,4 @@ export {
 } from './components/States.js';
 export { Sparkline, sparklinePath, type SparklineProps } from './components/Sparkline.js';
 export { IndexTicker, formatIndexLevel, type IndexTickerProps } from './components/IndexTicker.js';
+export { LivePrice, type LivePriceProps, type LivePriceTick } from './components/LivePrice.js';

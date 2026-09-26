@@ -2,22 +2,39 @@ import './styles/app.css';
 import { RouterProvider } from '@tanstack/react-router';
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
+import { createLiveQuotes } from './app/liveQuotes';
 import { AppProviders } from './app/providers/AppProviders';
 import { createQueryClient } from './app/queryClient';
 import { createAppRouter } from './app/router';
+import { parseRuntimeConfig } from './app/runtimeConfig';
 
-const rootElement = document.getElementById('root');
-if (!rootElement) {
-  throw new Error('Root element #root not found');
+// Fails fast on an invalid VITE_API_MODE or URL (T-049).
+const config = parseRuntimeConfig(import.meta.env);
+
+async function boot() {
+  const rootElement = document.getElementById('root');
+  if (!rootElement) {
+    throw new Error('Root element #root not found');
+  }
+
+  // VITE_API_MODE is a build-time constant (vite.config.ts), so in an api-mode build this branch
+  // and the MSW chunk it imports are removed entirely (T-050).
+  if (import.meta.env.VITE_API_MODE === 'msw') {
+    const { startMockWorker } = await import('./mocks/browser');
+    await startMockWorker(config);
+  }
+
+  const queryClient = createQueryClient();
+  const router = createAppRouter(queryClient);
+  const { quoteStore } = createLiveQuotes(config, window.location);
+
+  createRoot(rootElement).render(
+    <StrictMode>
+      <AppProviders queryClient={queryClient} quoteStore={quoteStore}>
+        <RouterProvider router={router} />
+      </AppProviders>
+    </StrictMode>,
+  );
 }
 
-const queryClient = createQueryClient();
-const router = createAppRouter(queryClient);
-
-createRoot(rootElement).render(
-  <StrictMode>
-    <AppProviders queryClient={queryClient}>
-      <RouterProvider router={router} />
-    </AppProviders>
-  </StrictMode>,
-);
+void boot();

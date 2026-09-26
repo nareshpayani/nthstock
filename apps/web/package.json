@@ -5,12 +5,13 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build && node scripts/checkBuild.mjs",
+    "build": "vite build && node scripts/checkBuild.mjs && npm run build:api-check",
     "preview": "vite preview",
     "lint": "eslint . && node scripts/checkNoHex.mjs src",
     "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.e2e.json",
     "test": "vitest run --coverage",
-    "e2e": "playwright test"
+    "e2e": "playwright test",
+    "build:api-check": "VITE_API_MODE=api vite build --outDir dist-api --emptyOutDir --logLevel warn && node scripts/checkBuild.mjs dist-api"
   },
   "devDependencies": {
     "@nthstock/config": "0.0.0",
@@ -36,13 +37,23 @@
     "vitest": "5.0.2"
   },
   "dependencies": {
+    "@nthstock/apiClient": "0.0.0",
+    "@nthstock/contracts": "0.0.0",
+    "@nthstock/marketData": "0.0.0",
     "@nthstock/tokens": "0.0.0",
     "@nthstock/ui": "0.0.0",
     "@nthstock/utils": "0.0.0",
     "@tanstack/react-query": "5.103.2",
     "@tanstack/react-router": "1.170.39",
+    "msw": "2.15.0",
     "react": "19.3.0",
     "react-dom": "19.3.0",
+    "zod": "4.6.5",
     "zustand": "5.0.15"
+  },
+  "msw": {
+    "workerDirectory": [
+      "public"
+    ]
   }
 }

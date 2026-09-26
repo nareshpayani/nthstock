@@ -2,7 +2,10 @@
 // - fonts are self-hosted: no external font URLs, total woff2 under 100 KB;
 // - initial JS (entry script plus modulepreloads) under 200 KB gzipped;
 // - every page route is code-split into its own chunk (T-022);
-// - icons are tree-shaken: only icons imported somewhere in src end up in the bundle (T-021).
+// - icons are tree-shaken: only icons imported somewhere in src end up in the bundle (T-021);
+// - mocks stay out of production paths (T-050): an api-mode build contains no MSW or mock-market
+//   code at all, and in an msw-mode build they load lazily, never in the initial JS.
+// Usage: node scripts/checkBuild.mjs [distDir]   (default dist)
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { gzipSync } from 'node:zlib';
@@ -10,13 +13,20 @@ import { allIcons } from '@nthstock/ui/allIcons';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 
-const DIST = 'dist';
+const DIST = process.argv[2] ?? 'dist';
 
 function* walk(dir) {
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
     const path = join(dir, entry.name);
     if (entry.isDirectory()) yield* walk(path);
     else if (/\.(tsx?|js)$/.test(entry.name)) yield path;
+  }
+}
+function* walkAll(dir) {
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    const path = join(dir, entry.name);
+    if (entry.isDirectory()) yield* walkAll(path);
+    else if (/\.(js|html)$/.test(entry.name)) yield path;
   }
 }
 const FONT_BUDGET = 100 * 1024;
@@ -48,6 +58,29 @@ const initialJs = initialScripts.reduce(
 if (initialJs > INITIAL_JS_BUDGET) {
   failures.push(`initial JS ${String(initialJs)} B gzipped > ${String(INITIAL_JS_BUDGET)} B`);
 }
+
+// Strings only MSW (its client and service worker) or the mock market contain.
+const MOCK_MARKERS = [/\[MSW\]/, /mockServiceWorker/, /INTEGRITY_CHECK_REQUEST/, /NIFTYMIDCAP100/];
+const hasMockCode = (text) => MOCK_MARKERS.some((marker) => marker.test(text));
+const apiMode = /<meta name="nthstock-api-mode" content="(msw|api)"/.exec(html)?.[1];
+if (!apiMode) failures.push('index.html has no nthstock-api-mode meta tag');
+const shipped = [...walkAll(DIST)];
+const mockFiles = shipped.filter((file) => hasMockCode(readFileSync(file, 'utf8')));
+if (apiMode === 'api' && mockFiles.length > 0) {
+  failures.push(`api-mode build contains MSW or mock code: ${mockFiles.join(', ')}`);
+}
+if (apiMode === 'msw') {
+  const eager = initialScripts.filter((file) =>
+    hasMockCode(readFileSync(join(DIST, file), 'utf8')),
+  );
+  if (eager.length > 0) failures.push(`MSW or mock code in the initial JS: ${eager.join(', ')}`);
+  if (!shipped.some((file) => file.endsWith('mockServiceWorker.js'))) {
+    failures.push('msw-mode build is missing mockServiceWorker.js');
+  }
+}
+const mockJs = mockFiles
+  .filter((file) => file.endsWith('.js') && !file.endsWith('mockServiceWorker.js'))
+  .reduce((sum, file) => sum + gzipSync(readFileSync(file)).length, 0);
 
 const ROUTE_CHUNKS = ['dashboard', 'portfolio', 'positions', 'orders', 'funds', 'login', '_symbol'];
 const missingChunks = ROUTE_CHUNKS.filter(
@@ -89,6 +122,9 @@ console.log(
 console.log(`checkBuild: icons bundled [${bundledIcons.join(', ')}]`);
 console.log(
   `checkBuild: fonts ${(fontBytes / 1024).toFixed(1)} KB woff2, initial JS ${(initialJs / 1024).toFixed(1)} KB gzipped (${String(initialScripts.length)} files)`,
+);
+console.log(
+  `checkBuild: ${DIST} is an ${String(apiMode)}-mode build; lazy mock JS ${(mockJs / 1024).toFixed(1)} KB gzipped`,
 );
 if (failures.length > 0) {
   for (const failure of failures) console.error(`checkBuild: ${failure}`);

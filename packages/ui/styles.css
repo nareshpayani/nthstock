@@ -49,3 +49,38 @@
     transform: rotate(360deg);
   }
 }
+
+/* LivePrice: a short tint on each tick. Two identical keyframes per direction let a new tick
+   restart the animation by switching class, with no remount. */
+@theme inline {
+  --animate-flash-up-a: nth-flash-up-a calc(var(--nth-duration-flash) * 6) var(--nth-ease-standard);
+  --animate-flash-up-b: nth-flash-up-b calc(var(--nth-duration-flash) * 6) var(--nth-ease-standard);
+  --animate-flash-down-a: nth-flash-down-a calc(var(--nth-duration-flash) * 6)
+    var(--nth-ease-standard);
+  --animate-flash-down-b: nth-flash-down-b calc(var(--nth-duration-flash) * 6)
+    var(--nth-ease-standard);
+}
+
+@keyframes nth-flash-up-a {
+  from {
+    background-color: var(--nth-color-up-soft);
+  }
+}
+
+@keyframes nth-flash-up-b {
+  from {
+    background-color: var(--nth-color-up-soft);
+  }
+}
+
+@keyframes nth-flash-down-a {
+  from {
+    background-color: var(--nth-color-down-soft);
+  }
+}
+
+@keyframes nth-flash-down-b {
+  from {
+    background-color: var(--nth-color-down-soft);
+  }
+}

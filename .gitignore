@@ -11,3 +11,4 @@ storybook-static/
 playwright-report/
 test-results/
 research-output/
+dist-api/

@@ -3,7 +3,7 @@
   "tasks": {
     "build": {
       "dependsOn": ["^build"],
-      "outputs": ["dist/**"]
+      "outputs": ["dist/**", "dist-api/**"]
     },
     "lint": {},
     "typecheck": {
@@ -19,7 +19,7 @@
       "persistent": true
     },
     "build-storybook": {
-      "dependsOn": ["^build"],
+      "dependsOn": ["^build", "build", "@nthstock/apiClient#build"],
       "outputs": ["storybook-static/**"]
     }
   }
