@@ -1,5 +1,5 @@
-import { WS_PROTOCOL_VERSION } from '@nthstock/contracts';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { WS_MAX_SUBSCRIPTIONS, WS_PROTOCOL_VERSION } from '@nthstock/contracts';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createRealtimeServer, WS_PATH, type RealtimeServer } from './app.js';
 import { connectTestClient } from './test/wsTestClient.js';
 
@@ -63,6 +63,42 @@ describe('realtime server', () => {
       message: { type: 'error', code: 'INVALID_MESSAGE' },
     });
     client.close();
+  });
+
+  it(`answers the ${WS_MAX_SUBSCRIPTIONS + 1}st subscribe with an error`, async () => {
+    const client = await connectTestClient(`ws://${base}${WS_PATH}`);
+    const symbols = Array.from({ length: WS_MAX_SUBSCRIPTIONS }, (_, i) => `S${i}`);
+    client.send({ v: WS_PROTOCOL_VERSION, type: 'subscribe', symbols, exchange: 'NSE' });
+    expect(await client.drain()).toEqual([]);
+    client.send({ v: WS_PROTOCOL_VERSION, type: 'subscribe', symbols: ['INFY'] });
+    expect(await client.next()).toEqual({
+      kind: 'json',
+      message: {
+        v: WS_PROTOCOL_VERSION,
+        type: 'error',
+        code: 'SUBSCRIPTION_LIMIT',
+        message: `A connection may subscribe to at most ${WS_MAX_SUBSCRIPTIONS} symbols`,
+        symbols: ['INFY'],
+      },
+    });
+    expect(server.registry.keyCount()).toBe(WS_MAX_SUBSCRIPTIONS);
+    client.close();
+  });
+
+  it('unsubscribes, and a disconnect clears the connection from both maps', async () => {
+    const client = await connectTestClient(`ws://${base}${WS_PATH}`);
+    client.send({ v: WS_PROTOCOL_VERSION, type: 'subscribe', symbols: ['INFY', 'TCS'] });
+    client.send({ v: WS_PROTOCOL_VERSION, type: 'unsubscribe', symbols: ['TCS'] });
+    await client.drain();
+    expect(server.registry.keyCount()).toBe(1);
+    expect(server.registry.connectionCount()).toBe(1);
+    client.close();
+    await client.closed;
+    await vi.waitFor(() => {
+      expect(server.connectionCount()).toBe(0);
+    });
+    expect(server.registry.keyCount()).toBe(0);
+    expect(server.registry.connectionCount()).toBe(0);
   });
 
   it('closes open connections when the server closes', async () => {

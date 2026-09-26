@@ -1,9 +1,19 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
-import { WS_PROTOCOL_VERSION, type WsServerMessage } from '@nthstock/contracts';
+import {
+  WS_MAX_SUBSCRIPTIONS,
+  WS_PROTOCOL_VERSION,
+  type WsServerMessage,
+} from '@nthstock/contracts';
 import { WebSocketServer, type RawData, type WebSocket } from 'ws';
 import { silentLogger, type Logger } from './logger.js';
 import { errorMessage, parseClientMessage } from './protocol.js';
+import {
+  createSubscriptionRegistry,
+  subscriptionKey,
+  type SubscriptionKey,
+  type SubscriptionRegistry,
+} from './registry.js';
 
 /** Path of the WebSocket endpoint; the web app derives `ws(s)://<host>/ws` from the same path. */
 export const WS_PATH = '/ws';
@@ -19,11 +29,15 @@ export type RealtimeServer = {
   /** Drops every connection and stops listening. */
   close(): Promise<void>;
   connectionCount(): number;
+  /** Who is subscribed to what; read-only use outside this module. */
+  readonly registry: SubscriptionRegistry<WebSocket>;
 };
 
 const sendJson = (socket: WebSocket, message: WsServerMessage) => {
   socket.send(JSON.stringify(message));
 };
+
+const symbolOf = (key: SubscriptionKey) => key.slice(key.indexOf(':') + 1);
 
 const textOf = (data: RawData, isBinary: boolean): string | null => {
   if (isBinary) return null;
@@ -38,6 +52,7 @@ const textOf = (data: RawData, isBinary: boolean): string | null => {
 export function createRealtimeServer(options: RealtimeServerOptions = {}): RealtimeServer {
   const logger = options.logger ?? silentLogger;
   const wss = new WebSocketServer({ noServer: true, maxPayload: 64 * 1024 });
+  const registry = createSubscriptionRegistry<WebSocket>();
 
   const handleHttp = (request: IncomingMessage, response: ServerResponse) => {
     const path = (request.url ?? '/').split('?')[0];
@@ -71,9 +86,35 @@ export function createRealtimeServer(options: RealtimeServerOptions = {}): Realt
         return;
       }
       const message = parsed.message;
-      if (message.type === 'ping') {
-        sendJson(socket, { v: WS_PROTOCOL_VERSION, type: 'pong', id: message.id });
+      switch (message.type) {
+        case 'ping':
+          sendJson(socket, { v: WS_PROTOCOL_VERSION, type: 'pong', id: message.id });
+          return;
+        case 'subscribe': {
+          const keys = message.symbols.map((symbol) => subscriptionKey(symbol, message.exchange));
+          const { rejected } = registry.add(socket, keys);
+          if (rejected.length > 0) {
+            sendJson(
+              socket,
+              errorMessage(
+                'SUBSCRIPTION_LIMIT',
+                `A connection may subscribe to at most ${WS_MAX_SUBSCRIPTIONS} symbols`,
+                rejected.map(symbolOf),
+              ),
+            );
+          }
+          return;
+        }
+        case 'unsubscribe':
+          registry.remove(
+            socket,
+            message.symbols.map((symbol) => subscriptionKey(symbol, message.exchange)),
+          );
+          return;
       }
+    });
+    socket.on('close', () => {
+      registry.removeConnection(socket);
     });
     socket.on('error', (error) => {
       logger.warn('socket error', { error: error.message });
@@ -101,5 +142,6 @@ export function createRealtimeServer(options: RealtimeServerOptions = {}): Realt
         http.close(() => resolve());
       }),
     connectionCount: () => wss.clients.size,
+    registry,
   };
 }
