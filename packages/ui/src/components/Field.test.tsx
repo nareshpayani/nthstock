@@ -146,4 +146,14 @@ describe('OtpInput', () => {
     expect(boxes[0]).toHaveAccessibleDescription('Wrong code');
     expect(screen.getByLabelText('OTP')).toBe(boxes[0]);
   });
+
+  it('masks a PIN and focuses the first box when asked', () => {
+    render(<OtpInput value="12" onChange={vi.fn()} length={4} mask autoFocus label="PIN" />);
+    const group = screen.getByRole('group', { name: 'PIN' });
+    const boxes = group.querySelectorAll('input');
+    expect(boxes).toHaveLength(4);
+    for (const box of boxes) expect(box).toHaveAttribute('type', 'password');
+    expect(boxes[0]).toHaveFocus();
+    expect(boxes[0]).toHaveAttribute('autocomplete', 'off');
+  });
 });
