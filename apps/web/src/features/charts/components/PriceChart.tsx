@@ -24,7 +24,7 @@ export type PriceChartProps = {
   intraday?: boolean;
   /** Height in px; the width follows the container. */
   height?: number;
-  className?: string;
+  className?: string | undefined;
 };
 
 /**

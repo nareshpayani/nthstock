@@ -96,6 +96,7 @@ const chartChunks = assets.filter(
     file.endsWith('.js') &&
     readFileSync(join(DIST, 'assets', file), 'utf8').includes(CHARTS_MARKER),
 );
+if (chartChunks.length === 0) failures.push('charts library not found in any chunk');
 const chartsJs = chartChunks.reduce(
   (sum, file) => sum + gzipSync(readFileSync(join(DIST, 'assets', file))).length,
   0,

@@ -62,10 +62,3 @@ export const sampleIndices: readonly SampleIndex[] = [
     series: series(5898330, 0, 4200, 9),
   },
 ];
-
-/** A longer SAMPLE series (a year of weekly points) for the dashboard index chart. */
-export const sampleNiftyYear: readonly number[] = Array.from({ length: 52 }, (_, i) => {
-  const trend = 2180000 + i * 6900;
-  const swing = Math.sin(i / 4) * 52000 + Math.sin(i / 1.7) * 21000;
-  return Math.round(trend + swing);
-});

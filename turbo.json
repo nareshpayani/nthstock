@@ -25,7 +25,7 @@
       "persistent": true
     },
     "build-storybook": {
-      "dependsOn": ["^build", "build", "@nthstock/apiClient#build"],
+      "dependsOn": ["^build", "build", "@nthstock/apiClient#build", "@nthstock/marketData#build"],
       "outputs": ["storybook-static/**"]
     }
   }
