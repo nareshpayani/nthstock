@@ -1,3 +1,4 @@
+import { Redis } from 'ioredis';
 import { buildApp } from './app.js';
 import { loadConfig } from './config.js';
 import { resolveJwtSecret } from './modules/auth/jwtSecret.js';
@@ -20,8 +21,14 @@ const jwtSecret = resolveJwtSecret({
     ),
 });
 
+// Rate-limit counters shared by every API instance when Redis is configured (T-082).
+const rateLimitRedis = config.redisUrl
+  ? new Redis(config.redisUrl, { enableOfflineQueue: false, maxRetriesPerRequest: 1 })
+  : null;
+
 const app = buildApp({
   logger: true,
+  ...(rateLimitRedis ? { rateLimitRedis } : {}),
   deps: {
     marketAlwaysOpen: config.mockMarketAlwaysOpen,
     production: config.production,
@@ -30,6 +37,10 @@ const app = buildApp({
     smsLog: (line) => process.stdout.write(`${line}\n`),
   },
   ...(config.redisUrl ? { tickPublisher: createRedisPublisher(config.redisUrl, tickLog) } : {}),
+});
+
+app.addHook('onClose', async () => {
+  await rateLimitRedis?.quit();
 });
 
 try {

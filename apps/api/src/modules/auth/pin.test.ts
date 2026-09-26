@@ -10,7 +10,14 @@ import {
 } from '@nthstock/contracts';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { buildApp, type App } from '../../app.js';
-import { cookieHeader, loginWithOtp, setCookieLine, setCookies } from '../../test/authFlow.js';
+import {
+  PRE_SESSION_CSRF,
+  cookieHeader,
+  csrfHeader,
+  loginWithOtp,
+  setCookieLine,
+  setCookies,
+} from '../../test/authFlow.js';
 import { manualClock, type ManualClock } from '../../test/manualClock.js';
 
 const MOBILE = '9876543210';
@@ -29,11 +36,13 @@ afterEach(async () => {
   await app.close();
 });
 
-const setPin = (access: string, pin = PIN, confirmPin = pin) =>
+type Auth = { access: string; csrf: string };
+
+const setPin = ({ access, csrf }: Auth, pin = PIN, confirmPin = pin) =>
   app.inject({
     method: 'POST',
     url: routes.pinSet.path,
-    headers: { cookie: cookieHeader({ [AUTH_COOKIES.access]: access }) },
+    headers: { ...csrfHeader(csrf), cookie: cookieHeader({ [AUTH_COOKIES.access]: access }) },
     payload: { pin, confirmPin },
   });
 
@@ -42,14 +51,17 @@ const verifyPin = (deviceToken: string | null, pin: string) =>
     method: 'POST',
     url: routes.pinVerify.path,
     headers:
-      deviceToken === null ? {} : { cookie: cookieHeader({ [AUTH_COOKIES.device]: deviceToken }) },
+      deviceToken === null
+        ? PRE_SESSION_CSRF
+        : { ...PRE_SESSION_CSRF, cookie: cookieHeader({ [AUTH_COOKIES.device]: deviceToken }) },
     payload: { pin },
   });
 
 /** Logs in with OTP and sets the PIN; returns the trusted-device token. */
 async function trustThisDevice(): Promise<{ device: string; session: Session }> {
-  const { access, session } = await loginWithOtp(app, MOBILE);
-  const response = await setPin(access);
+  const login = await loginWithOtp(app, MOBILE);
+  const { session } = login;
+  const response = await setPin(login);
   expect(response.statusCode).toBe(200);
   return { device: setCookies(response)[AUTH_COOKIES.device] ?? '', session };
 }
@@ -58,13 +70,14 @@ const errorOf = (response: { json(): unknown }) => ApiError.parse(response.json(
 
 describe('POST /v1/auth/pin/set', () => {
   it('needs a session', async () => {
-    expect((await setPin('nope')).statusCode).toBe(401);
+    expect((await setPin({ access: 'nope', csrf: 'x' })).statusCode).toBe(401);
   });
 
   it('stores an Argon2id hash, trusts the device and sets the trusted-device cookie', async () => {
-    const { access, session } = await loginWithOtp(app, MOBILE);
+    const login = await loginWithOtp(app, MOBILE);
+    const { session } = login;
 
-    const response = await setPin(access);
+    const response = await setPin(login);
 
     const { device } = PinSetResponse.parse(response.json());
     expect(device).toMatchObject({ id: session.device.id, trusted: true, current: true });
@@ -78,9 +91,9 @@ describe('POST /v1/auth/pin/set', () => {
   });
 
   it('rejects mismatched or malformed PINs', async () => {
-    const { access } = await loginWithOtp(app, MOBILE);
-    expect((await setPin(access, '1234', '4321')).statusCode).toBe(400);
-    expect((await setPin(access, '12')).statusCode).toBe(400);
+    const login = await loginWithOtp(app, MOBILE);
+    expect((await setPin(login, '1234', '4321')).statusCode).toBe(400);
+    expect((await setPin(login, '12')).statusCode).toBe(400);
   });
 });
 
@@ -136,13 +149,14 @@ describe('POST /v1/auth/pin/verify', () => {
     const requested = await app.inject({
       method: 'POST',
       url: routes.otpRequest.path,
+      headers: PRE_SESSION_CSRF,
       payload: { mobile: MOBILE, purpose: 'UNLOCK_PIN' },
     });
     const { requestId } = OtpRequestResponse.parse(requested.json());
     const unlocked = await app.inject({
       method: 'POST',
       url: routes.otpVerify.path,
-      headers: { cookie: cookieHeader({ [AUTH_COOKIES.device]: device }) },
+      headers: { ...PRE_SESSION_CSRF, cookie: cookieHeader({ [AUTH_COOKIES.device]: device }) },
       payload: { requestId, mobile: MOBILE, otp: DEV_OTP },
     });
     expect(unlocked.statusCode).toBe(200);
@@ -164,12 +178,15 @@ describe('POST /v1/auth/pin/verify', () => {
 
   it('logout keeps the device trusted', async () => {
     const { device } = await trustThisDevice();
-    const { accessToken: access } = Session.parse((await verifyPin(device, PIN)).json());
+    const { accessToken: access, csrfToken } = Session.parse((await verifyPin(device, PIN)).json());
 
     const out = await app.inject({
       method: 'POST',
       url: routes.logout.path,
-      headers: { cookie: cookieHeader({ [AUTH_COOKIES.access]: access }) },
+      headers: {
+        ...csrfHeader(csrfToken),
+        cookie: cookieHeader({ [AUTH_COOKIES.access]: access }),
+      },
     });
 
     expect(setCookieLine(out, AUTH_COOKIES.device)).toBeUndefined();
@@ -181,13 +198,14 @@ describe('POST /v1/auth/pin/verify', () => {
     const requested = await app.inject({
       method: 'POST',
       url: routes.otpRequest.path,
+      headers: PRE_SESSION_CSRF,
       payload: { mobile: '9123456789' },
     });
     const { requestId } = OtpRequestResponse.parse(requested.json());
     const other = await app.inject({
       method: 'POST',
       url: routes.otpVerify.path,
-      headers: { cookie: cookieHeader({ [AUTH_COOKIES.device]: device }) },
+      headers: { ...PRE_SESSION_CSRF, cookie: cookieHeader({ [AUTH_COOKIES.device]: device }) },
       payload: { requestId, mobile: '9123456789', otp: DEV_OTP },
     });
 

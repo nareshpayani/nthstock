@@ -38,6 +38,8 @@ export type SessionRecord = {
   id: string;
   userId: string;
   deviceId: string;
+  /** Must come back as the CSRF header on cookie-authenticated state-changing requests. */
+  csrfToken: string;
   createdAt: Date;
   expiresAt: Date;
   revokedAt: Date | null;

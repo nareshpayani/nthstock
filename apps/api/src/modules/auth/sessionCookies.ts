@@ -65,14 +65,17 @@ export function clearSessionCookies(reply: FastifyReply, { secure }: { secure: b
   );
 }
 
+export type PresentedToken = { token: string; via: 'bearer' | 'cookie' };
+
 /** The access token: `Authorization: Bearer` first, then the access cookie. */
-export function accessTokenOf(request: FastifyRequest): string | null {
+export function accessTokenOf(request: FastifyRequest): PresentedToken | null {
   const header = request.headers.authorization;
   if (header?.startsWith('Bearer ')) {
     const token = header.slice('Bearer '.length).trim();
-    if (token) return token;
+    if (token) return { token, via: 'bearer' };
   }
-  return requestCookies(request)[AUTH_COOKIES.access] || null;
+  const cookie = requestCookies(request)[AUTH_COOKIES.access];
+  return cookie ? { token: cookie, via: 'cookie' } : null;
 }
 
 /** Sets the trusted-device cookie (PIN login on this browser). */

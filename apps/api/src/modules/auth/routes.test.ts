@@ -1,6 +1,7 @@
 import { ApiError, OtpRequestResponse, routes } from '@nthstock/contracts';
 import { afterEach, describe, expect, it } from 'vitest';
 import { buildApp, type App } from '../../app.js';
+import { PRE_SESSION_CSRF } from '../../test/authFlow.js';
 import { manualClock } from '../../test/manualClock.js';
 
 const clock = manualClock();
@@ -18,7 +19,12 @@ afterEach(async () => {
 });
 
 const requestOtp = (mobile = '9876543210') =>
-  app.inject({ method: 'POST', url: routes.otpRequest.path, payload: { mobile } });
+  app.inject({
+    method: 'POST',
+    url: routes.otpRequest.path,
+    headers: PRE_SESSION_CSRF,
+    payload: { mobile },
+  });
 
 describe('POST /v1/auth/otp/request', () => {
   it('answers with a request id and logs the OTP through the mock SMS provider', async () => {

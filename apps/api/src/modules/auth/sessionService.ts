@@ -32,6 +32,8 @@ export type AuthContext = {
   claims: AccessTokenClaims;
   /** The access token as presented. */
   token: string;
+  /** How it was presented; only cookie-borne tokens need the CSRF check. */
+  via: 'bearer' | 'cookie';
   session: SessionRecord;
   user: UserRecord;
   device: DeviceRecord;
@@ -49,7 +51,7 @@ export type SessionService = {
   /** Rotates the refresh token. Reuse of an old token revokes the whole family (401). */
   refresh(refreshToken: string): Promise<IssuedSession>;
   /** Resolves the session behind an access token, or null when it is invalid, expired or revoked. */
-  authenticate(accessToken: string): Promise<AuthContext | null>;
+  authenticate(accessToken: string, via: AuthContext['via']): Promise<AuthContext | null>;
   revoke(sessionId: string): Promise<void>;
 };
 
@@ -111,6 +113,7 @@ export function createSessionService({
         id: newId('ses'),
         userId: input.user.id,
         deviceId: device.id,
+        csrfToken: randomBytes(32).toString('base64url'),
         createdAt: now,
         expiresAt: new Date(now.getTime() + REFRESH_TOKEN_TTL_SEC * 1000),
         revokedAt: null,
@@ -139,7 +142,7 @@ export function createSessionService({
       return issue(session, user, device);
     },
 
-    async authenticate(accessToken) {
+    async authenticate(accessToken, via) {
       const now = clock.now();
       const claims = await verifyAccessToken(secret, accessToken, now);
       if (!claims) return null;
@@ -150,7 +153,7 @@ export function createSessionService({
         repo.getDevice(session.deviceId),
       ]);
       if (!user || !device) return null;
-      return { claims, token: accessToken, session, user, device };
+      return { claims, token: accessToken, via, session, user, device };
     },
 
     revoke: (sessionId) => repo.revokeSession(sessionId, clock.now()),

@@ -1,7 +1,14 @@
 import { ACCESS_TOKEN_TTL_SEC, AUTH_COOKIES, ApiError, Session, routes } from '@nthstock/contracts';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { buildApp, type App } from '../../app.js';
-import { cookieHeader, loginWithOtp, setCookieLine, setCookies } from '../../test/authFlow.js';
+import {
+  PRE_SESSION_CSRF,
+  cookieHeader,
+  csrfHeader,
+  loginWithOtp,
+  setCookieLine,
+  setCookies,
+} from '../../test/authFlow.js';
 import { manualClock, type ManualClock } from '../../test/manualClock.js';
 import { DEMO_USER } from '../users/repo.js';
 
@@ -34,14 +41,17 @@ const refresh = (token: string | null) =>
   app.inject({
     method: 'POST',
     url: routes.sessionRefresh.path,
-    headers: token === null ? {} : { cookie: cookieHeader({ [AUTH_COOKIES.refresh]: token }) },
+    headers:
+      token === null
+        ? PRE_SESSION_CSRF
+        : { ...PRE_SESSION_CSRF, cookie: cookieHeader({ [AUTH_COOKIES.refresh]: token }) },
   });
 
-const logout = (access: string) =>
+const logout = (access: string, csrf: string) =>
   app.inject({
     method: 'POST',
     url: routes.logout.path,
-    headers: { cookie: cookieHeader({ [AUTH_COOKIES.access]: access }) },
+    headers: { ...csrfHeader(csrf), cookie: cookieHeader({ [AUTH_COOKIES.access]: access }) },
   });
 
 describe('OTP login', () => {
@@ -101,12 +111,14 @@ describe('OTP login', () => {
     const requested = await app.inject({
       method: 'POST',
       url: routes.otpRequest.path,
+      headers: PRE_SESSION_CSRF,
       payload: { mobile: MOBILE },
     });
     const { requestId } = requested.json<{ requestId: string }>();
     const verified = await app.inject({
       method: 'POST',
       url: routes.otpVerify.path,
+      headers: PRE_SESSION_CSRF,
       payload: { requestId, mobile: MOBILE, otp: lines[0] },
     });
 
@@ -214,9 +226,9 @@ describe('POST /v1/auth/refresh', () => {
 
 describe('POST /v1/auth/logout', () => {
   it('revokes the session and clears both cookies', async () => {
-    const { access, refresh: rt } = await loginWithOtp(app, MOBILE);
+    const { access, csrf, refresh: rt } = await loginWithOtp(app, MOBILE);
 
-    const response = await logout(access);
+    const response = await logout(access, csrf);
 
     expect(response.statusCode).toBe(200);
     expect(response.json()).toEqual({ ok: true });
@@ -229,6 +241,6 @@ describe('POST /v1/auth/logout', () => {
   });
 
   it('answers 401 without a session', async () => {
-    expect((await logout('nope')).statusCode).toBe(401);
+    expect((await logout('nope', 'whatever')).statusCode).toBe(401);
   });
 });

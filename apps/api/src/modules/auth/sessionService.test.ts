@@ -39,16 +39,16 @@ describe('session service', () => {
     const issued = await service.start({ user: created, userAgent: undefined });
     await users.reset();
 
-    expect(await service.authenticate(issued.access.token)).toBeNull();
+    expect(await service.authenticate(issued.access.token, 'cookie')).toBeNull();
     await expect(service.refresh(issued.refreshToken)).rejects.toMatchObject({ status: 401 });
   });
 
   it('refuses an access token after the session is revoked', async () => {
     const issued = await service.start({ user: DEMO_USER, userAgent: undefined });
-    expect(await service.authenticate(issued.access.token)).not.toBeNull();
+    expect(await service.authenticate(issued.access.token, 'cookie')).not.toBeNull();
 
     await service.revoke(issued.session.id);
 
-    expect(await service.authenticate(issued.access.token)).toBeNull();
+    expect(await service.authenticate(issued.access.token, 'cookie')).toBeNull();
   });
 });

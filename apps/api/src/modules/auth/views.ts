@@ -21,6 +21,7 @@ export function toSession(issued: IssuedSession): Session {
     device: toDevice(issued.device, issued.device.id),
     accessToken: issued.access.token,
     accessTokenExpiresAt: issued.access.expiresAt.toISOString(),
+    csrfToken: issued.session.csrfToken,
   };
 }
 
@@ -31,5 +32,6 @@ export function toCurrentSession(context: AuthContext): Session {
     device: toDevice(context.device, context.device.id),
     accessToken: context.token,
     accessTokenExpiresAt: new Date(context.claims.exp * 1000).toISOString(),
+    csrfToken: context.session.csrfToken,
   };
 }

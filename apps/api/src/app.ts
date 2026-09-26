@@ -1,6 +1,8 @@
 import rateLimit from '@fastify/rate-limit';
 import Fastify, { type FastifyInstance, type FastifyServerOptions } from 'fastify';
+import type { Redis } from 'ioredis';
 import { createDeps, type AppDeps, type DepsOverrides } from './deps.js';
+import { installCsrfCheck } from './http/csrf.js';
 import { installErrorHandling } from './http/errorHandler.js';
 import { authRoutes } from './modules/auth/routes.js';
 import { healthRoutes } from './modules/health/routes.js';
@@ -14,6 +16,11 @@ export type AppOptions = {
   deps?: DepsOverrides;
   /** Requests per minute per client IP across all routes (CLAUDE.md security baseline). */
   rateLimitPerMinute?: number;
+  /**
+   * Keeps rate-limit counters in Redis so every API instance shares them. Left out, counters are
+   * per process (tests, REST-only dev). The caller owns the client.
+   */
+  rateLimitRedis?: Redis;
   /**
    * Publishes every adapter tick here once the app is ready (T-071); apps/realtime fans them out.
    * Left out, the API serves REST only. The app closes the publisher when it closes.
@@ -33,13 +40,19 @@ export function buildApp(options: AppOptions = {}): App {
   const app = Fastify(options.logger === undefined ? {} : { logger: options.logger });
   const deps = createDeps(options.deps);
   installErrorHandling(app);
-  // Global per-IP limit; a 429 becomes an ApiError RATE_LIMITED via the error handler.
-  // In-memory for now; the Redis store and per-user and auth-route limits come with T-082.
+  // Global per-IP limit; the auth routes set tighter ones (T-082). A 429 becomes an ApiError
+  // RATE_LIMITED via the error handler.
   app.register(rateLimit, {
     global: true,
     max: options.rateLimitPerMinute ?? DEFAULT_RATE_LIMIT_PER_MINUTE,
     timeWindow: '1 minute',
+    // With Redis, a Redis outage lets requests through (skipOnError) rather than taking the API
+    // down; the OTP throttle and the OTP and PIN attempt counters still hold.
+    ...(options.rateLimitRedis
+      ? { redis: options.rateLimitRedis, nameSpace: 'nthstock:rate-limit:', skipOnError: true }
+      : {}),
   });
+  installCsrfCheck(app);
   app.addHook('onClose', async () => {
     deps.dispose();
   });

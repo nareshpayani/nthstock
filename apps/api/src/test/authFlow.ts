@@ -1,4 +1,11 @@
-import { AUTH_COOKIES, DEV_OTP, OtpRequestResponse, Session, routes } from '@nthstock/contracts';
+import {
+  AUTH_COOKIES,
+  AUTH_CSRF_HEADER,
+  DEV_OTP,
+  OtpRequestResponse,
+  Session,
+  routes,
+} from '@nthstock/contracts';
 import type { FastifyInstance, LightMyRequestResponse } from 'fastify';
 
 /** Name → value of every Set-Cookie on a response (an empty value means "deleted"). */
@@ -26,8 +33,16 @@ export const cookieHeader = (cookies: Record<string, string>) =>
     .map(([name, value]) => `${name}=${value}`)
     .join('; ');
 
+/** The CSRF header for requests before a session exists (any non-empty value). */
+export const PRE_SESSION_CSRF = { [AUTH_CSRF_HEADER]: 'pre-session' } as const;
+
+/** The CSRF header for a session. */
+export const csrfHeader = (csrf: string) => ({ [AUTH_CSRF_HEADER]: csrf });
+
 export type LoggedIn = {
   session: Session;
+  /** The session's CSRF token. */
+  csrf: string;
   access: string;
   refresh: string;
   response: LightMyRequestResponse;
@@ -37,8 +52,9 @@ export type LoggedIn = {
 export async function loginWithOtp(
   app: FastifyInstance,
   mobile: string,
-  headers: Record<string, string> = {},
+  extraHeaders: Record<string, string> = {},
 ): Promise<LoggedIn> {
+  const headers = { ...PRE_SESSION_CSRF, ...extraHeaders };
   const requested = await app.inject({
     method: 'POST',
     url: routes.otpRequest.path,
@@ -54,8 +70,10 @@ export async function loginWithOtp(
   });
   if (response.statusCode !== 200) throw new Error(`login failed: ${response.body}`);
   const cookies = setCookies(response);
+  const session = Session.parse(response.json());
   return {
-    session: Session.parse(response.json()),
+    session,
+    csrf: session.csrfToken,
     access: cookies[AUTH_COOKIES.access] ?? '',
     refresh: cookies[AUTH_COOKIES.refresh] ?? '',
     response,

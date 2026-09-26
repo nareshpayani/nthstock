@@ -200,6 +200,7 @@ export const sessionFixture: Session = {
   device: deviceFixture,
   accessToken: 'fake-access-token',
   accessTokenExpiresAt: '2026-09-25T04:15:00.000Z',
+  csrfToken: 'fake-csrf-token-0123456789',
 };
 
 export const otpRequestResponseFixture: OtpRequestResponse = {

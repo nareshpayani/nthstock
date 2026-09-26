@@ -76,8 +76,22 @@ export const Session = z.object({
   device: Device,
   accessToken: z.string().min(1),
   accessTokenExpiresAt: IsoUtc,
+  /**
+   * Send as `X-CSRF-Token` on every POST, PUT, PATCH and DELETE while this session lasts. Kept in
+   * memory only; a reload gets it back from `POST /v1/auth/refresh`.
+   */
+  csrfToken: z.string().min(16).max(256),
 });
 export type Session = z.infer<typeof Session>;
+
+/**
+ * The CSRF header (CLAUDE.md security baseline). Every state-changing `/v1` request must carry it,
+ * or the server answers 403. With a session it must equal `Session.csrfToken`. Before a session
+ * exists (OTP, PIN login, refresh after a reload) any non-empty value up to 256 characters is
+ * accepted: a cross-site page cannot add a custom header without a CORS preflight, which the API
+ * never grants, and the session cookies are SameSite=Strict.
+ */
+export const AUTH_CSRF_HEADER = 'x-csrf-token';
 
 export const PinSetRequest = z
   .object({ pin: Pin, confirmPin: Pin })
