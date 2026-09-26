@@ -11,3 +11,10 @@ export {
   type MapPriceSource,
   type PriceSource,
 } from './context.js';
+export {
+  firstFillOnPath,
+  matchFill,
+  type Fill,
+  type MatchableOrder,
+  type PathFill,
+} from './fillMatcher.js';
