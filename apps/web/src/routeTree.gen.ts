@@ -17,6 +17,7 @@ import { Route as AppFundsRouteImport } from './routes/_app/funds'
 import { Route as AppOrdersRouteImport } from './routes/_app/orders'
 import { Route as AppPortfolioRouteImport } from './routes/_app/portfolio'
 import { Route as AppPositionsRouteImport } from './routes/_app/positions'
+import { Route as DevPricesRouteImport } from './routes/dev/prices'
 import { Route as AppStocksSymbolRouteImport } from './routes/_app/stocks/$symbol'
 
 const IndexRoute = IndexRouteImport.update({
@@ -58,6 +59,11 @@ const AppPositionsRoute = AppPositionsRouteImport.update({
   path: '/positions',
   getParentRoute: () => AppRoute,
 } as any)
+const DevPricesRoute = DevPricesRouteImport.update({
+  id: '/dev/prices',
+  path: '/dev/prices',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AppStocksSymbolRoute = AppStocksSymbolRouteImport.update({
   id: '/stocks/$symbol',
   path: '/stocks/$symbol',
@@ -72,6 +78,7 @@ export interface FileRoutesByFullPath {
   '/orders': typeof AppOrdersRoute
   '/portfolio': typeof AppPortfolioRoute
   '/positions': typeof AppPositionsRoute
+  '/dev/prices': typeof DevPricesRoute
   '/stocks/$symbol': typeof AppStocksSymbolRoute
 }
 export interface FileRoutesByTo {
@@ -82,6 +89,7 @@ export interface FileRoutesByTo {
   '/orders': typeof AppOrdersRoute
   '/portfolio': typeof AppPortfolioRoute
   '/positions': typeof AppPositionsRoute
+  '/dev/prices': typeof DevPricesRoute
   '/stocks/$symbol': typeof AppStocksSymbolRoute
 }
 export interface FileRoutesById {
@@ -94,6 +102,7 @@ export interface FileRoutesById {
   '/_app/orders': typeof AppOrdersRoute
   '/_app/portfolio': typeof AppPortfolioRoute
   '/_app/positions': typeof AppPositionsRoute
+  '/dev/prices': typeof DevPricesRoute
   '/_app/stocks/$symbol': typeof AppStocksSymbolRoute
 }
 export interface FileRouteTypes {
@@ -106,6 +115,7 @@ export interface FileRouteTypes {
     | '/orders'
     | '/portfolio'
     | '/positions'
+    | '/dev/prices'
     | '/stocks/$symbol'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -116,6 +126,7 @@ export interface FileRouteTypes {
     | '/orders'
     | '/portfolio'
     | '/positions'
+    | '/dev/prices'
     | '/stocks/$symbol'
   id:
     | '__root__'
@@ -127,6 +138,7 @@ export interface FileRouteTypes {
     | '/_app/orders'
     | '/_app/portfolio'
     | '/_app/positions'
+    | '/dev/prices'
     | '/_app/stocks/$symbol'
   fileRoutesById: FileRoutesById
 }
@@ -134,6 +146,7 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AppRoute: typeof AppRouteWithChildren
   LoginRoute: typeof LoginRoute
+  DevPricesRoute: typeof DevPricesRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -194,6 +207,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppPositionsRouteImport
       parentRoute: typeof AppRoute
     }
+    '/dev/prices': {
+      id: '/dev/prices'
+      path: '/dev/prices'
+      fullPath: '/dev/prices'
+      preLoaderRoute: typeof DevPricesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/_app/stocks/$symbol': {
       id: '/_app/stocks/$symbol'
       path: '/stocks/$symbol'
@@ -228,6 +248,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AppRoute: AppRouteWithChildren,
   LoginRoute: LoginRoute,
+  DevPricesRoute: DevPricesRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

@@ -14,13 +14,26 @@ npm install
 npm run dev        # web on http://localhost:5173, API on http://localhost:4000
 npm run check      # format, lint, typecheck, test, build
 npm run storybook  # design system on http://localhost:6006
-npm run e2e        # Playwright app-shell smoke test (Chrome)
+npm run e2e        # Playwright smoke tests (Chrome), msw mode with the mock market forced open
 ```
 
-| Workspace         | What it is                                                                  |
-| ----------------- | --------------------------------------------------------------------------- |
-| `apps/web`        | Vite + React SPA                                                            |
-| `apps/api`        | Fastify API (`GET /v1/health`)                                              |
-| `packages/config` | Shared ESLint and TypeScript config                                         |
-| `packages/ui`     | Design system components (Radix, cva, Tailwind) and Storybook               |
-| `packages/tokens` | Design tokens → `tokens.css`, Tailwind v4 theme, self-hosted IBM Plex fonts |
+The web app runs in **msw mode** by default: MSW mocks REST and the live-price WebSocket in the
+browser over the mock market (`packages/marketData`). Prices tick only during NSE hours; for a demo
+at any hour, force the mock market open:
+
+```bash
+VITE_MOCK_MARKET_OPEN=true npm run dev -w @nthstock/web
+```
+
+All web variables are listed in [`apps/web/.env.example`](./apps/web/.env.example)
+(`VITE_API_MODE=msw|api`, API and WS base URLs, the market-open override). A test page with live
+prices is at `/dev/prices`.
+
+| Workspace            | What it is                                                                  |
+| -------------------- | --------------------------------------------------------------------------- |
+| `apps/web`           | Vite + React SPA                                                            |
+| `apps/api`           | Fastify API (`GET /v1/health`)                                              |
+| `packages/config`    | Shared ESLint and TypeScript config                                         |
+| `packages/ui`        | Design system components (Radix, cva, Tailwind) and Storybook               |
+| `packages/apiClient` | Typed REST client, live-quote WebSocket client and quote store              |
+| `packages/tokens`    | Design tokens → `tokens.css`, Tailwind v4 theme, self-hosted IBM Plex fonts |

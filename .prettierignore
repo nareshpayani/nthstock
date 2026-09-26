@@ -8,3 +8,5 @@ package-lock.json
 routeTree.gen.ts
 playwright-report
 test-results
+apps/web/public/mockServiceWorker.js
+dist-api

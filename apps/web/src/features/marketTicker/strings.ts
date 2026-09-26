@@ -1,6 +1,6 @@
 export const strings = {
   tickersLabel: 'Market indices',
-  sampleNote: 'Sample values until live market data is connected',
+  loading: 'loading',
   open: 'Market open',
   preOpen: 'Pre-open',
   closed: 'Market closed',

@@ -1,5 +1,6 @@
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
+import { createTestQuoteStore, testQuote } from '@/test/quotes';
 import { renderApp } from '@/test/renderApp';
 import { initialShellState, useShellStore } from '../shellStore';
 
@@ -8,7 +9,12 @@ afterEach(() => {
 });
 
 async function renderDashboard() {
-  const view = renderApp('/dashboard');
+  const quotes = createTestQuoteStore();
+  quotes.push(
+    testQuote('NIFTY50', 2541860, { prevClose: 2520615 }),
+    testQuote('SENSEX', 8309215, { exchange: 'BSE', prevClose: 8319185 }),
+  );
+  const view = renderApp('/dashboard', { quoteStore: quotes.store });
   await screen.findByRole('heading', { level: 1, name: /^Good/ });
   return view;
 }
@@ -31,10 +37,13 @@ describe('Header (T-025)', () => {
     );
   });
 
-  it('shows the index tickers with arrows and text, and a market status', async () => {
+  it('shows the live index tickers with arrows and text, and a market status', async () => {
     await renderDashboard();
     expect(
       screen.getAllByText(/NIFTY 50 25,418.60, up 212.45 points, up 0.84 percent/).length,
+    ).toBeGreaterThan(0);
+    expect(
+      screen.getAllByText(/SENSEX 83,092.15, down 99.70 points, down 0.12 percent/).length,
     ).toBeGreaterThan(0);
     expect(screen.getAllByRole('status', { name: /NSE market status/ }).length).toBeGreaterThan(0);
     expect(screen.getByRole('link', { name: 'Log in' })).toHaveAttribute('href', '/login');

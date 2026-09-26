@@ -20,6 +20,7 @@ describe('file routes (T-022)', () => {
     ['/funds', 'Funds'],
     ['/stocks/infy', 'INFY'],
     ['/login', 'Log in to nthstock'],
+    ['/dev/prices', 'Live prices'],
     ['/no-such-page', 'Page not found'],
   ])('%s renders its page', async (url, heading) => {
     renderApp(url);
