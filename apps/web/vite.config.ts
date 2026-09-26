@@ -89,6 +89,9 @@ export default defineConfig(({ mode }) => {
       environment: 'jsdom',
       setupFiles: ['./src/test/setup.ts'],
       css: false,
+      // Above the 5 s asyncUtilTimeout in src/test/setup.ts, so a test that waits on two lazy route
+      // chunks on a busy CI runner can still finish, and a findBy timeout reports its own error.
+      testTimeout: 15_000,
       exclude: [...configDefaults.exclude, 'e2e/**'],
       coverage: {
         provider: 'v8',
