@@ -73,7 +73,7 @@ describe('shortcuts (T-028)', () => {
 
   it('/ typed inside the search input does not fire the shortcut', async () => {
     await renderDashboard();
-    const search = screen.getAllByRole('searchbox', { name: 'Search stocks' })[0] as HTMLElement;
+    const search = screen.getAllByRole('combobox', { name: 'Search stocks' })[0] as HTMLElement;
     search.focus();
     fireEvent.keyDown(search, { key: '/' });
     fireEvent.keyDown(search, { key: '?' });
@@ -86,7 +86,7 @@ describe('shortcuts (T-028)', () => {
     fireEvent.keyDown(document.body, { key: '/' });
     const drawer = await screen.findByRole('dialog', { name: 'Menu' });
     await waitFor(() =>
-      expect(within(drawer).getByRole('searchbox', { name: 'Search stocks' })).toHaveFocus(),
+      expect(within(drawer).getByRole('combobox', { name: 'Search stocks' })).toHaveFocus(),
     );
   });
 });

@@ -80,7 +80,11 @@ export function AppShell({ children }: AppShellProps) {
             ))}
           </ul>
         </nav>
-        <LeftRail searchRef={drawerSearch} onAddStock={() => drawerSearch.current?.focus()} />
+        <LeftRail
+          searchRef={drawerSearch}
+          onAddStock={() => drawerSearch.current?.focus()}
+          onNavigate={() => setDrawerOpen(false)}
+        />
       </Sheet>
       <ShortcutHelpDialog open={helpOpen} onOpenChange={setHelpOpen} />
     </div>

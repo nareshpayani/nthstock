@@ -32,7 +32,7 @@ test('keyboard: / focuses search and ? opens the shortcut list', async ({ page }
   await page.goto('/dashboard');
   await page.getByRole('heading', { level: 1 }).waitFor();
   await page.keyboard.press('/');
-  const search = page.getByRole('complementary').getByRole('searchbox', { name: 'Search stocks' });
+  const search = page.getByRole('complementary').getByRole('combobox', { name: 'Search stocks' });
   await expect(search).toBeFocused();
   await page.keyboard.type('?');
   await expect(page.getByRole('dialog')).toHaveCount(0);
@@ -67,7 +67,7 @@ test('under 1024 px the rail and tabs live in a drawer', async ({ page }) => {
   await page.getByRole('button', { name: 'Open menu' }).click();
   const drawer = page.getByRole('dialog', { name: 'Menu' });
   await expect(drawer).toBeVisible();
-  await expect(drawer.getByRole('searchbox', { name: 'Search stocks' })).toBeFocused();
+  await expect(drawer.getByRole('combobox', { name: 'Search stocks' })).toBeFocused();
   await drawer.getByRole('link', { name: 'Funds' }).click();
   // Funds needs a session: signed out, the guard sends it to login (T-089).
   await expect(page).toHaveURL(/\/login\?redirect=%2Ffunds$/);
