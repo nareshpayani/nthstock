@@ -4,7 +4,19 @@ import type { BackendRequest, BackendResponse, ScenarioBackend } from './harness
 export type FetchLike = (
   url: string,
   init: { method: string; headers: Record<string, string>; body?: string },
-) => Promise<{ status: number; text(): Promise<string> }>;
+) => Promise<{
+  status: number;
+  text(): Promise<string>;
+  headers?: { getSetCookie?(): string[] };
+}>;
+
+export type FetchBackendOptions = {
+  onClose?: () => void | Promise<void>;
+  /** The origin scenario `index` talks to, e.g. its own subdomain for its own cookie store. */
+  scopeOrigin?: (index: number) => string;
+  /** Moves the backend's auth clock forward. */
+  advanceTime?: (ms: number) => void | Promise<void>;
+};
 
 /**
  * A backend that sends real `fetch` requests to `origin`. Point it at the MSW node server's origin
@@ -13,22 +25,36 @@ export type FetchLike = (
 export function fetchBackend(
   origin: string,
   fetchImpl: FetchLike,
-  onClose?: () => void | Promise<void>,
+  onCloseOrOptions?: (() => void | Promise<void>) | FetchBackendOptions,
 ): ScenarioBackend {
-  return {
-    async send({ method, url, body }: BackendRequest): Promise<BackendResponse> {
+  const options: FetchBackendOptions =
+    typeof onCloseOrOptions === 'function'
+      ? { onClose: onCloseOrOptions }
+      : (onCloseOrOptions ?? {});
+
+  const at = (base: string): ScenarioBackend => ({
+    async send({ method, url, body, headers: extra }: BackendRequest): Promise<BackendResponse> {
+      const headers: Record<string, string> = { accept: 'application/json', ...extra };
+      if (body !== undefined) headers['content-type'] = 'application/json';
       const init =
-        body === undefined
-          ? { method, headers: { accept: 'application/json' } }
-          : {
-              method,
-              headers: { accept: 'application/json', 'content-type': 'application/json' },
-              body: JSON.stringify(body),
-            };
-      const response = await fetchImpl(`${origin}${url}`, init);
+        body === undefined ? { method, headers } : { method, headers, body: JSON.stringify(body) };
+      const response = await fetchImpl(`${base}${url}`, init);
       const text = await response.text();
-      return { status: response.status, body: text === '' ? null : (JSON.parse(text) as unknown) };
+      const setCookies = response.headers?.getSetCookie?.() ?? [];
+      return {
+        status: response.status,
+        body: text === '' ? null : (JSON.parse(text) as unknown),
+        ...(setCookies.length > 0 ? { setCookies } : {}),
+      };
     },
+    ...(options.advanceTime ? { advanceTime: options.advanceTime } : {}),
+  });
+
+  const root = at(origin);
+  const { scopeOrigin, onClose } = options;
+  return {
+    ...root,
+    ...(scopeOrigin ? { scope: (index: number) => at(scopeOrigin(index)) } : {}),
     ...(onClose ? { close: onClose } : {}),
   };
 }

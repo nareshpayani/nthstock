@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import {
   ACCESS_TOKEN_AUDIENCE,
   ACCESS_TOKEN_ISSUER,
@@ -25,6 +26,8 @@ export async function signAccessToken(
     .setAudience(ACCESS_TOKEN_AUDIENCE)
     .setIssuedAt(iat)
     .setExpirationTime(exp)
+    // A unique id, so two tokens issued in the same second differ (and can be told apart later).
+    .setJti(randomUUID())
     .sign(secret);
   return { token, expiresAt: new Date(exp * 1000) };
 }
