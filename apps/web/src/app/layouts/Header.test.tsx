@@ -7,7 +7,7 @@ import {
   createRouter,
   RouterProvider,
 } from '@tanstack/react-router';
-import { act, fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import { createElement } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 import { createTestQuoteStore, testQuote } from '@/test/quotes';
@@ -103,5 +103,14 @@ describe('Header live tickers (T-092)', () => {
     expect(screen.queryByText(/Sample/)).not.toBeInTheDocument();
     const group = screen.getAllByRole('group', { name: 'Market indices' })[0];
     expect(group).not.toHaveAttribute('title');
+  });
+});
+
+describe('Header status strip (narrow screens)', () => {
+  it('is a named, focusable region so keyboard users can scroll it', async () => {
+    renderHeader(null);
+    const strip = await screen.findByRole('region', { name: 'Market status and indices' });
+    expect(strip).toHaveAttribute('tabindex', '0');
+    expect(within(strip).getByRole('status', { name: /NSE market status/ })).toBeInTheDocument();
   });
 });
