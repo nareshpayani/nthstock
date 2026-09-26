@@ -36,7 +36,7 @@ describe('registerRoute: request validation', () => {
     expect(response.statusCode).toBe(400);
     const body = ApiError.parse(response.json());
     expect(body.error.code).toBe('VALIDATION_ERROR');
-    expect(body.error.message).toBe('Invalid body');
+    expect(body.error.message).toBe('Invalid request body');
     expect(body.error.details?.['issues']).toEqual(
       expect.arrayContaining([expect.objectContaining({ path: ['mobile'] })]),
     );
@@ -97,7 +97,7 @@ describe('registerRoute: request validation', () => {
 
     const bad = await app.inject({ method: 'GET', url: '/v1/market/movers?index=NIFTY50' });
     expect(bad.statusCode).toBe(400);
-    expect(ApiError.parse(bad.json()).error.message).toBe('Invalid query');
+    expect(ApiError.parse(bad.json()).error.message).toBe('Invalid query parameters');
 
     const good = await app.inject({
       method: 'GET',

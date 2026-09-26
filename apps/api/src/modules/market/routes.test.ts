@@ -155,7 +155,7 @@ describe('GET /v1/market/search', () => {
       expect(status).toBe(400);
       expect(ApiError.parse(body).error).toMatchObject({
         code: 'VALIDATION_ERROR',
-        message: 'Invalid query',
+        message: 'Invalid query parameters',
       });
     }
   });

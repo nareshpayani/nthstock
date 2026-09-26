@@ -43,10 +43,11 @@ export type RegisterRouteOptions = {
   validateResponse?: boolean;
 };
 
+/** Same wording as the MSW handler kit, so both backends answer alike. */
 const PART_LABEL: Record<Part, string> = {
   params: 'path parameters',
-  query: 'query',
-  body: 'body',
+  query: 'query parameters',
+  body: 'request body',
 };
 
 function parsePart(def: RouteDef, part: Part, value: unknown): unknown {

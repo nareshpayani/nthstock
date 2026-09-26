@@ -17,3 +17,5 @@ export {
 } from './harness.js';
 export { fetchBackend, type FetchLike } from './fetchBackend.js';
 export { healthScenarios } from './scenarios/health.js';
+export { marketScenarios } from './scenarios/market.js';
+export { scenarioGroups } from './scenarios/all.js';
