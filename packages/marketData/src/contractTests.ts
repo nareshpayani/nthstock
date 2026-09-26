@@ -91,6 +91,15 @@ export function runAdapterContractTests(
       expect(await adapter.search('zzzzqqqq')).toEqual([]);
     });
 
+    it('lists popular searches: equities only, unique, within the limit', async () => {
+      const popular = await adapter.getPopularSearches(5);
+      expect(popular.length).toBeGreaterThan(0);
+      expect(popular.length).toBeLessThanOrEqual(5);
+      for (const hit of popular) SearchHit.parse(hit);
+      expect(popular.every((hit) => hit.type === 'EQUITY')).toBe(true);
+      expect(new Set(popular.map((hit) => hit.symbol)).size).toBe(popular.length);
+    });
+
     it('returns quotes that parse, null for unknown, batches in request order', async () => {
       const quote = Quote.parse(await adapter.getQuote(equity));
       expect(quote.symbol).toBe(equity);

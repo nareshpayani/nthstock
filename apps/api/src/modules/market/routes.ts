@@ -36,6 +36,10 @@ export const marketRoutes =
       items: await market.search(query.q, query.limit),
     }));
 
+    registerRoute(app, 'marketSearchPopular', async ({ query }) => ({
+      items: await market.getPopularSearches(query.limit),
+    }));
+
     registerRoute(
       app,
       'instrument',

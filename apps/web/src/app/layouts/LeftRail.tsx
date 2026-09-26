@@ -6,14 +6,16 @@ import { strings } from '../strings';
 export type LeftRailProps = {
   searchRef: Ref<HTMLInputElement>;
   onAddStock: () => void;
+  /** Called when search opens a stock, e.g. to close the drawer. */
+  onNavigate?: () => void;
 };
 
 /** Left rail frame: search slot, sort slot, "My Watchlist" and a paper-trading note. */
-export function LeftRail({ searchRef, onAddStock }: LeftRailProps) {
+export function LeftRail({ searchRef, onAddStock, onNavigate }: LeftRailProps) {
   return (
     <div className="grid content-start gap-4 p-4">
       <div className="flex items-center gap-2">
-        <SearchBox ref={searchRef} />
+        <SearchBox ref={searchRef} {...(onNavigate ? { onNavigate } : {})} />
         <WatchlistSortMenu />
       </div>
       <WatchlistSection onAddStock={onAddStock} />

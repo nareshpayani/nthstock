@@ -179,9 +179,9 @@ API shapes are nthstock's own contracts, not copies of Paytm Money's.
 
 ## E5: Search + stock detail
 
-- [ ] T-102 [MOCK] Add a popular-searches route (top symbols by volume) in apps/api and MSW. Depends: T-052, T-062. Done when: both backends return the same schema-valid list in the scenario suite.
-- [ ] T-103 [FE] Build header search: / focuses it, 150 ms debounce, results dropdown with highlighted matches. Depends: T-025, T-028, T-052. Done when: / focuses the box and results show symbol, name and exchange.
-- [ ] T-104 [FE] Add search keyboard navigation (↑/↓, Enter, Esc), recent searches, and popular searches when the box is empty. Depends: T-103, T-102. Done when: Enter opens /stocks/<symbol>, Esc closes and returns focus, and an empty box shows recent then popular.
+- [x] T-102 [MOCK] Add a popular-searches route (top symbols by volume) in apps/api and MSW. Depends: T-052, T-062. Done when: both backends return the same schema-valid list in the scenario suite.
+- [x] T-103 [FE] Build header search: / focuses it, 150 ms debounce, results dropdown with highlighted matches. Depends: T-025, T-028, T-052. Done when: / focuses the box and results show symbol, name and exchange.
+- [x] T-104 [FE] Add search keyboard navigation (↑/↓, Enter, Esc), recent searches, and popular searches when the box is empty. Depends: T-103, T-102. Done when: Enter opens /stocks/<symbol>, Esc closes and returns focus, and an empty box shows recent then popular.
 - [ ] T-105 [FE] Add the stock detail route loader (instrument and quote) with a not-found state and document title. Depends: T-022, T-052. Done when: /stocks/NOPE shows not-found and /stocks/INFY sets the page title.
 - [ ] T-106 [FE] Build the detail header (name, symbol, NSE/BSE toggle, large LivePrice, day change) with Buy and Sell buttons that dispatch openTicket to a new ticketIntent store. Depends: T-105, T-057, T-013. Done when: clicking Buy sets ticketIntent to the symbol with side BUY (store test).
 - [ ] T-107 [FE] Build the price chart with 1D, 1W, 1M, 1Y and 5Y tabs (range in the URL), an area/candle toggle and a crosshair tooltip in IST and ₹. Depends: T-094, T-105. Done when: changing range updates the URL and refetches, and the tooltip shows en-IN grouped rupees.

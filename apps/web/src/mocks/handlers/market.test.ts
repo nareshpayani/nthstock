@@ -64,6 +64,13 @@ describe('MSW market handlers (T-052) through the API client (T-053)', () => {
     expect(hits.items[0]?.symbol).toBe('INFY');
   });
 
+  it('popular searches are schema-valid equities within the limit', async () => {
+    const popular = await client.request('marketSearchPopular', { query: { limit: 5 } });
+    await valid('marketSearchPopular', Promise.resolve(popular));
+    expect(popular.items).toHaveLength(5);
+    expect(popular.items.every((hit) => hit.type === 'EQUITY')).toBe(true);
+  });
+
   it('instrument, candles, depth and stats', async () => {
     const params = { symbol: 'INFY' };
     await valid('instrument', client.request('instrument', { params }));

@@ -323,4 +323,16 @@ describe('MockMarketDataAdapter data', () => {
   it('searches through the index', async () => {
     expect((await adapter.search('inf'))[0]?.symbol).toBe('INFY');
   });
+
+  it("ranks popular searches by today's volume, equities only, within the limit", async () => {
+    const popular = await adapter.getPopularSearches();
+    expect(popular).toHaveLength(8);
+    expect(popular.every((hit) => hit.type === 'EQUITY')).toBe(true);
+    const quotes = await adapter.getQuotes(popular.map((hit) => hit.symbol));
+    const volumes = quotes.map((q) => q.volume);
+    expect([...volumes].sort((a, b) => b - a)).toEqual(volumes);
+    expect(await adapter.getPopularSearches(3)).toEqual(popular.slice(0, 3));
+    expect(await adapter.getPopularSearches(500)).toHaveLength(20);
+    expect(await adapter.getPopularSearches(0)).toHaveLength(1);
+  });
 });

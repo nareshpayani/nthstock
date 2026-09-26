@@ -37,6 +37,12 @@ export interface MarketDataAdapter {
   /** Ranked search: exact symbol, then symbol prefix, then name token. `limit` defaults to 10. */
   search(query: string, limit?: number): Promise<SearchHit[]>;
 
+  /**
+   * Popular searches: equities by today's traded volume, highest first (ties by market cap).
+   * `limit` defaults to 8 and is capped at 20. Indices are never included.
+   */
+  getPopularSearches(limit?: number): Promise<SearchHit[]>;
+
   getQuote(symbol: string, exchange?: Exchange): Promise<Quote | null>;
   /** Quotes in request order; unknown symbols are skipped. */
   getQuotes(symbols: readonly string[], exchange?: Exchange): Promise<Quote[]>;

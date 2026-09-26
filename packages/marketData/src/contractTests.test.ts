@@ -143,6 +143,21 @@ class StubAdapter implements MarketDataAdapter {
         })),
     );
   }
+  getPopularSearches(limit = 8): Promise<SearchHit[]> {
+    return Promise.resolve(
+      ['BETA', 'ALPHA']
+        .map((symbol) => this.find(symbol))
+        .filter((i): i is Instrument => i !== undefined)
+        .slice(0, limit)
+        .map(({ token, symbol, exchange, name, type }) => ({
+          token,
+          symbol,
+          exchange,
+          name,
+          type,
+        })),
+    );
+  }
   getQuote(symbol: string) {
     return Promise.resolve(quotes[symbol] ?? null);
   }

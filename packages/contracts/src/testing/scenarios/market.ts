@@ -154,6 +154,36 @@ export const marketScenarios = defineScenarios('market', [
     },
   },
 
+  {
+    name: 'popular searches: 8 unique equities by default, each a real instrument',
+    async run(client) {
+      const { items } = await client.call('marketSearchPopular');
+
+      expect(items).toHaveLength(8);
+      expect(new Set(items.map((hit) => hit.symbol)).size).toBe(items.length);
+      for (const hit of items) {
+        expect(hit.type).toBe('EQUITY');
+        const instrument = await client.call('instrument', { params: { symbol: hit.symbol } });
+        expect(instrument).toMatchObject(hit);
+      }
+    },
+  },
+  {
+    name: 'popular searches: the limit holds and an out-of-range limit is 400',
+    async run(client) {
+      const { items } = await client.call('marketSearchPopular', { query: { limit: 3 } });
+      expect(items).toHaveLength(3);
+
+      for (const limit of ['0', '21', 'many']) {
+        await expectError(
+          client.callError('marketSearchPopular', { query: { limit } }),
+          400,
+          'VALIDATION_ERROR',
+        );
+      }
+    },
+  },
+
   // ---- Instrument -------------------------------------------------------------------------
   {
     name: 'instrument: returns equities and indices by symbol',
