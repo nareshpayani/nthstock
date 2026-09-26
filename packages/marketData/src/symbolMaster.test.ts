@@ -9,6 +9,13 @@ import {
   marketCapBucket,
 } from './symbolMaster.js';
 
+// This package is isomorphic (no Node types); the timing test only needs process.cpuUsage.
+interface CpuUsage {
+  user: number;
+  system: number;
+}
+declare const process: { cpuUsage(previous?: CpuUsage): CpuUsage };
+
 const master = generateSymbolMaster();
 
 describe('generateSymbolMaster', () => {
@@ -21,10 +28,13 @@ describe('generateSymbolMaster', () => {
 
   it('generates in under 200 ms', () => {
     generateSymbolMaster({ seed: 1 }); // warm up the JIT
+    // CPU time, not wall time: CI runs every package's tests at once on a few cores, and
+    // waiting for a core (211 ms wall on one run, ~20 ms of work) is not generation cost.
     const timings = [2, 3, 4].map((seed) => {
-      const start = Date.now();
+      const start = process.cpuUsage();
       generateSymbolMaster({ seed });
-      return Date.now() - start;
+      const used = process.cpuUsage(start);
+      return (used.user + used.system) / 1_000;
     });
     expect(Math.min(...timings)).toBeLessThan(200);
   });
