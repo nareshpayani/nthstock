@@ -37,6 +37,7 @@
     "vitest": "5.0.2"
   },
   "dependencies": {
+    "@hookform/resolvers": "5.9.1",
     "@nthstock/apiClient": "0.0.0",
     "@nthstock/contracts": "0.0.0",
     "@nthstock/marketData": "0.0.0",
@@ -50,6 +51,7 @@
     "msw": "2.15.0",
     "react": "19.3.0",
     "react-dom": "19.3.0",
+    "react-hook-form": "7.89.0",
     "zod": "4.6.5",
     "zustand": "5.0.15"
   },
