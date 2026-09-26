@@ -133,11 +133,14 @@ export const REFRESH_TOKEN_TTL_SEC = 30 * 24 * 60 * 60;
 /**
  * Cookies apps/api sets, all httpOnly and SameSite=Strict:
  * - `access`: the 15-min access JWT (Path=/), also read by apps/realtime on the WS upgrade;
- * - `refresh`: the rotating refresh token (Path=/v1/auth).
+ * - `refresh`: the rotating refresh token (Path=/v1/auth);
+ * - `device`: the trusted-device token set with the PIN (Path=/v1/auth, 180 days), which lets
+ *   this browser log in with the PIN instead of an OTP. Logout keeps it.
  */
 export const AUTH_COOKIES = {
   access: 'nth_at',
   refresh: 'nth_rt',
+  device: 'nth_dev',
 } as const;
 
 export const ACCESS_TOKEN_ISSUER = 'nthstock-api';
@@ -155,3 +158,10 @@ export const AccessTokenClaims = z.object({
   exp: z.number().int(),
 });
 export type AccessTokenClaims = z.infer<typeof AccessTokenClaims>;
+
+// ---- PIN -------------------------------------------------------------------------------------
+
+/** Wrong PINs after which the account's PIN is locked until an OTP is verified. */
+export const PIN_MAX_FAILURES = 5;
+/** How long a device stays trusted for PIN login. */
+export const TRUSTED_DEVICE_TTL_SEC = 180 * 24 * 60 * 60;

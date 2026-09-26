@@ -2,6 +2,7 @@ import { MockMarketDataAdapter, type MarketDataAdapter } from '@nthstock/marketD
 import { systemClock, type Clock } from '@nthstock/utils';
 import { createMockCaptchaVerifier, type CaptchaVerifier } from './modules/auth/captcha.js';
 import { resolveJwtSecret } from './modules/auth/jwtSecret.js';
+import { createArgon2PinHasher, type PinHasher } from './modules/auth/pinHasher.js';
 import { createMemoryAuthRepo, type AuthRepo } from './modules/auth/repo.js';
 import {
   createMockSmsProvider,
@@ -28,6 +29,8 @@ export type AppDeps = {
   captcha: CaptchaVerifier;
   /** HS256 key for access tokens (JWT_SECRET; see `resolveJwtSecret`). */
   jwtSecret: Uint8Array;
+  /** Argon2id PIN hashing. */
+  pinHasher: PinHasher;
   /** Releases what `createDeps` created itself (the adapter's timers). Injected parts are left alone. */
   dispose(): void;
 };
@@ -46,6 +49,7 @@ export type DepsOverrides = {
   captcha?: CaptchaVerifier;
   /** Left out: a random per-process key outside production; production must pass one. */
   jwtSecret?: Uint8Array;
+  pinHasher?: PinHasher;
 };
 
 /** Builds a fresh set of dependencies; each app (and each test app) gets its own in-memory state. */
@@ -69,6 +73,7 @@ export function createDeps(overrides: DepsOverrides = {}): AppDeps {
       createMockSmsProvider({ log: overrides.smsLog ?? (() => undefined), production }),
     captcha: overrides.captcha ?? createMockCaptchaVerifier({ production }),
     jwtSecret: overrides.jwtSecret ?? resolveJwtSecret({ value: undefined, production }),
+    pinHasher: overrides.pinHasher ?? createArgon2PinHasher(),
     dispose: () => owned?.dispose(),
   };
 }

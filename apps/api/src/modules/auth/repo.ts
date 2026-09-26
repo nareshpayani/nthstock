@@ -21,6 +21,18 @@ export type DeviceRecord = {
   lastSeenAt: Date;
 };
 
+/** A user's PIN: an Argon2id hash (never the PIN) and the wrong-attempt count behind the lock. */
+export type PinRecord = {
+  hash: string;
+  failures: number;
+};
+
+/** A trusted-device token, stored by the SHA-256 of its value. */
+export type DeviceTokenRecord = {
+  deviceId: string;
+  expiresAt: Date;
+};
+
 /** A login session; its id is also the refresh token family. */
 export type SessionRecord = {
   id: string;
@@ -63,6 +75,17 @@ export interface AuthRepo {
     id: string,
     patch: Partial<Pick<DeviceRecord, 'trusted' | 'lastSeenAt'>>,
   ): Promise<DeviceRecord | null>;
+  /** Replaces any earlier trusted-device token of the device. */
+  putDeviceToken(hash: string, token: DeviceTokenRecord): Promise<void>;
+  getDeviceToken(hash: string): Promise<DeviceTokenRecord | null>;
+
+  /** Stores a new PIN hash and clears the wrong-attempt count. */
+  setPin(userId: string, hash: string): Promise<void>;
+  getPin(userId: string): Promise<PinRecord | null>;
+  /** Adds one wrong attempt; resolves to the new count (0 when the user has no PIN). */
+  recordPinFailure(userId: string): Promise<number>;
+  /** Clears the wrong-attempt count, which also lifts the lock. */
+  clearPinFailures(userId: string): Promise<void>;
 
   createSession(session: SessionRecord): Promise<void>;
   getSession(id: string): Promise<SessionRecord | null>;
@@ -111,6 +134,8 @@ export function createMemoryAuthRepo(): AuthRepo {
   const devices = new Map<string, DeviceRecord>();
   const sessions = new Map<string, SessionRecord>();
   const refreshTokens = new Map<string, RefreshTokenRecord>();
+  const deviceTokens = new Map<string, DeviceTokenRecord>();
+  const pins = new Map<string, PinRecord>();
 
   return {
     putOtpChallenge: (challenge) => {
@@ -156,6 +181,36 @@ export function createMemoryAuthRepo(): AuthRepo {
       devices.set(id, next);
       return Promise.resolve(copyDevice(next));
     },
+    putDeviceToken: (hash, token) => {
+      for (const [key, existing] of deviceTokens) {
+        if (existing.deviceId === token.deviceId) deviceTokens.delete(key);
+      }
+      deviceTokens.set(hash, { ...token, expiresAt: new Date(token.expiresAt) });
+      return Promise.resolve();
+    },
+    getDeviceToken: (hash) => {
+      const found = deviceTokens.get(hash);
+      return Promise.resolve(found ? { ...found, expiresAt: new Date(found.expiresAt) } : null);
+    },
+    setPin: (userId, hash) => {
+      pins.set(userId, { hash, failures: 0 });
+      return Promise.resolve();
+    },
+    getPin: (userId) => {
+      const found = pins.get(userId);
+      return Promise.resolve(found ? { ...found } : null);
+    },
+    recordPinFailure: (userId) => {
+      const found = pins.get(userId);
+      if (!found) return Promise.resolve(0);
+      found.failures += 1;
+      return Promise.resolve(found.failures);
+    },
+    clearPinFailures: (userId) => {
+      const found = pins.get(userId);
+      if (found) found.failures = 0;
+      return Promise.resolve();
+    },
     createSession: (session) => {
       sessions.set(session.id, copySession(session));
       return Promise.resolve();
@@ -186,6 +241,8 @@ export function createMemoryAuthRepo(): AuthRepo {
       devices.clear();
       sessions.clear();
       refreshTokens.clear();
+      deviceTokens.clear();
+      pins.clear();
       return Promise.resolve();
     },
   };

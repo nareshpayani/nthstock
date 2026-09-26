@@ -3,7 +3,7 @@ import type { FastifyReply, FastifyRequest } from 'fastify';
 import { parseCookies, serializeCookie, type CookieOptions } from '../../http/cookies.js';
 import type { IssuedSession } from './sessionService.js';
 
-/** Path of the refresh cookie: only the auth routes (refresh, logout) ever receive it. */
+/** Path of the refresh and device cookies: only the auth routes ever receive them. */
 export const REFRESH_COOKIE_PATH = '/v1/auth';
 
 const base = (secure: boolean): Omit<CookieOptions, 'maxAge' | 'path'> => ({
@@ -73,4 +73,20 @@ export function accessTokenOf(request: FastifyRequest): string | null {
     if (token) return token;
   }
   return requestCookies(request)[AUTH_COOKIES.access] || null;
+}
+
+/** Sets the trusted-device cookie (PIN login on this browser). */
+export function setDeviceCookie(
+  reply: FastifyReply,
+  { token, expiresAt }: { token: string; expiresAt: Date },
+  { now, secure }: { now: Date; secure: boolean },
+): void {
+  appendSetCookie(
+    reply,
+    serializeCookie(AUTH_COOKIES.device, token, {
+      ...base(secure),
+      path: REFRESH_COOKIE_PATH,
+      maxAge: secondsUntil(now, expiresAt),
+    }),
+  );
 }

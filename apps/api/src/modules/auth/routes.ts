@@ -4,9 +4,15 @@ import type { AppDeps } from '../../deps.js';
 import { registerRoute } from '../../http/registerRoute.js';
 import { authContextOf, createAuthenticate } from './authenticate.js';
 import { createOtpService } from './otpService.js';
-import { clearSessionCookies, requestCookies, setSessionCookies } from './sessionCookies.js';
+import { createPinService } from './pinService.js';
+import {
+  clearSessionCookies,
+  requestCookies,
+  setDeviceCookie,
+  setSessionCookies,
+} from './sessionCookies.js';
 import { createSessionService, sessionEnded, type IssuedSession } from './sessionService.js';
-import { toCurrentSession, toSession } from './views.js';
+import { toCurrentSession, toDevice, toSession } from './views.js';
 
 /** Auth routes (E3): OTP request and verify, sessions, PIN. */
 export const authRoutes =
@@ -26,6 +32,13 @@ export const authRoutes =
       secret: deps.jwtSecret,
     });
     const authenticate = createAuthenticate(sessions);
+    const pins = createPinService({
+      clock: deps.clock,
+      repo: deps.repos.auth,
+      users: deps.repos.users,
+      sessions,
+      hasher: deps.pinHasher,
+    });
     const secure = deps.production;
 
     const answer = (reply: FastifyReply, issued: IssuedSession) => {
@@ -40,7 +53,34 @@ export const authRoutes =
       const user =
         (await deps.repos.users.findByMobile(mobile)) ??
         (await deps.repos.users.create({ mobile }));
-      const issued = await sessions.start({ user, userAgent: request.headers['user-agent'] });
+      // A verified OTP proves the owner: it lifts a PIN lock, and a trusted device stays trusted.
+      await pins.unlock(user.id);
+      const trusted = await pins.trustedDevice(requestCookies(request)[AUTH_COOKIES.device]);
+      const issued = await sessions.start({
+        user,
+        userAgent: request.headers['user-agent'],
+        deviceId: trusted?.userId === user.id ? trusted.id : null,
+      });
+      return answer(reply, issued);
+    });
+
+    registerRoute(
+      app,
+      'pinSet',
+      async ({ body, request, reply }) => {
+        const trusted = await pins.set(authContextOf(request), body.pin);
+        setDeviceCookie(reply, trusted, { now: deps.clock.now(), secure });
+        return { device: toDevice(trusted.device, trusted.device.id) };
+      },
+      { authenticate },
+    );
+
+    registerRoute(app, 'pinVerify', async ({ body, request, reply }) => {
+      const issued = await pins.verify({
+        deviceToken: requestCookies(request)[AUTH_COOKIES.device],
+        pin: body.pin,
+        userAgent: request.headers['user-agent'],
+      });
       return answer(reply, issued);
     });
 
