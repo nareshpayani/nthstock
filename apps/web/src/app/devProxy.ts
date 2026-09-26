@@ -1,5 +1,5 @@
-import type { ApiMode } from './runtimeConfig';
-import { WS_PATH } from './runtimeConfig';
+// Loaded by vite.config.ts under Node, so the import names its extension.
+import { WS_PATH, type ApiMode } from './runtimeConfig.ts';
 
 /** Where `npm run dev:api` runs apps/api and apps/realtime (their default ports). */
 export const DEFAULT_API_PROXY_TARGET = 'http://127.0.0.1:4000';

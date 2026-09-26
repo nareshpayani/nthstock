@@ -1,4 +1,5 @@
 import './styles/app.css';
+import { createApiClient } from '@nthstock/apiClient';
 import { RouterProvider } from '@tanstack/react-router';
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
@@ -7,6 +8,7 @@ import { AppProviders } from './app/providers/AppProviders';
 import { createQueryClient } from './app/queryClient';
 import { createAppRouter } from './app/router';
 import { parseRuntimeConfig } from './app/runtimeConfig';
+import { restSnapshot, startVisibilitySync } from './app/visibilitySync';
 
 // Fails fast on an invalid VITE_API_MODE or URL (T-049).
 const config = parseRuntimeConfig(import.meta.env);
@@ -26,7 +28,14 @@ async function boot() {
 
   const queryClient = createQueryClient();
   const router = createAppRouter(queryClient);
-  const { quoteStore } = createLiveQuotes(config, window.location);
+  const { wsClient, quoteStore } = createLiveQuotes(config, window.location);
+  // Background tabs keep only the active watchlist live; focus and reconnects resync (T-077).
+  startVisibilitySync({
+    document,
+    quoteStore,
+    wsClient,
+    fetchSnapshot: restSnapshot(createApiClient({ baseUrl: config.apiBaseUrl })),
+  });
 
   createRoot(rootElement).render(
     <StrictMode>

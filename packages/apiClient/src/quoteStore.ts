@@ -43,8 +43,21 @@ export type QuoteStore = {
   ingest(quotes: readonly Quote[]): void;
   /** Commits queued quotes now. The scheduler calls this; tests may too. */
   flush(): void;
-  /** Symbols with at least one listener. */
+  /** Symbols with at least one listener, as `EXCHANGE:SYMBOL` keys. */
   activeSymbols(): string[];
+  /**
+   * Marks a symbol to stay live while the store is paused (the active watchlist, T-077).
+   * Ref-counted; returns the release.
+   */
+  pin(symbol: string, exchange: Exchange): () => void;
+  /**
+   * Tab hidden (T-077): releases the source subscription of every symbol that is not pinned.
+   * Listeners stay registered and keep the last committed quote.
+   */
+  pause(): void;
+  /** Tab visible again: resubscribes everything `pause` released. */
+  resume(): void;
+  isPaused(): boolean;
   dispose(): void;
 };
 
@@ -65,8 +78,32 @@ export function createQuoteStore(options: QuoteStoreOptions = {}): QuoteStore {
   const pending = new Map<string, Quote>();
   const listeners = new Map<string, Set<() => void>>();
   const releases = new Map<string, () => void>();
+  const pins = new Map<string, number>();
   let flushQueued = false;
   let disposed = false;
+  let paused = false;
+
+  const parseKey = (key: string) => {
+    const at = key.indexOf(':');
+    return { exchange: key.slice(0, at) as Exchange, symbol: key.slice(at + 1) };
+  };
+
+  /** A key is subscribed at the source iff someone listens and (not paused, or it is pinned). */
+  const reconcile = (key: string) => {
+    const wanted =
+      !disposed && source !== undefined && listeners.has(key) && (!paused || pins.has(key));
+    const held = releases.get(key);
+    if (wanted && !held && source) {
+      const { symbol, exchange } = parseKey(key);
+      releases.set(key, source.subscribe(symbol, exchange));
+    } else if (!wanted && held) {
+      held();
+      releases.delete(key);
+    }
+  };
+
+  const isOlder = (quote: Quote, than: Quote | undefined) =>
+    than !== undefined && Date.parse(quote.ts) < Date.parse(than.ts);
 
   const flush = () => {
     flushQueued = false;
@@ -92,8 +129,15 @@ export function createQuoteStore(options: QuoteStoreOptions = {}): QuoteStore {
 
   const ingest = (quotes: readonly Quote[]) => {
     if (disposed || quotes.length === 0) return;
-    for (const quote of quotes) pending.set(quoteKey(quote.symbol, quote.exchange), quote);
-    if (!flushQueued) {
+    let queued = false;
+    for (const quote of quotes) {
+      const key = quoteKey(quote.symbol, quote.exchange);
+      // A REST snapshot can land after a newer WS tick: never let an older quote win.
+      if (isOlder(quote, pending.get(key)) || isOlder(quote, committed.get(key)?.quote)) continue;
+      pending.set(key, quote);
+      queued = true;
+    }
+    if (queued && !flushQueued) {
       flushQueued = true;
       schedule(flush);
     }
@@ -109,7 +153,7 @@ export function createQuoteStore(options: QuoteStoreOptions = {}): QuoteStore {
       if (!set) {
         set = new Set();
         listeners.set(key, set);
-        if (source && !disposed) releases.set(key, source.subscribe(symbol, exchange));
+        reconcile(key);
       }
       set.add(listener);
       const own = set;
@@ -117,14 +161,38 @@ export function createQuoteStore(options: QuoteStoreOptions = {}): QuoteStore {
         own.delete(listener);
         if (own.size === 0 && listeners.get(key) === own) {
           listeners.delete(key);
-          releases.get(key)?.();
-          releases.delete(key);
+          reconcile(key);
         }
       };
     },
     ingest,
     flush,
     activeSymbols: () => [...listeners.keys()],
+    pin(symbol, exchange) {
+      const key = quoteKey(symbol, exchange);
+      pins.set(key, (pins.get(key) ?? 0) + 1);
+      reconcile(key);
+      let released = false;
+      return () => {
+        if (released) return;
+        released = true;
+        const count = (pins.get(key) ?? 1) - 1;
+        if (count > 0) pins.set(key, count);
+        else pins.delete(key);
+        reconcile(key);
+      };
+    },
+    pause() {
+      if (paused) return;
+      paused = true;
+      for (const key of [...releases.keys()]) reconcile(key);
+    },
+    resume() {
+      if (!paused) return;
+      paused = false;
+      for (const key of listeners.keys()) reconcile(key);
+    },
+    isPaused: () => paused,
     dispose() {
       disposed = true;
       detach?.();
