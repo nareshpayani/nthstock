@@ -1,5 +1,4 @@
 import './styles/app.css';
-import { createApiClient } from '@nthstock/apiClient';
 import { systemClock } from '@nthstock/utils';
 import { RouterProvider } from '@tanstack/react-router';
 import { StrictMode } from 'react';
@@ -10,6 +9,7 @@ import { createQueryClient } from './app/queryClient';
 import { createAppRouter } from './app/router';
 import { parseRuntimeConfig } from './app/runtimeConfig';
 import { restSnapshot, startVisibilitySync } from './app/visibilitySync';
+import { createSessionApiClient } from './shared/lib/sessionClient';
 
 // Fails fast on an invalid VITE_API_MODE or URL (T-049).
 const config = parseRuntimeConfig(import.meta.env);
@@ -28,7 +28,8 @@ async function boot() {
   }
 
   const queryClient = createQueryClient();
-  const apiClient = createApiClient({ baseUrl: config.apiBaseUrl });
+  // Sends the CSRF token and refreshes an expired session once on a 401 (T-089).
+  const apiClient = createSessionApiClient({ baseUrl: config.apiBaseUrl });
   const router = createAppRouter({ queryClient, apiClient });
   const { wsClient, quoteStore } = createLiveQuotes(config, window.location);
   // Background tabs keep only the active watchlist live; focus and reconnects resync (T-077).

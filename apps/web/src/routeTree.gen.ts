@@ -12,12 +12,13 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AppRouteImport } from './routes/_app'
 import { Route as LoginRouteImport } from './routes/login'
+import { Route as AppAuthedRouteImport } from './routes/_app/_authed'
 import { Route as AppDashboardRouteImport } from './routes/_app/dashboard'
-import { Route as AppFundsRouteImport } from './routes/_app/funds'
-import { Route as AppOrdersRouteImport } from './routes/_app/orders'
-import { Route as AppPortfolioRouteImport } from './routes/_app/portfolio'
-import { Route as AppPositionsRouteImport } from './routes/_app/positions'
 import { Route as DevPricesRouteImport } from './routes/dev/prices'
+import { Route as AppAuthedFundsRouteImport } from './routes/_app/_authed/funds'
+import { Route as AppAuthedOrdersRouteImport } from './routes/_app/_authed/orders'
+import { Route as AppAuthedPortfolioRouteImport } from './routes/_app/_authed/portfolio'
+import { Route as AppAuthedPositionsRouteImport } from './routes/_app/_authed/positions'
 import { Route as AppStocksSymbolRouteImport } from './routes/_app/stocks/$symbol'
 
 const IndexRoute = IndexRouteImport.update({
@@ -34,35 +35,39 @@ const LoginRoute = LoginRouteImport.update({
   path: '/login',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AppAuthedRoute = AppAuthedRouteImport.update({
+  id: '/_authed',
+  getParentRoute: () => AppRoute,
+} as any)
 const AppDashboardRoute = AppDashboardRouteImport.update({
   id: '/dashboard',
   path: '/dashboard',
-  getParentRoute: () => AppRoute,
-} as any)
-const AppFundsRoute = AppFundsRouteImport.update({
-  id: '/funds',
-  path: '/funds',
-  getParentRoute: () => AppRoute,
-} as any)
-const AppOrdersRoute = AppOrdersRouteImport.update({
-  id: '/orders',
-  path: '/orders',
-  getParentRoute: () => AppRoute,
-} as any)
-const AppPortfolioRoute = AppPortfolioRouteImport.update({
-  id: '/portfolio',
-  path: '/portfolio',
-  getParentRoute: () => AppRoute,
-} as any)
-const AppPositionsRoute = AppPositionsRouteImport.update({
-  id: '/positions',
-  path: '/positions',
   getParentRoute: () => AppRoute,
 } as any)
 const DevPricesRoute = DevPricesRouteImport.update({
   id: '/dev/prices',
   path: '/dev/prices',
   getParentRoute: () => rootRouteImport,
+} as any)
+const AppAuthedFundsRoute = AppAuthedFundsRouteImport.update({
+  id: '/funds',
+  path: '/funds',
+  getParentRoute: () => AppAuthedRoute,
+} as any)
+const AppAuthedOrdersRoute = AppAuthedOrdersRouteImport.update({
+  id: '/orders',
+  path: '/orders',
+  getParentRoute: () => AppAuthedRoute,
+} as any)
+const AppAuthedPortfolioRoute = AppAuthedPortfolioRouteImport.update({
+  id: '/portfolio',
+  path: '/portfolio',
+  getParentRoute: () => AppAuthedRoute,
+} as any)
+const AppAuthedPositionsRoute = AppAuthedPositionsRouteImport.update({
+  id: '/positions',
+  path: '/positions',
+  getParentRoute: () => AppAuthedRoute,
 } as any)
 const AppStocksSymbolRoute = AppStocksSymbolRouteImport.update({
   id: '/stocks/$symbol',
@@ -74,22 +79,22 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
   '/dashboard': typeof AppDashboardRoute
-  '/funds': typeof AppFundsRoute
-  '/orders': typeof AppOrdersRoute
-  '/portfolio': typeof AppPortfolioRoute
-  '/positions': typeof AppPositionsRoute
   '/dev/prices': typeof DevPricesRoute
+  '/funds': typeof AppAuthedFundsRoute
+  '/orders': typeof AppAuthedOrdersRoute
+  '/portfolio': typeof AppAuthedPortfolioRoute
+  '/positions': typeof AppAuthedPositionsRoute
   '/stocks/$symbol': typeof AppStocksSymbolRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
   '/dashboard': typeof AppDashboardRoute
-  '/funds': typeof AppFundsRoute
-  '/orders': typeof AppOrdersRoute
-  '/portfolio': typeof AppPortfolioRoute
-  '/positions': typeof AppPositionsRoute
   '/dev/prices': typeof DevPricesRoute
+  '/funds': typeof AppAuthedFundsRoute
+  '/orders': typeof AppAuthedOrdersRoute
+  '/portfolio': typeof AppAuthedPortfolioRoute
+  '/positions': typeof AppAuthedPositionsRoute
   '/stocks/$symbol': typeof AppStocksSymbolRoute
 }
 export interface FileRoutesById {
@@ -97,12 +102,13 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/_app': typeof AppRouteWithChildren
   '/login': typeof LoginRoute
+  '/_app/_authed': typeof AppAuthedRouteWithChildren
   '/_app/dashboard': typeof AppDashboardRoute
-  '/_app/funds': typeof AppFundsRoute
-  '/_app/orders': typeof AppOrdersRoute
-  '/_app/portfolio': typeof AppPortfolioRoute
-  '/_app/positions': typeof AppPositionsRoute
   '/dev/prices': typeof DevPricesRoute
+  '/_app/_authed/funds': typeof AppAuthedFundsRoute
+  '/_app/_authed/orders': typeof AppAuthedOrdersRoute
+  '/_app/_authed/portfolio': typeof AppAuthedPortfolioRoute
+  '/_app/_authed/positions': typeof AppAuthedPositionsRoute
   '/_app/stocks/$symbol': typeof AppStocksSymbolRoute
 }
 export interface FileRouteTypes {
@@ -111,34 +117,35 @@ export interface FileRouteTypes {
     | '/'
     | '/login'
     | '/dashboard'
+    | '/dev/prices'
     | '/funds'
     | '/orders'
     | '/portfolio'
     | '/positions'
-    | '/dev/prices'
     | '/stocks/$symbol'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
     | '/login'
     | '/dashboard'
+    | '/dev/prices'
     | '/funds'
     | '/orders'
     | '/portfolio'
     | '/positions'
-    | '/dev/prices'
     | '/stocks/$symbol'
   id:
     | '__root__'
     | '/'
     | '/_app'
     | '/login'
+    | '/_app/_authed'
     | '/_app/dashboard'
-    | '/_app/funds'
-    | '/_app/orders'
-    | '/_app/portfolio'
-    | '/_app/positions'
     | '/dev/prices'
+    | '/_app/_authed/funds'
+    | '/_app/_authed/orders'
+    | '/_app/_authed/portfolio'
+    | '/_app/_authed/positions'
     | '/_app/stocks/$symbol'
   fileRoutesById: FileRoutesById
 }
@@ -172,39 +179,18 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LoginRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/_app/_authed': {
+      id: '/_app/_authed'
+      path: ''
+      fullPath: '/'
+      preLoaderRoute: typeof AppAuthedRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/_app/dashboard': {
       id: '/_app/dashboard'
       path: '/dashboard'
       fullPath: '/dashboard'
       preLoaderRoute: typeof AppDashboardRouteImport
-      parentRoute: typeof AppRoute
-    }
-    '/_app/funds': {
-      id: '/_app/funds'
-      path: '/funds'
-      fullPath: '/funds'
-      preLoaderRoute: typeof AppFundsRouteImport
-      parentRoute: typeof AppRoute
-    }
-    '/_app/orders': {
-      id: '/_app/orders'
-      path: '/orders'
-      fullPath: '/orders'
-      preLoaderRoute: typeof AppOrdersRouteImport
-      parentRoute: typeof AppRoute
-    }
-    '/_app/portfolio': {
-      id: '/_app/portfolio'
-      path: '/portfolio'
-      fullPath: '/portfolio'
-      preLoaderRoute: typeof AppPortfolioRouteImport
-      parentRoute: typeof AppRoute
-    }
-    '/_app/positions': {
-      id: '/_app/positions'
-      path: '/positions'
-      fullPath: '/positions'
-      preLoaderRoute: typeof AppPositionsRouteImport
       parentRoute: typeof AppRoute
     }
     '/dev/prices': {
@@ -213,6 +199,34 @@ declare module '@tanstack/react-router' {
       fullPath: '/dev/prices'
       preLoaderRoute: typeof DevPricesRouteImport
       parentRoute: typeof rootRouteImport
+    }
+    '/_app/_authed/funds': {
+      id: '/_app/_authed/funds'
+      path: '/funds'
+      fullPath: '/funds'
+      preLoaderRoute: typeof AppAuthedFundsRouteImport
+      parentRoute: typeof AppAuthedRoute
+    }
+    '/_app/_authed/orders': {
+      id: '/_app/_authed/orders'
+      path: '/orders'
+      fullPath: '/orders'
+      preLoaderRoute: typeof AppAuthedOrdersRouteImport
+      parentRoute: typeof AppAuthedRoute
+    }
+    '/_app/_authed/portfolio': {
+      id: '/_app/_authed/portfolio'
+      path: '/portfolio'
+      fullPath: '/portfolio'
+      preLoaderRoute: typeof AppAuthedPortfolioRouteImport
+      parentRoute: typeof AppAuthedRoute
+    }
+    '/_app/_authed/positions': {
+      id: '/_app/_authed/positions'
+      path: '/positions'
+      fullPath: '/positions'
+      preLoaderRoute: typeof AppAuthedPositionsRouteImport
+      parentRoute: typeof AppAuthedRoute
     }
     '/_app/stocks/$symbol': {
       id: '/_app/stocks/$symbol'
@@ -224,21 +238,33 @@ declare module '@tanstack/react-router' {
   }
 }
 
+interface AppAuthedRouteChildren {
+  AppAuthedFundsRoute: typeof AppAuthedFundsRoute
+  AppAuthedOrdersRoute: typeof AppAuthedOrdersRoute
+  AppAuthedPortfolioRoute: typeof AppAuthedPortfolioRoute
+  AppAuthedPositionsRoute: typeof AppAuthedPositionsRoute
+}
+
+const AppAuthedRouteChildren: AppAuthedRouteChildren = {
+  AppAuthedFundsRoute: AppAuthedFundsRoute,
+  AppAuthedOrdersRoute: AppAuthedOrdersRoute,
+  AppAuthedPortfolioRoute: AppAuthedPortfolioRoute,
+  AppAuthedPositionsRoute: AppAuthedPositionsRoute,
+}
+
+const AppAuthedRouteWithChildren = AppAuthedRoute._addFileChildren(
+  AppAuthedRouteChildren,
+)
+
 interface AppRouteChildren {
+  AppAuthedRoute: typeof AppAuthedRouteWithChildren
   AppDashboardRoute: typeof AppDashboardRoute
-  AppFundsRoute: typeof AppFundsRoute
-  AppOrdersRoute: typeof AppOrdersRoute
-  AppPortfolioRoute: typeof AppPortfolioRoute
-  AppPositionsRoute: typeof AppPositionsRoute
   AppStocksSymbolRoute: typeof AppStocksSymbolRoute
 }
 
 const AppRouteChildren: AppRouteChildren = {
+  AppAuthedRoute: AppAuthedRouteWithChildren,
   AppDashboardRoute: AppDashboardRoute,
-  AppFundsRoute: AppFundsRoute,
-  AppOrdersRoute: AppOrdersRoute,
-  AppPortfolioRoute: AppPortfolioRoute,
-  AppPositionsRoute: AppPositionsRoute,
   AppStocksSymbolRoute: AppStocksSymbolRoute,
 }
 

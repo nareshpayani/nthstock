@@ -10,7 +10,17 @@ import { createMockMarket } from './marketAdapter';
 export async function startMockWorker(config: RuntimeConfig) {
   const adapter = createMockMarket({ alwaysOpen: config.mockMarketOpen });
   const wsUrl = resolveWsUrl(config, window.location);
-  const worker = setupWorker(...createHandlers({ adapter, wsUrl }));
+  // The auth mock keeps its users, PINs and trusted devices in localStorage, so "reload and log
+  // in with your PIN" works in msw mode (MSW keeps the mocked cookies there too).
+  let storage: Storage | undefined;
+  try {
+    storage = window.localStorage;
+  } catch {
+    storage = undefined;
+  }
+  const worker = setupWorker(
+    ...createHandlers({ adapter, wsUrl, ...(storage ? { auth: { storage } } : {}) }),
+  );
   // Assets, fonts and the Vite client go to the network untouched. MSW's own logging is off
   // because it would print every WebSocket frame (4 a second per symbol); one line says it is on.
   await worker.start({ onUnhandledRequest: 'bypass', quiet: true });

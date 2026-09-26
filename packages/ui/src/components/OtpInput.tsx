@@ -11,6 +11,10 @@ export type OtpInputProps = {
   disabled?: boolean;
   /** Accessible name for the group, e.g. "One-time password". */
   label?: string;
+  /** Hide the digits as they are typed, for PINs. */
+  mask?: boolean;
+  /** Focus the first box on mount. */
+  autoFocus?: boolean;
   className?: string;
 };
 
@@ -25,6 +29,8 @@ export function OtpInput({
   length = 6,
   disabled,
   label = 'One-time password',
+  mask = false,
+  autoFocus = false,
   className,
 }: OtpInputProps) {
   const refs = useRef<(HTMLInputElement | null)[]>([]);
@@ -76,8 +82,11 @@ export function OtpInput({
           }}
           {...(index === 0 ? control : { 'aria-invalid': control['aria-invalid'] })}
           aria-label={`Digit ${String(index + 1)} of ${String(length)}`}
+          type={mask ? 'password' : 'text'}
           inputMode="numeric"
-          autoComplete={index === 0 ? 'one-time-code' : 'off'}
+          autoComplete={mask ? 'off' : index === 0 ? 'one-time-code' : 'off'}
+          // Focusing the first box when a step opens (OTP sent, PIN entry) is expected here.
+          autoFocus={autoFocus && index === 0}
           maxLength={1}
           disabled={disabled}
           value={digit}

@@ -13,6 +13,7 @@ import {
   type AuthErrorDetails,
   type Device,
   type KycStatus,
+  type RouteName,
   type Session,
   type User,
 } from '@nthstock/contracts';
@@ -23,6 +24,7 @@ import {
   defineRoute,
   type ResolverContext,
   type RouteHandlerOptions,
+  type RouteResolver,
 } from '../handlerKit';
 
 /**
@@ -34,7 +36,12 @@ import {
  * MSW keeps only the first cookie of a mocked response. It plays both apps/api cookies: user routes
  * need its session live and its access window (15 min since the last issue) open; refresh rotates
  * the generation, and presenting an older generation is reuse, which revokes the session. The
- * trusted-device cookie keeps apps/api's name. State lives in memory and resets on reload.
+ * trusted-device cookie keeps apps/api's name. State lives in memory; in the browser it is also
+ * saved to localStorage (see `storage`), so a reload keeps users, PINs and trusted devices, just as
+ * MSW keeps the mocked cookies.
+ *
+ * Dev login: any mobile starting 6 to 9, then the fixed dev OTP `123456` (`DEV_OTP`). It is not a
+ * secret; apps/api uses it outside production too.
  */
 
 /** The one cookie that stands in for apps/api's access and refresh cookies. */
@@ -86,7 +93,15 @@ export type AuthMockOptions = {
   now?: () => number;
   /** Whether cookies carry `Secure`; off by default (the dev server is plain http). */
   secureCookies?: boolean;
+  /**
+   * Where to keep the mock's state between page loads (the browser passes localStorage). Every
+   * read and write is wrapped in try/catch: without storage the mock just starts fresh.
+   */
+  storage?: Pick<Storage, 'getItem' | 'setItem'>;
 };
+
+/** localStorage key of the persisted auth mock state. */
+export const AUTH_MOCK_STORAGE_KEY = 'nthstock.msw.auth';
 
 const randomToken = (bytes = 32) => {
   const data = crypto.getRandomValues(new Uint8Array(bytes));
@@ -137,7 +152,11 @@ function cookieLine(name: string, value: string, maxAgeSec: number, path: string
 }
 
 /** The in-memory auth backend behind the handlers; exported for tests. */
-export function createAuthMock({ now = Date.now, secureCookies = false }: AuthMockOptions = {}) {
+export function createAuthMock({
+  now = Date.now,
+  secureCookies = false,
+  storage,
+}: AuthMockOptions = {}) {
   const users = new Map<string, UserRecord>();
   const otps = new Map<string, OtpChallenge>();
   const lastOtpAt = new Map<string, number>();
@@ -145,6 +164,7 @@ export function createAuthMock({ now = Date.now, secureCookies = false }: AuthMo
   const deviceTokens = new Map<string, { deviceId: string; expiresAt: number }>();
   const pins = new Map<string, PinRecord>();
   const sessions = new Map<string, SessionRecord>();
+  const tables = { users, otps, lastOtpAt, devices, deviceTokens, pins, sessions };
 
   users.set(MOCK_DEMO_USER.mobile, {
     ...MOCK_DEMO_USER,
@@ -153,6 +173,45 @@ export function createAuthMock({ now = Date.now, secureCookies = false }: AuthMo
     pinSet: false,
     createdAt: Date.parse('2026-01-01T00:00:00.000Z'),
   });
+
+  // Restore what an earlier page load saved. Anything unreadable is ignored.
+  try {
+    const saved = storage?.getItem(AUTH_MOCK_STORAGE_KEY);
+    const parsed: unknown = saved ? JSON.parse(saved) : null;
+    if (parsed && typeof parsed === 'object') {
+      for (const [name, table] of Object.entries(tables)) {
+        const entries = (parsed as Record<string, unknown>)[name];
+        if (!Array.isArray(entries)) continue;
+        // The mock wrote these entries itself; their shapes match the tables.
+        for (const [key, value] of entries as [string, never][]) table.set(key, value);
+      }
+    }
+  } catch {
+    // Start fresh.
+  }
+
+  const save = () => {
+    if (!storage) return;
+    try {
+      const snapshot = Object.fromEntries(
+        Object.entries(tables).map(([name, table]) => [name, [...table.entries()]]),
+      );
+      storage.setItem(AUTH_MOCK_STORAGE_KEY, JSON.stringify(snapshot));
+    } catch {
+      // Storage is a convenience; the in-memory state still works.
+    }
+  };
+
+  /** Saves the state after every call, whether it succeeded or failed (failures count too). */
+  const persisted =
+    <A extends unknown[], R>(resolver: (...args: A) => R | Promise<R>) =>
+    async (...args: A): Promise<R> => {
+      try {
+        return await resolver(...args);
+      } finally {
+        save();
+      }
+    };
 
   const userById = (id: string) => [...users.values()].find((u) => u.id === id) ?? null;
 
@@ -274,8 +333,14 @@ export function createAuthMock({ now = Date.now, secureCookies = false }: AuthMo
     return session;
   }
 
+  const route = <N extends RouteName>(
+    name: N,
+    resolver: RouteResolver<N>,
+    options: RouteHandlerOptions,
+  ) => defineRoute(name, persisted(resolver), options);
+
   const handlers = (options: RouteHandlerOptions = {}): HttpHandler[] => [
-    defineRoute(
+    route(
       'otpRequest',
       ({ body }) => {
         const at = now();
@@ -305,7 +370,7 @@ export function createAuthMock({ now = Date.now, secureCookies = false }: AuthMo
       options,
     ),
 
-    defineRoute(
+    route(
       'otpVerify',
       ({ body, cookies, headers }) => {
         const challenge = otps.get(body.mobile);
@@ -360,7 +425,7 @@ export function createAuthMock({ now = Date.now, secureCookies = false }: AuthMo
       options,
     ),
 
-    defineRoute(
+    route(
       'pinSet',
       async (context) => {
         const session = authenticate(context);
@@ -388,7 +453,7 @@ export function createAuthMock({ now = Date.now, secureCookies = false }: AuthMo
       options,
     ),
 
-    defineRoute(
+    route(
       'pinVerify',
       async ({ body, cookies, headers }) => {
         const device = trustedDevice(cookies);
@@ -409,9 +474,9 @@ export function createAuthMock({ now = Date.now, secureCookies = false }: AuthMo
       options,
     ),
 
-    defineRoute('sessionGet', (context) => toSession(authenticate(context)), options),
+    route('sessionGet', (context) => toSession(authenticate(context)), options),
 
-    defineRoute(
+    route(
       'sessionRefresh',
       ({ cookies, headers }) => {
         try {
@@ -432,7 +497,7 @@ export function createAuthMock({ now = Date.now, secureCookies = false }: AuthMo
       options,
     ),
 
-    defineRoute(
+    route(
       'logout',
       (context) => {
         authenticate(context).revoked = true;

@@ -183,3 +183,61 @@ describe('trimTrailingSlashes', () => {
     expect(performance.now() - start).toBeLessThan(100);
   });
 });
+
+describe('onUnauthorized (one silent refresh, T-089)', () => {
+  const unauthorized = () =>
+    json(401, { error: { code: 'UNAUTHORIZED', message: 'Log in to continue.' } });
+  const funds = {
+    openingBalance: 100_000_000,
+    balance: 100_000_000,
+    blocked: 0,
+    available: 100_000_000,
+    realisedPnlToday: 0,
+    asOf: TS,
+  };
+
+  it('refreshes once and retries a user route that answered 401', async () => {
+    let calls = 0;
+    const { fetch } = fakeFetch(() => (++calls === 1 ? unauthorized() : json(200, funds)));
+    const onUnauthorized = vi.fn(() => Promise.resolve(true));
+    const client = createApiClient({ fetch, onUnauthorized });
+    await expect(client.request('fundsSummary')).resolves.toEqual(funds);
+    expect(onUnauthorized).toHaveBeenCalledTimes(1);
+    expect(calls).toBe(2);
+  });
+
+  it('retries only once: a second 401 rejects', async () => {
+    const { fetch, calls } = fakeFetch(unauthorized);
+    const onUnauthorized = vi.fn(() => Promise.resolve(true));
+    const client = createApiClient({ fetch, onUnauthorized });
+    await expect(client.request('fundsSummary')).rejects.toMatchObject({ status: 401 });
+    expect(onUnauthorized).toHaveBeenCalledTimes(1);
+    expect(calls).toHaveLength(2);
+  });
+
+  it('rejects with the original 401 when the refresh fails', async () => {
+    const { fetch, calls } = fakeFetch(unauthorized);
+    const client = createApiClient({ fetch, onUnauthorized: () => Promise.resolve(false) });
+    await expect(client.request('fundsSummary')).rejects.toMatchObject({ code: 'UNAUTHORIZED' });
+    expect(calls).toHaveLength(1);
+  });
+
+  it('never refreshes for public routes (a wrong PIN is not an expired session)', async () => {
+    const { fetch } = fakeFetch(unauthorized);
+    const onUnauthorized = vi.fn(() => Promise.resolve(true));
+    const client = createApiClient({ fetch, onUnauthorized });
+    await expect(client.request('pinVerify', { body: { pin: '1234' } })).rejects.toBeInstanceOf(
+      ApiError,
+    );
+    await expect(client.request('sessionRefresh')).rejects.toBeInstanceOf(ApiError);
+    expect(onUnauthorized).not.toHaveBeenCalled();
+  });
+
+  it('does not refresh on other errors', async () => {
+    const { fetch } = fakeFetch(() => json(403, { error: { code: 'FORBIDDEN', message: 'no' } }));
+    const onUnauthorized = vi.fn(() => Promise.resolve(true));
+    const client = createApiClient({ fetch, onUnauthorized });
+    await expect(client.request('fundsSummary')).rejects.toMatchObject({ status: 403 });
+    expect(onUnauthorized).not.toHaveBeenCalled();
+  });
+});

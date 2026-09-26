@@ -73,3 +73,15 @@ export const OneTimePassword: Story = { render: () => <Otp /> };
 export const OneTimePasswordError: Story = {
   render: () => <Otp error="Incorrect OTP. 2 attempts left." />,
 };
+
+function PinBoxes() {
+  const [pin, setPin] = useState('');
+  return (
+    <Field label="Enter your PIN">
+      <OtpInput value={pin} onChange={setPin} length={4} mask label="PIN" />
+    </Field>
+  );
+}
+
+/** Four masked boxes for the login PIN. */
+export const Pin: Story = { render: () => <PinBoxes /> };

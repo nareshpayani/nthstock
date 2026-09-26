@@ -21,10 +21,10 @@ test('/ redirects to the dashboard and shows the shell', async ({ page }) => {
   await expect(page.getByRole('complementary', { name: 'Watchlist and search' })).toBeVisible();
   await expect(page.getByText('Your watchlist is empty').first()).toBeVisible();
 
+  // Orders needs a session (T-089): signed out, it goes to login with a way back.
   await nav.getByRole('link', { name: 'Orders' }).click();
-  await expect(page).toHaveURL(/\/orders$/);
-  await expect(page.getByRole('heading', { level: 1, name: 'Orders' })).toBeVisible();
-  await expect(nav.getByRole('link', { name: 'Orders' })).toHaveAttribute('aria-current', 'page');
+  await expect(page).toHaveURL(/\/login\?redirect=%2Forders$/);
+  await expect(page.getByRole('heading', { level: 1, name: 'Log in to nthstock' })).toBeVisible();
 });
 
 test('keyboard: / focuses search and ? opens the shortcut list', async ({ page }) => {
@@ -69,6 +69,7 @@ test('under 1024 px the rail and tabs live in a drawer', async ({ page }) => {
   await expect(drawer).toBeVisible();
   await expect(drawer.getByRole('searchbox', { name: 'Search stocks' })).toBeFocused();
   await drawer.getByRole('link', { name: 'Funds' }).click();
-  await expect(page).toHaveURL(/\/funds$/);
+  // Funds needs a session: signed out, the guard sends it to login (T-089).
+  await expect(page).toHaveURL(/\/login\?redirect=%2Ffunds$/);
   await expect(drawer).toBeHidden();
 });

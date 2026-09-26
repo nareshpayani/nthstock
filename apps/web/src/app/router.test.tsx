@@ -7,17 +7,29 @@ import {
   RouterProvider,
 } from '@tanstack/react-router';
 import { render, screen, waitFor } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { renderApp } from '@/test/renderApp';
+import { resetSession, signIn } from '@/test/session';
 import { routeDefaults } from './router';
+
+afterEach(() => {
+  resetSession();
+});
 
 describe('file routes (T-022)', () => {
   it.each([
-    ['/dashboard', /^Good (morning|afternoon|evening)$/],
     ['/portfolio', 'Portfolio'],
     ['/positions', 'Positions'],
     ['/orders', 'Orders'],
     ['/funds', 'Funds'],
+  ])('%s renders its page when signed in', async (url, heading) => {
+    signIn();
+    renderApp(url);
+    expect(await screen.findByRole('heading', { level: 1, name: heading })).toBeInTheDocument();
+  });
+
+  it.each([
+    ['/dashboard', /^Good (morning|afternoon|evening)$/],
     ['/stocks/infy', 'INFY'],
     ['/login', 'Log in to nthstock'],
     ['/dev/prices', 'Live prices'],

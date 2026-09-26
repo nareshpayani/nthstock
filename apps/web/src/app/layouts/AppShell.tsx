@@ -4,13 +4,12 @@ import { useRef, type ReactNode } from 'react';
 import { useShortcut } from '@/shared/hooks/useShortcut';
 import { useShellStore } from '../shellStore';
 import { strings } from '../strings';
-import { Header, type HeaderUser } from './Header';
+import { Header } from './Header';
 import { LeftRail } from './LeftRail';
 import { navItems } from './navItems';
 import { ShortcutHelpDialog } from './ShortcutHelpDialog';
 
 export type AppShellProps = {
-  user?: HeaderUser | null;
   children: ReactNode;
 };
 
@@ -18,7 +17,7 @@ export type AppShellProps = {
  * Header, left rail and main area (T-024). At 1024 px and up the rail is a sticky column; below
  * that it lives in a left drawer together with the main tabs. "/" focuses search, "?" opens help.
  */
-export function AppShell({ user = null, children }: AppShellProps) {
+export function AppShell({ children }: AppShellProps) {
   const drawerOpen = useShellStore((s) => s.drawerOpen);
   const helpOpen = useShellStore((s) => s.helpOpen);
   const setDrawerOpen = useShellStore((s) => s.setDrawerOpen);
@@ -45,11 +44,7 @@ export function AppShell({ user = null, children }: AppShellProps) {
       >
         {strings.skipToContent}
       </a>
-      <Header
-        user={user}
-        onOpenMenu={() => setDrawerOpen(true)}
-        onOpenHelp={() => setHelpOpen(true)}
-      />
+      <Header onOpenMenu={() => setDrawerOpen(true)} onOpenHelp={() => setHelpOpen(true)} />
       <div className="flex">
         <aside
           aria-label={strings.rail.label}
