@@ -13,6 +13,8 @@
   ],
   "scripts": {
     "dev": "turbo run dev",
+    "infra:up": "docker compose -f infra/docker-compose.yml up -d --wait",
+    "infra:down": "docker compose -f infra/docker-compose.yml down",
     "storybook": "npm run storybook -w @nthstock/ui",
     "build-storybook": "turbo run build-storybook",
     "build": "turbo run build",

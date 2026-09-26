@@ -15,6 +15,7 @@ npm run dev        # web on http://localhost:5173, API on http://localhost:4000
 npm run check      # format, lint, typecheck, test, build
 npm run storybook  # design system on http://localhost:6006
 npm run e2e        # Playwright smoke tests (Chrome), msw mode with the mock market forced open
+npm run infra:up   # Redis 7 in Docker Compose on 127.0.0.1:6379 (see infra/README.md)
 ```
 
 The web app runs in **msw mode** by default: MSW mocks REST and the live-price WebSocket in the
