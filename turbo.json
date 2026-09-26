@@ -11,7 +11,13 @@
     },
     "test": {
       "dependsOn": ["^build"],
-      "outputs": ["coverage/**"]
+      "outputs": ["coverage/**"],
+      "passThroughEnv": [
+        "REDIS_TEST_URL",
+        "SKIP_REDIS_INTEGRATION",
+        "DOCKER_HOST",
+        "TESTCONTAINERS_*"
+      ]
     },
     "dev": {
       "dependsOn": ["^build"],
