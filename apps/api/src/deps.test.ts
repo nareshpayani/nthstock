@@ -11,6 +11,8 @@ describe('createDeps', () => {
     expect(a.clock).toBe(systemClock);
     await a.repos.users.create({ mobile: '9876543210' });
     expect(await b.repos.users.findByMobile('9876543210')).toBeNull();
+    a.dispose();
+    b.dispose();
   });
 
   it('takes an injected clock and repos', () => {
@@ -18,13 +20,14 @@ describe('createDeps', () => {
     const users = createMemoryUsersRepo({ clock });
 
     const deps = createDeps({ clock, repos: { users } });
+    deps.dispose();
 
     expect(deps.clock).toBe(clock);
     expect(deps.repos.users).toBe(users);
   });
 
   it('resets every repo to its seed', async () => {
-    const { repos } = createDeps();
+    const { repos, dispose } = createDeps();
     await repos.users.create({ mobile: '9876543210' });
     await repos.users.update(DEMO_USER.id, { pinSet: true });
 
@@ -32,5 +35,6 @@ describe('createDeps', () => {
 
     expect(await repos.users.findByMobile('9876543210')).toBeNull();
     expect(await repos.users.findById(DEMO_USER.id)).toEqual(DEMO_USER);
+    dispose();
   });
 });

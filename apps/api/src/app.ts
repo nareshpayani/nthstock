@@ -2,10 +2,11 @@ import Fastify, { type FastifyInstance, type FastifyServerOptions } from 'fastif
 import { createDeps, type AppDeps, type DepsOverrides } from './deps.js';
 import { installErrorHandling } from './http/errorHandler.js';
 import { healthRoutes } from './modules/health/routes.js';
+import { marketRoutes } from './modules/market/routes.js';
 
 export type AppOptions = {
   logger?: FastifyServerOptions['logger'];
-  /** Injected clock and repos; anything left out gets its default (system clock, in-memory repos). */
+  /** Injected clock, repos and market adapter; anything left out gets its default. */
   deps?: DepsOverrides;
 };
 
@@ -19,6 +20,10 @@ export function buildApp(options: AppOptions = {}): App {
   const app = Fastify(options.logger === undefined ? {} : { logger: options.logger });
   const deps = createDeps(options.deps);
   installErrorHandling(app);
+  app.addHook('onClose', async () => {
+    deps.dispose();
+  });
   app.register(healthRoutes(deps));
+  app.register(marketRoutes(deps));
   return Object.assign(app, { deps });
 }

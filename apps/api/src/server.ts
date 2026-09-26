@@ -1,12 +1,15 @@
 import { buildApp } from './app.js';
+import { loadConfig } from './config.js';
 
-const port = Number(process.env['PORT'] ?? 4000);
-const host = process.env['HOST'] ?? '0.0.0.0';
+const config = loadConfig(process.env);
 
-const app = buildApp({ logger: true });
+const app = buildApp({
+  logger: true,
+  deps: { marketAlwaysOpen: config.mockMarketAlwaysOpen },
+});
 
 try {
-  await app.listen({ port, host });
+  await app.listen({ port: config.port, host: config.host });
 } catch (error) {
   app.log.error(error);
   process.exit(1);
