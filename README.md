@@ -26,6 +26,15 @@ at any hour, force the mock market open:
 VITE_MOCK_MARKET_OPEN=true npm run dev -w @nthstock/web
 ```
 
+**api mode** runs the real backend: `npm run dev:api` starts Redis (Docker Compose), `apps/api`,
+`apps/realtime` and the web app with `VITE_API_MODE=api`. The Vite dev server proxies `/v1` to
+apps/api (port 4000) and `/ws` to apps/realtime (port 8081), so REST, cookies and the WebSocket
+are all same-origin; no MSW worker is registered. Outside NSE hours, force the mock market open:
+
+```bash
+MOCK_MARKET_ALWAYS_OPEN=true npm run dev:api
+```
+
 All web variables are listed in [`apps/web/.env.example`](./apps/web/.env.example)
 (`VITE_API_MODE=msw|api`, API and WS base URLs, the market-open override). A test page with live
 prices is at `/dev/prices`.

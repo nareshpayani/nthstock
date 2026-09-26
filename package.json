@@ -13,6 +13,7 @@
   ],
   "scripts": {
     "dev": "turbo run dev",
+    "dev:api": "npm run infra:up && VITE_API_MODE=api REDIS_URL=${REDIS_URL:-redis://127.0.0.1:6379} turbo run dev --env-mode=loose --filter=@nthstock/api --filter=@nthstock/realtime --filter=@nthstock/web",
     "infra:up": "docker compose -f infra/docker-compose.yml up -d --wait",
     "infra:down": "docker compose -f infra/docker-compose.yml down",
     "storybook": "npm run storybook -w @nthstock/ui",

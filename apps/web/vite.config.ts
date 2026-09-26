@@ -5,6 +5,7 @@ import { rmSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { loadEnv, type Plugin } from 'vite';
 import { configDefaults, defineConfig } from 'vitest/config';
+import { devProxy } from './src/app/devProxy.ts';
 import { parseRuntimeConfig, type ApiMode } from './src/app/runtimeConfig.ts';
 
 /** Adds <link rel="preload"> for every self-hosted woff2 font in the production bundle (T-010). */
@@ -56,6 +57,8 @@ function apiModeBuild(apiMode: ApiMode): Plugin {
 export default defineConfig(({ mode }) => {
   // Validate VITE_* at start-up so a typo in the mode fails `vite`, `vite build` and Vitest at once.
   const runtime = parseRuntimeConfig(loadEnv(mode, process.cwd(), 'VITE_'));
+  // api mode (T-076): /v1 → apps/api and /ws → apps/realtime, same origin for cookies.
+  const proxy = devProxy(runtime.apiMode, loadEnv(mode, process.cwd(), ''));
   return {
     // The mode is a build-time constant: main.tsx's `=== 'msw'` check folds away in api builds,
     // taking the dynamic MSW import with it.
@@ -77,8 +80,8 @@ export default defineConfig(({ mode }) => {
     resolve: {
       alias: { '@': decodeURIComponent(new URL('./src', import.meta.url).pathname) },
     },
-    server: { port: 5173 },
-    preview: { port: 4173 },
+    server: { port: 5173, ...(proxy ? { proxy } : {}) },
+    preview: { port: 4173, ...(proxy ? { proxy } : {}) },
     // The lazy MSW + mock-market chunk (msw mode only) is large by nature; real budgets are
     // enforced by scripts/checkBuild.mjs on the initial JS.
     build: { chunkSizeWarningLimit: 1_000 },
