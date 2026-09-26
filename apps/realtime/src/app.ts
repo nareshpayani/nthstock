@@ -4,6 +4,7 @@ import { WebSocketServer, type RawData, type WebSocket } from 'ws';
 import type { QuoteFeed } from './feed.js';
 import { createHub, type Connection } from './hub.js';
 import { silentLogger, type Logger } from './logger.js';
+import type { Timers } from './timers.js';
 import type { SubscriptionRegistry } from './registry.js';
 
 /** Path of the WebSocket endpoint; the web app derives `ws(s)://<host>/ws` from the same path. */
@@ -13,6 +14,8 @@ export type RealtimeServerOptions = {
   logger?: Logger;
   /** Where quotes come from; the server closes it on close. Left out, nothing is fanned out. */
   feed?: QuoteFeed;
+  /** Flush timers; tests inject manual ones. */
+  timers?: Timers;
 };
 
 export type RealtimeServer = {
@@ -22,6 +25,8 @@ export type RealtimeServer = {
   /** Drops every connection, closes the feed and stops listening. */
   close(): Promise<void>;
   connectionCount(): number;
+  /** Sends pending conflated quotes now instead of at the next timer flush (tests). */
+  flush(): void;
   /** Who is subscribed to what; read-only use outside the hub. */
   readonly registry: SubscriptionRegistry<Connection>;
 };
@@ -40,7 +45,7 @@ const textOf = (data: RawData, isBinary: boolean): string | null => {
 export function createRealtimeServer(options: RealtimeServerOptions = {}): RealtimeServer {
   const logger = options.logger ?? silentLogger;
   const wss = new WebSocketServer({ noServer: true, maxPayload: 64 * 1024 });
-  const hub = createHub({ logger });
+  const hub = createHub({ logger, ...(options.timers ? { timers: options.timers } : {}) });
   const detachFeed = options.feed?.onQuotes(hub.ingest);
 
   const handleHttp = (request: IncomingMessage, response: ServerResponse) => {
@@ -95,6 +100,7 @@ export function createRealtimeServer(options: RealtimeServerOptions = {}): Realt
     close() {
       closing ??= (async () => {
         detachFeed?.();
+        hub.close();
         await options.feed?.close();
         for (const client of wss.clients) client.terminate();
         wss.close();
@@ -103,6 +109,7 @@ export function createRealtimeServer(options: RealtimeServerOptions = {}): Realt
       return closing;
     },
     connectionCount: () => hub.connectionCount(),
+    flush: hub.flush,
     registry: hub.registry,
   };
 }

@@ -5,6 +5,7 @@ import {
   type WsServerMessage,
 } from '@nthstock/contracts';
 import { silentLogger, type Logger } from './logger.js';
+import { systemTimers, type Timers } from './timers.js';
 import { errorMessage, parseClientMessage } from './protocol.js';
 import {
   createSubscriptionRegistry,
@@ -31,30 +32,49 @@ export type Hub = {
   open(socket: ClientSocket): Connection;
   /** Quotes from the feed; each goes only to connections subscribed to its symbol. */
   ingest(quotes: readonly Quote[]): void;
+  /** Sends every connection's pending quotes now, one frame each. The flush timer calls this. */
+  flush(): void;
   readonly registry: SubscriptionRegistry<Connection>;
   connectionCount(): number;
+  /** Stops the flush timer. */
+  close(): void;
 };
+
+/** At most 4 updates per second per symbol (CLAUDE.md §4). */
+export const MAX_UPDATES_PER_SECOND = 4;
+export const FLUSH_INTERVAL_MS = 1_000 / MAX_UPDATES_PER_SECOND;
 
 export type HubOptions = {
   logger?: Logger;
+  timers?: Timers;
+};
+
+type Session = {
+  socket: ClientSocket;
+  /** Latest quote per subscribed key since the last flush (last value wins). */
+  pending: Map<SubscriptionKey, Quote>;
 };
 
 const symbolOf = (key: SubscriptionKey) => key.slice(key.indexOf(':') + 1);
 
 /**
- * Transport-agnostic core of apps/realtime: protocol handling, subscriptions and fan-out
- * (T-070, T-072). `app.ts` connects it to `ws` sockets and the Redis feed.
+ * Transport-agnostic core of apps/realtime: protocol handling, subscriptions, fan-out and
+ * conflation (T-070, T-072, T-073). `app.ts` connects it to `ws` sockets and the Redis feed.
  */
 export function createHub(options: HubOptions = {}): Hub {
   const logger = options.logger ?? silentLogger;
+  const timers = options.timers ?? systemTimers;
   const registry = createSubscriptionRegistry<Connection>();
-  const sockets = new Map<Connection, ClientSocket>();
+  const sessions = new Map<Connection, Session>();
+  /** Sessions with pending quotes, so a flush touches only those. */
+  const dirty = new Set<Session>();
 
   const sendJson = (socket: ClientSocket, message: WsServerMessage) => {
     socket.send(JSON.stringify(message));
   };
 
   const open = (socket: ClientSocket): Connection => {
+    const session: Session = { socket, pending: new Map() };
     const connection: Connection = {
       receive(text) {
         const parsed = parseClientMessage(text);
@@ -83,43 +103,61 @@ export function createHub(options: HubOptions = {}): Hub {
             return;
           }
           case 'unsubscribe':
-            registry.remove(
+            for (const key of registry.remove(
               connection,
               message.symbols.map((symbol) => subscriptionKey(symbol, message.exchange)),
-            );
+            )) {
+              session.pending.delete(key);
+            }
             return;
         }
       },
       closed() {
         registry.removeConnection(connection);
-        sockets.delete(connection);
+        sessions.delete(connection);
+        dirty.delete(session);
       },
     };
-    sockets.set(connection, socket);
+    sessions.set(connection, session);
     return connection;
   };
 
+  /** Conflation (T-073): only the latest quote per symbol waits for the next flush. */
   const ingest = (quotes: readonly Quote[]) => {
-    const outgoing = new Map<Connection, Quote[]>();
     for (const quote of quotes) {
-      for (const connection of registry.subscribersOf(
-        subscriptionKey(quote.symbol, quote.exchange),
-      )) {
-        const list = outgoing.get(connection);
-        if (list) list.push(quote);
-        else outgoing.set(connection, [quote]);
+      const key = subscriptionKey(quote.symbol, quote.exchange);
+      for (const connection of registry.subscribersOf(key)) {
+        const session = sessions.get(connection);
+        if (!session) continue;
+        session.pending.set(key, quote);
+        dirty.add(session);
       }
     }
-    for (const [connection, list] of outgoing) {
-      const socket = sockets.get(connection);
-      if (!socket) continue;
+  };
+
+  /** One frame per connection per flush, batching every symbol that changed. */
+  const flush = () => {
+    for (const session of dirty) {
+      const quotes = [...session.pending.values()];
+      session.pending.clear();
+      if (quotes.length === 0) continue;
       try {
-        sendJson(socket, { v: WS_PROTOCOL_VERSION, type: 'quotes', quotes: list });
+        sendJson(session.socket, { v: WS_PROTOCOL_VERSION, type: 'quotes', quotes });
       } catch (error) {
         logger.warn('send failed', { error: String(error) });
       }
     }
+    dirty.clear();
   };
 
-  return { open, ingest, registry, connectionCount: () => sockets.size };
+  const flushTimer = timers.setInterval(flush, FLUSH_INTERVAL_MS);
+
+  return {
+    open,
+    ingest,
+    flush,
+    registry,
+    connectionCount: () => sessions.size,
+    close: () => timers.clearInterval(flushTimer),
+  };
 }
