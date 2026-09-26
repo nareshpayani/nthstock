@@ -342,6 +342,19 @@ export const wsClientFixtures: WsClientMessage[] = [
 
 export const wsServerFixtures: WsServerMessage[] = [
   { v: 1, type: 'quotes', quotes: [quoteFixture] },
+  {
+    v: 1,
+    type: 'instruments',
+    instruments: [
+      {
+        token: quoteFixture.token,
+        symbol: quoteFixture.symbol,
+        exchange: quoteFixture.exchange,
+        open: quoteFixture.open,
+        prevClose: quoteFixture.prevClose,
+      },
+    ],
+  },
   { v: 1, type: 'orderUpdate', order: orderFixture },
   { v: 1, type: 'pong', id: 7 },
   {

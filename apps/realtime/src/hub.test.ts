@@ -2,6 +2,7 @@ import { WS_PROTOCOL_VERSION } from '@nthstock/contracts';
 import { describe, expect, it, vi } from 'vitest';
 import { createHub, FLUSH_INTERVAL_MS, MAX_UPDATES_PER_SECOND } from './hub.js';
 import { fakeSocket } from './test/fakeSocket.js';
+import { quoteFramesOf } from './test/frames.js';
 import { manualTimers } from './test/manualTimers.js';
 import { testQuote } from './test/quotes.js';
 
@@ -17,7 +18,7 @@ describe('hub fan-out', () => {
     hub.flush();
     hub.ingest([testQuote('TCS', 300_500)]);
     hub.flush();
-    const quotes = socket.json().flatMap((m) => (m.type === 'quotes' ? m.quotes : []));
+    const quotes = quoteFramesOf(socket.sent).flat();
     expect(quotes.map((q) => q.symbol)).toEqual(['INFY']);
   });
 
@@ -27,7 +28,7 @@ describe('hub fan-out', () => {
     hub.open(socket).receive(subscribe(['SBIN'], 'BSE'));
     hub.ingest([testQuote('SBIN', 80_000), testQuote('SBIN', 80_100, { exchange: 'BSE' })]);
     hub.flush();
-    const quotes = socket.json().flatMap((m) => (m.type === 'quotes' ? m.quotes : []));
+    const quotes = quoteFramesOf(socket.sent).flat();
     expect(quotes.map((q) => `${q.exchange}:${q.ltp}`)).toEqual(['BSE:80100']);
   });
 
@@ -41,18 +42,16 @@ describe('hub fan-out', () => {
     connB.receive(subscribe(['INFY', 'TCS']));
     hub.ingest([testQuote('INFY', 150_000), testQuote('TCS', 300_000)]);
     hub.flush();
-    expect(a.json()).toHaveLength(1);
-    expect(b.json()).toEqual([
-      expect.objectContaining({ type: 'quotes', quotes: [expect.anything(), expect.anything()] }),
-    ]);
+    expect(quoteFramesOf(a.sent).map((f) => f.map((q) => q.symbol))).toEqual([['INFY']]);
+    expect(quoteFramesOf(b.sent).map((f) => f.map((q) => q.symbol))).toEqual([['INFY', 'TCS']]);
     connA.receive(
       JSON.stringify({ v: WS_PROTOCOL_VERSION, type: 'unsubscribe', symbols: ['INFY'] }),
     );
     connB.closed();
     hub.ingest([testQuote('INFY', 150_100)]);
     hub.flush();
-    expect(a.json()).toHaveLength(1);
-    expect(b.json()).toHaveLength(1);
+    expect(quoteFramesOf(a.sent)).toHaveLength(1);
+    expect(quoteFramesOf(b.sent)).toHaveLength(1);
     expect(hub.connectionCount()).toBe(1);
     expect(hub.registry.keyCount()).toBe(0);
   });
@@ -87,17 +86,17 @@ describe('hub conflation', () => {
       timers.advance(20);
     }
 
-    const frames = socket.json().flatMap((m) => (m.type === 'quotes' ? [m] : []));
+    const frames = quoteFramesOf(socket.sent);
     // One flush every 250 ms, each a single frame batching both symbols.
     expect(frames).toHaveLength(3_000 / FLUSH_INTERVAL_MS);
     for (const frame of frames) {
-      expect(frame.quotes.map((q) => q.symbol).sort()).toEqual(['INFY', 'TCS']);
+      expect(frame.map((q) => q.symbol).sort()).toEqual(['INFY', 'TCS']);
     }
     for (const symbol of ['INFY', 'TCS'] as const) {
       const perSecond = [0, 0, 0];
       frames.forEach((frame, index) => {
         const second = Math.floor(((index + 1) * FLUSH_INTERVAL_MS - 1) / 1_000);
-        if (frame.quotes.some((q) => q.symbol === symbol))
+        if (frame.some((q) => q.symbol === symbol))
           perSecond[second] = (perSecond[second] ?? 0) + 1;
       });
       expect(Math.max(...perSecond)).toBeLessThanOrEqual(MAX_UPDATES_PER_SECOND);
@@ -106,8 +105,8 @@ describe('hub conflation', () => {
     frames.forEach((frame, index) => {
       const flushAt = (index + 1) * FLUSH_INTERVAL_MS;
       const lastTick = Math.floor((flushAt - 1) / 20) + 1;
-      expect(frame.quotes.find((q) => q.symbol === 'INFY')?.ltp).toBe(infyAt(lastTick));
-      expect(frame.quotes.find((q) => q.symbol === 'TCS')?.ltp).toBe(tcsAt(lastTick));
+      expect(frame.find((q) => q.symbol === 'INFY')?.ltp).toBe(infyAt(lastTick));
+      expect(frame.find((q) => q.symbol === 'TCS')?.ltp).toBe(tcsAt(lastTick));
     });
     hub.close();
     expect(timers.activeCount()).toBe(0);
@@ -139,5 +138,61 @@ describe('hub conflation', () => {
     connection.closed();
     timers.advance(FLUSH_INTERVAL_MS);
     expect(socket.sent).toEqual([]);
+  });
+});
+
+describe('hub binary quote frames', () => {
+  const setup = () => {
+    const timers = manualTimers();
+    const hub = createHub({ timers });
+    const socket = fakeSocket();
+    const connection = hub.open(socket);
+    connection.receive(subscribe(['INFY', 'TCS']));
+    return { hub, socket, connection };
+  };
+
+  it('sends instruments once, then only 24-byte records, and again when they change', () => {
+    const { hub, socket } = setup();
+    hub.ingest([testQuote('INFY', 150_000), testQuote('TCS', 300_000)]);
+    hub.flush();
+    hub.ingest([testQuote('INFY', 150_100)]);
+    hub.flush();
+    hub.ingest([testQuote('INFY', 150_200, { prevClose: 150_100 })]);
+    hub.flush();
+    const kinds = socket.sent.map((data) =>
+      typeof data === 'string' ? (JSON.parse(data) as { type: string }).type : data.byteLength,
+    );
+    expect(kinds).toEqual(['instruments', 12 + 2 * 24, 12 + 24, 'instruments', 12 + 24]);
+    expect(
+      quoteFramesOf(socket.sent)
+        .flat()
+        .map((q) => q.ltp),
+    ).toEqual([150_000, 300_000, 150_100, 150_200]);
+  });
+
+  it('re-announces an instrument after unsubscribe and resubscribe', () => {
+    const { hub, socket, connection } = setup();
+    hub.ingest([testQuote('INFY', 150_000)]);
+    hub.flush();
+    connection.receive(
+      JSON.stringify({ v: WS_PROTOCOL_VERSION, type: 'unsubscribe', symbols: ['INFY'] }),
+    );
+    connection.receive(subscribe(['INFY']));
+    hub.ingest([testQuote('INFY', 150_100)]);
+    hub.flush();
+    const types = socket.sent.filter((d) => typeof d === 'string').map((d) => JSON.parse(d).type);
+    expect(types).toEqual(['instruments', 'instruments']);
+  });
+
+  it('falls back to a JSON quotes message when a value does not fit the binary record', () => {
+    const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn() };
+    const hub = createHub({ logger, timers: manualTimers() });
+    const socket = fakeSocket();
+    hub.open(socket).receive(subscribe(['INFY']));
+    const huge = testQuote('INFY', 150_000, { volume: 2 ** 33 });
+    hub.ingest([huge]);
+    hub.flush();
+    expect(socket.json()).toEqual([{ v: WS_PROTOCOL_VERSION, type: 'quotes', quotes: [huge] }]);
+    expect(logger.warn).toHaveBeenCalledWith('quote frame fallback to JSON', expect.anything());
   });
 });

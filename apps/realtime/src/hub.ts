@@ -1,7 +1,10 @@
 import {
   WS_MAX_SUBSCRIPTIONS,
   WS_PROTOCOL_VERSION,
+  encodeQuoteFrame,
+  instrumentOf,
   type Quote,
+  type WsInstrument,
   type WsServerMessage,
 } from '@nthstock/contracts';
 import { silentLogger, type Logger } from './logger.js';
@@ -53,7 +56,12 @@ type Session = {
   socket: ClientSocket;
   /** Latest quote per subscribed key since the last flush (last value wins). */
   pending: Map<SubscriptionKey, Quote>;
+  /** What this client was last told about each subscribed key's instrument (T-074). */
+  instruments: Map<SubscriptionKey, string>;
 };
+
+const instrumentSignature = (i: WsInstrument) =>
+  `${i.token}|${i.open}|${i.prevClose}|${i.symbol}|${i.exchange}`;
 
 const symbolOf = (key: SubscriptionKey) => key.slice(key.indexOf(':') + 1);
 
@@ -74,7 +82,7 @@ export function createHub(options: HubOptions = {}): Hub {
   };
 
   const open = (socket: ClientSocket): Connection => {
-    const session: Session = { socket, pending: new Map() };
+    const session: Session = { socket, pending: new Map(), instruments: new Map() };
     const connection: Connection = {
       receive(text) {
         const parsed = parseClientMessage(text);
@@ -108,6 +116,7 @@ export function createHub(options: HubOptions = {}): Hub {
               message.symbols.map((symbol) => subscriptionKey(symbol, message.exchange)),
             )) {
               session.pending.delete(key);
+              session.instruments.delete(key);
             }
             return;
         }
@@ -135,14 +144,44 @@ export function createHub(options: HubOptions = {}): Hub {
     }
   };
 
+  /**
+   * Sends a session's quotes as one binary frame (T-074), preceded by an `instruments` message for
+   * any instrument the client has not been told about or that changed (open or previous close
+   * roll over at the session start). If a value does not fit the binary record, the batch goes
+   * as a JSON `quotes` message instead.
+   */
+  const sendQuotes = (session: Session, entries: [SubscriptionKey, Quote][]) => {
+    const quotes = entries.map(([, quote]) => quote);
+    let frame: Uint8Array;
+    try {
+      frame = encodeQuoteFrame(quotes);
+    } catch (error) {
+      logger.warn('quote frame fallback to JSON', { error: String(error) });
+      sendJson(session.socket, { v: WS_PROTOCOL_VERSION, type: 'quotes', quotes });
+      return;
+    }
+    const fresh: WsInstrument[] = [];
+    for (const [key, quote] of entries) {
+      const instrument = instrumentOf(quote);
+      const signature = instrumentSignature(instrument);
+      if (session.instruments.get(key) === signature) continue;
+      session.instruments.set(key, signature);
+      fresh.push(instrument);
+    }
+    if (fresh.length > 0) {
+      sendJson(session.socket, { v: WS_PROTOCOL_VERSION, type: 'instruments', instruments: fresh });
+    }
+    session.socket.send(frame);
+  };
+
   /** One frame per connection per flush, batching every symbol that changed. */
   const flush = () => {
     for (const session of dirty) {
-      const quotes = [...session.pending.values()];
+      const entries = [...session.pending];
       session.pending.clear();
-      if (quotes.length === 0) continue;
+      if (entries.length === 0) continue;
       try {
-        sendJson(session.socket, { v: WS_PROTOCOL_VERSION, type: 'quotes', quotes });
+        sendQuotes(session, entries);
       } catch (error) {
         logger.warn('send failed', { error: String(error) });
       }

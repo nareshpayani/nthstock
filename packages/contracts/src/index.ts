@@ -6,4 +6,5 @@ export * from './orders.js';
 export * from './portfolio.js';
 export * from './ws.js';
 export * from './pubsub.js';
+export * from './quoteFrame.js';
 export * from './routes.js';

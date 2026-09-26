@@ -2,6 +2,7 @@ import { WS_MAX_SUBSCRIPTIONS, WS_PROTOCOL_VERSION } from '@nthstock/contracts';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createRealtimeServer, WS_PATH, type RealtimeServer } from './app.js';
 import { createMemoryQuoteFeed } from './feed.js';
+import { quoteFramesOf } from './test/frames.js';
 import { manualTimers } from './test/manualTimers.js';
 import { testQuote } from './test/quotes.js';
 import { connectTestClient } from './test/wsTestClient.js';
@@ -124,11 +125,8 @@ describe('realtime server with a feed', () => {
     feed.emit([testQuote('TCS', 300_100)]);
     own.flush();
     const frames = await client.drain();
-    expect(frames).toHaveLength(1);
-    expect(frames[0]).toMatchObject({
-      kind: 'json',
-      message: { type: 'quotes', quotes: [{ symbol: 'INFY', ltp: 150_000 }] },
-    });
+    expect(frames.map((f) => f.kind)).toEqual(['json', 'binary']);
+    expect(quoteFramesOf(frames)).toEqual([[testQuote('INFY', 150_000)]]);
     await own.close();
     expect(feed.closed).toBe(true);
   });

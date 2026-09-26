@@ -3,6 +3,7 @@ import { Redis } from 'ioredis';
 import { afterAll, beforeAll, expect, it, vi } from 'vitest';
 import { createRealtimeServer, WS_PATH } from './app.js';
 import { createRedisQuoteFeed } from './feed.js';
+import { quoteFramesOf } from './test/frames.js';
 import { testQuote } from './test/quotes.js';
 import {
   describeWithRedis,
@@ -44,13 +45,12 @@ describeWithRedis('Redis feed to WebSocket clients (integration)', () => {
     await publish([testQuote('TCS', 300_000)]);
     await publish([testQuote('TCS', 300_100), testQuote('INFY', 150_000)]);
 
-    const frame = await client.next();
-    expect(frame).toMatchObject({ kind: 'json', message: { type: 'quotes' } });
-    const symbols =
-      frame.kind === 'json' && frame.message.type === 'quotes'
-        ? frame.message.quotes.map((q) => q.symbol)
-        : [];
-    expect(symbols).toEqual(['INFY']);
+    const frames = [await client.next(), await client.next()];
+    expect(
+      quoteFramesOf(frames)
+        .flat()
+        .map((q) => q.symbol),
+    ).toEqual(['INFY']);
     expect(await client.drain()).toEqual([]);
     expect(logger.warn).toHaveBeenCalledTimes(2);
     expect(logger.warn).toHaveBeenCalledWith('Dropped a malformed tick batch', { channel });

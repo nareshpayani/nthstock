@@ -14,6 +14,7 @@ export class FakeWebSocket implements WebSocketLike {
   }
 
   readyState = 0;
+  binaryType = 'blob';
   readonly sent: unknown[] = [];
   closedWith: { code?: number | undefined; reason?: string | undefined } | null = null;
   onopen: ((event: unknown) => void) | null = null;
