@@ -7,7 +7,7 @@ export type LogoProps = {
 };
 
 /**
- * nthstock logo: a harbour-blue tile with "n" and a marigold superscript "th", then the wordmark.
+ * nthstock logo: a brand-blue tile with "n" and a marigold superscript "th", then the wordmark.
  * The whole logo has one accessible name.
  */
 export function Logo({ withWordmark = true, className }: LogoProps) {

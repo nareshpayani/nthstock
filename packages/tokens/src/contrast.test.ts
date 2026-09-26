@@ -32,4 +32,18 @@ describe('contrast', () => {
     expect(contrastRatio(colors.up, colors['up-soft'])).toBeGreaterThanOrEqual(4.5);
     expect(contrastRatio(colors.down, colors['down-soft'])).toBeGreaterThanOrEqual(4.5);
   });
+
+  it('brand and muted text reach 4.5:1 on the blue tint (active nav, hero card)', () => {
+    expect(contrastRatio(colors.brand, colors['brand-soft'])).toBeGreaterThanOrEqual(4.5);
+    expect(contrastRatio(colors['ink-muted'], colors['brand-soft'])).toBeGreaterThanOrEqual(4.5);
+  });
+
+  it('white text reaches 4.5:1 on ink (tooltips)', () => {
+    expect(contrastRatio(colors.surface, colors.ink)).toBeGreaterThanOrEqual(4.5);
+  });
+
+  it('brand and ink-muted UI parts reach 3:1 on surface (focused borders, switch tracks)', () => {
+    expect(contrastRatio(colors.brand, colors.surface)).toBeGreaterThanOrEqual(3);
+    expect(contrastRatio(colors['ink-muted'], colors.surface)).toBeGreaterThanOrEqual(3);
+  });
 });

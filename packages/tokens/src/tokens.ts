@@ -1,22 +1,24 @@
 /**
  * nthstock design tokens: the single source for tokens.css (CSS variables) and the Tailwind theme.
  * One light theme only (CLAUDE.md D4). Approved by the owner on 2026-09-25.
+ * Palette variant "closer" (2026-09-26): bright blue primary on white, deep navy ink.
+ * nthstock's own values; deliberately far from any third-party brand colour.
  * Marigold is a fill colour only (focus rings, pills, highlights) and never used for text.
  */
 
 export const colors = {
-  brand: '#1D4E6B',
-  'brand-soft': '#E6EEF3',
+  brand: '#1463D8',
+  'brand-soft': '#E8F1FD',
   marigold: '#F2B632',
   'marigold-soft': '#FDF3DC',
   up: '#0B7A52',
   'up-soft': '#E3F3EC',
   down: '#C0392B',
   'down-soft': '#FBE9E7',
-  ink: '#13212E',
-  'ink-muted': '#5B6B7A',
-  canvas: '#F5F7F9',
-  line: '#DDE3EA',
+  ink: '#0E2240',
+  'ink-muted': '#5A6B80',
+  canvas: '#F3F6FA',
+  line: '#DCE3ED',
   surface: '#FFFFFF',
 } as const;
 
@@ -55,8 +57,8 @@ export const radius = { sm: 4, md: 8, lg: 12, pill: 9999 } as const;
 
 /** Cards use borders, not shadows. One shadow for menus and overlays, one hairline for raised chips. */
 export const shadows = {
-  raised: '0 1px 2px rgb(19 33 46 / 0.12)',
-  overlay: '0 8px 24px rgb(19 33 46 / 0.16)',
+  raised: '0 1px 2px rgb(14 34 64 / 0.12)',
+  overlay: '0 8px 24px rgb(14 34 64 / 0.16)',
 } as const;
 
 export const zIndex = { header: 10, drawer: 20, overlay: 30, popover: 35, toast: 40 } as const;

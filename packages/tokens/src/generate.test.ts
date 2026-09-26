@@ -15,7 +15,7 @@ describe('toCssVariables', () => {
   it('emits one :root block with the approved palette', () => {
     expect(css).toContain(':root {');
     expect(css).toContain('color-scheme: light;');
-    expect(css).toContain('--nth-color-brand: #1D4E6B;');
+    expect(css).toContain('--nth-color-brand: #1463D8;');
     expect(css).toContain('--nth-color-up: #0B7A52;');
     expect(css).toContain('--nth-color-down: #C0392B;');
     expect(css).toContain("--nth-font-sans: 'IBM Plex Sans'");
