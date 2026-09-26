@@ -19,7 +19,7 @@
       "persistent": true
     },
     "build-storybook": {
-      "dependsOn": ["^build"],
+      "dependsOn": ["^build", "build", "@nthstock/apiClient#build"],
       "outputs": ["storybook-static/**"]
     }
   }
