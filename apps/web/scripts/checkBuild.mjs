@@ -3,6 +3,7 @@
 // - initial JS (entry script plus modulepreloads) under 200 KB gzipped;
 // - every page route is code-split into its own chunk (T-022);
 // - icons are tree-shaken: only icons imported somewhere in src end up in the bundle (T-021);
+// - the charts library (TradingView Lightweight Charts) loads lazily, never in the initial JS (T-094);
 // - mocks stay out of production paths (T-050): an api-mode build contains no MSW or mock-market
 //   code at all, and in an msw-mode build they load lazily, never in the initial JS.
 // Usage: node scripts/checkBuild.mjs [distDir]   (default dist)
@@ -82,6 +83,24 @@ const mockJs = mockFiles
   .filter((file) => file.endsWith('.js') && !file.endsWith('mockServiceWorker.js'))
   .reduce((sum, file) => sum + gzipSync(readFileSync(file)).length, 0);
 
+// A class name Lightweight Charts puts on its root element; unique to the library.
+const CHARTS_MARKER = 'tv-lightweight-charts';
+const eagerCharts = initialScripts.filter((file) =>
+  readFileSync(join(DIST, file), 'utf8').includes(CHARTS_MARKER),
+);
+if (eagerCharts.length > 0) {
+  failures.push(`charts library in the initial JS: ${eagerCharts.join(', ')}`);
+}
+const chartChunks = assets.filter(
+  (file) =>
+    file.endsWith('.js') &&
+    readFileSync(join(DIST, 'assets', file), 'utf8').includes(CHARTS_MARKER),
+);
+const chartsJs = chartChunks.reduce(
+  (sum, file) => sum + gzipSync(readFileSync(join(DIST, 'assets', file))).length,
+  0,
+);
+
 const ROUTE_CHUNKS = ['dashboard', 'portfolio', 'positions', 'orders', 'funds', 'login', '_symbol'];
 const missingChunks = ROUTE_CHUNKS.filter(
   (name) => !assets.some((file) => file.startsWith(`${name}-`) && file.endsWith('.js')),
@@ -125,6 +144,9 @@ console.log(
 );
 console.log(
   `checkBuild: ${DIST} is an ${String(apiMode)}-mode build; lazy mock JS ${(mockJs / 1024).toFixed(1)} KB gzipped`,
+);
+console.log(
+  `checkBuild: charts library in ${String(chartChunks.length)} lazy chunk(s), ${(chartsJs / 1024).toFixed(1)} KB gzipped`,
 );
 if (failures.length > 0) {
   for (const failure of failures) console.error(`checkBuild: ${failure}`);
