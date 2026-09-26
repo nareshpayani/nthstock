@@ -1,0 +1,83 @@
+name: 'Agent: Auto-merge'
+
+# Squash-merges a PR into main as soon as every check on its head commit is green.
+# Owner decision 2026-09-26 (ADR 0003 amendment): agent PRs no longer wait for a manual merge.
+# Skipped: drafts, forks, Dependabot, spec PRs (the owner still approves specs), and any PR
+# labelled needs-human, agent:fix-needed or do-not-merge. Add do-not-merge to hold a PR.
+
+on:
+  workflow_run:
+    workflows: [CI, CodeQL]
+    types: [completed]
+  pull_request:
+    types: [labeled, unlabeled, ready_for_review]
+  schedule:
+    - cron: '47 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+  checks: read
+  actions: write
+
+concurrency:
+  group: agent-automerge
+  cancel-in-progress: false
+
+jobs:
+  merge:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      GH_TOKEN: ${{ github.token }}
+      OWNER_LOGIN: ${{ vars.OWNER_LOGIN || 'nareshpayani' }}
+      AGENT_BOT_LOGIN: ${{ vars.AGENT_BOT_LOGIN || 'claude[bot]' }}
+      AUTOMERGE_ENABLED: ${{ vars.AGENT_AUTOMERGE || 'true' }}
+    steps:
+      - name: Merge every open PR whose checks are all green
+        if: env.AUTOMERGE_ENABLED == 'true'
+        run: |
+          set -euo pipefail
+          repo="$GITHUB_REPOSITORY"
+          merged=0
+          prs=$(gh pr list --repo "$repo" --base main --state open --limit 50 \
+            --json number,isDraft,author,labels,headRefOid,headRepositoryOwner,mergeable \
+            --jq '.[] | @base64')
+          for row in $prs; do
+            pr() { echo "$row" | base64 -d | jq -r "$1"; }
+            num=$(pr .number)
+            author=$(pr .author.login)
+            case "$author" in
+              "$OWNER_LOGIN"|"$AGENT_BOT_LOGIN"|app/claude) ;;
+              *) echo "#$num: author $author is not the owner or an agent, skipping"; continue ;;
+            esac
+            [ "$(pr .isDraft)" = "false" ] || { echo "#$num: draft, skipping"; continue; }
+            [ "$(pr .headRepositoryOwner.login)" = "${repo%%/*}" ] || { echo "#$num: fork, skipping"; continue; }
+            if pr '[.labels[].name] | map(select(. == "needs-human" or . == "agent:fix-needed" or . == "do-not-merge" or . == "spec")) | length' | grep -qv '^0$'; then
+              echo "#$num: blocking label, skipping"; continue
+            fi
+            [ "$(pr .mergeable)" = "MERGEABLE" ] || { echo "#$num: not mergeable ($(pr .mergeable)), skipping"; continue; }
+            sha=$(pr .headRefOid)
+            runs=$(gh api "repos/$repo/commits/$sha/check-runs?per_page=100" \
+              --jq '[.check_runs[] | select(.name != "merge") | {status, conclusion}]')
+            total=$(echo "$runs" | jq length)
+            pending=$(echo "$runs" | jq '[.[] | select(.status != "completed")] | length')
+            bad=$(echo "$runs" | jq '[.[] | select(.status == "completed" and (.conclusion | IN("success","skipped","neutral") | not))] | length')
+            # CI runs 5+ jobs on every PR; fewer means the checks have not all started yet.
+            if [ "$total" -lt 5 ] || [ "$pending" -gt 0 ] || [ "$bad" -gt 0 ]; then
+              echo "#$num: checks not all green (total=$total pending=$pending failed=$bad), skipping"; continue
+            fi
+            echo "#$num: all $total checks green, squash-merging"
+            gh pr merge "$num" --repo "$repo" --squash --delete-branch --match-head-commit "$sha"
+            merged=1
+            # One merge per run: the other PRs' checks ran against the old main. The conflict
+            # resolver and the next run (after their CI, or the hourly sweep) pick them up.
+            break
+          done
+          # Merges made with GITHUB_TOKEN do not trigger push workflows, so start them on main explicitly.
+          if [ "$merged" -eq 1 ]; then
+            for wf in ci.yml codeql.yml agent-conflicts.yml; do
+              gh workflow run "$wf" --repo "$repo" --ref main
+            done
+          fi

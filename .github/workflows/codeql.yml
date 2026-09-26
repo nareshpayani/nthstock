@@ -6,6 +6,8 @@ on:
     branches: [main]
   schedule:
     - cron: '0 20 * * 0'
+  # Started by agent-automerge.yml after it merges.
+  workflow_dispatch:
 
 permissions:
   contents: read

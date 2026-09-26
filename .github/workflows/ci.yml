@@ -4,6 +4,8 @@ on:
   pull_request:
   push:
     branches: [main]
+  # Started by agent-automerge.yml after it merges (GITHUB_TOKEN merges don't trigger push runs).
+  workflow_dispatch:
 
 permissions:
   contents: read
