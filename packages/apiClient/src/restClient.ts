@@ -25,6 +25,12 @@ export type ApiClientOptions = {
   fetch?: FetchLike;
   /** Returns the CSRF token for POST, PUT, PATCH and DELETE; nothing is sent when it returns null. */
   csrfToken?: () => string | null | undefined;
+  /**
+   * Called when a route that needs a session (`auth: 'user'`) answers 401, typically to refresh
+   * the session once. Resolving `true` retries the request exactly once; `false` rejects with the
+   * original 401. Concurrent 401s should share one refresh (the caller dedupes).
+   */
+  onUnauthorized?: () => Promise<boolean>;
 };
 
 type Part<N extends RouteName, K extends 'params' | 'query' | 'body', V> = Routes[N] extends {
@@ -101,48 +107,67 @@ export function createApiClient(options: ApiClientOptions = {}): ApiClient {
     },
 
     async request(name, ...[args]) {
-      const route = routes[name];
-      const headers: Record<string, string> = { Accept: 'application/json' };
-      const init: RequestInit = { method: route.method, credentials: 'include', headers };
-      if (args?.signal) init.signal = args.signal;
-      if (args?.body !== undefined) {
-        headers['Content-Type'] = 'application/json';
-        init.body = JSON.stringify(args.body);
-      }
-      if (route.method !== 'GET') {
-        const token = options.csrfToken?.();
-        if (token) headers[CSRF_HEADER] = token;
-      }
-
-      const doFetch: FetchLike = options.fetch ?? ((input, req) => globalThis.fetch(input, req));
-      let response: Response;
       try {
-        response = await doFetch(urlFor(name, args), init);
+        return await send(name, args);
       } catch (error) {
-        if (error instanceof DOMException && error.name === 'AbortError') throw error;
-        throw new ApiError({
-          kind: 'network',
-          status: 0,
-          code: 'SERVICE_UNAVAILABLE',
-          message: error instanceof Error ? error.message : 'Network request failed',
-          cause: error,
-        });
+        const retry =
+          options.onUnauthorized !== undefined &&
+          routes[name].auth === 'user' &&
+          error instanceof ApiError &&
+          error.status === 401 &&
+          (await options.onUnauthorized());
+        if (!retry) throw error;
+        // One silent retry only: a second 401 goes to the caller.
+        return await send(name, args);
       }
-
-      const body = await readBody(response);
-      if (!response.ok) throw ApiError.fromResponse(response.status, body, response.statusText);
-
-      const parsed = route.response.safeParse(body);
-      if (!parsed.success) {
-        throw new ApiError({
-          kind: 'contract',
-          status: response.status,
-          code: 'INTERNAL_ERROR',
-          message: `Response for ${name} does not match its contract`,
-          details: { issues: parsed.error.issues },
-        });
-      }
-      return parsed.data as RouteResponse<typeof name>;
     },
   };
+
+  async function send<N extends RouteName>(
+    name: N,
+    args: RequestArgs<N> | undefined,
+  ): Promise<RouteResponse<N>> {
+    const route = routes[name];
+    const headers: Record<string, string> = { Accept: 'application/json' };
+    const init: RequestInit = { method: route.method, credentials: 'include', headers };
+    if (args?.signal) init.signal = args.signal;
+    if (args?.body !== undefined) {
+      headers['Content-Type'] = 'application/json';
+      init.body = JSON.stringify(args.body);
+    }
+    if (route.method !== 'GET') {
+      const token = options.csrfToken?.();
+      if (token) headers[CSRF_HEADER] = token;
+    }
+
+    const doFetch: FetchLike = options.fetch ?? ((input, req) => globalThis.fetch(input, req));
+    let response: Response;
+    try {
+      response = await doFetch(urlFor(name, args), init);
+    } catch (error) {
+      if (error instanceof DOMException && error.name === 'AbortError') throw error;
+      throw new ApiError({
+        kind: 'network',
+        status: 0,
+        code: 'SERVICE_UNAVAILABLE',
+        message: error instanceof Error ? error.message : 'Network request failed',
+        cause: error,
+      });
+    }
+
+    const body = await readBody(response);
+    if (!response.ok) throw ApiError.fromResponse(response.status, body, response.statusText);
+
+    const parsed = route.response.safeParse(body);
+    if (!parsed.success) {
+      throw new ApiError({
+        kind: 'contract',
+        status: response.status,
+        code: 'INTERNAL_ERROR',
+        message: `Response for ${name} does not match its contract`,
+        details: { issues: parsed.error.issues },
+      });
+    }
+    return parsed.data as RouteResponse<N>;
+  }
 }
