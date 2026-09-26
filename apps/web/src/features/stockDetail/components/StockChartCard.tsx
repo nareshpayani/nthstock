@@ -1,4 +1,4 @@
-import type { CandleRange, Instrument } from '@nthstock/contracts';
+import type { Candle, CandleRange, Instrument } from '@nthstock/contracts';
 import { ErrorState, SegmentedControl, Skeleton } from '@nthstock/ui';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import {
@@ -8,6 +8,7 @@ import {
   candlesQuery,
   isIntraday,
   rangeLabel,
+  useLiveCandles,
 } from '@/features/charts';
 import { Card } from '@/shared/components/Card';
 import { useMarketOpen } from '@/shared/hooks/useMarketOpen';
@@ -24,11 +25,13 @@ export type StockChartCardProps = {
 };
 
 const CHART_HEIGHT = 320;
+const NO_CANDLES: readonly Candle[] = [];
 
 /**
  * Stock price chart (T-107): 1D to 5Y range tabs and an area/candle toggle, both kept in the URL
  * by the page, and a crosshair tooltip with the hovered bar's IST time and ₹ values. The previous
- * range stays on screen, dimmed, while the next one loads.
+ * range stays on screen, dimmed, while the next one loads. On 1D while the market is open, the
+ * last bar moves with every live quote and a new bar starts each minute (T-108).
  */
 export function StockChartCard({
   instrument,
@@ -45,6 +48,10 @@ export function StockChartCard({
     placeholderData: keepPreviousData,
   });
   const format = instrument.type === 'INDEX' ? 'index' : 'inr';
+  // T-108: while NSE is open, today's 1-minute bars follow the quote store.
+  const live =
+    marketOpen && range === '1D' && candles.data?.interval === '1m' && !candles.isPlaceholderData;
+  const bars = useLiveCandles(symbol, exchange, candles.data?.candles ?? NO_CANDLES, live);
 
   return (
     <Card
@@ -85,7 +92,7 @@ export function StockChartCard({
           </div>
         ) : candles.data ? (
           <PriceChart
-            candles={candles.data.candles}
+            candles={bars}
             label={strings.chart.label(
               symbol,
               strings.chart.typeNames[chartType],

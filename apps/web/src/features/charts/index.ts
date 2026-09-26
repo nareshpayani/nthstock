@@ -6,3 +6,5 @@ export { seriesDirection, toAreaData, toCandleData, toChartTime } from './model/
 export { formatChartValue, type ChartDirection, type ChartValueFormat } from './model/chartFormat';
 export { CHART_RANGES, DEFAULT_CHART_RANGE, NIFTY, isIntraday, rangeLabel } from './model/ranges';
 export { tooltipContent, type HoveredItem, type TooltipContent } from './model/chartTooltip';
+export { useLiveCandles } from './hooks/useLiveCandles';
+export { LIVE_BUCKET_MS, applyTick, quoteToTick, type LiveTick } from './model/liveCandles';

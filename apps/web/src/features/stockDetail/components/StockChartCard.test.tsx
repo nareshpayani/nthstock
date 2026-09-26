@@ -1,7 +1,9 @@
+import { fixedClock, fromIst } from '@nthstock/utils';
 import { act, fireEvent, screen, waitFor } from '@testing-library/react';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { chartsMock } from '@/test/chartsMock';
 import { createMockApi } from '@/test/mockApi';
+import { createTestQuoteStore, testQuote } from '@/test/quotes';
 import { renderApp } from '@/test/renderApp';
 import { installResizeObserver } from '@/test/resizeObserver';
 import { resetSession } from '@/test/session';
@@ -83,5 +85,59 @@ describe('stock price chart (T-107)', () => {
     expect(tooltip).toHaveTextContent('25 Sept 2026');
     expect(tooltip).toHaveTextContent('High₹1,525.00');
     expect(tooltip).toHaveTextContent('Close₹1,512.35');
+  });
+});
+
+describe('live 1D chart (T-108)', () => {
+  // The market is open (forced), so the 1D bars follow the quote store.
+  const open = { clock: fixedClock(fromIst(2026, 9, 25, 15 * 60)), alwaysOpen: true };
+
+  async function renderLive(url: string, marketSession = open) {
+    const quotes = createTestQuoteStore();
+    renderApp(url, { apiClient: api.apiClient, quoteStore: quotes.store, marketSession });
+    await screen.findByTestId('chart-host');
+    const series = await waitFor(() => {
+      const found = chartsMock.active()[0]?.series[0];
+      expect(found?.setData).toHaveBeenCalled();
+      return found;
+    });
+    const data = series?.setData.mock.lastCall?.[0] as { time: number; value: number }[];
+    const last = data[data.length - 1] as { time: number; value: number };
+    return { quotes, series, last };
+  }
+
+  it('a tick in the same minute updates the last bar and the next minute appends one', async () => {
+    const { quotes, series, last } = await renderLive('/stocks/INFY');
+    const setDataCalls = series?.setData.mock.calls.length;
+    const inMinute = new Date(last.time * 1000 + 30_000).toISOString();
+    act(() => quotes.push(testQuote('INFY', 151235, { ts: inMinute })));
+    expect(series?.update).toHaveBeenLastCalledWith({ time: last.time, value: 151235 });
+
+    const nextMinute = new Date(last.time * 1000 + 65_000).toISOString();
+    act(() => quotes.push(testQuote('INFY', 151300, { ts: nextMinute })));
+    expect(series?.update).toHaveBeenLastCalledWith({ time: last.time + 60, value: 151300 });
+    // Updated in place: no full redraw.
+    expect(series?.setData.mock.calls.length).toBe(setDataCalls);
+  });
+
+  it('stays still on other ranges and while the market is closed', async () => {
+    const { quotes, series, last } = await renderLive('/stocks/INFY?range=1W');
+    act(() =>
+      quotes.push(
+        testQuote('INFY', 151235, { ts: new Date(last.time * 1000 + 1_000).toISOString() }),
+      ),
+    );
+    expect(series?.update).not.toHaveBeenCalled();
+  });
+
+  it('does not follow ticks on 1D when the market is closed', async () => {
+    const closed = { clock: fixedClock(fromIst(2026, 9, 25, 16 * 60)), alwaysOpen: false };
+    const { quotes, series, last } = await renderLive('/stocks/INFY', closed);
+    act(() =>
+      quotes.push(
+        testQuote('INFY', 151235, { ts: new Date(last.time * 1000 + 1_000).toISOString() }),
+      ),
+    );
+    expect(series?.update).not.toHaveBeenCalled();
   });
 });

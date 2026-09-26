@@ -3,13 +3,16 @@ import {
   AreaSeries,
   CandlestickSeries,
   createChart,
+  type CandlestickData,
   type IChartApi,
+  type LineData,
   type ISeriesApi,
   type MouseEventParams,
   type Time,
 } from 'lightweight-charts';
 import { useEffect, useRef, useState } from 'react';
 import { toAreaData, toCandleData } from '../model/chartData';
+import { trailingChanges } from '../model/liveCandles';
 import type { ChartDirection, ChartValueFormat } from '../model/chartFormat';
 import { areaSeriesOptions, candleSeriesOptions, chartOptions } from '../model/chartTheme';
 import { tooltipContent, type HoveredItem } from '../model/chartTooltip';
@@ -45,6 +48,7 @@ export function PriceChartCanvas({
   const hostRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const seriesRef = useRef<AnySeries | null>(null);
+  const drawnRef = useRef<{ series: AnySeries; candles: readonly Candle[] } | null>(null);
   const [hover, setHover] = useState<ChartTooltipState | null>(null);
 
   useEffect(() => {
@@ -91,13 +95,28 @@ export function PriceChartCanvas({
   useEffect(() => {
     const series = seriesRef.current;
     if (!series) return;
+    const drawn = drawnRef.current;
+    drawnRef.current = { series, candles };
+    // A live tick (T-108) changes or appends only the last bar: update it in place, so the chart
+    // keeps its scroll and zoom and does not redraw every bar four times a second.
+    const changes = drawn?.series === series ? trailingChanges(drawn.candles, candles) : null;
+    if (changes) {
+      for (const bar of changes) {
+        if (series.seriesType() === 'Candlestick') {
+          (series as ISeriesApi<'Candlestick'>).update(toCandleData([bar])[0] as CandlestickData);
+        } else {
+          (series as ISeriesApi<'Area'>).update(toAreaData([bar])[0] as LineData);
+        }
+      }
+      return;
+    }
     if (series.seriesType() === 'Candlestick') {
       (series as ISeriesApi<'Candlestick'>).setData(toCandleData(candles));
     } else {
       (series as ISeriesApi<'Area'>).setData(toAreaData(candles));
     }
     chartRef.current?.timeScale().fitContent();
-  }, [candles, type, format, intraday, height]);
+  }, [candles, type, format, intraday, height, tooltip]);
 
   useEffect(() => {
     const series = seriesRef.current;
