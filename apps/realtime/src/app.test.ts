@@ -10,13 +10,14 @@ import { createMemoryQuoteFeed } from './feed.js';
 import { quoteFramesOf } from './test/frames.js';
 import { manualTimers } from './test/manualTimers.js';
 import { testQuote } from './test/quotes.js';
+import { connectAuthed, testAuthenticator } from './test/auth.js';
 import { connectTestClient } from './test/wsTestClient.js';
 
 let server: RealtimeServer;
 let base: string;
 
 beforeEach(async () => {
-  server = createRealtimeServer();
+  server = createRealtimeServer({ authenticate: testAuthenticator() });
   const port = await server.listen(0, '127.0.0.1');
   base = `127.0.0.1:${port}`;
 });
@@ -43,7 +44,7 @@ describe('realtime server', () => {
   });
 
   it('accepts a WebSocket connection on /ws and answers ping with pong', async () => {
-    const client = await connectTestClient(`ws://${base}${WS_PATH}`);
+    const client = await connectAuthed(`ws://${base}${WS_PATH}`);
     expect(server.connectionCount()).toBe(1);
     client.send({ v: WS_PROTOCOL_VERSION, type: 'ping', id: 7 });
     expect(await client.next()).toEqual({
@@ -59,7 +60,7 @@ describe('realtime server', () => {
   });
 
   it('reports malformed, binary and wrong-version messages as errors', async () => {
-    const client = await connectTestClient(`ws://${base}${WS_PATH}`);
+    const client = await connectAuthed(`ws://${base}${WS_PATH}`);
     client.socket.send('not json');
     expect(await client.next()).toMatchObject({
       message: { type: 'error', code: 'INVALID_MESSAGE' },
@@ -80,7 +81,7 @@ describe('realtime server', () => {
   });
 
   it(`answers the ${WS_MAX_SUBSCRIPTIONS + 1}st subscribe with an error`, async () => {
-    const client = await connectTestClient(`ws://${base}${WS_PATH}`);
+    const client = await connectAuthed(`ws://${base}${WS_PATH}`);
     const symbols = Array.from({ length: WS_MAX_SUBSCRIPTIONS }, (_, i) => `S${i}`);
     client.send({ v: WS_PROTOCOL_VERSION, type: 'subscribe', symbols, exchange: 'NSE' });
     expect(await client.drain()).toEqual([]);
@@ -100,7 +101,7 @@ describe('realtime server', () => {
   });
 
   it('unsubscribes, and a disconnect clears the connection from both maps', async () => {
-    const client = await connectTestClient(`ws://${base}${WS_PATH}`);
+    const client = await connectAuthed(`ws://${base}${WS_PATH}`);
     client.send({ v: WS_PROTOCOL_VERSION, type: 'subscribe', symbols: ['INFY', 'TCS'] });
     client.send({ v: WS_PROTOCOL_VERSION, type: 'unsubscribe', symbols: ['TCS'] });
     await client.drain();
@@ -116,19 +117,23 @@ describe('realtime server', () => {
   });
 
   it('closes open connections when the server closes', async () => {
-    const client = await connectTestClient(`ws://${base}${WS_PATH}`);
+    const client = await connectAuthed(`ws://${base}${WS_PATH}`);
     await server.close();
     expect((await client.closed).code).toBe(1006);
-    server = createRealtimeServer(); // afterEach closes a fresh, never-listening server
+    server = createRealtimeServer({ authenticate: testAuthenticator() }); // afterEach closes a fresh, never-listening server
   });
 });
 
 describe('realtime server with a feed', () => {
   it('sends a client subscribed to INFY only INFY quotes, and closes the feed on close', async () => {
     const feed = createMemoryQuoteFeed();
-    const own = createRealtimeServer({ feed, timers: manualTimers() });
+    const own = createRealtimeServer({
+      authenticate: testAuthenticator(),
+      feed,
+      timers: manualTimers(),
+    });
     const port = await own.listen(0, '127.0.0.1');
-    const client = await connectTestClient(`ws://127.0.0.1:${port}${WS_PATH}`);
+    const client = await connectAuthed(`ws://127.0.0.1:${port}${WS_PATH}`);
     client.send({ v: WS_PROTOCOL_VERSION, type: 'subscribe', symbols: ['INFY'] });
     await client.drain();
     feed.emit([testQuote('TCS', 300_000), testQuote('INFY', 150_000)]);
@@ -145,9 +150,13 @@ describe('realtime server with a feed', () => {
 describe('realtime server idle timeout', () => {
   it('closes an idle WebSocket with the idle close code', async () => {
     let now = 0;
-    const own = createRealtimeServer({ timers: manualTimers(), now: () => now });
+    const own = createRealtimeServer({
+      authenticate: testAuthenticator(),
+      timers: manualTimers(),
+      now: () => now,
+    });
     const port = await own.listen(0, '127.0.0.1');
-    const client = await connectTestClient(`ws://127.0.0.1:${port}${WS_PATH}`);
+    const client = await connectAuthed(`ws://127.0.0.1:${port}${WS_PATH}`);
     now = 20_000;
     own.heartbeat(); // pings; the client answers with a pong automatically
     now = WS_IDLE_TIMEOUT_MS + 20_000;
