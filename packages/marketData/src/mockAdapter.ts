@@ -13,7 +13,11 @@ import type {
   SearchHit,
   StockList,
 } from '@nthstock/contracts';
-import { TICK_SIZE_PAISE } from '@nthstock/contracts';
+import {
+  POPULAR_SEARCHES_LIMIT_DEFAULT,
+  POPULAR_SEARCHES_LIMIT_MAX,
+  TICK_SIZE_PAISE,
+} from '@nthstock/contracts';
 import {
   getMarketStatus,
   istDateKey,
@@ -35,7 +39,7 @@ import {
 } from './lists.js';
 import { changeBasisPoints, circuitBand, clamp, roundToTick } from './price.js';
 import { hashSeed, mulberry32, randomNormal, type Rng } from './prng.js';
-import { SearchIndex } from './search.js';
+import { SearchIndex, toSearchHit } from './search.js';
 import { SECTOR_GBM, type GbmParams } from './sectors.js';
 import {
   generateSymbolMaster,
@@ -205,6 +209,14 @@ export class MockMarketDataAdapter implements MarketDataAdapter {
 
   search(query: string, limit?: number): Promise<SearchHit[]> {
     return Promise.resolve(this.searchIndex.search(query, limit));
+  }
+
+  getPopularSearches(limit: number = POPULAR_SEARCHES_LIMIT_DEFAULT): Promise<SearchHit[]> {
+    const max = clamp(Math.floor(limit), 1, POPULAR_SEARCHES_LIMIT_MAX);
+    const ranked = [...this.equityEntries].sort(
+      (a, b) => b.state.volume - a.state.volume || a.master.rank - b.master.rank,
+    );
+    return Promise.resolve(ranked.slice(0, max).map((e) => toSearchHit(e.master.instrument)));
   }
 
   getQuote(symbol: string, exchange?: Exchange): Promise<Quote | null> {

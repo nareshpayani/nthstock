@@ -45,6 +45,11 @@ export function marketHandlers(
       options,
     ),
     defineRoute(
+      'marketSearchPopular',
+      async ({ query }) => ({ items: await adapter.getPopularSearches(query.limit) }),
+      options,
+    ),
+    defineRoute(
       'instrument',
       async ({ params, query }) =>
         (await adapter.getInstrument(params.symbol, query.exchange)) ??

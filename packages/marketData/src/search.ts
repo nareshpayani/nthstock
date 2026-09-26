@@ -3,6 +3,12 @@ import { SEARCH_LIMIT_MAX } from '@nthstock/contracts';
 
 export const SEARCH_LIMIT_DEFAULT = 10;
 
+/** The search-row view of an instrument. */
+export function toSearchHit(instrument: Instrument): SearchHit {
+  const { token, symbol, exchange, name, type } = instrument;
+  return { token, symbol, exchange, name, type };
+}
+
 type Entry = { hit: SearchHit; symbol: string; nameTokens: readonly string[] };
 
 function tokens(text: string): string[] {
@@ -57,13 +63,7 @@ export class SearchIndex {
 
   constructor(instruments: readonly Instrument[]) {
     this.entries = instruments.map((instrument) => ({
-      hit: {
-        token: instrument.token,
-        symbol: instrument.symbol,
-        exchange: instrument.exchange,
-        name: instrument.name,
-        type: instrument.type,
-      },
+      hit: toSearchHit(instrument),
       symbol: instrument.symbol,
       nameTokens: tokens(instrument.name),
     }));

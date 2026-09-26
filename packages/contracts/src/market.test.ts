@@ -28,6 +28,8 @@ import {
   MoversQuery,
   Quote,
   QuoteRow,
+  PopularSearchesQuery,
+  PopularSearchesResponse,
   SearchQuery,
   SearchResponse,
   StockList,
@@ -39,6 +41,7 @@ describe('market fixtures round-trip', () => {
     ['Instrument', Instrument, instrumentFixture],
     ['Instrument (index)', Instrument, indexInstrumentFixture],
     ['SearchResponse', SearchResponse, searchResponseFixture],
+    ['PopularSearchesResponse', PopularSearchesResponse, searchResponseFixture],
     ['Quote', Quote, quoteFixture],
     ['BatchQuotesResponse', BatchQuotesResponse, { items: [quoteFixture] }],
     ['InstrumentStats', InstrumentStats, statsFixture],
@@ -104,6 +107,13 @@ describe('market rules', () => {
   it('rejects an empty search query and coerces the limit', () => {
     expect(SearchQuery.safeParse({ q: '   ' }).success).toBe(false);
     expect(SearchQuery.parse({ q: ' infy ', limit: '10' })).toEqual({ q: 'infy', limit: 10 });
+  });
+
+  it('coerces the popular-searches limit and caps it at 20', () => {
+    expect(PopularSearchesQuery.parse({})).toEqual({});
+    expect(PopularSearchesQuery.parse({ limit: '5' })).toEqual({ limit: 5 });
+    expect(PopularSearchesQuery.safeParse({ limit: '0' }).success).toBe(false);
+    expect(PopularSearchesQuery.safeParse({ limit: '21' }).success).toBe(false);
   });
 
   it('accepts only gainers or losers for movers', () => {

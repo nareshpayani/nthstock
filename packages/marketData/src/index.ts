@@ -59,4 +59,4 @@ export {
 } from './candles.js';
 export { generateDepth, type DepthBook } from './depth.js';
 export { LIST_SIZE, MOVERS_LIMIT_DEFAULT, STOCK_LIST_DEFS, rankMovers } from './lists.js';
-export { SEARCH_LIMIT_DEFAULT, SearchIndex } from './search.js';
+export { SEARCH_LIMIT_DEFAULT, SearchIndex, toSearchHit } from './search.js';

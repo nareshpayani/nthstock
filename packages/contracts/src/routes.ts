@@ -20,6 +20,8 @@ import {
   InstrumentStats,
   Movers,
   MoversQuery,
+  PopularSearchesQuery,
+  PopularSearchesResponse,
   SearchQuery,
   SearchResponse,
   StockList,
@@ -161,6 +163,13 @@ export const routes = {
     auth: 'public',
     query: SearchQuery,
     response: SearchResponse,
+  },
+  marketSearchPopular: {
+    method: 'GET',
+    path: '/v1/market/search/popular',
+    auth: 'public',
+    query: PopularSearchesQuery,
+    response: PopularSearchesResponse,
   },
   instrument: {
     method: 'GET',

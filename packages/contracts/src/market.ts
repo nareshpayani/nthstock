@@ -54,6 +54,19 @@ export type SearchQuery = z.infer<typeof SearchQuery>;
 export const SearchResponse = z.object({ items: z.array(SearchHit) });
 export type SearchResponse = z.infer<typeof SearchResponse>;
 
+export const POPULAR_SEARCHES_LIMIT_DEFAULT = 8;
+export const POPULAR_SEARCHES_LIMIT_MAX = 20;
+
+/** `?limit=` for popular searches: 1–20, default 8. */
+export const PopularSearchesQuery = z.object({
+  limit: z.coerce.number().int().min(1).max(POPULAR_SEARCHES_LIMIT_MAX).optional(),
+});
+export type PopularSearchesQuery = z.infer<typeof PopularSearchesQuery>;
+
+/** Popular searches: the most traded equities today, highest volume first (T-102). */
+export const PopularSearchesResponse = z.object({ items: z.array(SearchHit) });
+export type PopularSearchesResponse = z.infer<typeof PopularSearchesResponse>;
+
 /** Live price snapshot. Prices in paise, change in paise and basis points. */
 export const Quote = z.object({
   token: InstrumentToken,
