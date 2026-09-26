@@ -14,6 +14,8 @@ import {
 } from './handlerKit';
 
 const ORIGIN = 'http://kit.test';
+/** Any non-empty CSRF header passes the kit's check (sessions check the value themselves). */
+const CSRF = { 'x-csrf-token': 'kit-test' };
 const violations: ContractViolation[] = [];
 const onContractViolation = (v: ContractViolation) => violations.push(v);
 const server = setupServer();
@@ -75,9 +77,13 @@ describe('defineRoute', () => {
     const bad = [
       await fetch(`${ORIGIN}/v1/market/instruments/infy`),
       await fetch(`${ORIGIN}/v1/market/movers?index=NIFTY50&direction=up`),
-      await fetch(`${ORIGIN}/v1/watchlists`, { method: 'POST', body: '{"name":""}' }),
-      await fetch(`${ORIGIN}/v1/watchlists`, { method: 'POST', body: 'not json' }),
-      await fetch(`${ORIGIN}/v1/watchlists`, { method: 'POST' }),
+      await fetch(`${ORIGIN}/v1/watchlists`, {
+        method: 'POST',
+        headers: CSRF,
+        body: '{"name":""}',
+      }),
+      await fetch(`${ORIGIN}/v1/watchlists`, { method: 'POST', headers: CSRF, body: 'not json' }),
+      await fetch(`${ORIGIN}/v1/watchlists`, { method: 'POST', headers: CSRF }),
     ];
     for (const response of bad) {
       expect(response.status).toBe(400);
@@ -98,7 +104,11 @@ describe('defineRoute', () => {
       return { id: 'wl_1', name: body.name, items: [], createdAt: at, updatedAt: at };
     });
     await fetch(`${ORIGIN}/v1/market/search?q=%20inf%20&limit=5`);
-    await fetch(`${ORIGIN}/v1/watchlists`, { method: 'POST', body: '{"name":"Tech"}' });
+    await fetch(`${ORIGIN}/v1/watchlists`, {
+      method: 'POST',
+      headers: CSRF,
+      body: '{"name":"Tech"}',
+    });
     expect(seen).toHaveBeenNthCalledWith(1, { q: 'inf', limit: 5 });
     expect(seen).toHaveBeenNthCalledWith(2, { name: 'Tech' });
   });
@@ -119,6 +129,41 @@ describe('defineRoute', () => {
     });
     expect((await fetch(`${ORIGIN}/v1/health`)).status).toBe(500);
     log.mockRestore();
+  });
+
+  it('answers a state-changing request without the CSRF header with 403 before validating', async () => {
+    const resolver = vi.fn(() => {
+      throw new Error('should not run');
+    });
+    use('watchlistCreate', resolver);
+    for (const headers of [{}, { 'x-csrf-token': ' ' }, { 'x-csrf-token': 'x'.repeat(257) }]) {
+      const response = await fetch(`${ORIGIN}/v1/watchlists`, {
+        method: 'POST',
+        headers,
+        body: '{"name":""}',
+      });
+      expect(response.status).toBe(403);
+      expect(await response.json()).toMatchObject({ error: { code: 'FORBIDDEN' } });
+    }
+    expect(resolver).not.toHaveBeenCalled();
+  });
+
+  it('passes request cookies in and sends the headers a resolver sets, on errors too', async () => {
+    use('health', ({ cookies, headers }) => {
+      headers.set('x-seen', cookies['flavour'] ?? 'none');
+      return { status: 'ok', version: 'test', time: '2026-09-25T04:00:00.000Z' };
+    });
+    use('instrument', ({ headers }) => {
+      headers.set('x-why', 'gone');
+      throw new MockApiError(404, 'NOT_FOUND', 'Symbol INFY not found');
+    });
+
+    const ok = await fetch(`${ORIGIN}/v1/health`, { headers: { cookie: 'flavour=mint' } });
+    const missing = await fetch(`${ORIGIN}/v1/market/instruments/INFY`);
+
+    expect(ok.headers.get('x-seen')).toBe('mint');
+    expect(missing.status).toBe(404);
+    expect(missing.headers.get('x-why')).toBe('gone');
   });
 
   it('waits for the configured latency', async () => {
