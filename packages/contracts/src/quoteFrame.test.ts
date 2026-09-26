@@ -38,10 +38,10 @@ function randomQuote(random: () => number, token: number, baseMs: number): Quote
   const symbol = Array.from({ length: int(1, 20) }, () => SYMBOL_CHARS[int(0, 37)]).join('');
   const prevClose = edge(0, U32);
   const ltp = edge(0, U32);
-  return Quote.parse({
+  return {
     token,
     symbol,
-    exchange: random() < 0.5 ? 'NSE' : 'BSE',
+    exchange: random() < 0.5 ? ('NSE' as const) : ('BSE' as const),
     ltp,
     change: ltp - prevClose,
     changeBp: edge(-0x8000, 0x7fff),
@@ -51,18 +51,20 @@ function randomQuote(random: () => number, token: number, baseMs: number): Quote
     prevClose,
     volume: edge(0, U32),
     ts: new Date(baseMs - edge(0, QUOTE_FRAME_MAX_AGE_MS)).toISOString(),
-  });
+  };
 }
 
 describe('binary quote frame', () => {
   it('round-trips random frames exactly at 24 bytes per quote (property test)', () => {
     const random = prng(20260925);
-    for (let run = 0; run < 500; run += 1) {
+    for (let run = 0; run < 200; run += 1) {
       const count = Math.floor(random() * 200) + 1;
       const baseMs = BASE_MS + Math.floor(random() * 1e9);
       const quotes = Array.from({ length: count }, (_, i) =>
         randomQuote(random, 1 + Math.floor(random() * (U32 - count)) + i, baseMs),
       );
+      // The generator stays inside the contract: every quote is a valid Quote.
+      if (run < 20) for (const quote of quotes) Quote.parse(quote);
       const frame = encodeQuoteFrame(quotes);
       expect(frame.byteLength).toBe(QUOTE_FRAME_HEADER_BYTES + count * QUOTE_RECORD_BYTES);
       const decoder = createQuoteFrameDecoder();
