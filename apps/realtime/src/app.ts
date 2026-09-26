@@ -1,6 +1,8 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
+import { WS_CLOSE_CODES } from '@nthstock/contracts';
 import { WebSocketServer, type RawData, type WebSocket } from 'ws';
+import type { WsAuthenticator } from './auth.js';
 import type { QuoteFeed } from './feed.js';
 import { createHub, type Connection } from './hub.js';
 import { silentLogger, type Logger } from './logger.js';
@@ -11,6 +13,11 @@ import type { SubscriptionRegistry } from './registry.js';
 export const WS_PATH = '/ws';
 
 export type RealtimeServerOptions = {
+  /**
+   * Checks every WS upgrade (T-083). A connection without a valid access token is accepted and
+   * closed at once with 4401, so the browser sees why (a refused upgrade shows only as 1006).
+   */
+  authenticate: WsAuthenticator;
   logger?: Logger;
   /** Where quotes come from; the server closes it on close. Left out, nothing is fanned out. */
   feed?: QuoteFeed;
@@ -46,7 +53,7 @@ const textOf = (data: RawData, isBinary: boolean): string | null => {
  * and a WebSocket endpoint at `/ws`, fanning feed quotes out through the hub. Built without
  * listening, so tests bind it to a free port.
  */
-export function createRealtimeServer(options: RealtimeServerOptions = {}): RealtimeServer {
+export function createRealtimeServer(options: RealtimeServerOptions): RealtimeServer {
   const logger = options.logger ?? silentLogger;
   const wss = new WebSocketServer({ noServer: true, maxPayload: 64 * 1024 });
   const hub = createHub({
@@ -75,9 +82,19 @@ export function createRealtimeServer(options: RealtimeServerOptions = {}): Realt
       socket.end('HTTP/1.1 404 Not Found\r\nConnection: close\r\n\r\n');
       return;
     }
-    wss.handleUpgrade(request, socket, head, (client) => {
-      wss.emit('connection', client, request);
-    });
+    void options
+      .authenticate(request)
+      .catch(() => null)
+      .then((claims) => {
+        if (socket.destroyed) return;
+        wss.handleUpgrade(request, socket, head, (client) => {
+          if (!claims) {
+            client.close(WS_CLOSE_CODES.unauthorized, 'Unauthorized');
+            return;
+          }
+          wss.emit('connection', client, request);
+        });
+      });
   });
 
   wss.on('connection', (socket: WebSocket) => {

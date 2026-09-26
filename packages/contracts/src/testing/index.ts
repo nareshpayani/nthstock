@@ -1,5 +1,7 @@
 /** Scenario harness and suites for mock backends. Imports Vitest, so keep it out of runtime bundles. */
+export { createCookieJar, type CookieJar, type CookieSnapshot } from './cookieJar.js';
 export {
+  PRE_SESSION_CSRF,
   ScenarioError,
   createScenarioClient,
   defineScenarios,
@@ -8,6 +10,7 @@ export {
   type BackendRequest,
   type BackendResponse,
   type CallInput,
+  type CsrfChoice,
   type ErrorResult,
   type LooseInput,
   type Scenario,
@@ -15,7 +18,8 @@ export {
   type ScenarioClient,
   type ScenarioGroup,
 } from './harness.js';
-export { fetchBackend, type FetchLike } from './fetchBackend.js';
+export { fetchBackend, type FetchBackendOptions, type FetchLike } from './fetchBackend.js';
+export { authScenarios } from './scenarios/auth.js';
 export { healthScenarios } from './scenarios/health.js';
 export { marketScenarios } from './scenarios/market.js';
 export { scenarioGroups } from './scenarios/all.js';

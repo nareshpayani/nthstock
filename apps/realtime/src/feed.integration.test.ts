@@ -11,7 +11,7 @@ import {
   uniqueChannel,
   type TestRedis,
 } from './test/testRedis.js';
-import { connectTestClient } from './test/wsTestClient.js';
+import { connectAuthed, testAuthenticator } from './test/auth.js';
 
 describeWithRedis('Redis feed to WebSocket clients (integration)', () => {
   let redis: TestRedis | undefined;
@@ -32,9 +32,9 @@ describeWithRedis('Redis feed to WebSocket clients (integration)', () => {
     const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn() };
     const feed = createRedisQuoteFeed({ url: redis?.url ?? '', channel, logger });
     await feed.ready();
-    const server = createRealtimeServer({ feed });
+    const server = createRealtimeServer({ authenticate: testAuthenticator(), feed });
     const port = await server.listen(0, '127.0.0.1');
-    const client = await connectTestClient(`ws://127.0.0.1:${port}${WS_PATH}`);
+    const client = await connectAuthed(`ws://127.0.0.1:${port}${WS_PATH}`);
     client.send({ v: WS_PROTOCOL_VERSION, type: 'subscribe', symbols: ['INFY'] });
     await client.drain();
 

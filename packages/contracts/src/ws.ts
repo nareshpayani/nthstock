@@ -14,6 +14,11 @@ export const WS_IDLE_TIMEOUT_MS = 60_000;
 
 /** Close codes the server uses (4000–4999 is the application range). */
 export const WS_CLOSE_CODES = {
+  /**
+   * The upgrade carried no valid access token (the `nth_at` cookie): missing, expired, forged.
+   * The client refreshes its session once, then reconnects; it does not retry blindly.
+   */
+  unauthorized: 4401,
   /** Idle for `WS_IDLE_TIMEOUT_MS`. The client reconnects as for any drop. */
   idleTimeout: 4408,
 } as const;

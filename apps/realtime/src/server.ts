@@ -1,11 +1,24 @@
 import { createRealtimeServer } from './app.js';
+import { createJwtCookieAuthenticator, resolveJwtSecret } from './auth.js';
 import { loadConfig } from './config.js';
 import { createRedisQuoteFeed } from './feed.js';
 import { jsonLogger } from './logger.js';
 
 const config = loadConfig(process.env);
 const feed = createRedisQuoteFeed({ url: config.redisUrl, logger: jsonLogger });
-const server = createRealtimeServer({ logger: jsonLogger, feed });
+const secret = resolveJwtSecret({
+  value: config.jwtSecret,
+  production: config.production,
+  onEphemeral: () =>
+    jsonLogger.warn(
+      'JWT_SECRET is not set: using an ephemeral key, so no apps/api token will verify. Run npm run dev:api or set JWT_SECRET in both apps.',
+    ),
+});
+const server = createRealtimeServer({
+  logger: jsonLogger,
+  feed,
+  authenticate: createJwtCookieAuthenticator({ secret }),
+});
 
 try {
   const port = await server.listen(config.port, config.host);

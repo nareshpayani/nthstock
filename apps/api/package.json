@@ -14,12 +14,14 @@
   },
   "dependencies": {
     "@fastify/rate-limit": "11.2.0",
+    "@node-rs/argon2": "2.2.1",
     "@nthstock/contracts": "0.0.0",
     "@nthstock/marketData": "0.0.0",
     "@nthstock/paperEngine": "0.0.0",
     "@nthstock/utils": "0.0.0",
     "fastify": "5.12.5",
     "ioredis": "6.0.0",
+    "jose": "6.2.12",
     "zod": "4.6.5"
   },
   "devDependencies": {

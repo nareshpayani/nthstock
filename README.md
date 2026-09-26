@@ -35,6 +35,10 @@ are all same-origin; no MSW worker is registered. Outside NSE hours, force the m
 MOCK_MARKET_ALWAYS_OPEN=true npm run dev:api
 ```
 
+The WebSocket needs a logged-in session: apps/realtime closes a connection without a valid access
+token cookie with code 4401. `npm run dev:api` generates one `JWT_SECRET` for apps/api and
+apps/realtime unless you set it. In dev the OTP is always `123456`, and apps/api prints it.
+
 All web variables are listed in [`apps/web/.env.example`](./apps/web/.env.example)
 (`VITE_API_MODE=msw|api`, API and WS base URLs, the market-open override). A test page with live
 prices is at `/dev/prices`.

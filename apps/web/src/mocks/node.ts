@@ -1,5 +1,5 @@
 import { setupServer } from 'msw/node';
-import { createHandlers } from './handlers';
+import { createHandlers, type AuthMockOptions } from './handlers';
 import { setMockLatency } from './handlerKit';
 import { createMockMarket, type MockMarketOptions } from './marketAdapter';
 
@@ -11,7 +11,9 @@ export const TEST_WS_URL = 'ws://api.test/ws';
  * MSW node server for Vitest (T-050): the same handlers as the browser, no latency.
  * Call `listen()` in beforeAll and `close()` in afterAll; dispose the adapter too.
  */
-export function createMockServer(options: MockMarketOptions & { flushMs?: number } = {}) {
+export function createMockServer(
+  options: MockMarketOptions & { flushMs?: number; auth?: AuthMockOptions } = {},
+) {
   setMockLatency(0);
   const adapter = createMockMarket(options);
   const server = setupServer(
@@ -19,6 +21,7 @@ export function createMockServer(options: MockMarketOptions & { flushMs?: number
       adapter,
       wsUrl: TEST_WS_URL,
       ...(options.flushMs === undefined ? {} : { stream: { flushMs: options.flushMs } }),
+      ...(options.auth ? { auth: options.auth } : {}),
     }),
   );
   return { server, adapter };

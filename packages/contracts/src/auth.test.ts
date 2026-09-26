@@ -1,6 +1,16 @@
 import { describe, expect, it } from 'vitest';
 import {
+  ACCESS_TOKEN_AUDIENCE,
+  ACCESS_TOKEN_ISSUER,
+  ACCESS_TOKEN_TTL_SEC,
+  AccessTokenClaims,
+  AuthErrorDetails,
+  DEV_OTP,
   Device,
+  OTP_CAPTCHA_AFTER_FAILURES,
+  OTP_MAX_FAILURES,
+  OTP_RESEND_AFTER_SEC,
+  OTP_TTL_SEC,
   Mobile,
   Otp,
   OtpRequest,
@@ -99,5 +109,42 @@ describe('OtpRequest', () => {
 describe('User', () => {
   it('only carries a masked mobile', () => {
     expect(User.safeParse({ ...userFixture, mobileMasked: '9876543210' }).success).toBe(false);
+  });
+});
+
+describe('auth rules', () => {
+  it('keeps the dev OTP a valid OTP and the throttles consistent', () => {
+    expect(Otp.parse(DEV_OTP)).toBe(DEV_OTP);
+    expect(OTP_CAPTCHA_AFTER_FAILURES).toBeLessThan(OTP_MAX_FAILURES);
+    expect(OTP_RESEND_AFTER_SEC).toBeLessThan(OTP_TTL_SEC);
+  });
+
+  it('parses auth error details', () => {
+    expect(AuthErrorDetails.parse({ captchaRequired: true, attemptsLeft: 2 })).toEqual({
+      captchaRequired: true,
+      attemptsLeft: 2,
+    });
+    expect(AuthErrorDetails.safeParse({ unlockWith: 'PIN' }).success).toBe(false);
+  });
+});
+
+describe('AccessTokenClaims', () => {
+  const claims = {
+    sub: 'usr_1',
+    sid: 'ses_1',
+    iss: ACCESS_TOKEN_ISSUER,
+    aud: ACCESS_TOKEN_AUDIENCE,
+    iat: 1_790_000_000,
+    exp: 1_790_000_000 + ACCESS_TOKEN_TTL_SEC,
+  };
+
+  it('accepts the claims apps/api signs', () => {
+    expect(AccessTokenClaims.parse(claims)).toEqual(claims);
+  });
+
+  it('rejects another issuer or audience, or a missing session id', () => {
+    expect(AccessTokenClaims.safeParse({ ...claims, iss: 'someone' }).success).toBe(false);
+    expect(AccessTokenClaims.safeParse({ ...claims, aud: 'other' }).success).toBe(false);
+    expect(AccessTokenClaims.safeParse({ ...claims, sid: undefined }).success).toBe(false);
   });
 });

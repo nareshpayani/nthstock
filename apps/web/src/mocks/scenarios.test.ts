@@ -3,10 +3,20 @@ import { TEST_API_ORIGIN, createMockServer } from './node';
 
 // The same scenario files run against apps/api through app.inject (ADR 0004, T-060).
 runScenarioSuite('MSW node server', scenarioGroups, () => {
-  const { server, adapter } = createMockServer();
+  // Auth scenarios move the auth clock forward; the market keeps real time.
+  let offset = 0;
+  const { server, adapter } = createMockServer({ auth: { now: () => Date.now() + offset } });
   server.listen({ onUnhandledRequest: 'error' });
-  return fetchBackend(TEST_API_ORIGIN, fetch, () => {
-    server.close();
-    adapter.dispose();
+  const { hostname } = new URL(TEST_API_ORIGIN);
+  return fetchBackend(TEST_API_ORIGIN, fetch, {
+    onClose: () => {
+      server.close();
+      adapter.dispose();
+    },
+    // Each scenario on its own subdomain: MSW's cookie store keeps its cookies apart.
+    scopeOrigin: (index) => `http://s${String(index)}.${hostname}`,
+    advanceTime: (ms) => {
+      offset += ms;
+    },
   });
 });

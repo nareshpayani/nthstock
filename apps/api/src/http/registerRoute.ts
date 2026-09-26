@@ -41,6 +41,11 @@ export type RegisterRouteOptions = {
    * Default true: a contract break is a bug and must not reach clients.
    */
   validateResponse?: boolean;
+  /**
+   * A per-IP limit for this route instead of the global one (@fastify/rate-limit), e.g. the auth
+   * routes (T-082). 429 RATE_LIMITED past it.
+   */
+  rateLimit?: { max: number; timeWindow: string };
 };
 
 /** Same wording as the MSW handler kit, so both backends answer alike. */
@@ -72,7 +77,7 @@ export function registerRoute<N extends RouteName>(
   options: RegisterRouteOptions = {},
 ): void {
   const def: RouteDef = routes[name];
-  const { authenticate, validateResponse = true } = options;
+  const { authenticate, validateResponse = true, rateLimit } = options;
   if (def.auth === 'user' && !authenticate) {
     throw new Error(`Route "${name}" needs a session; pass options.authenticate`);
   }
@@ -80,6 +85,7 @@ export function registerRoute<N extends RouteName>(
   app.route({
     method: def.method,
     url: def.path,
+    ...(rateLimit ? { config: { rateLimit } } : {}),
     handler: async (request, reply) => {
       if (authenticate) await authenticate(request);
       const context = {

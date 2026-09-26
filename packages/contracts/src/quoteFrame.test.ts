@@ -71,7 +71,9 @@ describe('binary quote frame', () => {
       decoder.learn(quotes.map(instrumentOf));
       expect(decoder.decode(frame)).toEqual(quotes);
     }
-  });
+    // ~20k quotes deep-compared: well under a second locally, but CI runs every package's suite at
+    // once and this has taken over 5 s there.
+  }, 30_000);
 
   it('costs at most 24 bytes per symbol', () => {
     expect(QUOTE_RECORD_BYTES).toBeLessThanOrEqual(24);

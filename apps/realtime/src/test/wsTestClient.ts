@@ -21,8 +21,11 @@ export type TestClient = {
 let pingIds = 1_000_000;
 
 /** A `ws` client that queues frames so tests can await them one by one. */
-export async function connectTestClient(url: string): Promise<TestClient> {
-  const socket = new WebSocket(url);
+export async function connectTestClient(
+  url: string,
+  { cookie }: { cookie?: string } = {},
+): Promise<TestClient> {
+  const socket = new WebSocket(url, cookie ? { headers: { cookie } } : {});
   const backlog: Received[] = [];
   const waiters: ((frame: Received) => void)[] = [];
   socket.on('message', (data, isBinary) => {

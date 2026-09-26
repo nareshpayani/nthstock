@@ -1,4 +1,5 @@
 import {
+  AUTH_CSRF_HEADER,
   routes,
   type ApiError,
   type ApiErrorCode,
@@ -56,9 +57,10 @@ export function errorResponse(
   code: ApiErrorCode,
   message: string,
   details?: Record<string, unknown>,
+  headers?: Headers,
 ) {
   const body: ApiError = { error: { code, message, ...(details ? { details } : {}) } };
-  return HttpResponse.json(body, { status });
+  return HttpResponse.json(body, { status, ...(headers ? { headers } : {}) });
 }
 
 export const notFound = (what: string): never => {
@@ -90,6 +92,13 @@ export type ResolverContext<N extends RouteName> = {
   query: Parsed<N, 'query'>;
   body: Parsed<N, 'body'>;
   request: Request;
+  /** Request cookies, including the ones earlier mocked responses set (MSW's cookie store). */
+  cookies: Readonly<Record<string, string>>;
+  /**
+   * Headers to add to the response, success or MockApiError alike, e.g. one `Set-Cookie`. MSW
+   * stores only the first cookie of a response, so a resolver sets at most one.
+   */
+  headers: Headers;
 };
 
 export type RouteResolver<N extends RouteName> = (
@@ -142,46 +151,69 @@ export function defineRoute<N extends RouteName>(
   const method = route.method.toLowerCase() as Methods;
   const report = options.onContractViolation ?? logViolation;
 
-  return http[method](`${options.origin ?? '*'}${route.path}`, async ({ request, params }) => {
-    const wait = pickLatency();
-    if (wait > 0) await delay(wait);
+  return http[method](
+    `${options.origin ?? '*'}${route.path}`,
+    async ({ request, params, cookies }) => {
+      const wait = pickLatency();
+      if (wait > 0) await delay(wait);
 
-    const url = new URL(request.url);
-    const checkedParams = validate(route.params, params, 'path parameters');
-    if (!checkedParams.ok) return checkedParams.response;
-    const checkedQuery = validate(
-      route.query,
-      Object.fromEntries(url.searchParams),
-      'query parameters',
-    );
-    if (!checkedQuery.ok) return checkedQuery.response;
-    const checkedBody = route.body
-      ? validate(route.body, await readJson(request), 'request body')
-      : validate(undefined, undefined, '');
-    if (!checkedBody.ok) return checkedBody.response;
-
-    let body: unknown;
-    try {
-      body = await resolver({
-        params: checkedParams.data,
-        query: checkedQuery.data,
-        body: checkedBody.data,
-        request,
-      } as ResolverContext<N>);
-    } catch (error) {
-      if (error instanceof MockApiError) {
-        return errorResponse(error.status, error.code, error.message, error.details);
+      // Same rule as apps/api (T-082): every state-changing request carries the CSRF header.
+      if (method !== 'get' && !csrfHeaderOf(request)) {
+        return errorResponse(
+          403,
+          'FORBIDDEN',
+          'Missing CSRF token. Reload the page and try again.',
+        );
       }
-      throw error;
-    }
 
-    const checked = route.response.safeParse(body);
-    if (!checked.success) {
-      report({ route: name, issues: checked.error.issues, body });
-      return errorResponse(500, 'INTERNAL_ERROR', `Mock ${name} broke its response contract`, {
-        issues: checked.error.issues,
-      });
-    }
-    return HttpResponse.json(body as Record<string, unknown>);
-  });
+      const url = new URL(request.url);
+      const checkedParams = validate(route.params, params, 'path parameters');
+      if (!checkedParams.ok) return checkedParams.response;
+      const checkedQuery = validate(
+        route.query,
+        Object.fromEntries(url.searchParams),
+        'query parameters',
+      );
+      if (!checkedQuery.ok) return checkedQuery.response;
+      const checkedBody = route.body
+        ? validate(route.body, await readJson(request), 'request body')
+        : validate(undefined, undefined, '');
+      if (!checkedBody.ok) return checkedBody.response;
+
+      let body: unknown;
+      const headers = new Headers();
+      try {
+        body = await resolver({
+          params: checkedParams.data,
+          query: checkedQuery.data,
+          body: checkedBody.data,
+          request,
+          cookies,
+          headers,
+        } as ResolverContext<N>);
+      } catch (error) {
+        if (error instanceof MockApiError) {
+          return errorResponse(error.status, error.code, error.message, error.details, headers);
+        }
+        throw error;
+      }
+
+      const checked = route.response.safeParse(body);
+      if (!checked.success) {
+        report({ route: name, issues: checked.error.issues, body });
+        return errorResponse(500, 'INTERNAL_ERROR', `Mock ${name} broke its response contract`, {
+          issues: checked.error.issues,
+        });
+      }
+      return HttpResponse.json(body as Record<string, unknown>, { headers });
+    },
+  );
+}
+
+const MAX_CSRF_LENGTH = 256;
+
+/** The CSRF header value, or null when it is missing, empty or too long (as apps/api). */
+export function csrfHeaderOf(request: Request): string | null {
+  const token = request.headers.get(AUTH_CSRF_HEADER)?.trim() ?? '';
+  return token.length > 0 && token.length <= MAX_CSRF_LENGTH ? token : null;
 }

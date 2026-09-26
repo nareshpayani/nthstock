@@ -1,7 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
+  PRE_SESSION_CSRF,
   ScenarioError,
   createScenarioClient,
+  defineScenarios,
   runScenarioSuite,
   toQueryString,
   type BackendRequest,
@@ -67,6 +69,7 @@ describe('createScenarioClient', () => {
       method: 'POST',
       url: '/v1/auth/otp/request',
       body: { mobile: '9876543210' },
+      headers: { 'x-csrf-token': PRE_SESSION_CSRF },
     });
     expect(sent[1]?.url).toBe('/v1/market/instruments/M%26M');
   });
@@ -117,6 +120,97 @@ describe('createScenarioClient', () => {
   });
 });
 
+describe('createScenarioClient: cookies, CSRF and time', () => {
+  const SESSION = {
+    user: {
+      id: 'usr_1',
+      mobileMasked: '******3210',
+      name: null,
+      email: null,
+      kycStatus: 'NOT_STARTED',
+      pinSet: false,
+      totpEnabled: false,
+      createdAt: HEALTH.time,
+    },
+    device: {
+      id: 'dev_1',
+      label: 'Chrome on macOS',
+      trusted: false,
+      current: true,
+      createdAt: HEALTH.time,
+      lastSeenAt: HEALTH.time,
+    },
+    accessToken: 'at',
+    accessTokenExpiresAt: HEALTH.time,
+    csrfToken: 'session-csrf-token-123',
+  };
+
+  it('keeps Set-Cookie cookies and the session CSRF token, and drops the token on logout', async () => {
+    const { backend, sent } = fakeBackend((request) =>
+      request.url === '/v1/auth/logout'
+        ? { status: 200, body: { ok: true }, setCookies: ['sid=; Max-Age=0'] }
+        : { status: 200, body: SESSION, setCookies: ['sid=abc; Path=/; HttpOnly'] },
+    );
+    const client = createScenarioClient(backend);
+
+    await client.call('sessionRefresh');
+    await client.call('sessionGet');
+    await client.call('logout');
+    await client.call('sessionRefresh', { csrf: false });
+    await client.call('sessionRefresh', { csrf: 'given' });
+
+    expect(sent.map((r) => r.headers)).toEqual([
+      { 'x-csrf-token': PRE_SESSION_CSRF },
+      { cookie: 'sid=abc' },
+      { cookie: 'sid=abc', 'x-csrf-token': 'session-csrf-token-123' },
+      { cookie: 'sid=' },
+      { cookie: 'sid=abc', 'x-csrf-token': 'given' },
+    ]);
+    expect(client.csrfToken()).toBe(SESSION.csrfToken);
+    expect(client.cookies.get('sid')).toBe('abc');
+  });
+
+  it('moves the backend clock, or says it cannot', async () => {
+    const advance = vi.fn();
+    const withClock = createScenarioClient({
+      ...fakeBackend(() => ({ status: 200, body: HEALTH })).backend,
+      advanceTime: advance,
+    });
+    await withClock.advanceTime(30_000);
+    expect(advance).toHaveBeenCalledWith(30_000);
+
+    const without = createScenarioClient(
+      fakeBackend(() => ({ status: 200, body: HEALTH })).backend,
+    );
+    await expect(without.advanceTime(1)).rejects.toThrow(/cannot move its clock/);
+  });
+});
+
+describe('runScenarioSuite scopes', () => {
+  const scopes: number[] = [];
+  const base = fakeBackend(() => ({ status: 200, body: HEALTH })).backend;
+  runScenarioSuite(
+    'a scoped fake backend',
+    [
+      defineScenarios('scopes', [
+        { name: 'first', run: async (client) => void (await client.call('health')) },
+        { name: 'second', run: async (client) => void (await client.call('health')) },
+      ]),
+    ],
+    () => ({
+      ...base,
+      scope: (index) => {
+        scopes.push(index);
+        return base;
+      },
+    }),
+  );
+
+  it('gave each scenario its own scope', () => {
+    expect(scopes).toEqual([1, 2]);
+  });
+});
+
 describe('fetchBackend', () => {
   const fakeFetch = (status: number, text: string) =>
     vi.fn<FetchLike>(() => Promise.resolve({ status, text: () => Promise.resolve(text) }));
@@ -150,6 +244,38 @@ describe('fetchBackend', () => {
       body: '{"a":1}',
     });
     expect(onClose).toHaveBeenCalledOnce();
+  });
+});
+
+describe('fetchBackend: cookies, scopes and time', () => {
+  it('sends extra headers, reads Set-Cookie lines, scopes the origin and moves the clock', async () => {
+    const fetch = vi.fn<FetchLike>(() =>
+      Promise.resolve({
+        status: 200,
+        text: () => Promise.resolve('{}'),
+        headers: { getSetCookie: () => ['a=1; Path=/'] },
+      }),
+    );
+    const advanceTime = vi.fn();
+    const backend = fetchBackend('http://api.test', fetch, {
+      scopeOrigin: (index) => `http://s${String(index)}.api.test`,
+      advanceTime,
+    });
+
+    const response = await backend.scope?.(2)?.send({
+      method: 'GET',
+      url: '/v1/x',
+      headers: { cookie: 'a=0' },
+    });
+    await backend.advanceTime?.(10);
+
+    expect(response).toEqual({ status: 200, body: {}, setCookies: ['a=1; Path=/'] });
+    expect(fetch).toHaveBeenCalledWith('http://s2.api.test/v1/x', {
+      method: 'GET',
+      headers: { accept: 'application/json', cookie: 'a=0' },
+    });
+    expect(advanceTime).toHaveBeenCalledWith(10);
+    expect(backend.close).toBeUndefined();
   });
 });
 
