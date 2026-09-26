@@ -1,0 +1,68 @@
+import type { ApiClient } from '@nthstock/apiClient';
+import type { Exchange } from '@nthstock/contracts';
+import { queryOptions } from '@tanstack/react-query';
+
+/** One instrument on one exchange; `exchange` omitted means "wherever it is listed". */
+export type InstrumentParams = { symbol: string; exchange?: Exchange | undefined };
+
+const withExchange = (exchange: Exchange | undefined) => (exchange ? { exchange } : {});
+
+export const stockDetailKeys = {
+  all: ['stockDetail'] as const,
+  instrument: (params: InstrumentParams) =>
+    [
+      'stockDetail',
+      'instrument',
+      { symbol: params.symbol, ...withExchange(params.exchange) },
+    ] as const,
+  quote: (params: InstrumentParams) =>
+    ['stockDetail', 'quote', { symbol: params.symbol, ...withExchange(params.exchange) }] as const,
+  stats: (params: InstrumentParams) =>
+    ['stockDetail', 'stats', { symbol: params.symbol, ...withExchange(params.exchange) }] as const,
+};
+
+/** `GET /v1/market/instruments/:symbol` (T-105). The symbol master rarely changes. */
+export function instrumentQuery(api: ApiClient, params: InstrumentParams) {
+  return queryOptions({
+    queryKey: stockDetailKeys.instrument(params),
+    queryFn: ({ signal }) =>
+      api.request('instrument', {
+        params: { symbol: params.symbol },
+        query: withExchange(params.exchange),
+        signal,
+      }),
+    staleTime: 30 * 60_000,
+  });
+}
+
+/**
+ * The REST quote snapshot (`GET /v1/market/quotes?symbols=`), shown until the first live tick
+ * reaches the quote store. `null` when the feed has no quote for the symbol.
+ */
+export function quoteSnapshotQuery(api: ApiClient, params: InstrumentParams) {
+  return queryOptions({
+    queryKey: stockDetailKeys.quote(params),
+    queryFn: async ({ signal }) => {
+      const response = await api.request('marketQuotes', {
+        query: { symbols: params.symbol, ...withExchange(params.exchange) },
+        signal,
+      });
+      return response.items[0] ?? null;
+    },
+    staleTime: 15_000,
+  });
+}
+
+/** `GET /v1/market/instruments/:symbol/stats` (T-109): key stats and fundamentals. */
+export function statsQuery(api: ApiClient, params: InstrumentParams) {
+  return queryOptions({
+    queryKey: stockDetailKeys.stats(params),
+    queryFn: ({ signal }) =>
+      api.request('instrumentStats', {
+        params: { symbol: params.symbol },
+        query: withExchange(params.exchange),
+        signal,
+      }),
+    staleTime: 60_000,
+  });
+}

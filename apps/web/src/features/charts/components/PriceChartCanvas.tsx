@@ -3,13 +3,20 @@ import {
   AreaSeries,
   CandlestickSeries,
   createChart,
+  type CandlestickData,
   type IChartApi,
+  type LineData,
   type ISeriesApi,
+  type MouseEventParams,
+  type Time,
 } from 'lightweight-charts';
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { toAreaData, toCandleData } from '../model/chartData';
+import { trailingChanges } from '../model/liveCandles';
 import type { ChartDirection, ChartValueFormat } from '../model/chartFormat';
 import { areaSeriesOptions, candleSeriesOptions, chartOptions } from '../model/chartTheme';
+import { tooltipContent, type HoveredItem } from '../model/chartTooltip';
+import { ChartTooltip, type ChartTooltipState } from './ChartTooltip';
 
 export type PriceChartCanvasProps = {
   candles: readonly Candle[];
@@ -18,6 +25,8 @@ export type PriceChartCanvasProps = {
   direction: ChartDirection;
   intraday: boolean;
   height: number;
+  /** Show the crosshair tooltip (IST time and ₹ values of the hovered bar). */
+  tooltip?: boolean;
 };
 
 type AnySeries = ISeriesApi<'Area'> | ISeriesApi<'Candlestick'>;
@@ -34,10 +43,13 @@ export function PriceChartCanvas({
   direction,
   intraday,
   height,
+  tooltip = false,
 }: PriceChartCanvasProps) {
   const hostRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const seriesRef = useRef<AnySeries | null>(null);
+  const drawnRef = useRef<{ series: AnySeries; candles: readonly Candle[] } | null>(null);
+  const [hover, setHover] = useState<ChartTooltipState | null>(null);
 
   useEffect(() => {
     const host = hostRef.current;
@@ -59,29 +71,62 @@ export function PriceChartCanvas({
     });
     observer.observe(host);
 
+    const series = seriesRef.current;
+    const onCrosshairMove = (param: MouseEventParams<Time>) => {
+      const item = param.point && param.time ? param.seriesData.get(series) : undefined;
+      const content =
+        item && param.point ? tooltipContent(item as HoveredItem, { format, intraday }) : null;
+      setHover(
+        content && param.point ? { ...content, x: param.point.x, width: host.clientWidth } : null,
+      );
+    };
+    if (tooltip) chart.subscribeCrosshairMove(onCrosshairMove);
+
     return () => {
+      if (tooltip) chart.unsubscribeCrosshairMove(onCrosshairMove);
+      setHover(null);
       observer.disconnect();
       chart.remove();
       chartRef.current = null;
       seriesRef.current = null;
     };
-  }, [type, format, intraday, height]);
+  }, [type, format, intraday, height, tooltip]);
 
   useEffect(() => {
     const series = seriesRef.current;
     if (!series) return;
+    const drawn = drawnRef.current;
+    drawnRef.current = { series, candles };
+    // A live tick (T-108) changes or appends only the last bar: update it in place, so the chart
+    // keeps its scroll and zoom and does not redraw every bar four times a second.
+    const changes = drawn?.series === series ? trailingChanges(drawn.candles, candles) : null;
+    if (changes) {
+      for (const bar of changes) {
+        if (series.seriesType() === 'Candlestick') {
+          (series as ISeriesApi<'Candlestick'>).update(toCandleData([bar])[0] as CandlestickData);
+        } else {
+          (series as ISeriesApi<'Area'>).update(toAreaData([bar])[0] as LineData);
+        }
+      }
+      return;
+    }
     if (series.seriesType() === 'Candlestick') {
       (series as ISeriesApi<'Candlestick'>).setData(toCandleData(candles));
     } else {
       (series as ISeriesApi<'Area'>).setData(toAreaData(candles));
     }
     chartRef.current?.timeScale().fitContent();
-  }, [candles, type, format, intraday, height]);
+  }, [candles, type, format, intraday, height, tooltip]);
 
   useEffect(() => {
     const series = seriesRef.current;
     if (series?.seriesType() === 'Area') series.applyOptions(areaSeriesOptions(direction, format));
   }, [direction, format, type, intraday, height]);
 
-  return <div ref={hostRef} className="w-full" style={{ height }} data-testid="chart-host" />;
+  return (
+    <div className="relative w-full" style={{ height }}>
+      <div ref={hostRef} className="w-full" style={{ height }} data-testid="chart-host" />
+      {hover ? <ChartTooltip {...hover} /> : null}
+    </div>
+  );
 }

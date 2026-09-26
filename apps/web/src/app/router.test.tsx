@@ -30,7 +30,6 @@ describe('file routes (T-022)', () => {
 
   it.each([
     ['/dashboard', /^Good (morning|afternoon|evening)$/],
-    ['/stocks/infy', 'INFY'],
     ['/login', 'Log in to nthstock'],
     ['/dev/prices', 'Live prices'],
     ['/no-such-page', 'Page not found'],

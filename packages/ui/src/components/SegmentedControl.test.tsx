@@ -51,6 +51,26 @@ describe('SegmentedControl', () => {
     fireEvent.click(screen.getByRole('radio', { name: 'Sell' }));
     expect(screen.getByRole('radio', { name: 'Sell' })).toHaveAttribute('aria-checked', 'true');
   });
+
+  it('a disabled option cannot be picked', () => {
+    const onValueChange = vi.fn();
+    render(
+      <SegmentedControl
+        label="Exchange"
+        options={[
+          { value: 'NSE', label: 'NSE' },
+          { value: 'BSE', label: 'BSE', disabled: true },
+        ]}
+        value="NSE"
+        onValueChange={onValueChange}
+      />,
+    );
+    const bse = screen.getByRole('radio', { name: 'BSE' });
+    expect(bse).toBeDisabled();
+    fireEvent.click(bse);
+    expect(onValueChange).not.toHaveBeenCalled();
+    expect(screen.getByRole('radio', { name: 'NSE' })).toHaveAttribute('aria-checked', 'true');
+  });
 });
 
 describe('Switch', () => {

@@ -1,6 +1,7 @@
 import { createApiClient, createQuoteStore, type QuoteSource } from '@nthstock/apiClient';
 import type { Quote } from '@nthstock/contracts';
 import { MockMarketDataAdapter } from '@nthstock/marketData';
+import { ToastProvider } from '@nthstock/ui';
 import { fixedClock, fromIst } from '@nthstock/utils';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import {
@@ -65,8 +66,9 @@ export function StoryProviders({ marketOpen = false, children }: StoryProvidersP
     const market = createStoryMarket();
     const root = createRootRoute({ component: () => children });
     const stock = createRoute({ getParentRoute: () => root, path: '/stocks/$symbol' });
+    const login = createRoute({ getParentRoute: () => root, path: '/login' });
     const router = createRouter({
-      routeTree: root.addChildren([stock]),
+      routeTree: root.addChildren([stock, login]),
       history: createMemoryHistory({ initialEntries: ['/'] }),
     });
     const queryClient = new QueryClient({
@@ -80,7 +82,9 @@ export function StoryProviders({ marketOpen = false, children }: StoryProvidersP
         <QuoteStoreContext.Provider value={setup.market.quoteStore}>
           <MarketSessionContext.Provider value={{ clock: STORY_CLOCK, alwaysOpen: marketOpen }}>
             {/* A story router, not the app's registered router type. */}
-            <RouterProvider router={setup.router as never} />
+            <ToastProvider>
+              <RouterProvider router={setup.router as never} />
+            </ToastProvider>
           </MarketSessionContext.Provider>
         </QuoteStoreContext.Provider>
       </ApiClientContext.Provider>

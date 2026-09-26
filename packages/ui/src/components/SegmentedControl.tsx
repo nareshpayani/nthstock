@@ -6,6 +6,8 @@ export type SegmentOption<T extends string> = {
   label: string;
   /** Colour of the selected segment: brand by default, up for Buy, down for Sell. */
   tone?: 'brand' | 'up' | 'down';
+  /** Unavailable option (e.g. an exchange the stock is not listed on): skipped by arrow keys. */
+  disabled?: boolean;
 };
 
 export type SegmentedControlProps<T extends string> = {
@@ -59,8 +61,9 @@ export function SegmentedControl<T extends string>({
         <RadioGroup.Item
           key={option.value}
           value={option.value}
+          {...(option.disabled ? { disabled: true } : {})}
           className={cn(
-            'rounded-[6px] font-medium text-ink-muted transition-colors duration-(--nth-duration-flash) hover:text-ink disabled:opacity-50',
+            'rounded-[6px] font-medium text-ink-muted transition-colors duration-(--nth-duration-flash) hover:text-ink disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:text-ink-muted',
             size === 'sm' ? 'h-7 px-3 text-label' : 'h-8 px-4 text-body',
             selectedTone[option.tone ?? 'brand'],
           )}

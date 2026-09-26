@@ -24,6 +24,8 @@ export type PriceChartProps = {
   intraday?: boolean;
   /** Height in px; the width follows the container. */
   height?: number;
+  /** Show a crosshair tooltip with the hovered bar's IST time and values (T-107). */
+  tooltip?: boolean;
   className?: string | undefined;
 };
 
@@ -39,6 +41,7 @@ export function PriceChart({
   direction,
   intraday = false,
   height = 240,
+  tooltip = false,
   className,
 }: PriceChartProps) {
   const first = candles[0];
@@ -61,6 +64,7 @@ export function PriceChart({
               direction={direction ?? seriesDirection(candles)}
               intraday={intraday}
               height={height}
+              tooltip={tooltip}
             />
           </Suspense>
           <figcaption className="sr-only">
