@@ -76,6 +76,15 @@ jobs:
         run: npx playwright install --with-deps chromium
       # playwright.config.ts builds in msw mode with VITE_MOCK_MARKET_OPEN=true; no env needed here.
       - run: npm run e2e
+      # T-100: the frozen 1440 px dashboard screenshot, for the PR (the test also attaches it to
+      # the HTML report). Uploaded whether or not the run passed.
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dashboard-screenshot
+          path: apps/web/test-results/**/dashboard-1440.png
+          if-no-files-found: warn
+          retention-days: 14
       - if: failure()
         uses: actions/upload-artifact@v4
         with:

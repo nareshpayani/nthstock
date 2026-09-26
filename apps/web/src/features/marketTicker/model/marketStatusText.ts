@@ -33,8 +33,12 @@ export function describeNextOpen(clock: Clock): string {
   return `${weekday.format(next)} ${time(next)}`;
 }
 
-/** Text for the header pill (T-029). Always text, never colour alone. */
-export function marketStatusView(clock: Clock): MarketStatusView {
+/**
+ * Text for the header pill (T-029). Always text, never colour alone. `alwaysOpen` is the mock
+ * market forced open (msw mode), which matches the LIVE badges at any hour.
+ */
+export function marketStatusView(clock: Clock, alwaysOpen = false): MarketStatusView {
+  if (alwaysOpen) return { tone: 'open', label: strings.open, detail: strings.mockOpen };
   const status = getMarketStatus(clock);
   if (status.state === 'open') return { tone: 'open', label: strings.open, detail: strings.closes };
   const opens = strings.opens(describeNextOpen(clock));

@@ -91,7 +91,14 @@ export function Header({ onOpenMenu, onOpenHelp }: HeaderProps) {
           </DropdownMenu>
         </div>
       </div>
-      <div className="relative flex h-10 items-center gap-4 overflow-x-auto border-t border-line px-3 lg:px-6 min-[1360px]:hidden">
+      {/* Scrolls sideways on narrow screens, so it takes focus for keyboard scrolling (WCAG 2.1.1,
+          axe scrollable-region-focusable). */}
+      <div
+        role="region"
+        aria-label={strings.header.statusStrip}
+        tabIndex={0}
+        className="relative flex h-10 items-center gap-4 overflow-x-auto border-t border-line px-3 lg:px-6 min-[1360px]:hidden"
+      >
         <MarketStatusPill compact className="shrink-0" />
         <HeaderTickers compact className="shrink-0" />
       </div>

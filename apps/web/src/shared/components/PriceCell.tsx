@@ -14,6 +14,9 @@ export type PriceCellProps = {
   className?: string;
 };
 
+/** Skeleton height = LivePrice's line height per size (label 16, body 20, title 28 px): no shift. */
+const skeletonHeight = { sm: 'h-4', md: 'h-5', lg: 'h-7' } as const;
+
 /**
  * The only component that reads live prices (ADR 0005): subscribes one symbol and renders
  * LivePrice. Memoised, so a parent re-render does not touch it and a tick re-renders only it.
@@ -40,7 +43,9 @@ export const PriceCell = memo(function PriceCell({
     );
   }
   if (!live) {
-    return <Skeleton className={cn('inline-block h-4 w-20 align-middle', className)} />;
+    return (
+      <Skeleton className={cn('inline-block w-20 align-middle', skeletonHeight[size], className)} />
+    );
   }
   return (
     <LivePrice

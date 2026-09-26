@@ -1,6 +1,7 @@
-import { fromIst, fixedClock } from '@nthstock/utils';
+import { fromIst, fixedClock, type Clock } from '@nthstock/utils';
 import { render, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
+import { MarketSessionContext } from '@/shared/lib/marketSessionContext';
 import { marketStatusView } from '../model/marketStatusText';
 import { MarketStatusPill } from './MarketStatusPill';
 
@@ -57,9 +58,17 @@ describe('marketStatusView (fixed IST clocks)', () => {
   });
 });
 
+function renderPill(clock: Clock, { compact = false, alwaysOpen = false } = {}) {
+  return render(
+    <MarketSessionContext.Provider value={{ clock, alwaysOpen }}>
+      <MarketStatusPill compact={compact} />
+    </MarketSessionContext.Provider>,
+  );
+}
+
 describe('MarketStatusPill', () => {
   it('renders text for the state, not only a colour', () => {
-    render(<MarketStatusPill clock={at(25, 9, 10 * 60)} />);
+    renderPill(at(25, 9, 10 * 60));
     const pill = screen.getByRole('status', {
       name: 'NSE market status: Market open, closes 3:30 pm IST',
     });
@@ -68,10 +77,25 @@ describe('MarketStatusPill', () => {
   });
 
   it('compact hides the detail visually but keeps it in the label', () => {
-    render(<MarketStatusPill clock={at(2, 10, 11 * 60)} compact />);
+    renderPill(at(2, 10, 11 * 60), { compact: true });
     const pill = screen.getByRole('status');
     expect(pill).toHaveTextContent('Holiday: Mahatma Gandhi Jayanti');
     expect(pill).not.toHaveTextContent('opens');
     expect(pill).toHaveAccessibleName(/opens Mon 9:15 am IST/);
+  });
+
+  it('says open whenever the mock market is forced open, like the LIVE badges', () => {
+    // A holiday night: NSE is closed, but the forced-open mock market ticks.
+    renderPill(at(2, 10, 23 * 60), { alwaysOpen: true });
+    expect(
+      screen.getByRole('status', {
+        name: 'NSE market status: Market open, mock market, open at any hour',
+      }),
+    ).toHaveTextContent('Market open');
+  });
+
+  it('follows the market session clock from context', () => {
+    renderPill(at(26, 9, 11 * 60));
+    expect(screen.getByRole('status')).toHaveTextContent('Market closed');
   });
 });

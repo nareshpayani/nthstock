@@ -26,6 +26,15 @@ export function formatSignedChange(change: number, format: 'inr' | 'index'): str
 }
 
 /**
+ * Skeleton height = ChangeBadge's height (label 16 or body 20 px line, plus 4 px padding when
+ * soft), so the badge replacing it does not shift the layout (T-101).
+ */
+const skeletonHeight = {
+  sm: { plain: 'h-4', soft: 'h-5' },
+  md: { plain: 'h-5', soft: 'h-6' },
+} as const;
+
+/**
  * Day change of one symbol, live from the quote store: ▲▼, signed text and colour (ChangeBadge).
  * Memoised and subscribed on its own, like PriceCell, so a tick re-renders only this badge.
  */
@@ -41,7 +50,17 @@ export const LiveChange = memo(function LiveChange({
 }: LiveChangeProps) {
   const live = useQuote(symbol, exchange);
   const value = live ? { change: live.quote.change, changeBp: live.quote.changeBp } : initial;
-  if (!value) return <Skeleton className={cn('inline-block h-4 w-24 align-middle', className)} />;
+  if (!value) {
+    return (
+      <Skeleton
+        className={cn(
+          'inline-block w-24 align-middle',
+          skeletonHeight[size][soft ? 'soft' : 'plain'],
+          className,
+        )}
+      />
+    );
+  }
   return (
     <ChangeBadge
       basisPoints={value.changeBp}

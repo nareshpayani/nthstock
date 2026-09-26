@@ -1,6 +1,7 @@
 import { cn } from '@nthstock/ui';
-import { systemClock, type Clock } from '@nthstock/utils';
-import { useEffect, useState } from 'react';
+import { useContext } from 'react';
+import { useMarketOpen } from '@/shared/hooks/useMarketOpen';
+import { MarketSessionContext } from '@/shared/lib/marketSessionContext';
 import { marketStatusView, type MarketStatusView } from '../model/marketStatusText';
 import { strings } from '../strings';
 
@@ -12,26 +13,22 @@ const toneClass: Record<MarketStatusView['tone'], { pill: string; dot: string }>
 };
 
 export type MarketStatusPillProps = {
-  /** Injected for tests and demos; defaults to the system clock. */
-  clock?: Clock;
   /** Hide the "opens …" detail (narrow headers). */
   compact?: boolean;
   className?: string;
 };
 
-/** NSE session state in IST, refreshed every 30 seconds. */
-export function MarketStatusPill({
-  clock = systemClock,
-  compact = false,
-  className,
-}: MarketStatusPillProps) {
-  // Re-render every 30 s so the status follows the clock; the view itself is derived on render.
-  const [, setTick] = useState(0);
-  useEffect(() => {
-    const timer = window.setInterval(() => setTick((tick) => tick + 1), 30_000);
-    return () => window.clearInterval(timer);
-  }, []);
-  const view = marketStatusView(clock);
+/**
+ * NSE session state in IST. Reads the same market session as the LIVE badges (`useMarketOpen`):
+ * the clock from MarketSessionContext, re-read every 30 seconds, and "open" whenever the mock
+ * market is forced open.
+ */
+export function MarketStatusPill({ compact = false, className }: MarketStatusPillProps) {
+  const { clock, alwaysOpen } = useContext(MarketSessionContext);
+  // useMarketOpen re-renders the pill every 30 s (not at all when forced open), and the pill says
+  // "Market open" exactly when the LIVE badges show. The rest of the view is derived on render.
+  const open = useMarketOpen();
+  const view = marketStatusView(clock, open && alwaysOpen);
 
   const tone = toneClass[view.tone];
   return (

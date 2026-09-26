@@ -16,6 +16,7 @@ export const strings = {
     holidays: 'Market holidays',
     about: 'About paper trading',
     soon: 'soon',
+    statusStrip: 'Market status and indices',
   },
   rail: {
     label: 'Watchlist and search',
