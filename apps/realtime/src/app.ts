@@ -1,43 +1,30 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
-import {
-  WS_MAX_SUBSCRIPTIONS,
-  WS_PROTOCOL_VERSION,
-  type WsServerMessage,
-} from '@nthstock/contracts';
 import { WebSocketServer, type RawData, type WebSocket } from 'ws';
+import type { QuoteFeed } from './feed.js';
+import { createHub, type Connection } from './hub.js';
 import { silentLogger, type Logger } from './logger.js';
-import { errorMessage, parseClientMessage } from './protocol.js';
-import {
-  createSubscriptionRegistry,
-  subscriptionKey,
-  type SubscriptionKey,
-  type SubscriptionRegistry,
-} from './registry.js';
+import type { SubscriptionRegistry } from './registry.js';
 
 /** Path of the WebSocket endpoint; the web app derives `ws(s)://<host>/ws` from the same path. */
 export const WS_PATH = '/ws';
 
 export type RealtimeServerOptions = {
   logger?: Logger;
+  /** Where quotes come from; the server closes it on close. Left out, nothing is fanned out. */
+  feed?: QuoteFeed;
 };
 
 export type RealtimeServer = {
   readonly http: Server;
   /** Starts listening; resolves with the bound port (pass 0 in tests for a free one). */
   listen(port: number, host?: string): Promise<number>;
-  /** Drops every connection and stops listening. */
+  /** Drops every connection, closes the feed and stops listening. */
   close(): Promise<void>;
   connectionCount(): number;
-  /** Who is subscribed to what; read-only use outside this module. */
-  readonly registry: SubscriptionRegistry<WebSocket>;
+  /** Who is subscribed to what; read-only use outside the hub. */
+  readonly registry: SubscriptionRegistry<Connection>;
 };
-
-const sendJson = (socket: WebSocket, message: WsServerMessage) => {
-  socket.send(JSON.stringify(message));
-};
-
-const symbolOf = (key: SubscriptionKey) => key.slice(key.indexOf(':') + 1);
 
 const textOf = (data: RawData, isBinary: boolean): string | null => {
   if (isBinary) return null;
@@ -47,18 +34,20 @@ const textOf = (data: RawData, isBinary: boolean): string | null => {
 
 /**
  * The realtime WebSocket server (T-069, ADR 0004 §4) on `ws`: an HTTP server with `GET /health`
- * and a WebSocket endpoint at `/ws`. Built without listening, so tests bind it to a free port.
+ * and a WebSocket endpoint at `/ws`, fanning feed quotes out through the hub. Built without
+ * listening, so tests bind it to a free port.
  */
 export function createRealtimeServer(options: RealtimeServerOptions = {}): RealtimeServer {
   const logger = options.logger ?? silentLogger;
   const wss = new WebSocketServer({ noServer: true, maxPayload: 64 * 1024 });
-  const registry = createSubscriptionRegistry<WebSocket>();
+  const hub = createHub({ logger });
+  const detachFeed = options.feed?.onQuotes(hub.ingest);
 
   const handleHttp = (request: IncomingMessage, response: ServerResponse) => {
     const path = (request.url ?? '/').split('?')[0];
     if (request.method === 'GET' && path === '/health') {
       response.writeHead(200, { 'content-type': 'application/json' });
-      response.end(JSON.stringify({ status: 'ok', connections: wss.clients.size }));
+      response.end(JSON.stringify({ status: 'ok', connections: hub.connectionCount() }));
       return;
     }
     response.writeHead(404, { 'content-type': 'application/json' });
@@ -79,47 +68,19 @@ export function createRealtimeServer(options: RealtimeServerOptions = {}): Realt
   });
 
   wss.on('connection', (socket: WebSocket) => {
+    const connection = hub.open(socket);
     socket.on('message', (data, isBinary) => {
-      const parsed = parseClientMessage(textOf(data, isBinary));
-      if (!parsed.ok) {
-        sendJson(socket, errorMessage(parsed.code, parsed.message));
-        return;
-      }
-      const message = parsed.message;
-      switch (message.type) {
-        case 'ping':
-          sendJson(socket, { v: WS_PROTOCOL_VERSION, type: 'pong', id: message.id });
-          return;
-        case 'subscribe': {
-          const keys = message.symbols.map((symbol) => subscriptionKey(symbol, message.exchange));
-          const { rejected } = registry.add(socket, keys);
-          if (rejected.length > 0) {
-            sendJson(
-              socket,
-              errorMessage(
-                'SUBSCRIPTION_LIMIT',
-                `A connection may subscribe to at most ${WS_MAX_SUBSCRIPTIONS} symbols`,
-                rejected.map(symbolOf),
-              ),
-            );
-          }
-          return;
-        }
-        case 'unsubscribe':
-          registry.remove(
-            socket,
-            message.symbols.map((symbol) => subscriptionKey(symbol, message.exchange)),
-          );
-          return;
-      }
+      connection.receive(textOf(data, isBinary));
     });
     socket.on('close', () => {
-      registry.removeConnection(socket);
+      connection.closed();
     });
     socket.on('error', (error) => {
       logger.warn('socket error', { error: error.message });
     });
   });
+
+  let closing: Promise<void> | null = null;
 
   return {
     http,
@@ -131,17 +92,17 @@ export function createRealtimeServer(options: RealtimeServerOptions = {}): Realt
           resolve((http.address() as AddressInfo).port);
         });
       }),
-    close: () =>
-      new Promise((resolve) => {
+    close() {
+      closing ??= (async () => {
+        detachFeed?.();
+        await options.feed?.close();
         for (const client of wss.clients) client.terminate();
         wss.close();
-        if (!http.listening) {
-          resolve();
-          return;
-        }
-        http.close(() => resolve());
-      }),
-    connectionCount: () => wss.clients.size,
-    registry,
+        if (http.listening) await new Promise<void>((resolve) => http.close(() => resolve()));
+      })();
+      return closing;
+    },
+    connectionCount: () => hub.connectionCount(),
+    registry: hub.registry,
   };
 }

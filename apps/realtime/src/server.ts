@@ -1,9 +1,11 @@
 import { createRealtimeServer } from './app.js';
 import { loadConfig } from './config.js';
+import { createRedisQuoteFeed } from './feed.js';
 import { jsonLogger } from './logger.js';
 
 const config = loadConfig(process.env);
-const server = createRealtimeServer({ logger: jsonLogger });
+const feed = createRedisQuoteFeed({ url: config.redisUrl, logger: jsonLogger });
+const server = createRealtimeServer({ logger: jsonLogger, feed });
 
 try {
   const port = await server.listen(config.port, config.host);
