@@ -18,3 +18,4 @@ export {
   type MatchableOrder,
   type PathFill,
 } from './fillMatcher.js';
+export { FundsLedger, type FundsLedgerOptions, type LedgerResult } from './fundsLedger.js';
