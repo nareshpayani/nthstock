@@ -34,6 +34,7 @@ prices is at `/dev/prices`.
 | -------------------- | --------------------------------------------------------------------------- |
 | `apps/web`           | Vite + React SPA                                                            |
 | `apps/api`           | Fastify API (`GET /v1/health`)                                              |
+| `apps/realtime`      | Live-price WebSocket server on `ws` (`/ws`, `GET /health`, port 8081)       |
 | `packages/config`    | Shared ESLint and TypeScript config                                         |
 | `packages/ui`        | Design system components (Radix, cva, Tailwind) and Storybook               |
 | `packages/apiClient` | Typed REST client, live-quote WebSocket client and quote store              |
