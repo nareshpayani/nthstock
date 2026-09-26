@@ -45,6 +45,22 @@ describe.each([
     await waitFor(() => expect(trigger).toHaveFocus());
   });
 
+  it('leaves Esc to a control whose own popup is open', async () => {
+    render(
+      <Overlay title="Menu" defaultOpen>
+        <input aria-label="Search" role="combobox" aria-expanded="true" aria-controls="list" />
+        <div id="list" role="listbox" aria-label="Results" />
+      </Overlay>,
+    );
+    const dialog = await screen.findByRole('dialog', { name: 'Menu' });
+    const search = screen.getByRole('combobox', { name: 'Search' });
+    fireEvent.keyDown(search, { key: 'Escape' });
+    expect(dialog).toBeInTheDocument();
+    search.setAttribute('aria-expanded', 'false');
+    fireEvent.keyDown(search, { key: 'Escape' });
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+  });
+
   it('closes from the close button', async () => {
     render(<Overlay title="Help" defaultOpen />);
     fireEvent.click(await screen.findByRole('button', { name: 'Close' }));
