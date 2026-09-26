@@ -1,6 +1,12 @@
-import { WS_PROTOCOL_VERSION } from '@nthstock/contracts';
+import { WS_CLOSE_CODES, WS_IDLE_TIMEOUT_MS, WS_PROTOCOL_VERSION } from '@nthstock/contracts';
 import { describe, expect, it, vi } from 'vitest';
-import { createHub, FLUSH_INTERVAL_MS, MAX_UPDATES_PER_SECOND } from './hub.js';
+import {
+  createHub,
+  FLUSH_INTERVAL_MS,
+  HEARTBEAT_INTERVAL_MS,
+  MAX_BUFFERED_BYTES,
+  MAX_UPDATES_PER_SECOND,
+} from './hub.js';
 import { fakeSocket } from './test/fakeSocket.js';
 import { quoteFramesOf } from './test/frames.js';
 import { manualTimers } from './test/manualTimers.js';
@@ -194,5 +200,93 @@ describe('hub binary quote frames', () => {
     hub.flush();
     expect(socket.json()).toEqual([{ v: WS_PROTOCOL_VERSION, type: 'quotes', quotes: [huge] }]);
     expect(logger.warn).toHaveBeenCalledWith('quote frame fallback to JSON', expect.anything());
+  });
+});
+
+describe('hub heartbeat and idle timeout', () => {
+  const setup = () => {
+    const timers = manualTimers();
+    const hub = createHub({ timers, now: timers.now });
+    const socket = fakeSocket();
+    const connection = hub.open(socket);
+    connection.receive(subscribe(['INFY']));
+    return { timers, hub, socket, connection };
+  };
+
+  it(`closes a connection idle for ${WS_IDLE_TIMEOUT_MS / 1000} s with ${WS_CLOSE_CODES.idleTimeout}`, () => {
+    const { timers, hub, socket } = setup();
+    timers.advance(WS_IDLE_TIMEOUT_MS - HEARTBEAT_INTERVAL_MS);
+    expect(socket.closedWith).toBeNull();
+    expect(socket.pings).toBe(2); // at 20 s and 40 s
+    timers.advance(HEARTBEAT_INTERVAL_MS);
+    expect(socket.closedWith).toEqual({ code: WS_CLOSE_CODES.idleTimeout, reason: 'idle timeout' });
+    expect(hub.connectionCount()).toBe(0);
+    expect(hub.registry.keyCount()).toBe(0);
+    expect(hub.stats().idleClosed).toBe(1);
+  });
+
+  it('counts messages and pongs as activity', () => {
+    const { timers, socket, connection } = setup();
+    timers.advance(50_000);
+    connection.receive(JSON.stringify({ v: WS_PROTOCOL_VERSION, type: 'ping', id: 1 }));
+    timers.advance(50_000);
+    connection.activity();
+    timers.advance(55_000);
+    expect(socket.closedWith).toBeNull();
+    timers.advance(5_000);
+    expect(socket.closedWith?.code).toBe(WS_CLOSE_CODES.idleTimeout);
+  });
+
+  it('survives sockets that throw on ping or close', () => {
+    const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn() };
+    const timers = manualTimers();
+    const hub = createHub({ logger, timers, now: timers.now });
+    const socket = fakeSocket();
+    socket.ping = () => {
+      throw new Error('ping boom');
+    };
+    socket.close = () => {
+      throw new Error('close boom');
+    };
+    hub.open(socket);
+    timers.advance(WS_IDLE_TIMEOUT_MS);
+    expect(logger.warn).toHaveBeenCalledWith('ping failed', expect.anything());
+    expect(logger.warn).toHaveBeenCalledWith('close failed', expect.anything());
+    expect(hub.connectionCount()).toBe(0);
+  });
+});
+
+describe('hub slow consumers', () => {
+  it(`drops quote frames while more than ${MAX_BUFFERED_BYTES} bytes are buffered`, () => {
+    const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn() };
+    const hub = createHub({ logger, timers: manualTimers() });
+    const slow = fakeSocket();
+    const fast = fakeSocket();
+    hub.open(slow).receive(subscribe(['INFY']));
+    hub.open(fast).receive(subscribe(['INFY']));
+    slow.bufferedAmount = MAX_BUFFERED_BYTES + 1;
+
+    hub.ingest([testQuote('INFY', 150_000)]);
+    hub.flush();
+    hub.ingest([testQuote('INFY', 150_100)]);
+    hub.flush();
+    expect(slow.sent).toEqual([]);
+    expect(quoteFramesOf(fast.sent)).toHaveLength(2);
+    expect(hub.stats().droppedFrames).toBe(2);
+    expect(logger.warn).toHaveBeenCalledTimes(1); // logged once per slowdown
+
+    // Control messages still go out while quotes are dropped.
+    hub.open(slow).receive(JSON.stringify({ v: WS_PROTOCOL_VERSION, type: 'ping', id: 3 }));
+    expect(slow.json()).toEqual([{ v: WS_PROTOCOL_VERSION, type: 'pong', id: 3 }]);
+
+    // Once the buffer drains, the latest value flows again, with its instrument.
+    slow.bufferedAmount = MAX_BUFFERED_BYTES;
+    hub.ingest([testQuote('INFY', 150_200)]);
+    hub.flush();
+    expect(
+      quoteFramesOf(slow.sent)
+        .flat()
+        .map((q) => q.ltp),
+    ).toEqual([150_200]);
   });
 });

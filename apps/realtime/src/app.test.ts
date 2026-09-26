@@ -1,4 +1,9 @@
-import { WS_MAX_SUBSCRIPTIONS, WS_PROTOCOL_VERSION } from '@nthstock/contracts';
+import {
+  WS_CLOSE_CODES,
+  WS_IDLE_TIMEOUT_MS,
+  WS_MAX_SUBSCRIPTIONS,
+  WS_PROTOCOL_VERSION,
+} from '@nthstock/contracts';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createRealtimeServer, WS_PATH, type RealtimeServer } from './app.js';
 import { createMemoryQuoteFeed } from './feed.js';
@@ -24,7 +29,12 @@ describe('realtime server', () => {
   it('answers GET /health with ok', async () => {
     const response = await fetch(`http://${base}/health`);
     expect(response.status).toBe(200);
-    expect(await response.json()).toEqual({ status: 'ok', connections: 0 });
+    expect(await response.json()).toEqual({
+      status: 'ok',
+      connections: 0,
+      droppedFrames: 0,
+      idleClosed: 0,
+    });
   });
 
   it('returns 404 for other paths', async () => {
@@ -129,5 +139,28 @@ describe('realtime server with a feed', () => {
     expect(quoteFramesOf(frames)).toEqual([[testQuote('INFY', 150_000)]]);
     await own.close();
     expect(feed.closed).toBe(true);
+  });
+});
+
+describe('realtime server idle timeout', () => {
+  it('closes an idle WebSocket with the idle close code', async () => {
+    let now = 0;
+    const own = createRealtimeServer({ timers: manualTimers(), now: () => now });
+    const port = await own.listen(0, '127.0.0.1');
+    const client = await connectTestClient(`ws://127.0.0.1:${port}${WS_PATH}`);
+    now = 20_000;
+    own.heartbeat(); // pings; the client answers with a pong automatically
+    now = WS_IDLE_TIMEOUT_MS + 20_000;
+    await client.drain(); // activity at 80 s
+    now = WS_IDLE_TIMEOUT_MS + 79_999;
+    own.heartbeat();
+    expect(own.connectionCount()).toBe(1);
+    now = WS_IDLE_TIMEOUT_MS + 80_000;
+    own.heartbeat();
+    expect(await client.closed).toEqual({
+      code: WS_CLOSE_CODES.idleTimeout,
+      reason: 'idle timeout',
+    });
+    await own.close();
   });
 });

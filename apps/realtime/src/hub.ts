@@ -1,4 +1,6 @@
 import {
+  WS_CLOSE_CODES,
+  WS_IDLE_TIMEOUT_MS,
   WS_MAX_SUBSCRIPTIONS,
   WS_PROTOCOL_VERSION,
   encodeQuoteFrame,
@@ -21,13 +23,19 @@ import {
 export type ClientSocket = {
   send(data: string | Uint8Array): void;
   close(code?: number, reason?: string): void;
+  /** WebSocket protocol-level ping; browsers answer with a pong automatically. */
+  ping(): void;
+  /** Bytes queued but not yet written to the network. */
+  readonly bufferedAmount: number;
 };
 
 /** One client connection as the hub sees it. */
 export type Connection = {
   /** A frame from the client: JSON text, or null for a binary frame (not part of the protocol). */
   receive(text: string | null): void;
-  /** The socket closed; forget every subscription. */
+  /** A protocol-level pong (or anything else) arrived: the client is alive. */
+  activity(): void;
+  /** The socket closed; forget every subscription. Safe to call more than once. */
   closed(): void;
 };
 
@@ -37,19 +45,40 @@ export type Hub = {
   ingest(quotes: readonly Quote[]): void;
   /** Sends every connection's pending quotes now, one frame each. The flush timer calls this. */
   flush(): void;
+  /** Pings live connections and closes idle ones. The heartbeat timer calls this. */
+  heartbeat(): void;
   readonly registry: SubscriptionRegistry<Connection>;
   connectionCount(): number;
-  /** Stops the flush timer. */
+  stats(): HubStats;
+  /** Stops the timers. */
   close(): void;
+};
+
+export type HubStats = {
+  connections: number;
+  /** Quote frames not sent because the client was too far behind. */
+  droppedFrames: number;
+  /** Connections closed for being idle. */
+  idleClosed: number;
 };
 
 /** At most 4 updates per second per symbol (CLAUDE.md §4). */
 export const MAX_UPDATES_PER_SECOND = 4;
 export const FLUSH_INTERVAL_MS = 1_000 / MAX_UPDATES_PER_SECOND;
 
+/** How often the heartbeat runs: idle checks each time, a ping every `PING_INTERVAL_MS`. */
+export const HEARTBEAT_INTERVAL_MS = 5_000;
+export const PING_INTERVAL_MS = 20_000;
+/** Above this many bytes buffered for a client, its quote frames are dropped (T-075). */
+export const MAX_BUFFERED_BYTES = 1024 * 1024;
+
 export type HubOptions = {
   logger?: Logger;
   timers?: Timers;
+  /** Milliseconds since the epoch; injected so idle tests never read the wall clock. */
+  now?: () => number;
+  idleTimeoutMs?: number;
+  maxBufferedBytes?: number;
 };
 
 type Session = {
@@ -58,6 +87,12 @@ type Session = {
   pending: Map<SubscriptionKey, Quote>;
   /** What this client was last told about each subscribed key's instrument (T-074). */
   instruments: Map<SubscriptionKey, string>;
+  /** When the client last sent anything (a message or a pong). */
+  lastSeen: number;
+  lastPing: number;
+  /** True while frames are being dropped, so the slowdown is logged once. */
+  lagging: boolean;
+  connection: Connection;
 };
 
 const instrumentSignature = (i: WsInstrument) =>
@@ -66,12 +101,16 @@ const instrumentSignature = (i: WsInstrument) =>
 const symbolOf = (key: SubscriptionKey) => key.slice(key.indexOf(':') + 1);
 
 /**
- * Transport-agnostic core of apps/realtime: protocol handling, subscriptions, fan-out and
- * conflation (T-070, T-072, T-073). `app.ts` connects it to `ws` sockets and the Redis feed.
+ * Transport-agnostic core of apps/realtime: protocol handling, subscriptions, fan-out,
+ * conflation, heartbeat and slow-consumer handling (T-070, T-072, T-073, T-075). `app.ts` connects it to `ws` sockets and the Redis feed.
  */
 export function createHub(options: HubOptions = {}): Hub {
   const logger = options.logger ?? silentLogger;
   const timers = options.timers ?? systemTimers;
+  const now = options.now ?? Date.now;
+  const idleTimeoutMs = options.idleTimeoutMs ?? WS_IDLE_TIMEOUT_MS;
+  const maxBufferedBytes = options.maxBufferedBytes ?? MAX_BUFFERED_BYTES;
+  const stats = { droppedFrames: 0, idleClosed: 0 };
   const registry = createSubscriptionRegistry<Connection>();
   const sessions = new Map<Connection, Session>();
   /** Sessions with pending quotes, so a flush touches only those. */
@@ -82,9 +121,10 @@ export function createHub(options: HubOptions = {}): Hub {
   };
 
   const open = (socket: ClientSocket): Connection => {
-    const session: Session = { socket, pending: new Map(), instruments: new Map() };
+    const openedAt = now();
     const connection: Connection = {
       receive(text) {
+        session.lastSeen = now();
         const parsed = parseClientMessage(text);
         if (!parsed.ok) {
           sendJson(socket, errorMessage(parsed.code, parsed.message));
@@ -121,11 +161,23 @@ export function createHub(options: HubOptions = {}): Hub {
             return;
         }
       },
+      activity() {
+        session.lastSeen = now();
+      },
       closed() {
         registry.removeConnection(connection);
         sessions.delete(connection);
         dirty.delete(session);
       },
+    };
+    const session: Session = {
+      socket,
+      pending: new Map(),
+      instruments: new Map(),
+      lastSeen: openedAt,
+      lastPing: openedAt,
+      lagging: false,
+      connection,
     };
     sessions.set(connection, session);
     return connection;
@@ -151,6 +203,19 @@ export function createHub(options: HubOptions = {}): Hub {
    * as a JSON `quotes` message instead.
    */
   const sendQuotes = (session: Session, entries: [SubscriptionKey, Quote][]) => {
+    // Slow consumer: a client this far behind would only fall further behind. Drop the frame (its
+    // symbols come again on their next tick) instead of buffering without bound.
+    if (session.socket.bufferedAmount > maxBufferedBytes) {
+      stats.droppedFrames += 1;
+      if (!session.lagging) {
+        session.lagging = true;
+        logger.warn('slow consumer: dropping quote frames', {
+          bufferedAmount: session.socket.bufferedAmount,
+        });
+      }
+      return;
+    }
+    session.lagging = false;
     const quotes = entries.map(([, quote]) => quote);
     let frame: Uint8Array;
     try {
@@ -189,14 +254,44 @@ export function createHub(options: HubOptions = {}): Hub {
     dirty.clear();
   };
 
+  const heartbeat = () => {
+    const at = now();
+    for (const session of [...sessions.values()]) {
+      if (at - session.lastSeen >= idleTimeoutMs) {
+        stats.idleClosed += 1;
+        session.connection.closed();
+        try {
+          session.socket.close(WS_CLOSE_CODES.idleTimeout, 'idle timeout');
+        } catch (error) {
+          logger.warn('close failed', { error: String(error) });
+        }
+        continue;
+      }
+      if (at - session.lastPing >= PING_INTERVAL_MS) {
+        session.lastPing = at;
+        try {
+          session.socket.ping();
+        } catch (error) {
+          logger.warn('ping failed', { error: String(error) });
+        }
+      }
+    }
+  };
+
   const flushTimer = timers.setInterval(flush, FLUSH_INTERVAL_MS);
+  const heartbeatTimer = timers.setInterval(heartbeat, HEARTBEAT_INTERVAL_MS);
 
   return {
     open,
     ingest,
     flush,
+    heartbeat,
     registry,
     connectionCount: () => sessions.size,
-    close: () => timers.clearInterval(flushTimer),
+    stats: () => ({ connections: sessions.size, ...stats }),
+    close() {
+      timers.clearInterval(flushTimer);
+      timers.clearInterval(heartbeatTimer);
+    },
   };
 }

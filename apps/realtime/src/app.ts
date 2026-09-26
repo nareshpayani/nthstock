@@ -14,8 +14,10 @@ export type RealtimeServerOptions = {
   logger?: Logger;
   /** Where quotes come from; the server closes it on close. Left out, nothing is fanned out. */
   feed?: QuoteFeed;
-  /** Flush timers; tests inject manual ones. */
+  /** Flush and heartbeat timers; tests inject manual ones. */
   timers?: Timers;
+  /** Clock for idle detection, epoch ms. */
+  now?: () => number;
 };
 
 export type RealtimeServer = {
@@ -27,6 +29,8 @@ export type RealtimeServer = {
   connectionCount(): number;
   /** Sends pending conflated quotes now instead of at the next timer flush (tests). */
   flush(): void;
+  /** Runs the heartbeat now: pings, and closes idle connections (tests). */
+  heartbeat(): void;
   /** Who is subscribed to what; read-only use outside the hub. */
   readonly registry: SubscriptionRegistry<Connection>;
 };
@@ -45,14 +49,18 @@ const textOf = (data: RawData, isBinary: boolean): string | null => {
 export function createRealtimeServer(options: RealtimeServerOptions = {}): RealtimeServer {
   const logger = options.logger ?? silentLogger;
   const wss = new WebSocketServer({ noServer: true, maxPayload: 64 * 1024 });
-  const hub = createHub({ logger, ...(options.timers ? { timers: options.timers } : {}) });
+  const hub = createHub({
+    logger,
+    ...(options.timers ? { timers: options.timers } : {}),
+    ...(options.now ? { now: options.now } : {}),
+  });
   const detachFeed = options.feed?.onQuotes(hub.ingest);
 
   const handleHttp = (request: IncomingMessage, response: ServerResponse) => {
     const path = (request.url ?? '/').split('?')[0];
     if (request.method === 'GET' && path === '/health') {
       response.writeHead(200, { 'content-type': 'application/json' });
-      response.end(JSON.stringify({ status: 'ok', connections: hub.connectionCount() }));
+      response.end(JSON.stringify({ status: 'ok', ...hub.stats() }));
       return;
     }
     response.writeHead(404, { 'content-type': 'application/json' });
@@ -76,6 +84,9 @@ export function createRealtimeServer(options: RealtimeServerOptions = {}): Realt
     const connection = hub.open(socket);
     socket.on('message', (data, isBinary) => {
       connection.receive(textOf(data, isBinary));
+    });
+    socket.on('pong', () => {
+      connection.activity();
     });
     socket.on('close', () => {
       connection.closed();
@@ -110,6 +121,7 @@ export function createRealtimeServer(options: RealtimeServerOptions = {}): Realt
     },
     connectionCount: () => hub.connectionCount(),
     flush: hub.flush,
+    heartbeat: hub.heartbeat,
     registry: hub.registry,
   };
 }

@@ -9,6 +9,15 @@ export const WS_PROTOCOL_VERSION = 1;
 /** Maximum symbols one connection may subscribe to. */
 export const WS_MAX_SUBSCRIPTIONS = 200;
 
+/** The server closes a connection it has heard nothing from (no message, no pong) for this long. */
+export const WS_IDLE_TIMEOUT_MS = 60_000;
+
+/** Close codes the server uses (4000–4999 is the application range). */
+export const WS_CLOSE_CODES = {
+  /** Idle for `WS_IDLE_TIMEOUT_MS`. The client reconnects as for any drop. */
+  idleTimeout: 4408,
+} as const;
+
 const v = z.literal(WS_PROTOCOL_VERSION);
 
 const SymbolSet = z.array(TradingSymbol).min(1).max(WS_MAX_SUBSCRIPTIONS);

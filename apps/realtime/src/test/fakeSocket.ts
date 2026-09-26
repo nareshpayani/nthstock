@@ -6,6 +6,8 @@ export type FakeSocket = ClientSocket & {
   /** JSON messages sent so far, parsed. */
   json(): WsServerMessage[];
   closedWith: { code: number | undefined; reason: string | undefined } | null;
+  pings: number;
+  bufferedAmount: number;
 };
 
 export function fakeSocket(): FakeSocket {
@@ -13,6 +15,11 @@ export function fakeSocket(): FakeSocket {
   const socket: FakeSocket = {
     sent,
     closedWith: null,
+    pings: 0,
+    bufferedAmount: 0,
+    ping() {
+      socket.pings += 1;
+    },
     send(data) {
       sent.push(data);
     },
