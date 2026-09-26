@@ -201,10 +201,10 @@ Humans set direction and approve; agents plan, build, test and review.
 1. **Spec first.** Every feature starts as `docs/specs/<feature>.md` (problem, UX, API contract, acceptance criteria). Owner approves the spec in chat before code.
 2. **Architecture changes** go through an ADR in `docs/adr/`.
 3. **Tracking:** one GitHub Issue per spec/task; a GitHub Projects board per phase.
-4. **Agent team** (details in `docs/agent-workflow.md`, ADR 0003): **Planner**, **Developer**, **Reviewer**, **Fixer**, running on GitHub Actions with role definitions in `.claude/agents/`. Labels drive the loop: `plan:approved` → spec PR + stories → merge spec → `agent:ready` → PR → review → `agent:fix-needed` (Fixer, same PR) or `ready-to-merge` (owner merges). Max 3 review rounds, then `needs-human`.
+4. **Agent team** (details in `docs/agent-workflow.md`, ADR 0003): **Planner**, **Developer**, **Reviewer**, **Fixer**, running on GitHub Actions with role definitions in `.claude/agents/`. Labels drive the loop: `plan:approved` → spec PR + stories → merge spec → `agent:ready` → PR → review → `agent:fix-needed` (Fixer, same PR) or `ready-to-merge`. Once every check is green, `agent-automerge.yml` squash-merges the PR (owner decision 2026-09-26; spec PRs, drafts, Dependabot and PRs labelled `needs-human`, `agent:fix-needed` or `do-not-merge` are skipped). Max 3 review rounds, then `needs-human`.
 5. **Agents may:** write specs, code and tests; open PRs; fix CI failures and review comments on their own.
-6. **Agents never:** merge PRs, push to `main`, deploy to production, touch real money, commit secrets, or add a paid service or a dependency outside the approved stack without asking.
-7. **Review:** a review agent comments on every PR; the owner approves and merges.
+6. **Agents never:** merge a PR by hand (only `agent-automerge.yml` merges, and only green PRs), push to `main`, deploy to production, touch real money, commit secrets, or add a paid service or a dependency outside the approved stack without asking.
+7. **Review:** a review agent comments on every PR; green PRs merge automatically, and the owner approves specs and can hold any PR with `do-not-merge`.
 8. **Environments:** local Docker Compose → free preview deploy per PR (web) → staging + prod from Phase 6.
 9. **Budget:** free tiers until Phase 6; owner approves any paid service.
 10. **One phase at a time.** No phase starts without owner sign-off in the project chat.

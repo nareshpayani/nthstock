@@ -30,8 +30,9 @@ jobs:
           create "agent:pr"          "BFD4F2" "PR opened by the Developer agent"
           create "agent:fix-needed"  "E99695" "Reviewer found blocking issues; Fixer agent will fix"
           create "agent:conflict"    "D93F0B" "PR conflicts with main; conflict agent is resolving it on the PR branch"
-          create "ready-to-merge"    "0E8A16" "Reviewer approved and CI green: owner can merge"
+          create "ready-to-merge"    "0E8A16" "Reviewer approved; auto-merges once every check is green"
           create "needs-human"       "B60205" "Agents stopped; owner decision needed"
+          create "do-not-merge"      "000000" "Hold: auto-merge skips this PR"
           for area in web api ui infra docs; do
             create "area:$area" "EDEDED" "Touches $area"
           done
