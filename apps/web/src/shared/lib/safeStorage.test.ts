@@ -10,6 +10,8 @@ describe('safeStorage', () => {
   it('reads and writes localStorage', () => {
     safeStorage.set('k', 'v');
     expect(safeStorage.get('k')).toBe('v');
+    safeStorage.remove('k');
+    expect(safeStorage.get('k')).toBeNull();
   });
 
   it('swallows errors when storage throws', () => {
@@ -20,6 +22,10 @@ describe('safeStorage', () => {
       throw new Error('QuotaExceededError');
     });
     expect(safeStorage.get('k')).toBeNull();
+    vi.spyOn(Storage.prototype, 'removeItem').mockImplementation(() => {
+      throw new Error('SecurityError');
+    });
     expect(() => safeStorage.set('k', 'v')).not.toThrow();
+    expect(() => safeStorage.remove('k')).not.toThrow();
   });
 });

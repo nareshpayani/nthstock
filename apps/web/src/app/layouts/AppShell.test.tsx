@@ -2,13 +2,20 @@ import { act, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, describe, expect, it } from 'vitest';
 import { createTestQuoteStore, testQuote } from '@/test/quotes';
 import { renderApp } from '@/test/renderApp';
+import { resetSession, signIn, signOut } from '@/test/session';
 import { initialShellState, useShellStore } from '../shellStore';
 
 afterEach(() => {
-  act(() => useShellStore.setState(initialShellState));
+  act(() => {
+    useShellStore.setState(initialShellState);
+    resetSession();
+  });
 });
 
-async function renderDashboard() {
+/** The dashboard, signed in unless told otherwise (Orders and Funds need a session). */
+async function renderDashboard({ signedIn = true } = {}) {
+  if (signedIn) signIn();
+  else signOut();
   const quotes = createTestQuoteStore();
   quotes.push(
     testQuote('NIFTY50', 2541860, { prevClose: 2520615 }),
@@ -38,7 +45,7 @@ describe('Header (T-025)', () => {
   });
 
   it('shows the live index tickers with arrows and text, and a market status', async () => {
-    await renderDashboard();
+    await renderDashboard({ signedIn: false });
     expect(
       screen.getAllByText(/NIFTY 50 25,418.60, up 212.45 points, up 0.84 percent/).length,
     ).toBeGreaterThan(0);
@@ -46,7 +53,10 @@ describe('Header (T-025)', () => {
       screen.getAllByText(/SENSEX 83,092.15, down 99.70 points, down 0.12 percent/).length,
     ).toBeGreaterThan(0);
     expect(screen.getAllByRole('status', { name: /NSE market status/ }).length).toBeGreaterThan(0);
-    expect(screen.getByRole('link', { name: 'Log in' })).toHaveAttribute('href', '/login');
+    expect(screen.getByRole('link', { name: 'Log in' })).toHaveAttribute(
+      'href',
+      '/login?redirect=%2Fdashboard',
+    );
   });
 });
 

@@ -17,4 +17,11 @@ export const safeStorage = {
       // Storage is a convenience only; ignore failures.
     }
   },
+  remove(key: string): void {
+    try {
+      window.localStorage.removeItem(key);
+    } catch {
+      // Nothing to clean up if storage is unavailable.
+    }
+  },
 };
