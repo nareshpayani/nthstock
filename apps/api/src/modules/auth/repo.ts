@@ -11,6 +11,34 @@ export type OtpChallenge = {
   expiresAt: Date;
 };
 
+/** A device a user logged in from. */
+export type DeviceRecord = {
+  id: string;
+  userId: string;
+  label: string;
+  trusted: boolean;
+  createdAt: Date;
+  lastSeenAt: Date;
+};
+
+/** A login session; its id is also the refresh token family. */
+export type SessionRecord = {
+  id: string;
+  userId: string;
+  deviceId: string;
+  createdAt: Date;
+  expiresAt: Date;
+  revokedAt: Date | null;
+};
+
+/** One refresh token, stored by the SHA-256 of its value. */
+export type RefreshTokenRecord = {
+  sessionId: string;
+  expiresAt: Date;
+  /** Set when the token was rotated; presenting it again is reuse. */
+  usedAt: Date | null;
+};
+
 /**
  * Storage seam for auth state (ADR 0004 §3). In-memory in the mock phase; Redis (OTPs, throttles,
  * sessions) and Postgres (devices, PINs) implementations replace it later without changes to the
@@ -28,6 +56,26 @@ export interface AuthRepo {
   /** When an OTP was last requested for the mobile (resend throttle). */
   getLastOtpRequestAt(mobile: string): Promise<Date | null>;
   setLastOtpRequestAt(mobile: string, at: Date): Promise<void>;
+
+  createDevice(device: DeviceRecord): Promise<void>;
+  getDevice(id: string): Promise<DeviceRecord | null>;
+  updateDevice(
+    id: string,
+    patch: Partial<Pick<DeviceRecord, 'trusted' | 'lastSeenAt'>>,
+  ): Promise<DeviceRecord | null>;
+
+  createSession(session: SessionRecord): Promise<void>;
+  getSession(id: string): Promise<SessionRecord | null>;
+  /** Marks the session (the whole refresh token family) revoked. */
+  revokeSession(id: string, at: Date): Promise<void>;
+
+  putRefreshToken(hash: string, token: RefreshTokenRecord): Promise<void>;
+  /**
+   * Marks the token used and resolves to it as it was before this call, so exactly one caller sees
+   * `usedAt: null` (a Redis version uses GETSET). Null when the token is unknown.
+   */
+  useRefreshToken(hash: string, at: Date): Promise<RefreshTokenRecord | null>;
+
   /** Drops all state. Tests call it between cases. */
   reset(): Promise<void>;
 }
@@ -38,9 +86,31 @@ const copyChallenge = (c: OtpChallenge): OtpChallenge => ({
   expiresAt: new Date(c.expiresAt),
 });
 
+const copyDevice = (d: DeviceRecord): DeviceRecord => ({
+  ...d,
+  createdAt: new Date(d.createdAt),
+  lastSeenAt: new Date(d.lastSeenAt),
+});
+
+const copySession = (s: SessionRecord): SessionRecord => ({
+  ...s,
+  createdAt: new Date(s.createdAt),
+  expiresAt: new Date(s.expiresAt),
+  revokedAt: s.revokedAt ? new Date(s.revokedAt) : null,
+});
+
+const copyRefresh = (r: RefreshTokenRecord): RefreshTokenRecord => ({
+  ...r,
+  expiresAt: new Date(r.expiresAt),
+  usedAt: r.usedAt ? new Date(r.usedAt) : null,
+});
+
 export function createMemoryAuthRepo(): AuthRepo {
   const challenges = new Map<string, OtpChallenge>();
   const lastRequest = new Map<string, Date>();
+  const devices = new Map<string, DeviceRecord>();
+  const sessions = new Map<string, SessionRecord>();
+  const refreshTokens = new Map<string, RefreshTokenRecord>();
 
   return {
     putOtpChallenge: (challenge) => {
@@ -71,9 +141,51 @@ export function createMemoryAuthRepo(): AuthRepo {
       lastRequest.set(mobile, new Date(at));
       return Promise.resolve();
     },
+    createDevice: (device) => {
+      devices.set(device.id, copyDevice(device));
+      return Promise.resolve();
+    },
+    getDevice: (id) => {
+      const found = devices.get(id);
+      return Promise.resolve(found ? copyDevice(found) : null);
+    },
+    updateDevice: (id, patch) => {
+      const found = devices.get(id);
+      if (!found) return Promise.resolve(null);
+      const next = copyDevice({ ...found, ...patch });
+      devices.set(id, next);
+      return Promise.resolve(copyDevice(next));
+    },
+    createSession: (session) => {
+      sessions.set(session.id, copySession(session));
+      return Promise.resolve();
+    },
+    getSession: (id) => {
+      const found = sessions.get(id);
+      return Promise.resolve(found ? copySession(found) : null);
+    },
+    revokeSession: (id, at) => {
+      const found = sessions.get(id);
+      if (found && !found.revokedAt) found.revokedAt = new Date(at);
+      return Promise.resolve();
+    },
+    putRefreshToken: (hash, token) => {
+      refreshTokens.set(hash, copyRefresh(token));
+      return Promise.resolve();
+    },
+    useRefreshToken: (hash, at) => {
+      const found = refreshTokens.get(hash);
+      if (!found) return Promise.resolve(null);
+      const before = copyRefresh(found);
+      found.usedAt ??= new Date(at);
+      return Promise.resolve(before);
+    },
     reset: () => {
       challenges.clear();
       lastRequest.clear();
+      devices.clear();
+      sessions.clear();
+      refreshTokens.clear();
       return Promise.resolve();
     },
   };

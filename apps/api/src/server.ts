@@ -1,5 +1,6 @@
 import { buildApp } from './app.js';
 import { loadConfig } from './config.js';
+import { resolveJwtSecret } from './modules/auth/jwtSecret.js';
 import { createRedisPublisher } from './ticks/publisher.js';
 
 const config = loadConfig(process.env);
@@ -10,11 +11,21 @@ const tickLog = {
   warn: (message: string) => process.stderr.write(`${message}\n`),
 };
 
+const jwtSecret = resolveJwtSecret({
+  value: config.jwtSecret,
+  production: config.production,
+  onEphemeral: () =>
+    process.stderr.write(
+      'JWT_SECRET is not set: using an ephemeral dev key; sessions end when apps/api restarts.\n',
+    ),
+});
+
 const app = buildApp({
   logger: true,
   deps: {
     marketAlwaysOpen: config.mockMarketAlwaysOpen,
     production: config.production,
+    jwtSecret,
     // The mock SMS provider's dev log line (the OTP, outside production only).
     smsLog: (line) => process.stdout.write(`${line}\n`),
   },

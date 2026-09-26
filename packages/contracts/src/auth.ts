@@ -122,3 +122,36 @@ export const AuthErrorDetails = z.object({
   unlockWith: z.literal('OTP').optional(),
 });
 export type AuthErrorDetails = z.infer<typeof AuthErrorDetails>;
+
+// ---- Sessions --------------------------------------------------------------------------------
+
+/** Access token lifetime: 15 minutes (requirements BE-06). */
+export const ACCESS_TOKEN_TTL_SEC = 15 * 60;
+/** Refresh token lifetime; every refresh rotates it. */
+export const REFRESH_TOKEN_TTL_SEC = 30 * 24 * 60 * 60;
+
+/**
+ * Cookies apps/api sets, all httpOnly and SameSite=Strict:
+ * - `access`: the 15-min access JWT (Path=/), also read by apps/realtime on the WS upgrade;
+ * - `refresh`: the rotating refresh token (Path=/v1/auth).
+ */
+export const AUTH_COOKIES = {
+  access: 'nth_at',
+  refresh: 'nth_rt',
+} as const;
+
+export const ACCESS_TOKEN_ISSUER = 'nthstock-api';
+export const ACCESS_TOKEN_AUDIENCE = 'nthstock';
+
+/** Claims of the access JWT (HS256), shared by apps/api (signs) and apps/realtime (verifies). */
+export const AccessTokenClaims = z.object({
+  /** User id. */
+  sub: Id,
+  /** Session id; the refresh token family. Revoking it ends the session. */
+  sid: Id,
+  iss: z.literal(ACCESS_TOKEN_ISSUER),
+  aud: z.literal(ACCESS_TOKEN_AUDIENCE),
+  iat: z.number().int(),
+  exp: z.number().int(),
+});
+export type AccessTokenClaims = z.infer<typeof AccessTokenClaims>;

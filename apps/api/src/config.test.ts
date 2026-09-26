@@ -8,6 +8,7 @@ describe('loadConfig', () => {
       port: 4000,
       host: '0.0.0.0',
       mockMarketAlwaysOpen: false,
+      jwtSecret: undefined,
       redisUrl: null,
     });
     expect(loadConfig({ REDIS_URL: ' ' }).redisUrl).toBeNull();
@@ -17,6 +18,7 @@ describe('loadConfig', () => {
     expect(
       loadConfig({
         NODE_ENV: 'production',
+        JWT_SECRET: 'test-only-secret-at-least-32-characters',
         PORT: '8080',
         HOST: '127.0.0.1',
         MOCK_MARKET_ALWAYS_OPEN: 'true',
@@ -27,6 +29,7 @@ describe('loadConfig', () => {
       port: 8080,
       host: '127.0.0.1',
       mockMarketAlwaysOpen: true,
+      jwtSecret: 'test-only-secret-at-least-32-characters',
       redisUrl: 'redis://127.0.0.1:6379',
     });
     expect(loadConfig({ MOCK_MARKET_ALWAYS_OPEN: '0' }).mockMarketAlwaysOpen).toBe(false);
@@ -37,5 +40,6 @@ describe('loadConfig', () => {
     expect(() => loadConfig({ MOCK_MARKET_ALWAYS_OPEN: 'yes' })).toThrow(/MOCK_MARKET_ALWAYS_OPEN/);
     expect(() => loadConfig({ REDIS_URL: 'http://x' })).toThrow(/REDIS_URL/);
     expect(() => loadConfig({ NODE_ENV: 'prod' })).toThrow(/NODE_ENV/);
+    expect(() => loadConfig({ NODE_ENV: 'production' })).toThrow(/JWT_SECRET must be set/);
   });
 });

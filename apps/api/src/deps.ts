@@ -1,6 +1,7 @@
 import { MockMarketDataAdapter, type MarketDataAdapter } from '@nthstock/marketData';
 import { systemClock, type Clock } from '@nthstock/utils';
 import { createMockCaptchaVerifier, type CaptchaVerifier } from './modules/auth/captcha.js';
+import { resolveJwtSecret } from './modules/auth/jwtSecret.js';
 import { createMemoryAuthRepo, type AuthRepo } from './modules/auth/repo.js';
 import {
   createMockSmsProvider,
@@ -25,6 +26,8 @@ export type AppDeps = {
   production: boolean;
   sms: SmsProvider;
   captcha: CaptchaVerifier;
+  /** HS256 key for access tokens (JWT_SECRET; see `resolveJwtSecret`). */
+  jwtSecret: Uint8Array;
   /** Releases what `createDeps` created itself (the adapter's timers). Injected parts are left alone. */
   dispose(): void;
 };
@@ -41,6 +44,8 @@ export type DepsOverrides = {
   /** Where the default mock SMS provider writes its dev log line; default: nowhere. */
   smsLog?: SmsLog;
   captcha?: CaptchaVerifier;
+  /** Left out: a random per-process key outside production; production must pass one. */
+  jwtSecret?: Uint8Array;
 };
 
 /** Builds a fresh set of dependencies; each app (and each test app) gets its own in-memory state. */
@@ -63,6 +68,7 @@ export function createDeps(overrides: DepsOverrides = {}): AppDeps {
       overrides.sms ??
       createMockSmsProvider({ log: overrides.smsLog ?? (() => undefined), production }),
     captcha: overrides.captcha ?? createMockCaptchaVerifier({ production }),
+    jwtSecret: overrides.jwtSecret ?? resolveJwtSecret({ value: undefined, production }),
     dispose: () => owned?.dispose(),
   };
 }
