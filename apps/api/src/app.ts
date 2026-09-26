@@ -4,6 +4,8 @@ import { createDeps, type AppDeps, type DepsOverrides } from './deps.js';
 import { installErrorHandling } from './http/errorHandler.js';
 import { healthRoutes } from './modules/health/routes.js';
 import { marketRoutes } from './modules/market/routes.js';
+import type { Publisher } from './ticks/publisher.js';
+import { startTickPump, type TickPump } from './ticks/tickPump.js';
 
 export type AppOptions = {
   logger?: FastifyServerOptions['logger'];
@@ -11,6 +13,11 @@ export type AppOptions = {
   deps?: DepsOverrides;
   /** Requests per minute per client IP across all routes (CLAUDE.md security baseline). */
   rateLimitPerMinute?: number;
+  /**
+   * Publishes every adapter tick here once the app is ready (T-071); apps/realtime fans them out.
+   * Left out, the API serves REST only. The app closes the publisher when it closes.
+   */
+  tickPublisher?: Publisher;
 };
 
 export const DEFAULT_RATE_LIMIT_PER_MINUTE = 600;
@@ -35,6 +42,17 @@ export function buildApp(options: AppOptions = {}): App {
   app.addHook('onClose', async () => {
     deps.dispose();
   });
+  const publisher = options.tickPublisher;
+  if (publisher) {
+    let pump: TickPump | null = null;
+    app.addHook('onReady', async () => {
+      pump = await startTickPump({ market: deps.market, publisher, log: app.log });
+    });
+    app.addHook('onClose', async () => {
+      pump?.stop();
+      await publisher.close();
+    });
+  }
   app.register(healthRoutes(deps));
   app.register(marketRoutes(deps));
   return Object.assign(app, { deps });
