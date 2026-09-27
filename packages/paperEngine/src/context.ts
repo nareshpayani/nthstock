@@ -99,3 +99,29 @@ export function assertQty(value: number, what: string): void {
     throw new RangeError(`${what} must be a whole number of at least 1, got ${String(value)}`);
   }
 }
+
+/** A clock tests and demos move by hand. Starts at `at`; never moves on its own. */
+export type ManualClock = Clock & {
+  set(at: Date | string | number): void;
+  advance(ms: number): void;
+};
+
+export function createManualClock(at: Date | string | number): ManualClock {
+  let instant = toInstant(at);
+  return {
+    now: () => new Date(instant),
+    set: (next) => {
+      instant = toInstant(next);
+    },
+    advance: (ms) => {
+      if (!Number.isFinite(ms)) throw new RangeError(`Cannot advance by ${String(ms)} ms`);
+      instant += ms;
+    },
+  };
+}
+
+function toInstant(at: Date | string | number): number {
+  const ms = new Date(at).getTime();
+  if (Number.isNaN(ms)) throw new RangeError(`Invalid date: ${String(at)}`);
+  return ms;
+}

@@ -4,6 +4,7 @@ import {
   assertPaise,
   assertQty,
   createEngineContext,
+  createManualClock,
   createMapPriceSource,
   createSequentialIds,
 } from './context.js';
@@ -59,5 +60,26 @@ describe('guards', () => {
     expect(() => assertQty(1, 'qty')).not.toThrow();
     expect(() => assertQty(0, 'qty')).toThrow(/at least 1/);
     expect(() => assertQty(1.5, 'qty')).toThrow(RangeError);
+  });
+});
+
+describe('createManualClock', () => {
+  it('moves only when told to', () => {
+    const clock = createManualClock('2026-09-25T04:00:00Z');
+    expect(clock.now().toISOString()).toBe('2026-09-25T04:00:00.000Z');
+    clock.advance(60_000);
+    expect(clock.now().toISOString()).toBe('2026-09-25T04:01:00.000Z');
+    clock.set(new Date('2026-09-28T03:45:00Z'));
+    expect(clock.now().toISOString()).toBe('2026-09-28T03:45:00.000Z');
+    const seen = clock.now();
+    seen.setTime(0);
+    expect(clock.now().getTime()).not.toBe(0);
+  });
+
+  it('refuses invalid times', () => {
+    expect(() => createManualClock('not a date')).toThrow(/Invalid date/);
+    const clock = createManualClock(0);
+    expect(() => clock.set(Number.NaN)).toThrow(/Invalid date/);
+    expect(() => clock.advance(Number.POSITIVE_INFINITY)).toThrow(/Cannot advance/);
   });
 });
