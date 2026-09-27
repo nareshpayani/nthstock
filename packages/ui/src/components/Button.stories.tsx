@@ -17,6 +17,7 @@ export const Buy: Story = { args: { variant: 'buy', children: 'Buy INFY' } };
 export const Sell: Story = { args: { variant: 'sell', children: 'Sell INFY' } };
 export const Secondary: Story = { args: { variant: 'secondary', children: 'Cancel' } };
 export const Ghost: Story = { args: { variant: 'ghost', children: 'View all' } };
+export const Danger: Story = { args: { variant: 'danger', children: 'Cancel order' } };
 export const WithIcon: Story = { args: { icon: <IconPlus />, children: 'Add stock' } };
 export const Loading: Story = { args: { loading: true, children: 'Placing order' } };
 export const Disabled: Story = { args: { disabled: true } };
@@ -45,6 +46,7 @@ export const AllVariants: Story = {
       <Button variant="sell">Sell</Button>
       <Button variant="secondary">Secondary</Button>
       <Button variant="ghost">Ghost</Button>
+      <Button variant="danger">Danger</Button>
     </div>
   ),
 };

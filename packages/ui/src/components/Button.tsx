@@ -13,6 +13,8 @@ export const buttonVariants = cva(
         sell: 'bg-down text-surface hover:bg-down/90 active:bg-down/80',
         secondary: 'border border-line bg-surface text-ink hover:bg-canvas',
         ghost: 'bg-transparent text-brand hover:bg-brand-soft',
+        /** Destructive confirmations (cancel an order, reset the paper balance). */
+        danger: 'bg-down text-surface hover:bg-down/90 active:bg-down/80',
       },
       size: {
         sm: 'h-8 rounded-md px-3 text-label',
