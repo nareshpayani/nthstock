@@ -20,6 +20,7 @@ export {
 } from './harness.js';
 export { fetchBackend, type FetchBackendOptions, type FetchLike } from './fetchBackend.js';
 export { authScenarios } from './scenarios/auth.js';
+export { fundsScenarios } from './scenarios/funds.js';
 export { healthScenarios } from './scenarios/health.js';
 export { marketScenarios } from './scenarios/market.js';
 export { orderScenarios } from './scenarios/orders.js';
