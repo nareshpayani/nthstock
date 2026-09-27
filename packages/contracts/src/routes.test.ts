@@ -48,8 +48,8 @@ describe('route map types', () => {
 const entries = Object.entries(routes) as [RouteName, RouteDef][];
 
 describe('route map', () => {
-  it('has 38 routes', () => {
-    expect(entries).toHaveLength(38);
+  it('has 39 routes', () => {
+    expect(entries).toHaveLength(39);
   });
 
   it('keeps every path under /v1 and every method+path unique', () => {
