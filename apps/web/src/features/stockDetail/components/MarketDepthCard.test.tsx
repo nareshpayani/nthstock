@@ -80,10 +80,10 @@ async function openDepth(url: string, marketSession: MarketSession = CLOSED) {
   return card;
 }
 
-const widths = (table: HTMLElement) =>
+const scales = (table: HTMLElement) =>
   within(table)
     .getAllByTestId('depth-bar')
-    .map((bar) => bar.style.width);
+    .map((bar) => bar.style.transform);
 
 /** Advances the faked setInterval clock (refetchInterval) and lets fetches settle. */
 async function advance(ms: number) {
@@ -104,8 +104,9 @@ describe('market depth (T-110)', () => {
     expect(bidRows[0]).toHaveTextContent(formatCount(depth.bids[0]?.qty ?? 0));
 
     const max = depthScale(depth);
-    expect(widths(bids)).toEqual(depth.bids.map((l) => `${String(barPercent(l.qty, max))}%`));
-    expect(widths(asks)).toEqual(depth.asks.map((l) => `${String(barPercent(l.qty, max))}%`));
+    const scale = (qty: number) => `scaleX(${String(barPercent(qty, max) / 100)})`;
+    expect(scales(bids)).toEqual(depth.bids.map((l) => scale(l.qty)));
+    expect(scales(asks)).toEqual(depth.asks.map((l) => scale(l.qty)));
     expect(
       within(bids).getByRole('rowheader', { name: 'Total bid qty' }).nextElementSibling,
     ).toHaveTextContent(formatCount(depth.totalBidQty));
@@ -120,8 +121,20 @@ describe('market depth (T-110)', () => {
     const asks = within(card).getByRole('table', { name: 'Offers (sell orders)' });
 
     // The largest level is the best offer (240), so it is the only full-width bar.
-    expect(widths(asks)).toEqual(['100%', '75%', '38%', '10%', '3%']);
-    expect(widths(bids)).toEqual(['50%', '25%', '13%', '5%', '2%']);
+    expect(scales(asks)).toEqual([
+      'scaleX(1)',
+      'scaleX(0.75)',
+      'scaleX(0.38)',
+      'scaleX(0.1)',
+      'scaleX(0.03)',
+    ]);
+    expect(scales(bids)).toEqual([
+      'scaleX(0.5)',
+      'scaleX(0.25)',
+      'scaleX(0.13)',
+      'scaleX(0.05)',
+      'scaleX(0.02)',
+    ]);
     expect(within(bids).getAllByTestId('depth-bid-row')[0]).toHaveTextContent('₹1,523.40');
     expect(within(asks).getAllByTestId('depth-ask-row')[0]).toHaveTextContent(/₹1,523\.4512240/);
     expect(within(card).getByText('1,48,900')).toBeInTheDocument();

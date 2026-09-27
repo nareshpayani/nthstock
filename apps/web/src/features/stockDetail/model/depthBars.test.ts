@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { MIN_BAR_PERCENT, barPercent, depthScale } from './depthBars';
+import { FIGURE_SPACE, MIN_BAR_PERCENT, barPercent, depthScale, padToWidest } from './depthBars';
 
 const levels = (qtys: number[]) => qtys.map((qty, i) => ({ price: 1_000 + i * 5, qty, orders: 1 }));
 const depthFixture = { bids: levels([120, 80, 40, 20, 10]), asks: levels([100, 60, 30, 15, 5]) };
@@ -24,5 +24,15 @@ describe('depth bars', () => {
     expect(barPercent(1, 10_000)).toBe(MIN_BAR_PERCENT);
     expect(barPercent(0, 120)).toBe(0);
     expect(barPercent(5, 0)).toBe(0);
+  });
+
+  it('pads numbers to the widest with figure spaces', () => {
+    const f = FIGURE_SPACE;
+    expect(padToWidest(['980', '1,020', '7'])).toEqual([
+      `${f}${f}980`,
+      '1,020',
+      `${f}${f}${f}${f}7`,
+    ]);
+    expect(padToWidest([])).toEqual([]);
   });
 });

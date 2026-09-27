@@ -1,4 +1,4 @@
-import type { Depth, DepthLevel, Instrument } from '@nthstock/contracts';
+import type { Depth, Instrument } from '@nthstock/contracts';
 import { DEPTH_LEVELS } from '@nthstock/contracts';
 import { ErrorState, Skeleton, cn } from '@nthstock/ui';
 import { formatInr, formatIstTime } from '@nthstock/utils';
@@ -10,7 +10,7 @@ import { useMarketOpen } from '@/shared/hooks/useMarketOpen';
 import { usePageVisible } from '@/shared/hooks/usePageVisible';
 import { useApiClient } from '@/shared/lib/apiClientContext';
 import { DEPTH_REFRESH_MS, depthQuery } from '../api/stockDetailQueries';
-import { barPercent, depthScale } from '../model/depthBars';
+import { barPercent, depthScale, padToWidest } from '../model/depthBars';
 import { formatCount } from '../model/statFormat';
 import { strings } from '../strings';
 
@@ -41,12 +41,40 @@ const ROWS = Array.from({ length: DEPTH_LEVELS }, (_, i) => i);
 const cell = 'h-8 px-2 py-0 align-middle';
 const numeric = 'text-right font-mono tabular-nums';
 
+/** One level ready to draw: display strings plus the bar's share of the largest level. */
+type Row = { price: string; orders: string; qty: string; percent: number };
+type SideRows = { rows: Row[]; total: string };
+
+/**
+ * Display strings for both sides. Orders, quantities and totals are padded to a shared width
+ * (padToWidest) across both tables, so right-aligned numbers do not move when they refresh.
+ */
+function formatBook(depth: Depth): Record<Side, SideRows> {
+  const maxQty = depthScale(depth);
+  const levels = [...depth.bids, ...depth.asks];
+  const orders = padToWidest(levels.map((l) => formatCount(l.orders)));
+  const qtys = padToWidest(levels.map((l) => formatCount(l.qty)));
+  const [totalBid = '', totalAsk = ''] = padToWidest([
+    formatCount(depth.totalBidQty),
+    formatCount(depth.totalAskQty),
+  ]);
+  const rows = (offset: number) =>
+    levels.slice(offset, offset + DEPTH_LEVELS).map((level, i) => ({
+      price: formatInr(level.price),
+      orders: orders[offset + i] ?? '',
+      qty: qtys[offset + i] ?? '',
+      percent: barPercent(level.qty, maxQty),
+    }));
+  return {
+    bid: { rows: rows(0), total: totalBid },
+    ask: { rows: rows(depth.bids.length), total: totalAsk },
+  };
+}
+
 type DepthSideProps = {
   side: Side;
   /** Null while loading: the same rows render with skeletons, so nothing moves on arrival. */
-  levels: readonly DepthLevel[] | null;
-  total: number | null;
-  maxQty: number;
+  book: SideRows | null;
 };
 
 /**
@@ -54,7 +82,7 @@ type DepthSideProps = {
  * quantity scaled to the largest level on either side, and the side's total quantity. The caption
  * names the side, so colour is never the only way to tell bids from offers.
  */
-function DepthSide({ side, levels, total, maxQty }: DepthSideProps) {
+function DepthSide({ side, book }: DepthSideProps) {
   const labels = SIDE[side];
   return (
     <table className="w-full table-fixed border-collapse text-body" data-side={side}>
@@ -81,26 +109,35 @@ function DepthSide({ side, levels, total, maxQty }: DepthSideProps) {
       </thead>
       <tbody>
         {ROWS.map((i) => {
-          const level = levels?.[i];
+          const level = book?.rows[i];
           return (
             // Rows are keyed by position, not price, so a refresh updates them in place.
             <tr key={i} data-testid={`depth-${side}-row`}>
               <td className={cn(cell, 'font-mono tabular-nums', labels.priceClass)}>
-                {level ? formatInr(level.price) : <Skeleton className="h-4 w-16" />}
+                {level ? level.price : <Skeleton className="h-4 w-16" />}
               </td>
               <td className={cn(cell, numeric, 'text-ink-muted')}>
-                {level ? formatCount(level.orders) : <Skeleton className="ml-auto h-4 w-6" />}
+                {level ? level.orders : <Skeleton className="ml-auto h-4 w-6" />}
               </td>
               <td className={cn(cell, numeric, 'relative text-ink')}>
                 {level ? (
                   <>
+                    {/*
+                      A full-width bar scaled with a transform, not a width: a transform never
+                      counts as a layout shift, so the once-a-second refresh keeps CLS at zero.
+                    */}
                     <span
                       aria-hidden="true"
                       data-testid="depth-bar"
-                      className={cn('absolute inset-y-1 right-0 rounded-sm', labels.barClass)}
-                      style={{ width: `${String(barPercent(level.qty, maxQty))}%` }}
+                      className={cn(
+                        'absolute inset-y-1 right-0 left-0 origin-right rounded-sm transition-transform duration-(--nth-duration-flash) motion-reduce:transition-none',
+                        labels.barClass,
+                      )}
+                      style={{
+                        transform: `scaleX(${String(level.percent / 100)})`,
+                      }}
                     />
-                    <span className="relative">{formatCount(level.qty)}</span>
+                    <span className="relative">{level.qty}</span>
                   </>
                 ) : (
                   <Skeleton className="ml-auto h-4 w-12" />
@@ -120,7 +157,7 @@ function DepthSide({ side, levels, total, maxQty }: DepthSideProps) {
             {labels.total}
           </th>
           <td className={cn(cell, numeric, 'font-semibold text-ink')}>
-            {total === null ? <Skeleton className="ml-auto h-4 w-14" /> : formatCount(total)}
+            {book ? book.total : <Skeleton className="ml-auto h-4 w-14" />}
           </td>
         </tr>
       </tfoot>
@@ -129,22 +166,12 @@ function DepthSide({ side, levels, total, maxQty }: DepthSideProps) {
 }
 
 function DepthBook({ depth }: { depth: Depth | null }) {
-  const maxQty = depth ? depthScale(depth) : 0;
+  const book = depth ? formatBook(depth) : null;
   return (
     <div className="@container">
       <div className="grid gap-4 @md:grid-cols-2">
-        <DepthSide
-          side="bid"
-          levels={depth?.bids ?? null}
-          total={depth?.totalBidQty ?? null}
-          maxQty={maxQty}
-        />
-        <DepthSide
-          side="ask"
-          levels={depth?.asks ?? null}
-          total={depth?.totalAskQty ?? null}
-          maxQty={maxQty}
-        />
+        <DepthSide side="bid" book={book?.bid ?? null} />
+        <DepthSide side="ask" book={book?.ask ?? null} />
       </div>
     </div>
   );
