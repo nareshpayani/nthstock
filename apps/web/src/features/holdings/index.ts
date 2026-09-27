@@ -1,1 +1,10 @@
 export { PortfolioPage } from './components/PortfolioPage';
+export { holdingsKeys, holdingsQuery, portfolioSummaryQuery } from './api/holdingsQuery';
+export { useLiveHolding, useLiveHoldings } from './hooks/useLiveHoldings';
+export {
+  createLiveHoldingsSelector,
+  holdingsTotals,
+  liveHolding,
+  type LiveHoldings,
+  type LiveHoldingsTotals,
+} from './model/liveHoldings';
