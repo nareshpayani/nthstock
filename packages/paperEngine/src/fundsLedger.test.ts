@@ -3,6 +3,7 @@ import { fixedClock } from '@nthstock/utils';
 import { describe, expect, it } from 'vitest';
 import { createEngineContext, createMapPriceSource } from './context.js';
 import { FundsLedger } from './fundsLedger.js';
+import { seeded } from './testHarness.js';
 
 const newLedger = (openingBalance?: number) =>
   new FundsLedger(
@@ -138,17 +139,6 @@ describe('FundsLedger (T-066)', () => {
 });
 
 /** Small seeded PRNG so the randomised test is reproducible (mulberry32). */
-function seeded(seed: number): () => number {
-  let a = seed >>> 0;
-  return () => {
-    a = (a + 0x6d2b79f5) >>> 0;
-    let t = a;
-    t = Math.imul(t ^ (t >>> 15), t | 1);
-    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
-}
-
 describe('FundsLedger.settleForcedBuy (T-130)', () => {
   it('debits an intraday square-off even when it overdraws, and the summary shows it', () => {
     const ledger = newLedger(1_000_00);
