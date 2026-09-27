@@ -102,11 +102,12 @@ jobs:
 
   # T-169 and T-170: lab Web Vitals budgets (LCP < 2.0 s, CLS < 0.05, TBT as the INP proxy) on the
   # dashboard and stock detail under Lighthouse's desktop throttling, and no main-thread task over
-  # 50 ms with 200 ticking symbols. Its own job, one worker, so nothing competes for the CPU.
+  # 50 ms with 200 ticking symbols. Its own job, one worker, so nothing competes for the CPU. Then
+  # Lighthouse CI itself enforces the same budgets plus the performance and accessibility scores.
   perf:
     name: Web vitals and render budgets (Chrome)
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
@@ -124,6 +125,26 @@ jobs:
         with:
           name: perf-report
           path: apps/web/playwright-report
+          retention-days: 14
+      # T-169: Lighthouse CI on / and /stocks/INFY (desktop preset, median of 3 runs): LCP, CLS,
+      # TBT, performance and accessibility scores. lighthouserc.cjs builds the msw-mode app into
+      # dist-lhci and serves it with vite preview (strict CSP on), then writes the reports to
+      # apps/web/lighthouse-report only: no public storage, no LHCI server.
+      # @lhci/cli runs as a pinned npx download, not a devDependency: its dependency tree fails
+      # `npm audit --audit-level=high` with no fixed version. Owner approved 2026-09-27.
+      - name: Lighthouse CI
+        if: ${{ !cancelled() }}
+        working-directory: apps/web
+        run: |
+          CHROME_PATH="$(node -e "process.stdout.write(require('@playwright/test').chromium.executablePath())")"
+          export CHROME_PATH
+          npx --yes @lhci/cli@0.15.1 autorun --config=lighthouserc.cjs
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lighthouse-report
+          path: apps/web/lighthouse-report
+          if-no-files-found: warn
           retention-days: 14
 
   # T-164: the golden path and the scripted-order scenarios (@api specs) against the real backends:

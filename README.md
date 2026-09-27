@@ -17,6 +17,7 @@ npm run storybook  # design system on http://localhost:6006
 npm run e2e        # Playwright E2E (Chrome), msw mode with the mock market forced open
 npm run e2e:api    # the @api specs against apps/api + apps/realtime (build them first; needs Redis)
 npm run e2e:perf   # the @perf specs: Web Vitals budgets and the 200-symbol render budget
+npm run lhci -w @nthstock/web  # Lighthouse CI budgets on / and /stocks/INFY (see below)
 npm run infra:up   # Redis 7 in Docker Compose on 127.0.0.1:6379 (see infra/README.md)
 ```
 
@@ -58,3 +59,23 @@ prices is at `/dev/prices`.
 | `packages/ui`        | Design system components (Radix, cva, Tailwind) and Storybook               |
 | `packages/apiClient` | Typed REST client, live-quote WebSocket client and quote store              |
 | `packages/tokens`    | Design tokens → `tokens.css`, Tailwind v4 theme, self-hosted IBM Plex fonts |
+
+## Performance budgets (T-169)
+
+CI's "Web vitals and render budgets (Chrome)" job runs the `@perf` Playwright specs and then
+**Lighthouse CI** (`apps/web/lighthouserc.cjs`) on `/` (the dashboard) and `/stocks/INFY`: the
+production msw-mode build served by `vite preview` with the strict CSP, desktop preset, 3 runs per
+URL, median checked. Budgets from CLAUDE.md §3: LCP < 2000 ms, CLS < 0.05, TBT < 150 ms (the INP
+proxy), performance and accessibility scores ≥ 0.9. Initial JS < 200 KB gzipped is enforced by
+`scripts/checkBuild.mjs` on every build; Lighthouse only warns on it, because in msw mode it also
+counts the lazy MSW + mock-market chunk. The HTML and JSON reports are the `lighthouse-report`
+artifact of the job.
+
+Lighthouse CI is not a dependency (its dependency tree fails `npm audit`); the script runs a pinned
+`npx --yes @lhci/cli@0.15.1`, downloaded into the npx cache on first use. Build the workspace
+packages once, then point it at a Chrome or Chromium:
+
+```bash
+npx turbo run build --filter=@nthstock/web^...
+CHROME_PATH=/opt/pw-browsers/chromium npm run lhci -w @nthstock/web   # reports in apps/web/lighthouse-report
+```

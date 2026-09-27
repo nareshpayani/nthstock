@@ -42,6 +42,9 @@ export default tseslint.config(
       'public/mockServiceWorker.js',
       'dist-api/**',
       'dist-e2e*/**',
+      'dist-lhci/**',
+      'lighthouse-report/**',
+      '.lighthouseci/**',
     ],
   },
   ...baseConfig,
@@ -61,5 +64,10 @@ export default tseslint.config(
   {
     files: ['scripts/**/*.mjs', 'e2e/**/*.ts', 'playwright.config.ts'],
     languageOptions: { globals: globals.node },
+  },
+  {
+    // Lighthouse CI config (T-169): CommonJS, loaded by @lhci/cli under Node.
+    files: ['lighthouserc.cjs'],
+    languageOptions: { sourceType: 'commonjs', globals: globals.node },
   },
 );

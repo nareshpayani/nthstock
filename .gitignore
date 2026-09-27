@@ -13,3 +13,6 @@ test-results/
 research-output/
 dist-api/
 dist-e2e*/
+dist-lhci/
+lighthouse-report/
+.lighthouseci/
