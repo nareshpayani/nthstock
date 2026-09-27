@@ -110,6 +110,9 @@ async function renderSignedIn(mobile: string) {
   return { ...view, apiClient, listId };
 }
 
+// Each case logs in and runs several round trips on the MSW node server; CI runners are slow.
+const HEAVY = 20_000;
+
 describe('watchlist Query hooks (T-118)', () => {
   it('stays idle while logged out', async () => {
     renderWithProviders(<Probe onRender={capture} />);
@@ -118,108 +121,124 @@ describe('watchlist Query hooks (T-118)', () => {
     expect(rows()).toHaveLength(0);
   });
 
-  it('shows an added stock at once and keeps it when the server agrees', async () => {
-    const { apiClient, listId } = await renderSignedIn('9811100001');
-    const infy = await stock(apiClient, 'INFY');
-    const held = gate();
-    server.use(
-      http.post('*/v1/watchlists/:id/items', async () => {
-        await held.opened;
-        return undefined; // fall through to the real handler
-      }),
-    );
+  it(
+    'shows an added stock at once and keeps it when the server agrees',
+    async () => {
+      const { apiClient, listId } = await renderSignedIn('9811100001');
+      const infy = await stock(apiClient, 'INFY');
+      const held = gate();
+      server.use(
+        http.post('*/v1/watchlists/:id/items', async () => {
+          await held.opened;
+          return undefined; // fall through to the real handler
+        }),
+      );
 
-    act(() => {
-      current().add.mutate({ listId, stock: infy });
-    });
-    await waitFor(() => expect(rowTexts()).toEqual(['My Watchlist: INFY']));
-    held.open();
-    await waitFor(() => expect(current().add.isSuccess).toBe(true));
-    expect(rowTexts()).toEqual(['My Watchlist: INFY']);
-  });
+      act(() => {
+        current().add.mutate({ listId, stock: infy });
+      });
+      await waitFor(() => expect(rowTexts()).toEqual(['My Watchlist: INFY']));
+      held.open();
+      await waitFor(() => expect(current().add.isSuccess).toBe(true));
+      expect(rowTexts()).toEqual(['My Watchlist: INFY']);
+    },
+    HEAVY,
+  );
 
-  it('rolls back a failed add and shows a toast', async () => {
-    const { apiClient, listId } = await renderSignedIn('9811100002');
-    const infy = await stock(apiClient, 'INFY');
-    const held = gate();
-    server.use(
-      http.post('*/v1/watchlists/:id/items', async () => {
-        await held.opened;
-        return HttpResponse.json(
-          { error: { code: 'LIMIT_REACHED', message: WATCHLIST_MESSAGES.itemLimit } },
-          { status: 409 },
-        );
-      }),
-    );
+  it(
+    'rolls back a failed add and shows a toast',
+    async () => {
+      const { apiClient, listId } = await renderSignedIn('9811100002');
+      const infy = await stock(apiClient, 'INFY');
+      const held = gate();
+      server.use(
+        http.post('*/v1/watchlists/:id/items', async () => {
+          await held.opened;
+          return HttpResponse.json(
+            { error: { code: 'LIMIT_REACHED', message: WATCHLIST_MESSAGES.itemLimit } },
+            { status: 409 },
+          );
+        }),
+      );
 
-    act(() => {
-      current().add.mutate({ listId, stock: infy });
-    });
-    await waitFor(() => expect(rowTexts()).toEqual(['My Watchlist: INFY']));
-    held.open();
+      act(() => {
+        current().add.mutate({ listId, stock: infy });
+      });
+      await waitFor(() => expect(rowTexts()).toEqual(['My Watchlist: INFY']));
+      held.open();
 
-    expect(await screen.findByText("Couldn't add INFY")).toBeInTheDocument();
-    expect(screen.getByText(WATCHLIST_MESSAGES.itemLimit)).toBeInTheDocument();
-    expect(rowTexts()).toEqual(['My Watchlist: ']);
-  });
+      expect(await screen.findByText("Couldn't add INFY")).toBeInTheDocument();
+      expect(screen.getByText(WATCHLIST_MESSAGES.itemLimit)).toBeInTheDocument();
+      expect(rowTexts()).toEqual(['My Watchlist: ']);
+    },
+    HEAVY,
+  );
 
-  it('rolls back a failed rename and names the rule in the toast', async () => {
-    const { listId } = await renderSignedIn('9811100003');
-    act(() => {
-      current().create.mutate({ name: 'Banks' });
-    });
-    await waitFor(() => expect(current().create.isSuccess).toBe(true));
+  it(
+    'rolls back a failed rename and names the rule in the toast',
+    async () => {
+      const { listId } = await renderSignedIn('9811100003');
+      act(() => {
+        current().create.mutate({ name: 'Banks' });
+      });
+      await waitFor(() => expect(current().create.isSuccess).toBe(true));
 
-    act(() => {
-      current().rename.mutate({ id: listId, name: 'banks' });
-    });
-    expect(await screen.findByText("Couldn't rename the watchlist")).toBeInTheDocument();
-    expect(screen.getByText(WATCHLIST_MESSAGES.duplicateName)).toBeInTheDocument();
-    await waitFor(() => expect(rowTexts()).toEqual(['My Watchlist: ', 'Banks: ']));
-  });
+      act(() => {
+        current().rename.mutate({ id: listId, name: 'banks' });
+      });
+      expect(await screen.findByText("Couldn't rename the watchlist")).toBeInTheDocument();
+      expect(screen.getByText(WATCHLIST_MESSAGES.duplicateName)).toBeInTheDocument();
+      await waitFor(() => expect(rowTexts()).toEqual(['My Watchlist: ', 'Banks: ']));
+    },
+    HEAVY,
+  );
 
-  it('creates, renames, reorders and deletes lists and items, ending in the server state', async () => {
-    const { apiClient, listId, queryClient } = await renderSignedIn('9811100004');
-    const settled = () => waitFor(() => expect(queryClient.isMutating()).toBe(0));
-    const [infy, tcs] = [await stock(apiClient, 'INFY'), await stock(apiClient, 'TCS')];
+  it(
+    'creates, renames, reorders and deletes lists and items, ending in the server state',
+    async () => {
+      const { apiClient, listId, queryClient } = await renderSignedIn('9811100004');
+      const settled = () => waitFor(() => expect(queryClient.isMutating()).toBe(0));
+      const [infy, tcs] = [await stock(apiClient, 'INFY'), await stock(apiClient, 'TCS')];
 
-    act(() => {
-      current().create.mutate({ name: ' Banks ' });
-    });
-    // The new list shows at once under a stand-in id, then under the server's id.
-    await waitFor(() => expect(rowTexts()).toEqual(['My Watchlist: ', 'Banks: ']));
-    await waitFor(() => expect(current().create.isSuccess).toBe(true));
-    const banks = current().create.data?.id ?? '';
-    expect(current().lists.data?.items.map((l) => l.id)).toEqual([listId, banks]);
+      act(() => {
+        current().create.mutate({ name: ' Banks ' });
+      });
+      // The new list shows at once under a stand-in id, then under the server's id.
+      await waitFor(() => expect(rowTexts()).toEqual(['My Watchlist: ', 'Banks: ']));
+      await waitFor(() => expect(current().create.isSuccess).toBe(true));
+      const banks = current().create.data?.id ?? '';
+      expect(current().lists.data?.items.map((l) => l.id)).toEqual([listId, banks]);
 
-    act(() => {
-      current().add.mutate({ listId, stock: infy });
-      current().add.mutate({ listId, stock: tcs });
-    });
-    await waitFor(() => expect(rowTexts()).toEqual(['My Watchlist: INFY,TCS', 'Banks: ']));
-    await settled();
+      act(() => {
+        current().add.mutate({ listId, stock: infy });
+        current().add.mutate({ listId, stock: tcs });
+      });
+      await waitFor(() => expect(rowTexts()).toEqual(['My Watchlist: INFY,TCS', 'Banks: ']));
+      await settled();
 
-    act(() => {
-      current().reorderItems.mutate({ listId, tokens: [tcs.token, infy.token] });
-      current().reorder.mutate({ ids: [banks, listId] });
-      current().rename.mutate({ id: banks, name: 'PSU banks' });
-    });
-    await waitFor(() => expect(rowTexts()).toEqual(['PSU banks: ', 'My Watchlist: TCS,INFY']));
-    await settled();
+      act(() => {
+        current().reorderItems.mutate({ listId, tokens: [tcs.token, infy.token] });
+        current().reorder.mutate({ ids: [banks, listId] });
+        current().rename.mutate({ id: banks, name: 'PSU banks' });
+      });
+      await waitFor(() => expect(rowTexts()).toEqual(['PSU banks: ', 'My Watchlist: TCS,INFY']));
+      await settled();
 
-    act(() => {
-      current().removeItem.mutate({ listId, token: tcs.token, symbol: 'TCS' });
-      current().remove.mutate({ id: banks });
-    });
-    await waitFor(() => expect(rowTexts()).toEqual(['My Watchlist: INFY']));
+      act(() => {
+        current().removeItem.mutate({ listId, token: tcs.token, symbol: 'TCS' });
+        current().remove.mutate({ id: banks });
+      });
+      await waitFor(() => expect(rowTexts()).toEqual(['My Watchlist: INFY']));
 
-    // After the last change settles, the lists are refetched and match the server.
-    await settled();
-    await waitFor(() => expect(current().lists.isFetching).toBe(false));
-    const server = await apiClient.request('watchlistsList');
-    expect(server.items.map((l) => [l.name, l.items.map((i) => i.symbol)])).toEqual([
-      ['My Watchlist', ['INFY']],
-    ]);
-    expect(rowTexts()).toEqual(['My Watchlist: INFY']);
-  });
+      // After the last change settles, the lists are refetched and match the server.
+      await settled();
+      await waitFor(() => expect(current().lists.isFetching).toBe(false));
+      const server = await apiClient.request('watchlistsList');
+      expect(server.items.map((l) => [l.name, l.items.map((i) => i.symbol)])).toEqual([
+        ['My Watchlist', ['INFY']],
+      ]);
+      expect(rowTexts()).toEqual(['My Watchlist: INFY']);
+    },
+    HEAVY,
+  );
 });

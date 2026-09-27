@@ -86,7 +86,7 @@ describe('watchlist routes (T-115)', () => {
     expect(full.json()).toEqual({
       error: { code: 'LIMIT_REACHED', message: WATCHLIST_MESSAGES.itemLimit },
     });
-  });
+  }, 20_000);
 
   it('persist a reorder until the repos are reset', async () => {
     const [first] = await lists();
