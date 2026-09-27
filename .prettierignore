@@ -10,4 +10,4 @@ playwright-report
 test-results
 apps/web/public/mockServiceWorker.js
 dist-api
-dist-e2e
+dist-e2e*

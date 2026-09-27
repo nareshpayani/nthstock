@@ -41,7 +41,7 @@ export default tseslint.config(
       'test-results/**',
       'public/mockServiceWorker.js',
       'dist-api/**',
-      'dist-e2e/**',
+      'dist-e2e*/**',
     ],
   },
   ...baseConfig,
