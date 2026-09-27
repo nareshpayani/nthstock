@@ -1,4 +1,4 @@
-import type { Exchange, Order, OrderSide } from '@nthstock/contracts';
+import type { Exchange, Order, OrderSide, ProductType } from '@nthstock/contracts';
 import { create } from 'zustand';
 
 /** What the order ticket should open with: the instrument and the side. */
@@ -11,6 +11,10 @@ export type TicketIntent = {
    * and only quantity and price can change.
    */
   modify?: Order;
+  /** Quantity to prefill, e.g. the open quantity when exiting a position (T-150). */
+  qty?: number;
+  /** Product to prefill, e.g. the position's own when exiting it (T-150). */
+  product?: ProductType;
 };
 
 /**

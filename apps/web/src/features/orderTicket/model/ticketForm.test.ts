@@ -64,6 +64,16 @@ describe('ticket form schema (T-136) validation matrix', () => {
       price: null,
     });
   });
+
+  it('prefills quantity and product from the intent (Exit on a position, T-150)', () => {
+    expect(defaultTicketValues('SELL', { qty: 10, product: 'INTRADAY' })).toEqual({
+      side: 'SELL',
+      type: 'MARKET',
+      product: 'INTRADAY',
+      qty: 10,
+      price: null,
+    });
+  });
 });
 
 describe('toPlaceOrderRequest', () => {

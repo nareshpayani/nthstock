@@ -48,9 +48,21 @@ function firstMessage(error: z.ZodError): string {
   return error.issues[0]?.message ?? 'Invalid value';
 }
 
-/** A fresh ticket: the side the user asked for, a delivery market order for one share. */
-export function defaultTicketValues(side: OrderSide): TicketFormValues {
-  return { side, type: 'MARKET', product: 'DELIVERY', qty: 1, price: null };
+/**
+ * A fresh ticket: the side the user asked for, a market order, for one delivery share unless the
+ * intent prefills the quantity and product (Exit on a position, T-150).
+ */
+export function defaultTicketValues(
+  side: OrderSide,
+  prefill: { qty?: number | undefined; product?: ProductType | undefined } = {},
+): TicketFormValues {
+  return {
+    side,
+    type: 'MARKET',
+    product: prefill.product ?? 'DELIVERY',
+    qty: prefill.qty ?? 1,
+    price: null,
+  };
 }
 
 /**
