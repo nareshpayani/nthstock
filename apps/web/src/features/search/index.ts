@@ -1,1 +1,1 @@
-export { SearchBox, type SearchBoxProps } from './components/SearchBox';
+export { SearchBox, type SearchAddTarget, type SearchBoxProps } from './components/SearchBox';

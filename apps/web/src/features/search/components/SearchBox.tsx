@@ -22,8 +22,17 @@ import { SearchOption } from './SearchOption';
 /** Typing pauses this long before a search request goes out (T-103). */
 export const SEARCH_DEBOUNCE_MS = 150;
 
+/** Adds a result to the open watchlist (T-121); the watchlist feature provides it. */
+export type SearchAddTarget = {
+  listName: string;
+  has: (hit: SearchHit) => boolean;
+  add: (hit: SearchHit) => void;
+};
+
 export type SearchBoxProps = {
   ref?: Ref<HTMLInputElement>;
+  /** When set, each result gets an add button and Shift+Enter adds the highlighted one. */
+  addTo?: SearchAddTarget | null | undefined;
   /** Called after a stock is chosen and navigation has started, e.g. to close a drawer. */
   onNavigate?: () => void;
 };
@@ -36,7 +45,7 @@ type Group = { key: 'results' | 'recent' | 'popular'; title: string | null; hits
  * shows recent searches, then popular ones. ↑/↓ move, Enter opens /stocks/<symbol>, Esc closes the
  * list and returns focus to where it was before the search.
  */
-export function SearchBox({ ref, onNavigate }: SearchBoxProps) {
+export function SearchBox({ ref, onNavigate, addTo }: SearchBoxProps) {
   const api = useApiClient();
   const queryClient = useQueryClient();
   const navigate = useNavigate();
@@ -167,6 +176,10 @@ export function SearchBox({ ref, onNavigate }: SearchBoxProps) {
       case 'Enter': {
         event.preventDefault();
         const hit = expanded ? options[activeIndex] : undefined;
+        if (event.shiftKey && addTo) {
+          if (hit) addTo.add(hit);
+          return;
+        }
         if (hit) choose(hit);
         else if (typing) void chooseFirstMatch();
         return;
@@ -258,6 +271,15 @@ export function SearchBox({ ref, onNavigate }: SearchBoxProps) {
                   selected={at === activeIndex}
                   onChoose={() => choose(hit)}
                   onHover={() => setActive(at)}
+                  add={
+                    addTo
+                      ? {
+                          listName: addTo.listName,
+                          added: addTo.has(hit),
+                          onAdd: () => addTo.add(hit),
+                        }
+                      : undefined
+                  }
                 />
               );
             });
@@ -276,6 +298,11 @@ export function SearchBox({ ref, onNavigate }: SearchBoxProps) {
             );
           })}
         </div>
+        {addTo && options.length > 0 ? (
+          <p className="border-t border-line px-3 pt-2 pb-1 text-label text-ink-muted">
+            {strings.addHint(addTo.listName)}
+          </p>
+        ) : null}
       </div>
       <p role="status" className="sr-only">
         {listening ? announcement : ''}
