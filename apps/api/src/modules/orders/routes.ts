@@ -40,6 +40,13 @@ export const orderRoutes =
 
     registerRoute(
       app,
+      'orderHistory',
+      ({ request, params }) => orders.history(userOf(request), params.id),
+      options,
+    );
+
+    registerRoute(
+      app,
       'orderPlace',
       ({ request, body }) => orders.place(userOf(request), body),
       options,
