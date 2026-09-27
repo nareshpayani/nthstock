@@ -96,9 +96,5 @@ export const strings = {
     buyLabel: (symbol: string) => `Buy ${symbol}`,
     sellLabel: (symbol: string) => `Sell ${symbol}`,
     paperNote: 'Paper trading: virtual cash only.',
-    ticketSoon: {
-      title: (side: string, symbol: string) => `${side} ${symbol}`,
-      body: 'The paper order ticket opens here in an upcoming release.',
-    },
   },
 } as const;

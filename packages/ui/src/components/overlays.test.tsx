@@ -1,5 +1,5 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { useRef } from 'react';
+import { useRef, useState } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 import { Button } from './Button.js';
 import { Dialog, Sheet } from './Dialog.js';
@@ -75,6 +75,39 @@ describe('Sheet', () => {
   it('can slide from the left', async () => {
     render(<Sheet title="Menu" side="left" defaultOpen />);
     expect(await screen.findByRole('dialog', { name: 'Menu' })).toHaveClass('left-0');
+  });
+
+  it('returns focus to returnFocus when opened without a trigger, over a light overlay', async () => {
+    function Ticket() {
+      const buy = useRef<HTMLButtonElement>(null);
+      const [open, setOpen] = useState(false);
+      return (
+        <>
+          <Button ref={buy} onClick={() => setOpen(true)}>
+            Buy INFY
+          </Button>
+          <Sheet
+            title="Trade INFY"
+            open={open}
+            onOpenChange={setOpen}
+            returnFocus={buy}
+            overlay="light"
+          >
+            <input aria-label="Quantity" />
+          </Sheet>
+        </>
+      );
+    }
+    render(<Ticket />);
+    const buy = screen.getByRole('button', { name: 'Buy INFY' });
+    buy.focus();
+    fireEvent.click(buy);
+    const dialog = await screen.findByRole('dialog', { name: 'Trade INFY' });
+    expect(document.querySelector('[data-overlay="light"]')).toHaveClass('bg-ink/10');
+    await waitFor(() => expect(dialog.contains(document.activeElement)).toBe(true));
+    fireEvent.keyDown(document.activeElement ?? dialog, { key: 'Escape' });
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    await waitFor(() => expect(buy).toHaveFocus());
   });
 });
 
@@ -198,6 +231,49 @@ describe('Toast', () => {
     await waitFor(() =>
       expect(screen.queryByRole('button', { name: 'Dismiss' })).not.toBeInTheDocument(),
     );
+  });
+
+  it('renders an action next to the message', async () => {
+    const onView = vi.fn();
+    function ActionButton() {
+      const toast = useToast();
+      return (
+        <Button
+          onClick={() =>
+            toast.show({
+              title: 'Order executed',
+              tone: 'success',
+              action: {
+                altText: 'Open Orders from the main navigation',
+                element: (
+                  <a
+                    href="/orders"
+                    onClick={(event) => {
+                      event.preventDefault();
+                      onView();
+                    }}
+                  >
+                    View orders
+                  </a>
+                ),
+              },
+            })
+          }
+        >
+          Place
+        </Button>
+      );
+    }
+    render(
+      <ToastProvider>
+        <ActionButton />
+      </ToastProvider>,
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Place' }));
+    const link = await screen.findByRole('link', { name: 'View orders' });
+    expect(link).toHaveAttribute('href', '/orders');
+    fireEvent.click(link);
+    expect(onView).toHaveBeenCalledTimes(1);
   });
 
   it('throws outside a provider', () => {

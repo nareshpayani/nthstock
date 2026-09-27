@@ -1,5 +1,5 @@
 import type { Exchange, Instrument, OrderSide, Quote } from '@nthstock/contracts';
-import { Button, SegmentedControl, useToast } from '@nthstock/ui';
+import { Button, SegmentedControl } from '@nthstock/ui';
 import { WatchlistStar } from '@/features/watchlist';
 import { LiveChange } from '@/shared/components/LiveChange';
 import { PriceCell } from '@/shared/components/PriceCell';
@@ -16,25 +16,18 @@ export type StockHeaderProps = {
 
 /**
  * Stock detail header (T-106): name, symbol, NSE/BSE toggle, the live price (PriceCell) and day
- * change (LiveChange, ▲▼ with text), and Buy/Sell for equities. Buy and Sell record the ticket
- * intent; a signed-out user goes through /login first.
+ * change (LiveChange, ▲▼ with text), and Buy/Sell for equities. Buy and Sell open the order
+ * ticket (T-135) through the ticket intent; a signed-out user goes through /login first.
  */
 export function StockHeader({ instrument, snapshot, onExchangeChange }: StockHeaderProps) {
   const { symbol, exchange, type } = instrument;
   const format = type === 'INDEX' ? 'index' : 'inr';
   const { listed, unlisted } = useExchangeListings(instrument);
   const openTicket = useOpenTicket();
-  const toast = useToast();
 
-  const trade = async (side: OrderSide) => {
-    const result = await openTicket({ symbol, exchange, side });
-    if (result === 'opened') {
-      const label = side === 'BUY' ? strings.header.buy : strings.header.sell;
-      toast.show({
-        title: strings.header.ticketSoon.title(label, symbol),
-        description: strings.header.ticketSoon.body,
-      });
-    }
+  // The order ticket slide-over (T-135) opens from the intent; signed out, login comes first.
+  const trade = (side: OrderSide) => {
+    void openTicket({ symbol, exchange, side });
   };
 
   return (
@@ -108,7 +101,7 @@ export function StockHeader({ instrument, snapshot, onExchangeChange }: StockHea
               variant="buy"
               size="lg"
               aria-label={strings.header.buyLabel(symbol)}
-              onClick={() => void trade('BUY')}
+              onClick={() => trade('BUY')}
             >
               {strings.header.buy}
             </Button>
@@ -116,7 +109,7 @@ export function StockHeader({ instrument, snapshot, onExchangeChange }: StockHea
               variant="sell"
               size="lg"
               aria-label={strings.header.sellLabel(symbol)}
-              onClick={() => void trade('SELL')}
+              onClick={() => trade('SELL')}
             >
               {strings.header.sell}
             </Button>

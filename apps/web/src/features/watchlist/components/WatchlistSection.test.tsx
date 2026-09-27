@@ -213,7 +213,6 @@ describe('row keys (T-122, T-125, T-121)', () => {
         exchange: 'NSE',
         side: 'BUY',
       });
-      expect(await screen.findByText('Buy INFY')).toBeInTheDocument();
 
       fireEvent.keyDown(rowLink('INFY'), { key: 'S' });
       expect(useTicketIntentStore.getState().intent?.side).toBe('SELL');
