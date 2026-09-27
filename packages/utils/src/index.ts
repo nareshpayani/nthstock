@@ -6,6 +6,7 @@ export {
   fixedClock,
   formatIstDate,
   formatIstTime,
+  formatIstTimeSeconds,
   fromIst,
   istDateKey,
   systemClock,

@@ -63,4 +63,34 @@ describe('describeOrderError (T-139)', () => {
     expect(described.title).toBe(title);
     expect(described.message).toMatch(message);
   });
+
+  it('speaks of modifying in modify mode, with the engine reason for a 409', () => {
+    const conflict = new ApiError({
+      kind: 'http',
+      status: 409,
+      code: 'INVALID_ORDER_STATE',
+      message: 'This order is already executed, so it can’t be modified.',
+    });
+    expect(describeOrderError(conflict, 'modify')).toEqual({
+      title: 'Order not modified',
+      message: 'This order is already executed, so it can’t be modified.',
+    });
+    expect(describeOrderError(http(404, 'NOT_FOUND'), 'modify').message).toMatch(/not found/);
+    expect(describeOrderError(new Error('boom'), 'modify')).toEqual({
+      title: 'Order not modified',
+      message: 'The order could not be modified. Try again.',
+    });
+    // A 422 on a modify leaves the order as it was: the reason shows, no rejected order.
+    const refused = new ApiError({
+      kind: 'http',
+      status: 422,
+      code: 'INSUFFICIENT_FUNDS',
+      message: 'Not enough cash.',
+      details: { order: { ...rejected, status: 'OPEN', statusReason: null } },
+    });
+    expect(describeOrderError(refused, 'modify')).toEqual({
+      title: 'Not enough cash',
+      message: 'Not enough cash.',
+    });
+  });
 });

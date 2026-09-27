@@ -30,6 +30,14 @@ describe('AMO (T-129)', () => {
       },
     ]);
     expect(updates.map((o) => o.status)).toEqual(['AMO', 'OPEN', 'EXECUTED']);
+    // Every step is in the order's history, each at its own instant (T-146).
+    expect(
+      engine.orderHistory(placed.order?.id ?? '')?.map((e) => [e.event, e.at, e.fillPrice]),
+    ).toEqual([
+      ['PLACED', '2026-09-25T14:30:00.000Z', null],
+      ['RELEASED', '2026-09-28T03:45:00.000Z', null],
+      ['EXECUTED', '2026-09-28T03:45:00.000Z', 1_510_00],
+    ]);
     // The block moved to the opening price, then settled.
     expect(engine.fundsSummary()).toMatchObject({
       blocked: 0,
@@ -134,6 +142,14 @@ describe('AMO (T-129)', () => {
     ]);
     expect(engine.fundsSummary()).toMatchObject({ blocked: 0, available: 15_000_00 });
     const id = placed.order?.id ?? '';
+    expect(engine.orderHistory(id)?.map((e) => [e.event, e.status, e.note])).toEqual([
+      ['PLACED', 'AMO', null],
+      [
+        'REJECTED',
+        'REJECTED',
+        'Not enough cash: this order needs ₹16,000.00 and ₹15,000.00 is available.',
+      ],
+    ]);
     expect(engine.cancel(id)).toMatchObject({ code: 'ILLEGAL_TRANSITION' });
   });
 

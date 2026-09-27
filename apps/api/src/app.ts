@@ -8,6 +8,7 @@ import { authRoutes } from './modules/auth/routes.js';
 import { healthRoutes } from './modules/health/routes.js';
 import { marketRoutes } from './modules/market/routes.js';
 import { orderRoutes } from './modules/orders/routes.js';
+import { portfolioRoutes } from './modules/portfolio/routes.js';
 import {
   startOrderUpdatePublisher,
   type OrderUpdatePublisher,
@@ -122,5 +123,6 @@ export function buildApp(options: AppOptions = {}): App {
   app.register(authRoutes(deps));
   app.register(watchlistRoutes(deps));
   app.register(orderRoutes(deps));
+  app.register(portfolioRoutes(deps));
   return Object.assign(app, { deps });
 }

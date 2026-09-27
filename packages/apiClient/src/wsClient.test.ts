@@ -69,6 +69,20 @@ describe('ws client subscriptions', () => {
     ]);
   });
 
+  it('connect() opens the socket without a symbol, once, and never after close()', () => {
+    const client = makeClient();
+    client.connect();
+    client.connect();
+    expect(FakeWebSocket.instances).toHaveLength(1);
+    const socket = FakeWebSocket.last();
+    socket.open();
+    expect(client.status()).toBe('open');
+    expect(socket.sent).toEqual([]);
+    client.close();
+    client.connect();
+    expect(FakeWebSocket.instances).toHaveLength(1);
+  });
+
   it('splits more than 200 symbols across frames', async () => {
     const client = makeClient();
     for (let i = 0; i < 250; i += 1) client.subscribe(`S${String(i)}`);

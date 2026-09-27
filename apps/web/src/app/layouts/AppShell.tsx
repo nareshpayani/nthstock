@@ -1,6 +1,7 @@
 import { Sheet } from '@nthstock/ui';
 import { Link } from '@tanstack/react-router';
 import { OrderTicketHost } from '@/features/orderTicket';
+import { OrderUpdatesBridge } from '@/features/orders';
 import { useRef, type ReactNode } from 'react';
 import { useShortcut } from '@/shared/hooks/useShortcut';
 import { useShellStore } from '../shellStore';
@@ -17,7 +18,8 @@ export type AppShellProps = {
 /**
  * Header, left rail and main area (T-024). At 1024 px and up the rail is a sticky column; below
  * that it lives in a left drawer together with the main tabs. "/" focuses search, "?" opens help.
- * The order ticket slide-over (T-135) is mounted here, so it opens over any page.
+ * The order ticket slide-over (T-135) is mounted here, so it opens over any page, and so is the
+ * order-update listener (T-147), so fills refresh the book and toast on any page.
  */
 export function AppShell({ children }: AppShellProps) {
   const drawerOpen = useShellStore((s) => s.drawerOpen);
@@ -90,6 +92,7 @@ export function AppShell({ children }: AppShellProps) {
       </Sheet>
       <ShortcutHelpDialog open={helpOpen} onOpenChange={setHelpOpen} />
       <OrderTicketHost />
+      <OrderUpdatesBridge />
     </div>
   );
 }

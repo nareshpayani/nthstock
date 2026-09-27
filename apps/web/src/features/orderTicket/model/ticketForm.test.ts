@@ -5,9 +5,12 @@ import {
   defaultTicketValues,
   newClientOrderId,
   orderValue,
+  ticketValuesFromOrder,
+  toModifyRequest,
   toPlaceOrderRequest,
   type TicketFormValues,
 } from './ticketForm';
+import { testOrder } from '@/test/orders';
 
 const base: TicketFormValues = defaultTicketValues('BUY');
 
@@ -114,5 +117,41 @@ describe('newClientOrderId', () => {
     const a = newClientOrderId();
     expect(Id.safeParse(a).success).toBe(true);
     expect(newClientOrderId()).not.toBe(a);
+  });
+});
+
+describe('modify mode (T-145)', () => {
+  const open = testOrder({
+    side: 'SELL',
+    type: 'LIMIT',
+    product: 'INTRADAY',
+    qty: 4,
+    price: 150_000,
+  });
+
+  it('starts from the order: its side, type, product, qty and price', () => {
+    expect(ticketValuesFromOrder(open)).toEqual({
+      side: 'SELL',
+      type: 'LIMIT',
+      product: 'INTRADAY',
+      qty: 4,
+      price: 150_000,
+    });
+  });
+
+  it('sends only the quantity and price that changed, or nothing', () => {
+    const values = ticketValuesFromOrder(open);
+    expect(toModifyRequest(values, open)).toBeNull();
+    expect(toModifyRequest({ ...values, qty: 6 }, open)).toEqual({ qty: 6 });
+    expect(toModifyRequest({ ...values, price: 149_500 }, open)).toEqual({ price: 149_500 });
+    expect(toModifyRequest({ ...values, qty: 5, price: 149_000 }, open)).toEqual({
+      qty: 5,
+      price: 149_000,
+    });
+    // A market order has no price to change.
+    const market = testOrder({ type: 'MARKET', price: null, qty: 2 });
+    expect(
+      toModifyRequest({ ...ticketValuesFromOrder(market), price: 150_000 }, market),
+    ).toBeNull();
   });
 });

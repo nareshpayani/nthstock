@@ -1,4 +1,5 @@
 import {
+  ModifyOrderRequest,
   OrderQty,
   OrderSide,
   OrderType,
@@ -6,6 +7,7 @@ import {
   ProductType,
   TickPrice,
   type InstrumentToken,
+  type Order,
 } from '@nthstock/contracts';
 import { z } from 'zod';
 
@@ -89,4 +91,29 @@ export function orderValue(
 export function newClientOrderId(): string {
   const bytes = crypto.getRandomValues(new Uint8Array(12));
   return `tkt_${[...bytes].map((b) => b.toString(16).padStart(2, '0')).join('')}`;
+}
+
+/** The ticket for modifying an open order (T-145): its own side, type, product, qty and price. */
+export function ticketValuesFromOrder(order: Order): TicketFormValues {
+  return {
+    side: order.side,
+    type: order.type,
+    product: order.product,
+    qty: order.qty,
+    price: order.price,
+  };
+}
+
+/**
+ * The `PATCH /v1/orders/:id` body for valid form values: only quantity and price, and only what
+ * changed (the price only for a limit order). `null` when nothing changed.
+ */
+export function toModifyRequest(values: TicketFormValues, order: Order): ModifyOrderRequest | null {
+  const body: { qty?: number; price?: number } = {};
+  if (values.qty !== null && values.qty !== order.qty) body.qty = values.qty;
+  if (order.type === 'LIMIT' && values.price !== null && values.price !== order.price) {
+    body.price = values.price;
+  }
+  if (body.qty === undefined && body.price === undefined) return null;
+  return ModifyOrderRequest.parse(body);
 }

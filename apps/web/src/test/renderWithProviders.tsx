@@ -12,12 +12,14 @@ import type { ReactNode } from 'react';
 import { AppProviders } from '@/app/providers/AppProviders';
 import { createQueryClient } from '@/app/queryClient';
 import type { MarketSession } from '@/shared/lib/marketSessionContext';
+import type { OrderUpdateSource } from '@/shared/lib/orderUpdatesContext';
 import { offlineApiClient } from './renderApp';
 
 export type RenderWithProvidersOptions = {
   apiClient?: ApiClient;
   quoteStore?: QuoteStore;
   marketSession?: MarketSession;
+  orderUpdates?: OrderUpdateSource;
 };
 
 /**
@@ -50,6 +52,7 @@ export function renderWithProviders(ui: ReactNode, options: RenderWithProvidersO
       apiClient={options.apiClient ?? offlineApiClient}
       {...(options.quoteStore ? { quoteStore: options.quoteStore } : {})}
       {...(options.marketSession ? { marketSession: options.marketSession } : {})}
+      {...(options.orderUpdates ? { orderUpdates: options.orderUpdates } : {})}
     >
       {/* The test router is not the app's registered router type. */}
       <RouterProvider router={router as never} />

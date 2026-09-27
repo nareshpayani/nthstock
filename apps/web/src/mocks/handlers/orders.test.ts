@@ -194,6 +194,41 @@ describe('MSW orders (T-132)', () => {
     );
   });
 
+  it('serves positions, the summary and order history from the same engine (T-142)', async () => {
+    const storages = { auth: memoryStorage(), orders: memoryStorage() };
+    const first = pageLoad(storages);
+    await login(first.client, '8300000006');
+    const quote = await infy(first.client);
+    first.orders.pinPrice(quote.token, quote.ltp);
+    const order = await first.client.call('orderPlace', {
+      body: { token: quote.token, side: 'BUY', type: 'MARKET', product: 'DELIVERY', qty: 5 },
+    });
+    const positions = await first.client.call('positionsList');
+    expect(positions.items).toEqual([
+      expect.objectContaining({ token: quote.token, netQty: 5, ltp: quote.ltp, unrealisedPnl: 0 }),
+    ]);
+    first.orders.pinPrice(quote.token, quote.ltp + 100);
+    const marked = await first.client.call('positionsList');
+    expect(marked.items[0]?.unrealisedPnl).toBe(5 * 100);
+    expect((await first.client.call('holdingsList')).items).toEqual([]);
+    expect(await first.client.call('portfolioSummary')).toMatchObject({
+      holdingsCount: 0,
+      positionsCount: 1,
+    });
+    const history = await first.client.call('orderHistory', { params: { id: order.id } });
+    expect(history.items.map((e) => e.event)).toEqual(['PLACED', 'EXECUTED']);
+    const cookies = first.client.cookies.header() ?? '';
+    for (const cleanup of cleanups.splice(0).reverse()) cleanup();
+
+    // The next page load restores the same account, history included.
+    const second = pageLoad(storages);
+    second.client.cookies.store(cookies.split('; ').map((pair) => `${pair}; Path=/`));
+    expect(await second.client.call('orderHistory', { params: { id: order.id } })).toEqual(history);
+    expect((await second.client.call('positionsList')).items[0]).toMatchObject({ netQty: 5 });
+    const missing = await second.client.callError('orderHistory', { params: { id: 'pe_nope' } });
+    expect(missing.status).toBe(404);
+  });
+
   it('starts fresh when saved state is corrupt or unreadable', async () => {
     const corrupt = memoryStorage();
     corrupt.setItem(ORDERS_MOCK_STORAGE_KEY, JSON.stringify({ v: 1, users: { usr_x: { v: 99 } } }));

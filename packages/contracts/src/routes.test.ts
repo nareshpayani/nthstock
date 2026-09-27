@@ -48,8 +48,8 @@ describe('route map types', () => {
 const entries = Object.entries(routes) as [RouteName, RouteDef][];
 
 describe('route map', () => {
-  it('has 39 routes', () => {
-    expect(entries).toHaveLength(39);
+  it('has 40 routes', () => {
+    expect(entries).toHaveLength(40);
   });
 
   it('keeps every path under /v1 and every method+path unique', () => {
@@ -114,6 +114,7 @@ describe('route map', () => {
         'watchlistItemRemove',
         'watchlistItemsReorder',
         'ordersList',
+        'orderHistory',
         'orderPlace',
         'orderModify',
         'orderCancel',

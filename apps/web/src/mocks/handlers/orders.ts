@@ -19,7 +19,7 @@ import type { IntervalTimers } from './quoteStream';
 import type { AuthMock } from './auth';
 
 /**
- * MSW order and funds handlers (T-132) on the same `PaperDesk` as apps/api (T-131): one paper
+ * MSW order, funds and portfolio handlers (T-132, T-142) on the same `PaperDesk` as apps/api (T-131): one paper
  * engine per user, fed by the in-browser mock market's ticks, so a LIMIT order fills on the tick
  * that crosses it and an `orderUpdate` goes out on the mock WebSocket (`onOrderUpdate`). Refusals
  * use `orderApiError`, so both backends answer alike.
@@ -181,6 +181,12 @@ export function createOrdersMock(
         return order;
       }),
 
+      route('orderHistory', (context) => {
+        const history = desk.orderHistory(userOf(context), context.params.id);
+        if (!history) throw new MockApiError(404, 'NOT_FOUND', 'This order was not found.');
+        return history;
+      }),
+
       route('orderPlace', async (context) =>
         answer(await desk.place(userOf(context), context.body)),
       ),
@@ -194,6 +200,16 @@ export function createOrdersMock(
       ),
 
       route('fundsSummary', (context) => desk.fundsSummary(userOf(context))),
+
+      // Positions, holdings and the portfolio summary (T-142): read from the same engines as the
+      // orders above, valued at the LTP they see, exactly as apps/api does (T-141).
+      route('positionsList', async (context) => ({
+        items: await desk.positions(userOf(context)),
+      })),
+
+      route('holdingsList', async (context) => ({ items: await desk.holdings(userOf(context)) })),
+
+      route('portfolioSummary', (context) => desk.portfolioSummary(userOf(context))),
     ];
   };
 

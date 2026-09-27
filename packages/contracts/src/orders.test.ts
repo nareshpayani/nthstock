@@ -2,12 +2,14 @@ import { describe, expect, it } from 'vitest';
 import {
   modifyOrderFixture,
   orderFixture,
+  orderHistoryFixture,
   placeLimitFixture,
   placeMarketFixture,
 } from './fixtures.js';
 import {
   ModifyOrderRequest,
   Order,
+  OrderHistoryResponse,
   OrderStatus,
   OrderType,
   OrdersPage,
@@ -26,6 +28,7 @@ describe('order fixtures round-trip', () => {
     ['ModifyOrderRequest', ModifyOrderRequest, modifyOrderFixture],
     ['Order', Order, orderFixture],
     ['OrdersPage', OrdersPage, { items: [orderFixture], nextCursor: null }],
+    ['OrderHistoryResponse', OrderHistoryResponse, orderHistoryFixture],
   ] as const)('%s', (_name, schema, fixture) => {
     expect(schema.parse(fixture)).toEqual(fixture);
   });

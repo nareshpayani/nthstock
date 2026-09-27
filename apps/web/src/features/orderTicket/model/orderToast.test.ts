@@ -1,6 +1,6 @@
 import type { Order } from '@nthstock/contracts';
 import { describe, expect, it } from 'vitest';
-import { successToast } from './orderToast';
+import { modifiedToast, successToast } from './orderToast';
 
 const order = (overrides: Partial<Order>): Order => ({
   id: 'pe_1',
@@ -41,5 +41,13 @@ describe('successToast (T-139)', () => {
       title: 'AMO placed',
       description: 'BUY 10 INFY at market price. Goes to the exchange at 9:15 AM.',
     });
+  });
+
+  it('says "Order modified" with the new terms (T-145)', () => {
+    expect(modifiedToast(order({ type: 'LIMIT', qty: 6, price: 149_500 }))).toEqual({
+      title: 'Order modified',
+      description: 'BUY 6 INFY @ ₹1,495.00',
+    });
+    expect(modifiedToast(order({ qty: 2 })).description).toBe('BUY 2 INFY at market price');
   });
 });

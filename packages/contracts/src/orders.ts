@@ -104,3 +104,41 @@ export type OrdersQuery = z.infer<typeof OrdersQuery>;
 
 export const OrdersPage = cursorPage(Order);
 export type OrdersPage = z.infer<typeof OrdersPage>;
+
+/**
+ * What happened to an order, one entry per change (T-146): placed (as OPEN, AMO or REJECTED),
+ * modified, released at 9:15 (AMO → OPEN), executed, cancelled, or rejected when an AMO fails its
+ * check at release.
+ */
+export const OrderHistoryEvent = z.enum([
+  'PLACED',
+  'MODIFIED',
+  'RELEASED',
+  'EXECUTED',
+  'CANCELLED',
+  'REJECTED',
+]);
+export type OrderHistoryEvent = z.infer<typeof OrderHistoryEvent>;
+
+/** One change of an order: the event, the status after it, when (UTC), and the terms after it. */
+export const OrderHistoryEntry = z.object({
+  event: OrderHistoryEvent,
+  status: OrderStatus,
+  at: IsoUtc,
+  qty: OrderQty,
+  type: OrderType,
+  /** Limit price after the event; null for MARKET. */
+  price: TickPrice.nullable(),
+  /** The fill price, on EXECUTED only. */
+  fillPrice: TickPrice.nullable(),
+  /** Plain-language reason for a cancel or rejection. */
+  note: z.string().max(200).nullable(),
+});
+export type OrderHistoryEntry = z.infer<typeof OrderHistoryEntry>;
+
+/** `GET /v1/orders/:id/history`: the order's changes, oldest first. */
+export const OrderHistoryResponse = z.object({
+  orderId: Id,
+  items: z.array(OrderHistoryEntry).min(1),
+});
+export type OrderHistoryResponse = z.infer<typeof OrderHistoryResponse>;

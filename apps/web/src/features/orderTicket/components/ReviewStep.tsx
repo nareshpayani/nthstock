@@ -14,6 +14,8 @@ export type ReviewStepProps = {
   value: number | null;
   /** The AMO date while the market is closed. */
   amoDate: string | null;
+  /** `modify` (T-145): the heading and Confirm speak of changing an open order. */
+  mode?: 'place' | 'modify';
   placing: boolean;
   onEdit: () => void;
   onConfirm: () => void;
@@ -30,6 +32,7 @@ export function ReviewStep({
   ltp,
   value,
   amoDate,
+  mode = 'place',
   placing,
   onEdit,
   onConfirm,
@@ -64,7 +67,7 @@ export function ReviewStep({
         tabIndex={-1}
         className="text-lg font-semibold text-ink outline-none"
       >
-        {strings.review.heading}
+        {mode === 'modify' ? strings.modify.heading : strings.review.heading}
       </h3>
       <dl className="grid gap-2 rounded-md border border-line p-3">
         {rows.map(([term, detail]) => (
@@ -90,7 +93,11 @@ export function ReviewStep({
           loading={placing}
           onClick={onConfirm}
         >
-          {amoDate ? strings.review.confirmAmo : strings.review.confirm}
+          {mode === 'modify'
+            ? strings.modify.confirm
+            : amoDate
+              ? strings.review.confirmAmo
+              : strings.review.confirm}
         </Button>
       </div>
     </section>

@@ -1,13 +1,17 @@
 import type {
   Exchange,
+  Holding,
   Instrument,
   InstrumentStats,
   InstrumentToken,
   ModifyOrderRequest,
   Order,
   OrderStatus,
+  OrderHistoryResponse,
   OrdersPage,
   PlaceOrderRequest,
+  PortfolioSummary,
+  Position,
   Quote,
   FundsSummary,
 } from '@nthstock/contracts';
@@ -16,6 +20,7 @@ import { istDateKey, nseHolidays2026, type Clock, type HolidayTable } from '@nth
 import { createEngineContext, type PriceSource } from './context.js';
 import type { InstrumentInfo, InstrumentSource } from './instruments.js';
 import { PaperEngine, type OrderActionResult, type PaperEngineSnapshot } from './paperEngine.js';
+import { averagePrice, basisPoints, holdingValues, positionValues } from './positionMath.js';
 
 /**
  * The slice of a market data adapter the desk reads (`MarketDataAdapter` in packages/marketData
@@ -64,6 +69,8 @@ const LIVE: ReadonlySet<OrderStatus> = new Set(['AMO', 'OPEN']);
 
 type CachedInstrument = { info: InstrumentInfo | null; day: string };
 
+type CachedClose = { prevClose: number | null; day: string };
+
 /**
  * The paper-trading desk: one `PaperEngine` per user, all fed by one market (ADR 0004). Both mock
  * backends run it (apps/api's orders module and the MSW order handlers), so they behave alike.
@@ -89,6 +96,7 @@ export class PaperDesk {
   readonly #pins = new Map<InstrumentToken, number>();
   readonly #instruments = new Map<InstrumentToken, CachedInstrument>();
   readonly #subscriptions = new Map<InstrumentToken, () => void>();
+  readonly #prevCloses = new Map<InstrumentToken, CachedClose>();
   /** Users with a live order in each instrument. */
   readonly #liveUsers = new Map<InstrumentToken, Set<string>>();
   /** The instruments each user has live orders in (the reverse of `#liveUsers`). */
@@ -172,6 +180,111 @@ export class PaperDesk {
       engine.sync();
       return engine.fundsSummary();
     });
+  }
+
+  /** The order's changes, oldest first (T-146); null when the user has no such order. */
+  orderHistory(userId: string, id: string): OrderHistoryResponse | null {
+    const items = this.#change(userId, (engine) => {
+      engine.sync();
+      return engine.orderHistory(id);
+    });
+    return items && items.length > 0 ? { orderId: id, items } : null;
+  }
+
+  /**
+   * Today's positions (T-141), in the order they were opened, marked to the LTP the engines see
+   * (P&L math from `positionValues`). An instrument without a price yet is valued at its average.
+   */
+  async positions(userId: string): Promise<Position[]> {
+    const list = this.#change(userId, (engine) => {
+      engine.sync();
+      return engine.positions();
+    });
+    await Promise.all(list.map((position) => this.#ensurePrice(position.token)));
+    return list.map(({ token, symbol, exchange, product, book }) => {
+      const fallback = averagePrice(book) || Math.max(book.buyQty, book.sellQty, 1);
+      const values = positionValues(book, this.ltp(token) ?? fallback);
+      return {
+        token,
+        symbol,
+        exchange,
+        product,
+        netQty: values.netQty,
+        buyQty: values.buyQty,
+        sellQty: values.sellQty,
+        avgBuyPrice: values.avgBuyPrice,
+        avgSellPrice: values.avgSellPrice,
+        ltp: values.ltp,
+        realisedPnl: values.realisedPnl,
+        unrealisedPnl: values.unrealisedPnl,
+      };
+    });
+  }
+
+  /**
+   * Delivery holdings carried from earlier days (T-141), by symbol, valued at the LTP the engines
+   * see with the day's change against the previous close (`holdingValues`).
+   */
+  async holdings(userId: string): Promise<Holding[]> {
+    const lots = this.#change(userId, (engine) => {
+      engine.sync();
+      return engine.holdings();
+    });
+    const master = await this.#master();
+    const rows = await Promise.all(
+      lots.map(async ({ token, lot }) => {
+        const instrument = master.get(token);
+        if (!instrument) return null;
+        await this.#ensurePrice(token);
+        const prevClose = await this.#prevClose(instrument);
+        const avg = Math.max(1, Math.round(lot.investedValue / lot.qty));
+        const ltp = this.ltp(token) ?? prevClose ?? avg;
+        const values = holdingValues(lot, ltp, prevClose ?? ltp);
+        const row: Holding = {
+          token,
+          symbol: instrument.symbol,
+          exchange: instrument.exchange,
+          ...values,
+        };
+        return row;
+      }),
+    );
+    return rows
+      .filter((row): row is Holding => row !== null)
+      .sort((a, b) => a.symbol.localeCompare(b.symbol));
+  }
+
+  /**
+   * The portfolio summary (T-141): totals over the holdings rows (invested, current value, total
+   * P&L and the day's P&L, so the summary always equals the sum of the rows), plus how many
+   * holdings and positions there are. Percentages are basis points; the day's is against
+   * yesterday's value (current value less the day's P&L).
+   */
+  async portfolioSummary(userId: string): Promise<PortfolioSummary> {
+    const [holdings, positions] = await Promise.all([
+      this.holdings(userId),
+      this.positions(userId),
+    ]);
+    let investedValue = 0;
+    let currentValue = 0;
+    let dayPnl = 0;
+    for (const holding of holdings) {
+      investedValue += holding.investedValue;
+      currentValue += holding.currentValue;
+      dayPnl += holding.dayChange;
+    }
+    const totalPnl = currentValue - investedValue;
+    return {
+      investedValue,
+      currentValue,
+      totalPnl,
+      totalPnlBp: basisPoints(totalPnl, investedValue),
+      dayPnl,
+      dayPnlBp: basisPoints(dayPnl, currentValue - dayPnl),
+      holdingsCount: holdings.length,
+      positionsCount: positions.length,
+      asOf: this.#options.clock.now().toISOString(),
+    };
   }
 
   /** The user's engine (created on first use), for read-only views such as positions. */
@@ -334,6 +447,23 @@ export class PaperDesk {
         this.#options.market.subscribe([symbol], (quotes) => this.ingest(quotes), exchange),
       );
     }
+  }
+
+  /** A price for `token` before valuing it: a tick, or else the adapter's quote (and a feed). */
+  async #ensurePrice(token: InstrumentToken): Promise<void> {
+    if (this.ltp(token) !== null) return;
+    await this.#prepare(token);
+  }
+
+  /** Yesterday's close from the adapter's quote, cached per IST day; null when there is none. */
+  async #prevClose(instrument: Instrument): Promise<number | null> {
+    const day = istDateKey(this.#options.clock.now());
+    const cached = this.#prevCloses.get(instrument.token);
+    if (cached?.day === day) return cached.prevClose;
+    const quote = await this.#options.market.getQuote(instrument.symbol, instrument.exchange);
+    const prevClose = quote && quote.prevClose > 0 ? quote.prevClose : null;
+    this.#prevCloses.set(instrument.token, { prevClose, day });
+    return prevClose;
   }
 
   #master(): Promise<Map<InstrumentToken, Instrument>> {

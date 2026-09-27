@@ -1,12 +1,16 @@
 import { randomUUID } from 'node:crypto';
 import type {
   FundsSummary,
+  Holding,
   InstrumentToken,
   ModifyOrderRequest,
   Order,
+  OrderHistoryResponse,
   OrdersPage,
   OrdersQuery,
   PlaceOrderRequest,
+  PortfolioSummary,
+  Position,
 } from '@nthstock/contracts';
 import {
   PaperDesk,
@@ -110,6 +114,11 @@ export function createOrderService({
       return desk.getOrder(userId, id) ?? orderGone();
     },
 
+    /** The order's changes, oldest first (T-146); 404 for another user's order. */
+    history(userId: string, id: string): OrderHistoryResponse {
+      return desk.orderHistory(userId, id) ?? orderGone();
+    },
+
     list(userId: string, query: OrdersQuery): OrdersPage {
       const page = desk.ordersPage(userId, {
         ...(query.status ? { status: query.status } : {}),
@@ -121,6 +130,15 @@ export function createOrderService({
     },
 
     funds: (userId: string): FundsSummary => desk.fundsSummary(userId),
+
+    /** Today's positions, marked to the LTP the engines see (read by the portfolio module). */
+    positions: (userId: string): Promise<Position[]> => desk.positions(userId),
+
+    /** Delivery holdings valued at the LTP against the previous close. */
+    holdings: (userId: string): Promise<Holding[]> => desk.holdings(userId),
+
+    /** Totals over the holdings rows, plus holdings and positions counts. */
+    portfolioSummary: (userId: string): Promise<PortfolioSummary> => desk.portfolioSummary(userId),
 
     /** Every order change of every user (for the Redis publisher, T-133). */
     onOrderUpdate(listener: OrderUpdateListener): () => void {
