@@ -19,6 +19,16 @@
         "TESTCONTAINERS_*"
       ]
     },
+    "@nthstock/realtime#test": {
+      "dependsOn": ["^build", "@nthstock/api#build"],
+      "outputs": ["coverage/**"],
+      "passThroughEnv": [
+        "REDIS_TEST_URL",
+        "SKIP_REDIS_INTEGRATION",
+        "DOCKER_HOST",
+        "TESTCONTAINERS_*"
+      ]
+    },
     "dev": {
       "dependsOn": ["^build"],
       "cache": false,
