@@ -1,5 +1,6 @@
 import {
   Order as OrderSchema,
+  OrderHistoryEntry as OrderHistoryEntrySchema,
   TICK_SIZE_PAISE,
   type Exchange,
   type FundsSummary,
@@ -7,6 +8,8 @@ import {
   type LedgerEntry,
   type ModifyOrderRequest,
   type Order,
+  type OrderHistoryEntry,
+  type OrderHistoryEvent,
   type OrderStatus,
   type PlaceOrderRequest,
   type ProductType,
@@ -84,6 +87,11 @@ export type PaperEngineSnapshot = {
   holdingSales: HoldingSale[];
   openingBalance: number;
   ledger: LedgerEntry[];
+  /**
+   * Each order's changes, oldest first, by order id (T-146). Snapshots saved before history was
+   * kept have none; restoring one rebuilds a short history from each order's own fields.
+   */
+  history?: [orderId: string, entries: OrderHistoryEntry[]][];
 };
 
 export type OrderActionErrorCode =
@@ -162,6 +170,7 @@ export class PaperEngine {
   readonly #holdings = new Map<InstrumentToken, HoldingLot>();
   readonly #holdingSales = new Map<InstrumentToken, HoldingSale>();
   readonly #rejectCodes = new Map<string, OrderRejectionCode>();
+  readonly #history = new Map<string, OrderHistoryEntry[]>();
   readonly #collectors = new Set<Order[]>();
   /** Scheduled session events up to this instant have run. */
   #syncedTo: Date;
@@ -228,6 +237,7 @@ export class PaperEngine {
       holdingSales: this.holdingSales() as HoldingSale[],
       openingBalance: this.#funds.openingBalance,
       ledger: [...this.#funds.entries()],
+      history: [...this.#history].map(([id, entries]) => [id, entries.map((e) => ({ ...e }))]),
     };
   }
 
@@ -278,6 +288,7 @@ export class PaperEngine {
     if (checked.ok && checked.blockAmount > 0) {
       this.#mustLedger(this.#funds.block(order.id, checked.blockAmount));
     }
+    this.#record(order, 'PLACED', { note: order.statusReason });
     this.#emit(order);
     if (order.status === 'OPEN') this.#match(order);
     return this.#result(order);
@@ -329,6 +340,7 @@ export class PaperEngine {
     order.qty = draft.qty;
     order.price = draft.price;
     order.updatedAt = this.#now().toISOString();
+    this.#record(order, 'MODIFIED');
     this.#emit(order);
     if (order.status === 'OPEN') this.#match(order);
     return this.#result(order);
@@ -366,6 +378,12 @@ export class PaperEngine {
   getOrder(id: string): Order | null {
     const order = this.#orders.get(id);
     return order ? copy(order) : null;
+  }
+
+  /** The order's changes, oldest first (T-146), or null for an unknown id. */
+  orderHistory(id: string): OrderHistoryEntry[] | null {
+    const entries = this.#history.get(id);
+    return entries ? entries.map((entry) => ({ ...entry })) : null;
   }
 
   /** Orders in the order they were placed, optionally only one status. */
@@ -419,6 +437,16 @@ export class PaperEngine {
       const order = OrderSchema.parse(raw);
       this.#orders.set(order.id, order);
       if (order.clientOrderId !== null) this.#byClientOrderId.set(order.clientOrderId, order.id);
+    }
+    const saved = new Map(snapshot.history ?? []);
+    for (const order of this.#orders.values()) {
+      const entries = saved.get(order.id);
+      this.#history.set(
+        order.id,
+        entries && entries.length > 0
+          ? entries.map((entry) => OrderHistoryEntrySchema.parse(entry))
+          : historyFromOrder(order),
+      );
     }
     for (const [id, code] of snapshot.rejectCodes) {
       if (this.#orders.get(id)?.status === 'REJECTED') this.#rejectCodes.set(id, code);
@@ -497,11 +525,13 @@ export class PaperEngine {
         order.status = transitionOrder(order.status, 'REJECT');
         order.statusReason = checked.reason;
         this.#rejectCodes.set(order.id, checked.code);
+        this.#record(order, 'REJECTED', { note: checked.reason });
         this.#emit(order);
         continue;
       }
       this.#reblock(order.id, checked.blockAmount);
       order.status = transitionOrder(order.status, 'RELEASE');
+      this.#record(order, 'RELEASED');
       this.#emit(order);
       this.#match(order);
     }
@@ -531,6 +561,7 @@ export class PaperEngine {
       const order = this.#newOrder(draft, position, 'OPEN', null);
       order.statusReason = SQUARED_OFF;
       this.#orders.set(order.id, order);
+      this.#record(order, 'PLACED', { note: SQUARED_OFF });
       const price = this.#ctx.ltp(position.token) ?? onTick(averagePrice(book));
       this.#execute(order, draft.qty, price, true);
     }
@@ -603,6 +634,7 @@ export class PaperEngine {
     order.status = transitionOrder(order.status, 'CANCEL');
     order.statusReason = reason;
     order.updatedAt = this.#now().toISOString();
+    this.#record(order, 'CANCELLED', { note: reason });
     this.#emit(order);
   }
 
@@ -642,6 +674,7 @@ export class PaperEngine {
     order.filledQty += qty;
     order.avgFillPrice = price;
     order.updatedAt = this.#now().toISOString();
+    this.#record(order, 'EXECUTED', { fillPrice: price });
     this.#emit(order);
   }
 
@@ -699,6 +732,17 @@ export class PaperEngine {
     return held + boughtToday - pending;
   }
 
+  /** Appends one change to the order's history, with the order's terms after it. */
+  #record(
+    order: StoredOrder,
+    event: OrderHistoryEvent,
+    extra: { fillPrice?: number; note?: string | null } = {},
+  ): void {
+    const entries = this.#history.get(order.id) ?? [];
+    entries.push(historyEntry(order, event, this.#now().toISOString(), extra));
+    this.#history.set(order.id, entries);
+  }
+
   #mustLedger(result: LedgerResult): void {
     // Validation checks cash before every block and settle, so a refusal here is a bug.
     if (!result.ok) throw new Error(`Invariant broken: ${result.reason}`);
@@ -732,6 +776,54 @@ function notFound(): OrderActionResult {
 /** A detached copy, so callers can't change engine state. */
 function copy(order: StoredOrder): Order {
   return { ...order };
+}
+
+function historyEntry(
+  order: Order,
+  event: OrderHistoryEvent,
+  at: string,
+  extra: { fillPrice?: number; note?: string | null } = {},
+): OrderHistoryEntry {
+  return {
+    event,
+    status: order.status,
+    at,
+    qty: order.qty,
+    type: order.type,
+    price: order.price,
+    fillPrice: extra.fillPrice ?? null,
+    note: extra.note ?? null,
+  };
+}
+
+/**
+ * A history for an order restored from a snapshot that kept none: placed at `placedAt`, then
+ * (when it has moved on) its last change at `updatedAt`. Modifications in between are unknown.
+ */
+function historyFromOrder(order: Order): OrderHistoryEntry[] {
+  const rejectedAtPlace = order.status === 'REJECTED' && order.placedAt === order.updatedAt;
+  const initial: OrderStatus =
+    order.status === 'AMO' ? 'AMO' : rejectedAtPlace ? 'REJECTED' : 'OPEN';
+  const placed = historyEntry({ ...order, status: initial }, 'PLACED', order.placedAt, {
+    note: rejectedAtPlace ? order.statusReason : null,
+  });
+  if (order.status === initial) return [placed];
+  const last: Record<Exclude<OrderStatus, 'AMO'>, OrderHistoryEvent> = {
+    OPEN: 'RELEASED',
+    EXECUTED: 'EXECUTED',
+    CANCELLED: 'CANCELLED',
+    REJECTED: 'REJECTED',
+  };
+  const event = last[order.status as Exclude<OrderStatus, 'AMO'>];
+  return [
+    placed,
+    historyEntry(order, event, order.updatedAt, {
+      ...(order.status === 'EXECUTED' && order.avgFillPrice !== null
+        ? { fillPrice: order.avgFillPrice }
+        : {}),
+      note: order.status === 'EXECUTED' ? null : order.statusReason,
+    }),
+  ];
 }
 
 function latestById(orders: readonly Order[]): readonly Order[] {

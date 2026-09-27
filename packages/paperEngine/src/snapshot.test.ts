@@ -47,6 +47,33 @@ describe('engine snapshot and restore', () => {
     expect(restored.fundsSummary()).toEqual(engine.fundsSummary());
     expect(restored.ledger.entries()).toEqual(engine.ledger.entries());
     expect(restored.snapshot()).toEqual(engine.snapshot());
+    for (const each of engine.orders()) {
+      expect(restored.orderHistory(each.id)).toEqual(engine.orderHistory(each.id));
+    }
+  });
+
+  it('rebuilds a short history for orders from a snapshot saved without one', () => {
+    const harness = busyHarness();
+    const legacy = harness.engine.snapshot();
+    delete legacy.history;
+    const restored = restoreFrom(harness, legacy);
+    const events = restored
+      .orders()
+      .map((each) => [
+        each.status,
+        restored.orderHistory(each.id)?.map((entry) => `${entry.event}:${entry.status}`),
+      ]);
+    expect(events).toEqual([
+      ['EXECUTED', ['PLACED:OPEN', 'EXECUTED:EXECUTED']],
+      ['OPEN', ['PLACED:OPEN']],
+      ['EXECUTED', ['PLACED:OPEN', 'EXECUTED:EXECUTED']],
+      ['EXECUTED', ['PLACED:OPEN', 'EXECUTED:EXECUTED']],
+      ['REJECTED', ['PLACED:REJECTED']],
+    ]);
+    const executed = restored.orders('EXECUTED')[0];
+    expect(executed && restored.orderHistory(executed.id)?.[1]?.fillPrice).toBe(
+      executed?.avgFillPrice,
+    );
   });
 
   it('keeps working after a restore: idempotent client ids, fills, cancels and reasons', () => {

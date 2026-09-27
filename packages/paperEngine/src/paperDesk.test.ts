@@ -1,4 +1,12 @@
-import { Order, type Instrument, type Quote } from '@nthstock/contracts';
+import {
+  HoldingsResponse,
+  Order,
+  OrderHistoryResponse,
+  PortfolioSummary,
+  PositionsResponse,
+  type Instrument,
+  type Quote,
+} from '@nthstock/contracts';
 import { describe, expect, it } from 'vitest';
 import { createManualClock, createSequentialIds } from './context.js';
 import { orderApiError } from './orderErrors.js';
@@ -25,6 +33,10 @@ function fakeMarket() {
     ['INFY', 1_500_00],
     ['TCS', 3_800_00],
   ]);
+  const prevCloses = new Map<string, number>([
+    ['INFY', 1_480_00],
+    ['TCS', 3_750_00],
+  ]);
   const bands = new Map([
     ['INFY', INFY],
     ['TCS', TCS],
@@ -48,7 +60,7 @@ function fakeMarket() {
     open: 0,
     high: 0,
     low: 0,
-    prevClose: 0,
+    prevClose: prevCloses.get(symbol) ?? 0,
     volume: 0,
     ts: '2026-09-25T04:30:00.000Z',
   });
@@ -276,5 +288,86 @@ describe('orderApiError', () => {
     expect(
       orderApiError({ ok: false, code: 'INTRADAY_MARKET_CLOSED', reason: 'r', order }).code,
     ).toBe('MARKET_CLOSED');
+  });
+
+  it('keeps the history of each order with every change, for its owner only', async () => {
+    const { desk, clock } = setup();
+    const placed = await desk.place('u1', limitBuy(1_450_00));
+    if (!placed.ok) throw new Error('place failed');
+    clock.advance(60_000);
+    await desk.modify('u1', placed.order.id, { price: 1_460_00, qty: 12 });
+    clock.advance(60_000);
+    await desk.cancel('u1', placed.order.id);
+
+    const history = OrderHistoryResponse.parse(desk.orderHistory('u1', placed.order.id));
+    expect(history.items.map((e) => [e.event, e.status, e.at, e.qty, e.price])).toEqual([
+      ['PLACED', 'OPEN', ist(25, 10, 0).toISOString(), 10, 1_450_00],
+      ['MODIFIED', 'OPEN', ist(25, 10, 1).toISOString(), 12, 1_460_00],
+      ['CANCELLED', 'CANCELLED', ist(25, 10, 2).toISOString(), 12, 1_460_00],
+    ]);
+    expect(history.items[2]?.note).toBe('Cancelled by you.');
+    expect(desk.orderHistory('u2', placed.order.id)).toBeNull();
+  });
+
+  it('values positions at the LTP the engines see, marking them to each new tick', async () => {
+    const { desk, market } = setup();
+    await desk.place('u1', marketBuy(10));
+    await desk.place('u1', {
+      token: TCS.token,
+      side: 'SELL',
+      type: 'MARKET',
+      product: 'INTRADAY',
+      qty: 2,
+    });
+    let positions = PositionsResponse.parse({ items: await desk.positions('u1') }).items;
+    expect(positions.map((p) => [p.symbol, p.product, p.netQty, p.ltp, p.unrealisedPnl])).toEqual([
+      ['INFY', 'DELIVERY', 10, 1_500_00, 0],
+      ['TCS', 'INTRADAY', -2, 3_800_00, 0],
+    ]);
+
+    market.tick('INFY', 1_510_00);
+    positions = await desk.positions('u1');
+    expect(positions[0]).toMatchObject({ ltp: 1_510_00, unrealisedPnl: 10 * 10_00 });
+    expect(positions[1]).toMatchObject({ ltp: 3_800_00, unrealisedPnl: 0 });
+    expect(await desk.positions('u2')).toEqual([]);
+  });
+
+  it('carries delivery buys into holdings at the close, valued against the previous close', async () => {
+    const { desk, clock } = setup();
+    await desk.place('u1', marketBuy(10));
+    expect(await desk.holdings('u1')).toEqual([]);
+
+    clock.set(ist(28, 10, 0));
+    desk.pinPrice(INFY.token, 1_520_00);
+    const holdings = HoldingsResponse.parse({ items: await desk.holdings('u1') }).items;
+    expect(holdings).toEqual([
+      {
+        token: INFY.token,
+        symbol: 'INFY',
+        exchange: 'NSE',
+        qty: 10,
+        avgPrice: 1_500_00,
+        ltp: 1_520_00,
+        investedValue: 15_000_00,
+        currentValue: 15_200_00,
+        pnl: 200_00,
+        pnlBp: 133,
+        dayChange: 10 * (1_520_00 - 1_480_00),
+        dayChangeBp: 270,
+      },
+    ]);
+
+    const summary = PortfolioSummary.parse(await desk.portfolioSummary('u1'));
+    expect(summary).toEqual({
+      investedValue: 15_000_00,
+      currentValue: 15_200_00,
+      totalPnl: 200_00,
+      totalPnlBp: 133,
+      dayPnl: 400_00,
+      dayPnlBp: 270,
+      holdingsCount: 1,
+      positionsCount: 0,
+      asOf: ist(28, 10, 0).toISOString(),
+    });
   });
 });
