@@ -23,3 +23,12 @@ export function successToast(order: Order): { title: string; description: string
     description: order.status === 'AMO' ? `${what}. ${strings.success.amoWhen}` : what,
   };
 }
+
+/** The toast after a modify that left the order open (T-145): "Order modified" with its terms. */
+export function modifiedToast(order: Order): { title: string; description: string } {
+  const what =
+    order.price === null
+      ? strings.success.atMarket(order.side, order.qty, order.symbol)
+      : strings.success.atPrice(order.side, order.qty, order.symbol, formatInr(order.price));
+  return { title: strings.modify.done, description: what };
+}

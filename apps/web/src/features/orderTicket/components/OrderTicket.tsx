@@ -1,4 +1,4 @@
-import type { Instrument, Order, PlaceOrderRequest } from '@nthstock/contracts';
+import type { Instrument, ModifyOrderRequest, Order, PlaceOrderRequest } from '@nthstock/contracts';
 import { ErrorState, useToast } from '@nthstock/ui';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useQuery } from '@tanstack/react-query';
@@ -11,20 +11,24 @@ import { PriceCell } from '@/shared/components/PriceCell';
 import { useMarketOpen } from '@/shared/hooks/useMarketOpen';
 import { useQuote } from '@/shared/hooks/useQuote';
 import { useApiClient } from '@/shared/lib/apiClientContext';
+import { claimFillToast } from '@/shared/lib/fillToasts';
 import { MarketSessionContext } from '@/shared/lib/marketSessionContext';
 import { useQuoteStore } from '@/shared/lib/quoteStoreContext';
 import type { TicketIntent } from '@/shared/lib/ticketIntentStore';
 import { ticketInstrumentQuery, ticketQuoteQuery, ticketStatsQuery } from '../api/ticketQueries';
+import { useModifyOrder } from '../hooks/useModifyOrder';
 import { usePlaceOrder } from '../hooks/usePlaceOrder';
 import { amoDate as amoDateFor } from '../model/amo';
 import { describeOrderError, type TicketError } from '../model/orderError';
-import { successToast } from '../model/orderToast';
+import { modifiedToast, successToast } from '../model/orderToast';
 import { preCheckOrder } from '../model/preCheck';
 import {
   TicketFormSchema,
   defaultTicketValues,
   newClientOrderId,
   orderValue,
+  ticketValuesFromOrder,
+  toModifyRequest,
   toPlaceOrderRequest,
   type TicketFormValues,
 } from '../model/ticketForm';
@@ -56,7 +60,20 @@ function LtpPrefill({
   return null;
 }
 
-type Review = { request: PlaceOrderRequest; ltp: number | null; value: number | null };
+type Review = {
+  request: PlaceOrderRequest;
+  /** In modify mode, what changes (quantity and price only). */
+  changes?: ModifyOrderRequest;
+  ltp: number | null;
+  value: number | null;
+};
+
+/** Cash the order already has blocked, which a modify can reuse (T-145). An estimate only. */
+function blockedFor(order: Order | undefined, ltp: number | null): number {
+  if (!order || order.side !== 'BUY') return 0;
+  const price = order.price ?? ltp ?? 0;
+  return (order.qty - order.filledQty) * price;
+}
 
 function TicketFlow({
   intent,
@@ -74,21 +91,23 @@ function TicketFlow({
   const stats = useQuery(ticketStatsQuery(api, intent));
   const snapshot = useQuery(ticketQuoteQuery(api, intent));
   const placeOrder = usePlaceOrder();
+  const modifyOrder = useModifyOrder();
+  const modifying = intent.modify;
   const [review, setReview] = useState<Review | null>(null);
   const [error, setError] = useState<TicketError | null>(null);
 
   const form = useForm<TicketFormValues>({
     resolver: zodResolver(TicketFormSchema),
     mode: 'onChange',
-    defaultValues: defaultTicketValues(intent.side),
+    defaultValues: modifying ? ticketValuesFromOrder(modifying) : defaultTicketValues(intent.side),
   });
   const { control, getValues, setValue } = form;
 
   // Intraday is only for market hours: a closed market leaves delivery (AMO).
   const product = useWatch({ control, name: 'product' });
   useEffect(() => {
-    if (!marketOpen && product === 'INTRADAY') setValue('product', 'DELIVERY');
-  }, [marketOpen, product, setValue]);
+    if (!modifying && !marketOpen && product === 'INTRADAY') setValue('product', 'DELIVERY');
+  }, [modifying, marketOpen, product, setValue]);
 
   const prefill = useCallback(
     (ltp: number) => {
@@ -108,7 +127,8 @@ function TicketFlow({
       instrument,
       stats: stats.data,
       ltp,
-      availableCash: funds.data?.available,
+      availableCash:
+        funds.data === undefined ? undefined : funds.data.available + blockedFor(modifying, ltp),
       forcedOpen: alwaysOpen,
     });
     if (!check.ok) {
@@ -123,12 +143,19 @@ function TicketFlow({
       }
       return;
     }
+    const request = toPlaceOrderRequest(values, instrument.token, newClientOrderId());
+    if (modifying) {
+      const changes = toModifyRequest(values, modifying);
+      if (!changes) {
+        setError({ title: strings.modify.failedTitle, message: strings.modify.nothingChanged });
+        return;
+      }
+      setError(null);
+      setReview({ request, changes, ltp, value: orderValue(values, ltp) });
+      return;
+    }
     setError(null);
-    setReview({
-      request: toPlaceOrderRequest(values, instrument.token, newClientOrderId()),
-      ltp,
-      value: orderValue(values, ltp),
-    });
+    setReview({ request, ltp, value: orderValue(values, ltp) });
   });
 
   const viewOrders = (event: MouseEvent<HTMLAnchorElement>) => {
@@ -138,6 +165,11 @@ function TicketFlow({
   };
 
   const onPlaced = (order: Order) => {
+    // An immediate fill may already have been toasted from its orderUpdate (T-147).
+    if (order.status === 'EXECUTED' && !claimFillToast(order.id)) {
+      onClose();
+      return;
+    }
     toast.show({
       ...successToast(order),
       tone: 'success',
@@ -153,8 +185,29 @@ function TicketFlow({
     onClose();
   };
 
+  const onModified = (order: Order) => {
+    const filled = order.status === 'EXECUTED';
+    if (!filled || claimFillToast(order.id)) {
+      toast.show({ ...(filled ? successToast(order) : modifiedToast(order)), tone: 'success' });
+    }
+    onClose();
+  };
+
   const onConfirm = () => {
     if (!review) return;
+    if (modifying && review.changes) {
+      modifyOrder.mutate(
+        { id: modifying.id, body: review.changes },
+        {
+          onSuccess: onModified,
+          onError: (failure) => {
+            setReview(null);
+            setError(describeOrderError(failure, 'modify'));
+          },
+        },
+      );
+      return;
+    }
     placeOrder.mutate(review.request, {
       onSuccess: onPlaced,
       onError: (failure) => {
@@ -202,7 +255,8 @@ function TicketFlow({
           ltp={review.ltp}
           value={review.value}
           amoDate={amoDate}
-          placing={placeOrder.isPending}
+          mode={modifying ? 'modify' : 'place'}
+          placing={placeOrder.isPending || modifyOrder.isPending}
           onEdit={() => setReview(null)}
           onConfirm={onConfirm}
         />
@@ -212,6 +266,7 @@ function TicketFlow({
           instrument={instrument}
           marketOpen={marketOpen}
           amoDate={amoDate}
+          modifying={modifying}
           snapshotLtp={snapshot.data?.ltp}
           available={funds.data?.available}
           fundsLoading={funds.isPending}
@@ -225,7 +280,9 @@ function TicketFlow({
 
 /**
  * The order ticket (T-135 to T-139), loaded lazily inside the slide-over: loads the instrument
- * (for its token and tick size), then runs form → review → place. Paper trading only.
+ * (for its token and tick size), then runs form → review → place. With `intent.modify` it modifies
+ * that open order instead (T-145): same form, side, product and type locked, quantity and price
+ * editable, then review → modify. Paper trading only.
  */
 export function OrderTicket({ intent, onClose }: OrderTicketProps) {
   const api = useApiClient();

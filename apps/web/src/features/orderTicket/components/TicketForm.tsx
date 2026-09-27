@@ -1,4 +1,4 @@
-import type { Exchange, Instrument } from '@nthstock/contracts';
+import type { Exchange, Instrument, Order } from '@nthstock/contracts';
 import { Button, Field, IconAlert, IconClock, NumberInput, SegmentedControl } from '@nthstock/ui';
 import { formatInr } from '@nthstock/utils';
 import { useEffect, useRef, type FormEventHandler } from 'react';
@@ -15,6 +15,8 @@ export type TicketFormProps = {
   marketOpen: boolean;
   /** The AMO date ("28 Sept 2026") while the market is closed. */
   amoDate: string | null;
+  /** The open order being modified (T-145): side, product and type are locked. */
+  modifying?: Order | undefined;
   snapshotLtp: number | null | undefined;
   available: number | undefined;
   fundsLoading: boolean;
@@ -34,6 +36,7 @@ export function TicketForm({
   instrument,
   marketOpen,
   amoDate,
+  modifying,
   snapshotLtp,
   available,
   fundsLoading,
@@ -61,9 +64,12 @@ export function TicketForm({
   };
 
   const sideLabel = strings.sides[side];
-  const submitLabel = marketOpen
-    ? strings.form.submit(sideLabel, instrument.symbol)
-    : strings.form.placeAmo;
+  const locked = modifying !== undefined;
+  const submitLabel = locked
+    ? strings.modify.submit
+    : marketOpen
+      ? strings.form.submit(sideLabel, instrument.symbol)
+      : strings.form.placeAmo;
 
   return (
     <form noValidate aria-label={strings.form.label} onSubmit={onSubmit} className="grid gap-4 p-4">
@@ -80,6 +86,7 @@ export function TicketForm({
         render={({ field }) => (
           <SegmentedControl
             label={strings.form.side}
+            disabled={locked}
             value={field.value}
             onValueChange={field.onChange}
             options={[
@@ -102,6 +109,7 @@ export function TicketForm({
               <SegmentedControl
                 label={strings.form.product}
                 size="sm"
+                disabled={locked}
                 value={field.value}
                 onValueChange={field.onChange}
                 options={[
@@ -111,7 +119,7 @@ export function TicketForm({
               />
             )}
           />
-          {!marketOpen ? (
+          {!marketOpen && !locked ? (
             <p className="text-label text-ink-muted">{strings.form.intradayClosed}</p>
           ) : null}
         </div>
@@ -126,6 +134,7 @@ export function TicketForm({
               <SegmentedControl
                 label={strings.form.type}
                 size="sm"
+                disabled={locked}
                 value={field.value}
                 onValueChange={(next) => {
                   field.onChange(next);
@@ -187,7 +196,17 @@ export function TicketForm({
         />
       </div>
 
-      <DepthMiniPanel instrument={instrument} live={marketOpen} onPick={pickPrice} />
+      {locked ? (
+        <p className="text-label text-ink-muted">
+          {modifying.filledQty > 0
+            ? `${strings.modify.locked} ${strings.modify.filled(modifying.filledQty)}.`
+            : strings.modify.locked}
+        </p>
+      ) : null}
+
+      {locked && type === 'MARKET' ? null : (
+        <DepthMiniPanel instrument={instrument} live={marketOpen} onPick={pickPrice} />
+      )}
 
       <OrderEstimate
         symbol={instrument.symbol}

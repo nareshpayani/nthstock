@@ -45,7 +45,13 @@ export function OrderTicketHost() {
       onOpenChange={(next) => {
         if (!next) closeTicket();
       }}
-      title={intent ? strings.title(intent.symbol) : strings.titleFallback}
+      title={
+        intent
+          ? intent.modify
+            ? strings.modifyTitle(intent.symbol)
+            : strings.title(intent.symbol)
+          : strings.titleFallback
+      }
       description={strings.description}
       returnFocus={returnFocus}
       overlay="light"
@@ -54,7 +60,7 @@ export function OrderTicketHost() {
       {open ? (
         <Suspense fallback={<TicketSkeleton />}>
           <OrderTicket
-            key={`${intent.exchange}:${intent.symbol}:${intent.side}`}
+            key={`${intent.exchange}:${intent.symbol}:${intent.side}:${intent.modify?.id ?? ''}`}
             intent={intent}
             onClose={closeTicket}
           />

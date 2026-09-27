@@ -1,6 +1,7 @@
 /** UI copy for the order ticket (T-135 to T-139). Paper trading only: no real money moves. */
 export const strings = {
   title: (symbol: string) => `Trade ${symbol}`,
+  modifyTitle: (symbol: string) => `Modify ${symbol} order`,
   titleFallback: 'Order ticket',
   description: 'Paper order with virtual cash. No real money moves.',
   loading: 'Loading the order ticket',
@@ -54,6 +55,18 @@ export const strings = {
     pickBid: (price: string, qty: string) => `Bid ${price}, ${qty} shares: use as limit price`,
     pickOffer: (price: string, qty: string) => `Offer ${price}, ${qty} shares: use as limit price`,
   },
+  modify: {
+    locked: 'Side, product and order type stay as placed. Change the quantity or price.',
+    submit: 'Review changes',
+    nothingChanged: 'Change the quantity or the price to modify this order.',
+    heading: 'Review your changes',
+    confirm: 'Modify order',
+    modifying: 'Modifying order',
+    done: 'Order modified',
+    failedTitle: 'Order not modified',
+    gone: 'This order was not found. It may have been cancelled.',
+    filled: (qty: number) => `${String(qty)} already filled`,
+  },
   review: {
     heading: 'Review your order',
     side: 'Order',
@@ -94,6 +107,7 @@ export const strings = {
     rateLimited: 'Too many orders in a short time. Wait a moment and try again.',
     network: 'Could not reach nthstock. Check your connection and try again.',
     generic: 'The order could not be placed. Try again.',
+    modifyGeneric: 'The order could not be modified. Try again.',
     title: 'Order not placed',
     cannotPlace: 'Order cannot be placed',
   },
