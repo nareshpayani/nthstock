@@ -85,6 +85,14 @@ jobs:
           path: apps/web/test-results/**/dashboard-1440.png
           if-no-files-found: warn
           retention-days: 14
+      # T-112: stock detail at 1440 and 768 px, for the PR.
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: stock-detail-screenshots
+          path: apps/web/test-results/**/stock-detail-*.png
+          if-no-files-found: warn
+          retention-days: 14
       - if: failure()
         uses: actions/upload-artifact@v4
         with:
