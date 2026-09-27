@@ -14,6 +14,7 @@ export {
   type IstParts,
 } from './time.js';
 export {
+  INTRADAY_SQUARE_OFF,
   MARKET_CLOSE,
   MARKET_OPEN,
   PRE_OPEN_START,

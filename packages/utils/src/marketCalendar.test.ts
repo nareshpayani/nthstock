@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { getMarketStatus, isTradingDay, nextSessionOpen } from './marketCalendar.js';
+import {
+  INTRADAY_SQUARE_OFF,
+  MARKET_CLOSE,
+  MARKET_OPEN,
+  getMarketStatus,
+  isTradingDay,
+  nextSessionOpen,
+} from './marketCalendar.js';
 import { nseHolidays2026 } from './nseHolidays2026.js';
 import { fixedClock, fromIst, toIstParts } from './time.js';
 
@@ -80,5 +87,13 @@ describe('holiday table', () => {
   it('knows trading days', () => {
     expect(isTradingDay(fromIst(2026, 9, 25, 600))).toBe(true);
     expect(isTradingDay(fromIst(2026, 12, 25, 600))).toBe(false);
+  });
+});
+
+describe('session times', () => {
+  it('squares off intraday at 15:20 IST, inside the 9:15–15:30 session', () => {
+    expect(INTRADAY_SQUARE_OFF).toBe(15 * 60 + 20);
+    expect(INTRADAY_SQUARE_OFF).toBeGreaterThan(MARKET_OPEN);
+    expect(INTRADAY_SQUARE_OFF).toBeLessThan(MARKET_CLOSE);
   });
 });
