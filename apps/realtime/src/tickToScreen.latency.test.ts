@@ -13,8 +13,8 @@ import type { TestClient } from './test/wsTestClient.js';
 /**
  * T-171: tick-to-screen, end to end over a real Redis (Testcontainers, or REDIS_TEST_URL).
  *
- * apps/api runs as its own process from its build (`node apps/api/dist/server.js`, which turbo
- * builds before this test) with the mock market forced open: its tick pump publishes every tick to
+ * apps/api runs as its own process from its build (`node apps/api/dist/server.js`, which
+ * `npm run test:latency` expects built) with the mock market forced open: its tick pump publishes every tick to
  * Redis. apps/realtime runs here and fans them out; a WebSocket client subscribes the way the
  * browser does and decodes the binary frames with the same decoder (`createQuoteFrameDecoder`).
  *
@@ -23,13 +23,14 @@ import type { TestClient } from './test/wsTestClient.js';
  * (the quote store batches per frame, CLAUDE.md §4), so one 60 Hz frame is added: that is
  * tick-to-screen. CLAUDE.md §3 target: under 500 ms; the p95 is asserted.
  *
- * Without Docker (and without REDIS_TEST_URL) the suite is skipped with a printed reason; CI has
- * Docker and runs it.
+ * Runs on its own (`npm run test:latency`), not in `npm test`: wall-clock numbers taken beside
+ * other suites under coverage measure the runner, not the pipeline. Without Docker (and without
+ * REDIS_TEST_URL) it is skipped with a printed reason; CI runs it in the api-mode job.
  */
 
 const API_SERVER = fileURLToPath(new URL('../../api/dist/server.js', import.meta.url));
 const SYMBOLS = ['RELIANCE', 'HDFCBANK', 'TCS', 'INFY', 'ICICIBANK', 'SBIN', 'ITC', 'LT'];
-const MEASURE_MS = 6_000;
+const MEASURE_MS = 10_000;
 /** One frame at 60 Hz: the quote store paints on the next animation frame. */
 const FRAME_MS = 1000 / 60;
 const TARGET_P95_MS = 500;
@@ -76,7 +77,7 @@ describeWithRedis('tick-to-screen: apps/api → Redis → apps/realtime → clie
   beforeAll(async () => {
     if (!existsSync(API_SERVER)) {
       throw new Error(
-        `${API_SERVER} is missing: build apps/api first (turbo runs @nthstock/api#build before this test).`,
+        `${API_SERVER} is missing: build apps/api first (npx turbo run build --filter=@nthstock/api).`,
       );
     }
     try {
@@ -156,7 +157,7 @@ describeWithRedis('tick-to-screen: apps/api → Redis → apps/realtime → clie
       `\n[tick-to-screen] ${String(latencies.length)} quotes, ${String(seen.size)} symbols: ` +
         `p50 ${p50.toFixed(1)} ms, p95 ${p95.toFixed(1)} ms, max ${max.toFixed(1)} ms\n`,
     );
-    // The mock market ticks every symbol once a second, so 6 s gives dozens of samples.
+    // The mock market ticks every symbol once a second, so 10 s gives dozens of samples.
     expect(latencies.length).toBeGreaterThanOrEqual(SYMBOLS.length * 3);
     expect([...seen].sort()).toEqual([...SYMBOLS].sort());
     expect(p95).toBeLessThan(TARGET_P95_MS);

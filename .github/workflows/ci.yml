@@ -152,6 +152,10 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npx turbo run build --filter=@nthstock/web^... --filter=@nthstock/api --filter=@nthstock/realtime
+      # T-171: tick-to-screen p95 < 500 ms over this job's Redis, run alone so it measures the pipeline.
+      - run: npm run test:latency -w @nthstock/realtime
+        env:
+          REDIS_TEST_URL: redis://127.0.0.1:6379
       - name: Install Chrome for Testing (Chromium)
         run: npx playwright install --with-deps chromium
       - run: npm run e2e:api
