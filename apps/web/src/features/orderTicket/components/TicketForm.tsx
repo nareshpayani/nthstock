@@ -90,7 +90,7 @@ export function TicketForm({
         )}
       />
 
-      <div className="grid gap-3 sm:grid-cols-2">
+      <div className="grid gap-3 sm:grid-cols-2 [&>*]:min-w-0">
         <div className="grid gap-1">
           <span className="text-label text-ink-muted" aria-hidden="true">
             {strings.form.product}
@@ -141,14 +141,15 @@ export function TicketForm({
         </div>
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-2">
+      <div className="grid gap-3 sm:grid-cols-2 [&>*]:min-w-0">
         <Controller
           control={control}
           name="qty"
           render={({ field, fieldState }) => (
-            <Field label={strings.form.qty} error={fieldState.error?.message}>
-              <div ref={qtyBox}>
+            <Field label={strings.form.qty} error={fieldState.error?.message} className="min-w-0">
+              <div ref={qtyBox} className="min-w-0">
                 <NumberInput
+                  className="w-full min-w-0"
                   mode="integer"
                   name={field.name}
                   value={field.value}
@@ -163,6 +164,7 @@ export function TicketForm({
           name="price"
           render={({ field, fieldState }) => (
             <Field
+              className="min-w-0"
               label={strings.form.price}
               error={type === 'LIMIT' ? fieldState.error?.message : undefined}
               hint={
@@ -172,6 +174,7 @@ export function TicketForm({
               }
             >
               <NumberInput
+                className="w-full min-w-0"
                 mode="price"
                 name={field.name}
                 step={instrument.tickSize}
