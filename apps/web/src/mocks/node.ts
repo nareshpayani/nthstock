@@ -1,5 +1,5 @@
 import { setupServer } from 'msw/node';
-import { createHandlers, type AuthMockOptions } from './handlers';
+import { createHandlers, type AuthMockOptions, type WatchlistMockOptions } from './handlers';
 import { setMockLatency } from './handlerKit';
 import { createMockMarket, type MockMarketOptions } from './marketAdapter';
 
@@ -12,7 +12,11 @@ export const TEST_WS_URL = 'ws://api.test/ws';
  * Call `listen()` in beforeAll and `close()` in afterAll; dispose the adapter too.
  */
 export function createMockServer(
-  options: MockMarketOptions & { flushMs?: number; auth?: AuthMockOptions } = {},
+  options: MockMarketOptions & {
+    flushMs?: number;
+    auth?: AuthMockOptions;
+    watchlists?: WatchlistMockOptions;
+  } = {},
 ) {
   setMockLatency(0);
   const adapter = createMockMarket(options);
@@ -22,6 +26,7 @@ export function createMockServer(
       wsUrl: TEST_WS_URL,
       ...(options.flushMs === undefined ? {} : { stream: { flushMs: options.flushMs } }),
       ...(options.auth ? { auth: options.auth } : {}),
+      ...(options.watchlists ? { watchlists: options.watchlists } : {}),
     }),
   );
   return { server, adapter };
