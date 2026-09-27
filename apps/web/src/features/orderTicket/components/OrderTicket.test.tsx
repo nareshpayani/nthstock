@@ -1,3 +1,4 @@
+import { createApiClient } from '@nthstock/apiClient';
 import type { Exchange, OrderSide } from '@nthstock/contracts';
 import { fixedClock, formatInr, fromIst } from '@nthstock/utils';
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
@@ -12,6 +13,7 @@ import { installResizeObserver } from '@/test/resizeObserver';
 import { resetSession, signOut } from '@/test/session';
 import { loginOnMock } from '@/test/watchlists';
 import { ticketKeys } from '../api/ticketQueries';
+import { OrderTicket } from './OrderTicket';
 import { OrderTicketHost } from './OrderTicketHost';
 
 /** Monday 28 Sep 2026, 10:00 IST: NSE is open. Saturday 26 Sep, 11:30 IST: closed. */
@@ -375,6 +377,43 @@ describe('order ticket with the market closed (T-138)', () => {
 
       await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
       expect((await screen.findAllByText('AMO placed')).length).toBeGreaterThan(0);
+    },
+    HEAVY,
+  );
+});
+
+describe('order ticket load states', () => {
+  it('shows a retryable error when the instrument cannot load', async () => {
+    renderWithProviders(
+      <OrderTicket intent={{ symbol: 'INFY', exchange: 'NSE', side: 'BUY' }} onClose={vi.fn()} />,
+    );
+    expect(await screen.findByText('The order ticket could not load')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Retry' })).toBeInTheDocument();
+  });
+
+  it(
+    'has no order form for an index',
+    async () => {
+      const mock = mockAt(OPEN_MS);
+      mock.server.listen({ onUnhandledRequest: 'error' });
+      try {
+        // The instrument is public: no login needed.
+        const apiClient = createApiClient({ baseUrl: 'http://ticket.test' });
+        renderWithProviders(
+          <OrderTicket
+            intent={{ symbol: 'NIFTY50', exchange: 'NSE', side: 'BUY' }}
+            onClose={vi.fn()}
+          />,
+          { apiClient },
+        );
+        expect(
+          await screen.findByText('Only stocks can be traded. Indices have no orders.'),
+        ).toBeInTheDocument();
+      } finally {
+        mock.server.close();
+        mock.orders.dispose();
+        mock.adapter.dispose();
+      }
     },
     HEAVY,
   );

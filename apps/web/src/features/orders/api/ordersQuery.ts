@@ -5,5 +5,4 @@
  */
 export const ordersKeys = {
   all: ['orders'] as const,
-  list: (params: { status?: string | undefined } = {}) => ['orders', 'list', params] as const,
 };
