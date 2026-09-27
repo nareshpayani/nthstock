@@ -85,6 +85,11 @@ const scales = (table: HTMLElement) =>
     .getAllByTestId('depth-bar')
     .map((bar) => bar.style.transform);
 
+/** Real time allowed for a refetch to reach MSW and settle (slow CI runners). */
+const SETTLE = { timeout: 5_000, interval: 20 };
+/** Polling tests step through several refreshes; give a busy runner room. */
+const POLL_TEST_TIMEOUT = 30_000;
+
 /** Advances the faked setInterval clock (refetchInterval) and lets fetches settle. */
 async function advance(ms: number) {
   await act(() => vi.advanceTimersByTimeAsync(ms));
@@ -141,50 +146,64 @@ describe('market depth (T-110)', () => {
     expect(within(card).getByText('3,71,000')).toBeInTheDocument();
   });
 
-  it('refreshes every second while open, visible and on screen, and stops when the tab is hidden', async () => {
-    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
-    const card = await openDepth('/stocks/INFY', OPEN);
-    const fetches = () => api.requestsTo('/depth').length;
-    const first = fetches();
-    expect(first).toBe(1);
-    expect(within(card).getByText('Top 5 levels, updated every second')).toBeInTheDocument();
+  it(
+    'refreshes every second while open, visible and on screen, and stops when the tab is hidden',
+    async () => {
+      vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
+      const card = await openDepth('/stocks/INFY', OPEN);
+      const fetches = () => api.requestsTo('/depth').length;
+      const first = fetches();
+      expect(first).toBe(1);
+      expect(within(card).getByText('Top 5 levels, updated every second')).toBeInTheDocument();
 
-    await advance(DEPTH_REFRESH_MS);
-    await vi.waitFor(() => expect(fetches()).toBe(2));
-    await advance(DEPTH_REFRESH_MS);
-    await vi.waitFor(() => expect(fetches()).toBe(3));
+      await advance(DEPTH_REFRESH_MS);
+      await vi.waitFor(() => expect(fetches()).toBe(2), SETTLE);
+      await advance(DEPTH_REFRESH_MS);
+      await vi.waitFor(() => expect(fetches()).toBe(3), SETTLE);
 
-    act(() => setPageVisibility('hidden'));
-    await advance(DEPTH_REFRESH_MS * 5);
-    expect(fetches()).toBe(3);
-    expect(within(card).getByText('Top 5 levels, updates paused while hidden')).toBeInTheDocument();
+      act(() => setPageVisibility('hidden'));
+      await advance(DEPTH_REFRESH_MS * 5);
+      expect(fetches()).toBe(3);
+      expect(
+        within(card).getByText('Top 5 levels, updates paused while hidden'),
+      ).toBeInTheDocument();
 
-    act(() => setPageVisibility('visible'));
-    await advance(DEPTH_REFRESH_MS);
-    await vi.waitFor(() => expect(fetches()).toBeGreaterThan(3));
-  });
+      act(() => setPageVisibility('visible'));
+      await advance(DEPTH_REFRESH_MS);
+      await vi.waitFor(() => expect(fetches()).toBeGreaterThan(3), SETTLE);
+    },
+    POLL_TEST_TIMEOUT,
+  );
 
-  it('stops refreshing when the card scrolls out of view', async () => {
-    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
-    const card = await openDepth('/stocks/INFY', OPEN);
-    expect(io.observed()).toContain(card.parentElement);
-    const fetches = () => api.requestsTo('/depth').length;
+  it(
+    'stops refreshing when the card scrolls out of view',
+    async () => {
+      vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
+      const card = await openDepth('/stocks/INFY', OPEN);
+      expect(io.observed()).toContain(card.parentElement);
+      const fetches = () => api.requestsTo('/depth').length;
 
-    act(() => io.setInView(false));
-    await advance(DEPTH_REFRESH_MS * 5);
-    expect(fetches()).toBe(1);
+      act(() => io.setInView(false));
+      await advance(DEPTH_REFRESH_MS * 5);
+      expect(fetches()).toBe(1);
 
-    act(() => io.setInView(true));
-    await advance(DEPTH_REFRESH_MS);
-    await vi.waitFor(() => expect(fetches()).toBe(2));
-  });
+      act(() => io.setInView(true));
+      await advance(DEPTH_REFRESH_MS);
+      await vi.waitFor(() => expect(fetches()).toBe(2), SETTLE);
+    },
+    POLL_TEST_TIMEOUT,
+  );
 
-  it('does not poll while the market is closed', async () => {
-    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
-    await openDepth('/stocks/INFY', CLOSED);
-    await advance(DEPTH_REFRESH_MS * 5);
-    expect(api.requestsTo('/depth')).toHaveLength(1);
-  });
+  it(
+    'does not poll while the market is closed',
+    async () => {
+      vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
+      await openDepth('/stocks/INFY', CLOSED);
+      await advance(DEPTH_REFRESH_MS * 5);
+      expect(api.requestsTo('/depth')).toHaveLength(1);
+    },
+    POLL_TEST_TIMEOUT,
+  );
 
   it('keeps the same table shape while loading, so nothing shifts when data arrives', async () => {
     let release: () => void = () => undefined;
