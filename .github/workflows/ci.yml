@@ -100,6 +100,32 @@ jobs:
           path: apps/web/playwright-report
           retention-days: 7
 
+  # T-169 and T-170: lab Web Vitals budgets (LCP < 2.0 s, CLS < 0.05, TBT as the INP proxy) on the
+  # dashboard and stock detail under Lighthouse's desktop throttling, and no main-thread task over
+  # 50 ms with 200 ticking symbols. Its own job, one worker, so nothing competes for the CPU.
+  perf:
+    name: Web vitals and render budgets (Chrome)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - run: npx turbo run build --filter=@nthstock/web^...
+      - name: Install Chrome for Testing (Chromium)
+        run: npx playwright install --with-deps chromium
+      - run: npm run e2e:perf
+      # The measured vitals, the longest main-thread tasks and the Chrome trace, pass or fail.
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: perf-report
+          path: apps/web/playwright-report
+          retention-days: 14
+
   # T-164: the golden path and the scripted-order scenarios (@api specs) against the real backends:
   # apps/api and apps/realtime from their builds (NODE_ENV=test, ENABLE_TEST_CONTROLS=true, a
   # per-run JWT key made by playwright.config.ts), Redis as a service container, and an api-mode
