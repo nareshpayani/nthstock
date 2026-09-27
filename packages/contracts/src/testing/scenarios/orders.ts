@@ -18,16 +18,16 @@ import { defineScenarios, type ScenarioClient } from '../harness.js';
  */
 
 /** Monday 28 Sep 2026, 10:00 IST: a trading day, market open. */
-const MONDAY_10_00_IST = '2026-09-28T04:30:00.000Z';
+export const MONDAY_10_00_IST = '2026-09-28T04:30:00.000Z';
 /** The same Monday, 20:00 IST: closed, so orders wait as AMO. */
-const MONDAY_20_00_IST = '2026-09-28T14:30:00.000Z';
+export const MONDAY_20_00_IST = '2026-09-28T14:30:00.000Z';
 /** Tuesday 29 Sep 2026, 9:16 IST: one minute after the 9:15 AMO release. */
-const TUESDAY_09_16_IST = '2026-09-29T03:46:00.000Z';
+export const TUESDAY_09_16_IST = '2026-09-29T03:46:00.000Z';
 
 const tick = (paise: number, round: (n: number) => number = Math.round) =>
   round(paise / TICK_SIZE_PAISE) * TICK_SIZE_PAISE;
 
-const expectError = async (
+export const expectError = async (
   pending: ReturnType<ScenarioClient['callError']>,
   status: number,
   code: string,
@@ -38,7 +38,7 @@ const expectError = async (
   return body.error;
 };
 
-type Stock = {
+export type Stock = {
   token: number;
   /** A base LTP (the previous close, on the tick). */
   base: number;
@@ -48,7 +48,7 @@ type Stock = {
 };
 
 /** Sets the clock, logs in as `mobile`, and pins `symbol` at its previous close. */
-async function start(
+export async function start(
   client: ScenarioClient,
   mobile: string,
   symbol = 'INFY',
@@ -57,6 +57,11 @@ async function start(
   await client.setTime(at);
   const { requestId } = await client.call('otpRequest', { body: { mobile } });
   await client.call('otpVerify', { body: { requestId, mobile, otp: DEV_OTP } });
+  return pinnedStock(client, symbol);
+}
+
+/** Looks `symbol` up and pins it at its previous close (on the tick). */
+export async function pinnedStock(client: ScenarioClient, symbol: string): Promise<Stock> {
   const { token } = await client.call('instrument', { params: { symbol } });
   const stats = await client.call('instrumentStats', { params: { symbol } });
   const base = tick(stats.prevClose);
@@ -72,7 +77,7 @@ async function start(
   return stock;
 }
 
-const buy = (
+export const buy = (
   stock: Stock,
   extra: Partial<PlaceOrderRequest> & Pick<PlaceOrderRequest, 'qty'>,
 ): PlaceOrderRequest => ({
