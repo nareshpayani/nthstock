@@ -182,3 +182,20 @@ export const IconExternal = /* @__PURE__ */ createIcon('external', () => (
     <path d="M18 14v4.5a1.5 1.5 0 0 1-1.5 1.5h-11A1.5 1.5 0 0 1 4 18.5v-11A1.5 1.5 0 0 1 5.5 6H10" />
   </>
 ));
+
+export const IconStar = /* @__PURE__ */ createIcon('star', () => (
+  <path d="m12 3.5 2.6 5.3 5.9.9-4.3 4.1 1 5.8-5.2-2.7-5.2 2.7 1-5.8-4.3-4.1 5.9-.9Z" />
+));
+
+/** Six dots: the drag handle of a reorderable row. */
+export const IconGrip = /* @__PURE__ */ createIcon('grip', () => (
+  <path d="M9 6h.01M9 12h.01M9 18h.01M15 6h.01M15 12h.01M15 18h.01" strokeWidth={3} />
+));
+
+export const IconEdit = /* @__PURE__ */ createIcon('edit', () => (
+  <path d="M4.5 19.5h4l10-10a2.1 2.1 0 0 0-3-3l-10 10Zm9-11 3 3" />
+));
+
+export const IconTrash = /* @__PURE__ */ createIcon('trash', () => (
+  <path d="M4.5 7h15M9.5 7V4.5h5V7m-8 0 .8 12.5h9.4L17.5 7M10 11v5M14 11v5" />
+));
