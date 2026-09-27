@@ -9,6 +9,9 @@ import {
   type SmsLog,
   type SmsProvider,
 } from './modules/auth/smsProvider.js';
+import { createMemoryAuditRepo, type AuditRepo } from './modules/audit/repo.js';
+import { createMemoryOrdersRepo, type OrdersRepo } from './modules/orders/repo.js';
+import { createOrderService, type OrderService } from './modules/orders/service.js';
 import { createMemoryUsersRepo, type UsersRepo } from './modules/users/repo.js';
 import { createMemoryWatchlistsRepo, type WatchlistsRepo } from './modules/watchlists/repo.js';
 
@@ -17,6 +20,10 @@ export type Repos = {
   users: UsersRepo;
   auth: AuthRepo;
   watchlists: WatchlistsRepo;
+  /** Paper accounts: one engine per user (T-131). */
+  orders: OrdersRepo;
+  /** The append-only audit log. */
+  audit: AuditRepo;
 };
 
 /** What modules get injected instead of reaching for globals: time, storage and market data. */
@@ -33,7 +40,12 @@ export type AppDeps = {
   jwtSecret: Uint8Array;
   /** Argon2id PIN hashing. */
   pinHasher: PinHasher;
-  /** Releases what `createDeps` created itself (the adapter's timers). Injected parts are left alone. */
+  /** Paper orders and funds for every user, fed by `market` ticks (T-131); one per process. */
+  orders: OrderService;
+  /**
+   * Releases what `createDeps` created itself (the orders desk's subscriptions, the adapter's
+   * timers). Injected parts are left alone.
+   */
   dispose(): void;
 };
 
@@ -52,6 +64,8 @@ export type DepsOverrides = {
   /** Left out: a random per-process key outside production; production must pass one. */
   jwtSecret?: Uint8Array;
   pinHasher?: PinHasher;
+  /** Ids for orders and ledger entries (tests); default random. */
+  newOrderId?: () => string;
 };
 
 /** Builds a fresh set of dependencies; each app (and each test app) gets its own in-memory state. */
@@ -62,13 +76,23 @@ export function createDeps(overrides: DepsOverrides = {}): AppDeps {
     new MockMarketDataAdapter({ clock, alwaysOpen: overrides.marketAlwaysOpen ?? false });
   const owned = overrides.market ? null : market;
   const production = overrides.production ?? false;
+  const repos: Repos = {
+    users: overrides.repos?.users ?? createMemoryUsersRepo({ clock }),
+    auth: overrides.repos?.auth ?? createMemoryAuthRepo(),
+    watchlists: overrides.repos?.watchlists ?? createMemoryWatchlistsRepo(),
+    orders: overrides.repos?.orders ?? createMemoryOrdersRepo(),
+    audit: overrides.repos?.audit ?? createMemoryAuditRepo({ clock }),
+  };
+  const orders = createOrderService({
+    clock,
+    market,
+    repo: repos.orders,
+    audit: repos.audit,
+    ...(overrides.newOrderId ? { newId: overrides.newOrderId } : {}),
+  });
   return {
     clock,
-    repos: {
-      users: overrides.repos?.users ?? createMemoryUsersRepo({ clock }),
-      auth: overrides.repos?.auth ?? createMemoryAuthRepo(),
-      watchlists: overrides.repos?.watchlists ?? createMemoryWatchlistsRepo(),
-    },
+    repos,
     market,
     production,
     sms:
@@ -77,7 +101,11 @@ export function createDeps(overrides: DepsOverrides = {}): AppDeps {
     captcha: overrides.captcha ?? createMockCaptchaVerifier({ production }),
     jwtSecret: overrides.jwtSecret ?? resolveJwtSecret({ value: undefined, production }),
     pinHasher: overrides.pinHasher ?? createArgon2PinHasher(),
-    dispose: () => owned?.dispose(),
+    orders,
+    dispose: () => {
+      orders.dispose();
+      owned?.dispose();
+    },
   };
 }
 
