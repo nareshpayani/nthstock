@@ -19,7 +19,7 @@ import type { IntervalTimers } from './quoteStream';
 import type { AuthMock } from './auth';
 
 /**
- * MSW order, funds and portfolio handlers (T-132, T-142) on the same `PaperDesk` as apps/api (T-131): one paper
+ * MSW order, funds and portfolio handlers (T-132, T-142, T-156) on the same `PaperDesk` as apps/api (T-131): one paper
  * engine per user, fed by the in-browser mock market's ticks, so a LIMIT order fills on the tick
  * that crosses it and an `orderUpdate` goes out on the mock WebSocket (`onOrderUpdate`). Refusals
  * use `orderApiError`, so both backends answer alike.
@@ -200,6 +200,22 @@ export function createOrdersMock(
       ),
 
       route('fundsSummary', (context) => desk.fundsSummary(userOf(context))),
+
+      // The funds ledger and the reset (T-156), with the same rules as apps/api (T-155): pages
+      // newest first by cursor, and a reset cancels open orders, clears positions and holdings and
+      // writes a RESET entry that restores the opening balance. `onChange` then saves the cleared
+      // engine, so the reset survives a reload.
+      route('fundsLedger', (context) => {
+        const { cursor, limit } = context.query;
+        const page = desk.ledgerPage(userOf(context), {
+          ...(cursor ? { cursor } : {}),
+          ...(limit ? { limit } : {}),
+        });
+        if (!page) throw new MockApiError(400, 'VALIDATION_ERROR', 'Invalid cursor');
+        return page;
+      }),
+
+      route('fundsReset', (context) => desk.reset(userOf(context))),
 
       // Positions, holdings and the portfolio summary (T-142): read from the same engines as the
       // orders above, valued at the LTP they see, exactly as apps/api does (T-141).

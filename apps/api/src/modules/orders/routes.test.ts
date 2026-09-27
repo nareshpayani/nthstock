@@ -88,12 +88,23 @@ describe('order routes (T-131)', () => {
 
     const audit = await app.deps.repos.audit.list(user.session.user.id);
     const mine = audit.filter((entry) => entry.orderId === order.id);
-    expect(mine.map((entry) => [entry.action, entry.actor.type, entry.outcome])).toEqual([
+    const orderActions = mine.filter((entry) => entry.action !== 'FUNDS_MOVEMENT');
+    expect(orderActions.map((entry) => [entry.action, entry.actor.type, entry.outcome])).toEqual([
       ['ORDER_UPDATE', 'system', 'OK'], // stored OPEN
       ['ORDER_UPDATE', 'system', 'OK'], // filled
       ['ORDER_PLACE', 'user', 'OK'],
     ]);
-    expect(mine.at(-1)?.detail).toMatchObject({ status: 'EXECUTED' });
+    expect(orderActions.at(-1)?.detail).toMatchObject({ status: 'EXECUTED' });
+    // Every fund movement of the order is audited too (block, release, debit).
+    expect(
+      mine
+        .filter((entry) => entry.action === 'FUNDS_MOVEMENT')
+        .map((entry) => [entry.detail['type'], entry.detail['amount']]),
+    ).toEqual([
+      ['ORDER_BLOCK', -2 * price],
+      ['ORDER_RELEASE', 2 * price],
+      ['TRADE_DEBIT', -2 * price],
+    ]);
   });
 
   it('fills a LIMIT order on the adapter tick that crosses it', async () => {

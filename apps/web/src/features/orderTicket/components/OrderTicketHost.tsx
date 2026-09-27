@@ -60,7 +60,7 @@ export function OrderTicketHost() {
       {open ? (
         <Suspense fallback={<TicketSkeleton />}>
           <OrderTicket
-            key={`${intent.exchange}:${intent.symbol}:${intent.side}:${intent.modify?.id ?? ''}`}
+            key={`${intent.exchange}:${intent.symbol}:${intent.side}:${intent.modify?.id ?? ''}:${String(intent.qty ?? '')}:${intent.product ?? ''}`}
             intent={intent}
             onClose={closeTicket}
           />

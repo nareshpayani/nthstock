@@ -5,8 +5,8 @@ import { authContextOf, createAuthenticate } from '../auth/authenticate.js';
 import { createSessionService } from '../auth/sessionService.js';
 
 /**
- * Order and funds routes (T-131): place, modify, cancel, get and list by status, and the funds
- * summary. Every route needs a session (and, for writes, the CSRF token); a user only ever sees
+ * Order routes (T-131): place, modify, cancel, get and list by status (the funds routes are in the
+ * funds module). Every route needs a session (and, for writes, the CSRF token); a user only ever sees
  * their own orders, and another user's order id answers 404.
  */
 export const orderRoutes =
@@ -65,6 +65,4 @@ export const orderRoutes =
       ({ request, params }) => orders.cancel(userOf(request), params.id),
       options,
     );
-
-    registerRoute(app, 'fundsSummary', ({ request }) => orders.funds(userOf(request)), options);
   };

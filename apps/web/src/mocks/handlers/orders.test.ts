@@ -1,5 +1,11 @@
 // @vitest-environment node
-import { DEV_OTP, Order, WsServerMessage, type Quote } from '@nthstock/contracts';
+import {
+  DEV_OTP,
+  Order,
+  PAPER_OPENING_BALANCE_PAISE,
+  WsServerMessage,
+  type Quote,
+} from '@nthstock/contracts';
 import {
   createScenarioClient,
   fetchBackend,
@@ -255,5 +261,63 @@ describe('MSW orders (T-132)', () => {
       body: { token: quote.token, side: 'BUY', type: 'MARKET', product: 'DELIVERY', qty: 1 },
     });
     expect(placed.status).toBe('EXECUTED');
+  });
+
+  it('pages the ledger and resets the in-browser engine, saved state included (T-156)', async () => {
+    const storages = { auth: memoryStorage(), orders: memoryStorage() };
+    const first = pageLoad(storages);
+    await login(first.client, '8300000008');
+    const quote = await infy(first.client);
+    first.orders.pinPrice(quote.token, quote.ltp);
+    const socket = await openSocket();
+    await first.client.call('orderPlace', {
+      body: { token: quote.token, side: 'BUY', type: 'MARKET', product: 'DELIVERY', qty: 4 },
+    });
+    const resting = await first.client.call('orderPlace', {
+      body: {
+        token: quote.token,
+        side: 'BUY',
+        type: 'LIMIT',
+        product: 'DELIVERY',
+        qty: 2,
+        price: quote.ltp - 500,
+      },
+    });
+    const page = await first.client.call('fundsLedger', { query: { limit: 2 } });
+    expect(page.items.map((e) => e.type)).toEqual(['ORDER_BLOCK', 'TRADE_DEBIT']);
+    const next = await first.client.call('fundsLedger', {
+      query: { cursor: page.nextCursor ?? '' },
+    });
+    expect(next.items.at(-1)?.type).toBe('OPENING_CREDIT');
+    expect(next.nextCursor).toBeNull();
+    expect(
+      (await first.client.callError('fundsLedger', { query: { cursor: 'nope' } })).status,
+    ).toBe(400);
+    expect(
+      (await first.client.callError('fundsReset', { body: { confirm: 'reset' } })).status,
+    ).toBe(400);
+
+    const funds = await first.client.call('fundsReset', { body: { confirm: 'RESET' } });
+    expect(funds).toMatchObject({
+      balance: PAPER_OPENING_BALANCE_PAISE,
+      available: PAPER_OPENING_BALANCE_PAISE,
+      blocked: 0,
+    });
+    await expect
+      .poll(() => socket.orderUpdates().map((o) => [o.id, o.status]))
+      .toContainEqual([resting.id, 'CANCELLED']);
+    expect((await first.client.call('ordersList')).items).toEqual([]);
+    expect((await first.client.call('positionsList')).items).toEqual([]);
+    expect((await first.client.call('holdingsList')).items).toEqual([]);
+    const [reset] = (await first.client.call('fundsLedger')).items;
+    expect(reset).toMatchObject({ type: 'RESET', balanceAfter: PAPER_OPENING_BALANCE_PAISE });
+    const cookies = first.client.cookies.header() ?? '';
+    for (const cleanup of cleanups.splice(0).reverse()) cleanup();
+
+    // The saved engine is the cleared one: a reload does not bring the orders back.
+    const second = pageLoad(storages);
+    second.client.cookies.store(cookies.split('; ').map((pair) => `${pair}; Path=/`));
+    expect((await second.client.call('ordersList')).items).toEqual([]);
+    expect((await second.client.call('fundsSummary')).available).toBe(PAPER_OPENING_BALANCE_PAISE);
   });
 });

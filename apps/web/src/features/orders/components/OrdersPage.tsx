@@ -12,6 +12,7 @@ import {
 import { useQuery } from '@tanstack/react-query';
 import { useContext, useMemo, useRef, useState } from 'react';
 import { PageHeader } from '@/shared/components/PageHeader';
+import { SearchStocksButton } from '@/shared/components/SearchStocksButton';
 import { useApiClient } from '@/shared/lib/apiClientContext';
 import { MarketSessionContext } from '@/shared/lib/marketSessionContext';
 import { useTicketIntentStore } from '@/shared/lib/ticketIntentStore';
@@ -122,6 +123,7 @@ export function OrdersPage({ search, onSearchChange }: OrdersPageProps) {
                 title={strings.empty[key].title}
                 description={strings.empty[key].body}
                 icon={<IconClock size={24} />}
+                action={<SearchStocksButton label={strings.emptyCta} />}
               />
             ) : (
               <OrderTable

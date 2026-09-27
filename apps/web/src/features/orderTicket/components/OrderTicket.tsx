@@ -99,7 +99,9 @@ function TicketFlow({
   const form = useForm<TicketFormValues>({
     resolver: zodResolver(TicketFormSchema),
     mode: 'onChange',
-    defaultValues: modifying ? ticketValuesFromOrder(modifying) : defaultTicketValues(intent.side),
+    defaultValues: modifying
+      ? ticketValuesFromOrder(modifying)
+      : defaultTicketValues(intent.side, intent),
   });
   const { control, getValues, setValue } = form;
 

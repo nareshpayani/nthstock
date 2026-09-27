@@ -139,6 +139,7 @@ type StoredOrder = Order;
 const LIVE_STATUSES: ReadonlySet<OrderStatus> = new Set(['AMO', 'OPEN']);
 
 const CANCELLED_BY_USER = 'Cancelled by you.';
+const CANCELLED_BY_RESET = 'Cancelled when you reset your paper balance.';
 const CANCELLED_AT_SQUARE_OFF = 'Cancelled at the 3:20 PM IST intraday square-off.';
 const CANCELLED_AT_CLOSE = 'Cancelled at market close, 3:30 PM IST. Day orders do not carry over.';
 const SQUARED_OFF = 'Squared off automatically at 3:20 PM IST.';
@@ -355,6 +356,31 @@ export class PaperEngine {
     if (refused) return refused;
     this.#cancel(order, CANCELLED_BY_USER);
     return this.#result(order);
+  }
+
+  /**
+   * Resets the paper account (T-155): cancels every AMO and OPEN order (each goes out as an order
+   * update and releases its block), writes a `RESET` ledger entry that brings available cash back
+   * to the opening balance, and clears orders, positions and holdings. The ledger keeps its
+   * history (append-only). Returns the orders it cancelled.
+   */
+  reset(): readonly Order[] {
+    this.sync();
+    const cancelled: Order[] = [];
+    for (const order of this.#orders.values()) {
+      if (!LIVE_STATUSES.has(order.status)) continue;
+      this.#cancel(order, CANCELLED_BY_RESET);
+      cancelled.push(copy(order));
+    }
+    this.#mustLedger(this.#funds.reset());
+    this.#orders.clear();
+    this.#byClientOrderId.clear();
+    this.#positions.clear();
+    this.#holdings.clear();
+    this.#holdingSales.clear();
+    this.#rejectCodes.clear();
+    this.#history.clear();
+    return cancelled;
   }
 
   /**

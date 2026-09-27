@@ -14,6 +14,7 @@ import type {
   Position,
   Quote,
   FundsSummary,
+  LedgerPage,
 } from '@nthstock/contracts';
 import { PAGE_LIMIT_DEFAULT } from '@nthstock/contracts';
 import { istDateKey, nseHolidays2026, type Clock, type HolidayTable } from '@nthstock/utils';
@@ -64,6 +65,9 @@ export type PaperDeskOptions = {
 
 /** Order book pages are newest first; the cursor is the id of the last order on a page. */
 export type OrdersPageQuery = { status?: OrderStatus; cursor?: string; limit?: number };
+
+/** Ledger pages are newest first; the cursor is the id of the last entry on a page. */
+export type LedgerPageQuery = { cursor?: string; limit?: number };
 
 const LIVE: ReadonlySet<OrderStatus> = new Set(['AMO', 'OPEN']);
 
@@ -161,23 +165,36 @@ export class PaperDesk {
       engine.sync();
       return engine.orders(query.status);
     });
-    const newestFirst = [...all].reverse();
-    let start = 0;
-    if (query.cursor !== undefined) {
-      const at = newestFirst.findIndex((order) => order.id === query.cursor);
-      if (at < 0) return null;
-      start = at + 1;
-    }
-    const limit = query.limit ?? PAGE_LIMIT_DEFAULT;
-    const items = newestFirst.slice(start, start + limit);
-    const last = items.at(-1);
-    const more = start + limit < newestFirst.length;
-    return { items, nextCursor: more && last ? last.id : null };
+    return newestFirstPage(all, query);
   }
 
   fundsSummary(userId: string): FundsSummary {
     return this.#change(userId, (engine) => {
       engine.sync();
+      return engine.fundsSummary();
+    });
+  }
+
+  /**
+   * One page of the user's funds ledger (T-155), newest first; `null` when the cursor is not one
+   * of their entries.
+   */
+  ledgerPage(userId: string, query: LedgerPageQuery = {}): LedgerPage | null {
+    const all = this.#change(userId, (engine) => {
+      engine.sync();
+      return engine.ledger.entries();
+    });
+    return newestFirstPage(all, query);
+  }
+
+  /**
+   * Resets the user's paper account (T-155): open orders are cancelled (and pushed as order
+   * updates), positions and holdings cleared, and a `RESET` ledger entry brings available cash
+   * back to the opening balance. Answers with the new funds summary.
+   */
+  reset(userId: string): FundsSummary {
+    return this.#change(userId, (engine) => {
+      engine.reset();
       return engine.fundsSummary();
     });
   }
@@ -472,6 +489,25 @@ export class PaperDesk {
       .then((list) => new Map(list.map((instrument) => [instrument.token, instrument])));
     return this.#symbolMaster;
   }
+}
+
+/** A cursor page of `all` (oldest first) read newest first; `null` for an unknown cursor. */
+function newestFirstPage<T extends { id: string }>(
+  all: readonly T[],
+  query: { cursor?: string; limit?: number },
+): { items: T[]; nextCursor: string | null } | null {
+  const newestFirst = [...all].reverse();
+  let start = 0;
+  if (query.cursor !== undefined) {
+    const at = newestFirst.findIndex((item) => item.id === query.cursor);
+    if (at < 0) return null;
+    start = at + 1;
+  }
+  const limit = query.limit ?? PAGE_LIMIT_DEFAULT;
+  const items = newestFirst.slice(start, start + limit);
+  const last = items.at(-1);
+  const more = start + limit < newestFirst.length;
+  return { items, nextCursor: more && last ? last.id : null };
 }
 
 function mapRegistry(): EngineRegistry {

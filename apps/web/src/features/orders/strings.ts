@@ -24,8 +24,12 @@ export const strings = {
     body: 'Check your connection and try again.',
     retry: 'Retry',
   },
+  emptyCta: 'Search stocks',
   empty: {
-    open: { title: 'No open orders', body: 'Limit orders and AMOs wait here until they fill.' },
+    open: {
+      title: 'No open orders',
+      body: 'Limit orders and AMOs wait here until they fill. Find a stock in search or your watchlist to trade.',
+    },
     executed: { title: 'No executed orders', body: 'Filled orders show here with their price.' },
     cancelled: {
       title: 'No cancelled or rejected orders',

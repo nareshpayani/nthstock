@@ -1,4 +1,4 @@
-export { PortfolioPage } from './components/PortfolioPage';
+export { PortfolioPage, type PortfolioSearch } from './components/PortfolioPage';
 export { holdingsKeys, holdingsQuery, portfolioSummaryQuery } from './api/holdingsQuery';
 export { useLiveHolding, useLiveHoldings } from './hooks/useLiveHoldings';
 export {
