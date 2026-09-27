@@ -1,5 +1,5 @@
 import { SearchBox } from '@/features/search';
-import { WatchlistSection, WatchlistSortMenu } from '@/features/watchlist';
+import { WatchlistSection, WatchlistSortMenu, useWatchlistAdder } from '@/features/watchlist';
 import type { Ref } from 'react';
 import { strings } from '../strings';
 
@@ -10,12 +10,14 @@ export type LeftRailProps = {
   onNavigate?: () => void;
 };
 
-/** Left rail frame: search slot, sort slot, "My Watchlist" and a paper-trading note. */
+/** Left rail frame: search slot, sort slot, watchlists and a paper-trading note. */
 export function LeftRail({ searchRef, onAddStock, onNavigate }: LeftRailProps) {
+  // Search results can go straight into the open watchlist (T-121).
+  const addTo = useWatchlistAdder();
   return (
     <div className="grid content-start gap-4 p-4">
       <div className="flex items-center gap-2">
-        <SearchBox ref={searchRef} {...(onNavigate ? { onNavigate } : {})} />
+        <SearchBox ref={searchRef} addTo={addTo} {...(onNavigate ? { onNavigate } : {})} />
         <WatchlistSortMenu />
       </div>
       <WatchlistSection onAddStock={onAddStock} />
