@@ -1,5 +1,7 @@
 import {
+  FundsSummary,
   HoldingsResponse,
+  LedgerPage,
   Order,
   OrderHistoryResponse,
   PortfolioSummary,
@@ -369,5 +371,47 @@ describe('orderApiError', () => {
       positionsCount: 0,
       asOf: ist(28, 10, 0).toISOString(),
     });
+  });
+
+  it('pages the funds ledger newest first by cursor (T-155)', async () => {
+    const { desk } = setup();
+    for (let i = 0; i < 3; i += 1) await desk.place('u1', marketBuy(1));
+    // Opening credit, then a block, a release and a debit per order: 10 entries.
+    const first = LedgerPage.parse(desk.ledgerPage('u1', { limit: 4 }));
+    expect(first.items.map((e) => e.type)).toEqual([
+      'TRADE_DEBIT',
+      'ORDER_RELEASE',
+      'ORDER_BLOCK',
+      'TRADE_DEBIT',
+    ]);
+    expect(first.nextCursor).toBe(first.items[3]?.id);
+    const second = desk.ledgerPage('u1', { limit: 4, cursor: first.nextCursor ?? '' });
+    const third = desk.ledgerPage('u1', { limit: 4, cursor: second?.nextCursor ?? '' });
+    expect(third?.items.map((e) => e.type)).toEqual(['ORDER_BLOCK', 'OPENING_CREDIT']);
+    expect(third?.nextCursor).toBeNull();
+    expect(desk.ledgerPage('u1', { cursor: 'nope' })).toBeNull();
+    expect(desk.ledgerPage('u2')?.items.map((e) => e.type)).toEqual(['OPENING_CREDIT']);
+  });
+
+  it('resets one user: open orders cancelled and pushed, ₹10,00,000 restored (T-155)', async () => {
+    const { desk, market, updates } = setup();
+    await desk.place('u1', marketBuy(5));
+    const resting = await desk.place('u1', limitBuy(1_400_00));
+    await desk.place('u2', marketBuy(2));
+    if (!resting.ok) throw new Error('place failed');
+    updates.length = 0;
+
+    const funds = FundsSummary.parse(desk.reset('u1'));
+    expect(funds).toMatchObject({ balance: 10_00_000_00, available: 10_00_000_00, blocked: 0 });
+    expect(updates.map((u) => [u.userId, u.order.id, u.order.status])).toEqual([
+      ['u1', resting.order.id, 'CANCELLED'],
+    ]);
+    expect(desk.ordersPage('u1')?.items).toEqual([]);
+    expect(await desk.positions('u1')).toEqual([]);
+    expect(desk.ledgerPage('u1', { limit: 1 })?.items[0]?.type).toBe('RESET');
+    // The other user is untouched, and a tick no longer reaches the reset account.
+    expect(await desk.positions('u2')).toHaveLength(1);
+    market.tick('INFY', 1_300_00);
+    expect(updates).toHaveLength(1);
   });
 });

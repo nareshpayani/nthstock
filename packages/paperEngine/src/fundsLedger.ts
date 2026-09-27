@@ -35,6 +35,9 @@ export type FundsLedgerOptions = {
  * - Fill: `settleBuy()` releases the block and debits the trade value (`TRADE_DEBIT`);
  *   `settleSell()` credits the proceeds (`TRADE_CREDIT`).
  *
+ * - Reset (T-155): `reset()` brings available cash back to the opening balance with one `RESET`
+ *   entry, once every order's block is released. Earlier entries stay: the ledger never shrinks.
+ *
  * Available cash never goes negative: an operation that would overdraw returns
  * `INSUFFICIENT_FUNDS` and appends nothing. The one exception is `settleForcedBuy()`, the
  * automatic intraday square-off.
@@ -79,6 +82,36 @@ export class FundsLedger {
   /** Every entry in order. The entries are frozen; the ledger is append-only. */
   entries(): readonly LedgerEntry[] {
     return [...this.#entries];
+  }
+
+  /** How many entries there are. */
+  get size(): number {
+    return this.#entries.length;
+  }
+
+  /** The entries from position `start` on (0-based), without copying the whole ledger. */
+  entriesFrom(start: number): readonly LedgerEntry[] {
+    return this.#entries.slice(Math.max(0, start));
+  }
+
+  /**
+   * Resets the paper balance (T-155): appends one `RESET` entry whose amount brings available
+   * cash back to the opening balance (it may be zero or negative when the account is up). Every
+   * block must be released first (the engine cancels open orders before it resets).
+   */
+  reset(): LedgerResult {
+    if (this.#blocked !== 0) {
+      throw new Error('Release every blocked amount before a reset');
+    }
+    const amount = this.openingBalance - this.#available;
+    return this.#ok(
+      this.#append(
+        'RESET',
+        amount,
+        null,
+        `Paper balance reset to ${formatInr(this.openingBalance)}`,
+      ),
+    );
   }
 
   /** Blocks `amount` for a BUY order being placed. An order may be blocked more than once (modify). */

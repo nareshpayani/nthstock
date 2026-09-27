@@ -78,6 +78,7 @@ export {
   PaperDesk,
   type DeskMarket,
   type EngineRegistry,
+  type LedgerPageQuery,
   type OrdersPageQuery,
   type PaperDeskOptions,
 } from './paperDesk.js';
