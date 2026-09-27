@@ -18,6 +18,7 @@ describe('public entry point', () => {
       'TickBatch',
       'encodeQuoteFrame',
       'routes',
+      'TEST_CONTROL_PATHS',
     ]) {
       expect(contracts, name).toHaveProperty(name);
     }

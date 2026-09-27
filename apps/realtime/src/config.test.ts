@@ -9,6 +9,7 @@ describe('loadConfig', () => {
       port: 8081,
       host: '0.0.0.0',
       redisUrl: 'redis://127.0.0.1:6379',
+      testControls: false,
     });
   });
 
@@ -27,7 +28,22 @@ describe('loadConfig', () => {
       port: 9000,
       host: '127.0.0.1',
       redisUrl: 'redis://redis.local:6380',
+      testControls: false,
     });
+  });
+
+  it('turns the test controls on only with NODE_ENV=test and the explicit flag (T-162)', () => {
+    expect(loadConfig({ NODE_ENV: 'test' }).testControls).toBe(false);
+    expect(loadConfig({ NODE_ENV: 'test', ENABLE_TEST_CONTROLS: '1' }).testControls).toBe(true);
+    expect(() => loadConfig({ ENABLE_TEST_CONTROLS: 'true' })).toThrow(/needs NODE_ENV=test/);
+    expect(() =>
+      loadConfig({
+        NODE_ENV: 'production',
+        JWT_SECRET: 'test-only-secret-at-least-32-characters',
+        ENABLE_TEST_CONTROLS: 'true',
+      }),
+    ).toThrow(/needs NODE_ENV=test \(got production\)/);
+    expect(() => loadConfig({ ENABLE_TEST_CONTROLS: 'yes' })).toThrow(/ENABLE_TEST_CONTROLS/);
   });
 
   it('fails fast on a bad value', () => {

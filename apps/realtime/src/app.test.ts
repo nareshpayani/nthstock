@@ -40,6 +40,14 @@ describe('realtime server', () => {
     });
   });
 
+  it('has no test controls unless built with them: POST /v1/__test/clock is a 404 (T-162)', async () => {
+    const response = await fetch(`http://${base}/v1/__test/clock`, {
+      method: 'POST',
+      body: JSON.stringify({ at: '2026-09-28T04:30:00.000Z' }),
+    });
+    expect(response.status).toBe(404);
+  });
+
   it('returns 404 for other paths', async () => {
     const response = await fetch(`http://${base}/nope`);
     expect(response.status).toBe(404);
@@ -213,5 +221,39 @@ describe('private order channel (T-133)', () => {
     expect(orderFeed.watching('usr_bob')).toBe(true);
     bob.close();
     await own.close();
+  });
+});
+
+describe('realtime server with test controls (T-162)', () => {
+  it('sets the test clock from POST /v1/__test/clock and rejects a bad body', async () => {
+    let offset = 0;
+    const now = () => Date.now() + offset;
+    const controlled = createRealtimeServer({
+      authenticate: testAuthenticator(),
+      testControls: {
+        setTime: (at) => {
+          offset = Date.parse(at) - Date.now();
+        },
+        now,
+      },
+    });
+    const port = await controlled.listen(0, '127.0.0.1');
+    try {
+      const url = `http://127.0.0.1:${String(port)}/v1/__test/clock`;
+      const ok = await fetch(url, {
+        method: 'POST',
+        body: JSON.stringify({ at: '2030-01-07T04:30:00.000Z' }),
+      });
+      expect(ok.status).toBe(200);
+      const { now: reported } = (await ok.json()) as { now: string };
+      expect(reported.slice(0, 13)).toBe('2030-01-07T04');
+      expect(new Date(now()).toISOString().slice(0, 13)).toBe('2030-01-07T04');
+      for (const body of ['{"at":"soon"}', 'not json', 'x'.repeat(2048)]) {
+        expect((await fetch(url, { method: 'POST', body })).status).toBe(400);
+      }
+      expect((await fetch(url)).status).toBe(404);
+    } finally {
+      await controlled.close();
+    }
   });
 });

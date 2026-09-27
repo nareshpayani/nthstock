@@ -2,6 +2,7 @@ import { Redis } from 'ioredis';
 import { buildApp } from './app.js';
 import { loadConfig } from './config.js';
 import { resolveJwtSecret } from './modules/auth/jwtSecret.js';
+import { offsetClock } from './modules/testControls/offsetClock.js';
 import { createRedisPublisher } from './ticks/publisher.js';
 
 const config = loadConfig(process.env);
@@ -29,6 +30,15 @@ const rateLimitRedis = config.redisUrl
 // One Redis publisher carries ticks and per-user order updates (T-133).
 const publisher = config.redisUrl ? createRedisPublisher(config.redisUrl, tickLog) : null;
 
+// E2E only (T-162): NODE_ENV=test plus ENABLE_TEST_CONTROLS=true (loadConfig refuses the flag
+// anywhere else) swaps in a clock the /v1/__test routes can move.
+const testClock = config.testControls ? offsetClock() : null;
+if (testClock) {
+  process.stderr.write(
+    'ENABLE_TEST_CONTROLS: /v1/__test clock and price routes are ON (NODE_ENV=test only).\n',
+  );
+}
+
 const app = buildApp({
   logger: true,
   ...(rateLimitRedis ? { rateLimitRedis } : {}),
@@ -36,10 +46,12 @@ const app = buildApp({
     marketAlwaysOpen: config.mockMarketAlwaysOpen,
     production: config.production,
     jwtSecret,
+    ...(testClock ? { clock: testClock } : {}),
     // The mock SMS provider's dev log line (the OTP, outside production only).
     smsLog: (line) => process.stdout.write(`${line}\n`),
   },
   ...(publisher ? { tickPublisher: publisher, orderPublisher: publisher } : {}),
+  ...(testClock ? { testControls: { setTime: testClock.set } } : {}),
 });
 
 app.addHook('onClose', async () => {

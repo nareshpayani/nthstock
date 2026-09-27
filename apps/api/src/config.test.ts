@@ -10,6 +10,7 @@ describe('loadConfig', () => {
       mockMarketAlwaysOpen: false,
       jwtSecret: undefined,
       redisUrl: null,
+      testControls: false,
     });
     expect(loadConfig({ REDIS_URL: ' ' }).redisUrl).toBeNull();
   });
@@ -31,8 +32,22 @@ describe('loadConfig', () => {
       mockMarketAlwaysOpen: true,
       jwtSecret: 'test-only-secret-at-least-32-characters',
       redisUrl: 'redis://127.0.0.1:6379',
+      testControls: false,
     });
     expect(loadConfig({ MOCK_MARKET_ALWAYS_OPEN: '0' }).mockMarketAlwaysOpen).toBe(false);
+  });
+
+  it('turns the test controls on only with NODE_ENV=test and the explicit flag (T-162)', () => {
+    expect(loadConfig({ NODE_ENV: 'test' }).testControls).toBe(false);
+    expect(loadConfig({ NODE_ENV: 'test', ENABLE_TEST_CONTROLS: 'true' }).testControls).toBe(true);
+    expect(() => loadConfig({ ENABLE_TEST_CONTROLS: 'true' })).toThrow(/needs NODE_ENV=test/);
+    expect(() =>
+      loadConfig({
+        NODE_ENV: 'production',
+        JWT_SECRET: 'test-only-secret-at-least-32-characters',
+        ENABLE_TEST_CONTROLS: '1',
+      }),
+    ).toThrow(/needs NODE_ENV=test \(got production\)/);
   });
 
   it('fails fast on a bad value', () => {
