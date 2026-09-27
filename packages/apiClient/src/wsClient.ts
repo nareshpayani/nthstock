@@ -82,6 +82,11 @@ export type WsClient = {
    */
   subscribe(symbol: string, exchange?: Exchange): () => void;
   onQuotes(listener: (quotes: readonly Quote[]) => void): () => void;
+  /**
+   * Opens the socket now, without a symbol: per-user messages such as `orderUpdate` (T-147) need
+   * a connection even on a page with no live prices. A no-op while connected or reconnecting.
+   */
+  connect(): void;
   onMessage(listener: (message: WsServerMessage) => void): () => void;
   onStatus(listener: (status: WsStatus) => void): () => void;
   status(): WsStatus;
@@ -309,6 +314,9 @@ export function createWsClient(options: WsClientOptions): WsClient {
     onQuotes(listener) {
       quoteListeners.add(listener);
       return () => quoteListeners.delete(listener);
+    },
+    connect() {
+      if (!disposed && !socket && reconnectTimer === null) connect();
     },
     onMessage(listener) {
       messageListeners.add(listener);
