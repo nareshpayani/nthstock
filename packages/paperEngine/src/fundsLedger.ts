@@ -30,7 +30,8 @@ export type FundsLedgerOptions = {
  *   `settleSell()` credits the proceeds (`TRADE_CREDIT`).
  *
  * Available cash never goes negative: an operation that would overdraw returns
- * `INSUFFICIENT_FUNDS` and appends nothing.
+ * `INSUFFICIENT_FUNDS` and appends nothing. The one exception is `settleForcedBuy()`, the
+ * automatic intraday square-off.
  */
 export class FundsLedger {
   readonly openingBalance: number;
@@ -102,6 +103,18 @@ export class FundsLedger {
       return insufficient(cost, this.#available + toRelease);
     }
     const released = this.#releaseEntry(orderId, toRelease);
+    const debit = this.#append('TRADE_DEBIT', -cost, orderId, `Bought under order ${orderId}`);
+    return this.#ok(...released, debit);
+  }
+
+  /**
+   * Settles the automatic 15:20 IST buy-back of an intraday short (T-130). Like a broker's auto
+   * square-off it always goes through, so it is the one operation that may take available cash
+   * below zero; the funds summary then shows the debit balance. Releases any block the order has.
+   */
+  settleForcedBuy(orderId: string, cost: number): LedgerResult {
+    assertPositivePaise(cost, 'Trade value');
+    const released = this.#releaseEntry(orderId, this.blockedFor(orderId));
     const debit = this.#append('TRADE_DEBIT', -cost, orderId, `Bought under order ${orderId}`);
     return this.#ok(...released, debit);
   }

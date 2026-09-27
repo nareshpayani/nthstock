@@ -1,13 +1,18 @@
-import type {
-  FundsSummary,
-  InstrumentToken,
-  ModifyOrderRequest,
-  Order,
-  OrderStatus,
-  PlaceOrderRequest,
-  ProductType,
+import {
+  TICK_SIZE_PAISE,
+  type Exchange,
+  type FundsSummary,
+  type InstrumentToken,
+  type ModifyOrderRequest,
+  type Order,
+  type OrderStatus,
+  type PlaceOrderRequest,
+  type ProductType,
+  type TradingSymbol,
 } from '@nthstock/contracts';
 import {
+  INTRADAY_SQUARE_OFF,
+  MARKET_CLOSE,
   MARKET_OPEN,
   fromIst,
   getMarketStatus,
@@ -35,6 +40,7 @@ import {
 import {
   EMPTY_POSITION,
   applyTrade,
+  averagePrice,
   mulDivRound,
   type HoldingLot,
   type PositionBook,
@@ -68,6 +74,8 @@ export type OrderActionResult =
 /** Today's position book for one instrument and product. */
 export type EnginePosition = {
   token: InstrumentToken;
+  symbol: TradingSymbol;
+  exchange: Exchange;
   product: ProductType;
   book: PositionBook;
 };
@@ -96,6 +104,9 @@ type StoredOrder = Order;
 const LIVE_STATUSES: ReadonlySet<OrderStatus> = new Set(['AMO', 'OPEN']);
 
 const CANCELLED_BY_USER = 'Cancelled by you.';
+const CANCELLED_AT_SQUARE_OFF = 'Cancelled at the 3:20 PM IST intraday square-off.';
+const CANCELLED_AT_CLOSE = 'Cancelled at market close, 3:30 PM IST. Day orders do not carry over.';
+const SQUARED_OFF = 'Squared off automatically at 3:20 PM IST.';
 
 /**
  * The paper-trading engine (ADR 0004): one user's orders, positions, holdings and funds.
@@ -108,7 +119,9 @@ const CANCELLED_BY_USER = 'Cancelled by you.';
  * - `modify()` and `cancel()` follow the order state machine (T-128).
  * - `sync()` brings the engine up to the clock, then matches OPEN orders against current prices.
  *   Call it on every tick. Session events run on IST trading days only (market hours and
- *   holidays from `@nthstock/utils`): at 9:15 AMOs are released (T-129).
+ *   holidays from `@nthstock/utils`): at 9:15 AMOs are released (T-129); at 15:20
+ *   intraday is squared off and at 15:30 open orders are cancelled and delivery buys move to
+ *   holdings (T-130).
  */
 export class PaperEngine {
   readonly #ctx: EngineContext;
@@ -133,6 +146,18 @@ export class PaperEngine {
       MARKET_OPEN,
       () => {
         this.#releaseAmos();
+      },
+    ],
+    [
+      INTRADAY_SQUARE_OFF,
+      () => {
+        this.#squareOffIntraday();
+      },
+    ],
+    [
+      MARKET_CLOSE,
+      () => {
+        this.#closeDay();
       },
     ],
   ];
@@ -191,31 +216,15 @@ export class PaperEngine {
     }
     if (!instrument) throw new Error('unreachable: validation accepts only known instruments');
 
-    const now = this.#now().toISOString();
     const status: OrderStatus = !checked.ok ? 'REJECTED' : this.#marketOpen() ? 'OPEN' : 'AMO';
-    const order: StoredOrder = {
-      id: this.#ctx.nextId(),
-      clientOrderId,
-      token: draft.token,
-      symbol: instrument.symbol,
-      exchange: instrument.exchange,
-      side: draft.side,
-      type: draft.type,
-      product: draft.product,
-      qty: draft.qty,
-      price: draft.price,
-      filledQty: 0,
-      avgFillPrice: null,
-      status,
-      statusReason: checked.ok ? null : checked.reason,
-      placedAt: now,
-      updatedAt: now,
-    };
+    const order = this.#newOrder(draft, instrument, status, clientOrderId);
+    order.statusReason = checked.ok ? null : checked.reason;
     this.#orders.set(order.id, order);
     if (!checked.ok) this.#rejectCodes.set(order.id, checked.code);
     if (clientOrderId !== null) this.#byClientOrderId.set(clientOrderId, order.id);
-    if (checked.ok && checked.blockAmount > 0)
+    if (checked.ok && checked.blockAmount > 0) {
       this.#mustLedger(this.#funds.block(order.id, checked.blockAmount));
+    }
     this.#emit(order);
     if (order.status === 'OPEN') this.#match(order);
     return this.#result(order);
@@ -315,7 +324,9 @@ export class PaperEngine {
 
   /** Today's positions with any trades, in the order they were opened. */
   positions(): readonly EnginePosition[] {
-    return [...this.#positions.values()].map((p) => ({ ...p, book: { ...p.book } }));
+    return [...this.#positions.values()]
+      .filter(({ book }) => book.buyQty + book.sellQty > 0)
+      .map((p) => ({ ...p, book: { ...p.book } }));
   }
 
   holdings(): readonly EngineHolding[] {
@@ -408,9 +419,86 @@ export class PaperEngine {
       this.#match(order);
     }
   }
+  /**
+   * 15:20 IST (T-130): cancels OPEN intraday orders, then closes every open intraday position
+   * with a MARKET order at the LTP (at the position's average price, on the tick, if there is no
+   * LTP). The buy-back of a short always settles, even into a debit balance.
+   */
+  #squareOffIntraday(): void {
+    for (const order of this.#orders.values()) {
+      if (order.status === 'OPEN' && order.product === 'INTRADAY') {
+        this.#cancel(order, CANCELLED_AT_SQUARE_OFF);
+      }
+    }
+    for (const position of this.#positions.values()) {
+      const { book } = position;
+      if (position.product !== 'INTRADAY' || book.netQty === 0) continue;
+      const draft: OrderDraft = {
+        token: position.token,
+        side: book.netQty > 0 ? 'SELL' : 'BUY',
+        type: 'MARKET',
+        product: 'INTRADAY',
+        qty: Math.abs(book.netQty),
+        price: null,
+      };
+      const order = this.#newOrder(draft, position, 'OPEN', null);
+      order.statusReason = SQUARED_OFF;
+      this.#orders.set(order.id, order);
+      const price = this.#ctx.ltp(position.token) ?? onTick(averagePrice(book));
+      this.#execute(order, draft.qty, price, true);
+    }
+  }
+
+  /**
+   * 15:30 IST (T-130): cancels every OPEN order (day orders do not carry over), moves today's
+   * delivery buys into holdings at their cost, and starts a fresh day of positions. AMOs placed
+   * after the close wait for the next session.
+   */
+  #closeDay(): void {
+    this.#squareOffIntraday();
+    for (const order of this.#orders.values()) {
+      if (order.status === 'OPEN') this.#cancel(order, CANCELLED_AT_CLOSE);
+    }
+    for (const position of this.#positions.values()) {
+      if (position.product !== 'DELIVERY' || position.book.netQty <= 0) continue;
+      const lot = this.#holdings.get(position.token) ?? { qty: 0, investedValue: 0 };
+      lot.qty += position.book.netQty;
+      lot.investedValue += position.book.openCost;
+      this.#holdings.set(position.token, lot);
+    }
+    this.#positions.clear();
+    this.#holdingSales.clear();
+  }
 
   #marketOpen(): boolean {
     return getMarketStatus({ now: () => this.#now() }, this.#holidays).state === 'open';
+  }
+
+  #newOrder(
+    draft: OrderDraft,
+    names: { symbol: TradingSymbol; exchange: Exchange },
+    status: OrderStatus,
+    clientOrderId: string | null,
+  ): StoredOrder {
+    const now = this.#now().toISOString();
+    return {
+      id: this.#ctx.nextId(),
+      clientOrderId,
+      token: draft.token,
+      symbol: names.symbol,
+      exchange: names.exchange,
+      side: draft.side,
+      type: draft.type,
+      product: draft.product,
+      qty: draft.qty,
+      price: draft.price,
+      filledQty: 0,
+      avgFillPrice: null,
+      status,
+      statusReason: null,
+      placedAt: now,
+      updatedAt: now,
+    };
   }
 
   #refuse(order: StoredOrder, event: OrderEvent): OrderActionResult | null {
@@ -446,19 +534,20 @@ export class PaperEngine {
   }
 
   /** Settles a fill of the whole remaining quantity and books it into positions and holdings. */
-  #execute(order: StoredOrder, qty: number, price: number): void {
+  #execute(order: StoredOrder, qty: number, price: number, squareOff = false): void {
     const value = qty * price;
-    if (order.side === 'BUY') this.#mustLedger(this.#funds.settleBuy(order.id, value));
-    else this.#mustLedger(this.#funds.settleSell(order.id, value));
+    if (order.side === 'SELL') this.#mustLedger(this.#funds.settleSell(order.id, value));
+    else if (squareOff) this.#mustLedger(this.#funds.settleForcedBuy(order.id, value));
+    else this.#mustLedger(this.#funds.settleBuy(order.id, value));
 
     const trade = { side: order.side, qty, price };
     if (order.product === 'DELIVERY' && order.side === 'SELL') {
-      const position = this.#position(order.token, 'DELIVERY');
+      const position = this.#position(order, 'DELIVERY');
       const fromToday = Math.min(qty, Math.max(0, position.book.netQty));
       if (fromToday > 0) position.book = applyTrade(position.book, { ...trade, qty: fromToday });
       if (qty > fromToday) this.#sellFromHoldings(order.token, qty - fromToday, price);
     } else {
-      const position = this.#position(order.token, order.product);
+      const position = this.#position(order, order.product);
       position.book = applyTrade(position.book, trade);
     }
 
@@ -487,11 +576,12 @@ export class PaperEngine {
     this.#holdingSales.set(token, sale);
   }
 
-  #position(token: InstrumentToken, product: ProductType): EnginePosition {
-    const key = `${String(token)}:${product}`;
+  #position(order: StoredOrder, product: ProductType): EnginePosition {
+    const key = `${String(order.token)}:${product}`;
     let position = this.#positions.get(key);
     if (!position) {
-      position = { token, product, book: { ...EMPTY_POSITION } };
+      const { token, symbol, exchange } = order;
+      position = { token, symbol, exchange, product, book: { ...EMPTY_POSITION } };
       this.#positions.set(key, position);
     }
     return position;
@@ -564,4 +654,9 @@ function latestById(orders: readonly Order[]): readonly Order[] {
     latest.set(order.id, order);
   }
   return [...latest.values()];
+}
+
+/** The nearest price on the 5-paise tick, at least one tick. */
+function onTick(paise: number): number {
+  return Math.max(TICK_SIZE_PAISE, Math.round(paise / TICK_SIZE_PAISE) * TICK_SIZE_PAISE);
 }

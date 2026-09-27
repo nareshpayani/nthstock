@@ -149,6 +149,37 @@ function seeded(seed: number): () => number {
   };
 }
 
+describe('FundsLedger.settleForcedBuy (T-130)', () => {
+  it('debits an intraday square-off even when it overdraws, and the summary shows it', () => {
+    const ledger = newLedger(1_000_00);
+    expect(ledger.settleBuy('o1', 1_500_00)).toMatchObject({ ok: false });
+    const result = ledger.settleForcedBuy('o1', 1_500_00);
+    expect(result).toMatchObject({
+      ok: true,
+      entries: [{ type: 'TRADE_DEBIT', amount: -1_500_00, balanceAfter: -500_00, orderId: 'o1' }],
+    });
+    const summary = ledger.summary();
+    expect(FundsSummary.parse(summary)).toMatchObject({ available: -500_00, balance: -500_00 });
+    expect(sum(ledger.entries())).toBe(ledger.available);
+  });
+
+  it('releases any block the order still has', () => {
+    const ledger = newLedger(1_000_00);
+    ledger.block('o1', 400_00);
+    const result = ledger.settleForcedBuy('o1', 300_00);
+    expect(result).toMatchObject({
+      ok: true,
+      entries: [
+        { type: 'ORDER_RELEASE', amount: 400_00 },
+        { type: 'TRADE_DEBIT', amount: -300_00 },
+      ],
+    });
+    expect(ledger.blocked).toBe(0);
+    expect(ledger.available).toBe(700_00);
+    expect(() => ledger.settleForcedBuy('o1', 0)).toThrow(/positive/);
+  });
+});
+
 describe('FundsLedger randomised sequences (T-066)', () => {
   it.each([1, 7, 42, 2026, 90210])('keeps its invariants for seed %i', (seed) => {
     const rand = seeded(seed);

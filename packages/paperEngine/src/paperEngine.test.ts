@@ -36,6 +36,8 @@ describe('PaperEngine.place (T-127, T-128)', () => {
     expect(engine.positions()).toEqual([
       {
         token: INFY.token,
+        symbol: 'INFY',
+        exchange: 'NSE',
         product: 'DELIVERY',
         book: expect.objectContaining({ netQty: 10, openCost: 15_000_00, buyQty: 10 }),
       },
