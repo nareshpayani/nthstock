@@ -145,7 +145,8 @@ export function createWatchlistService({
       withLists(userId, (lists) => {
         const current = lists.map((l) => l.id);
         if (!samePermutation(current, ids)) throw conflict(WATCHLIST_MESSAGES.staleOrder);
-        const ordered = ids.map((id) => lists.find((l) => l.id === id) as WatchlistRecord);
+        const byId = new Map(lists.map((l) => [l.id, l]));
+        const ordered = ids.flatMap((id) => byId.get(id) ?? []);
         return { lists: ordered, result: ordered.map(toWatchlist) };
       }),
 
@@ -181,9 +182,8 @@ export function createWatchlistService({
       withList(userId, id, (list) => {
         const current = list.items.map((item) => item.token);
         if (!samePermutation(current, tokens)) throw conflict(WATCHLIST_MESSAGES.staleOrder);
-        list.items = tokens.map(
-          (token) => list.items.find((item) => item.token === token) as (typeof list.items)[number],
-        );
+        const byToken = new Map(list.items.map((item) => [item.token, item]));
+        list.items = tokens.flatMap((token) => byToken.get(token) ?? []);
       }),
   };
 }
