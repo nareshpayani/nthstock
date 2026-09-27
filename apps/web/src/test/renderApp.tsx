@@ -5,6 +5,7 @@ import { AppProviders } from '@/app/providers/AppProviders';
 import { createQueryClient } from '@/app/queryClient';
 import { createAppRouter } from '@/app/router';
 import type { MarketSession } from '@/shared/lib/marketSessionContext';
+import type { OrderUpdateSource } from '@/shared/lib/orderUpdatesContext';
 
 /** A client with no network: every call fails at once as a network error (no MSW server needed). */
 export const offlineApiClient: ApiClient = createApiClient({
@@ -17,6 +18,7 @@ export type RenderAppOptions = {
   /** Defaults to offlineApiClient; pass a client on the MSW node server for data. */
   apiClient?: ApiClient;
   marketSession?: MarketSession;
+  orderUpdates?: OrderUpdateSource;
 };
 
 /** Renders the real app (providers + file routes) at a URL, for route and shell tests. */
@@ -39,6 +41,7 @@ export function renderApp(url: string, options: RenderAppOptions = {}) {
       apiClient={apiClient}
       {...(options.quoteStore ? { quoteStore: options.quoteStore } : {})}
       {...(options.marketSession ? { marketSession: options.marketSession } : {})}
+      {...(options.orderUpdates ? { orderUpdates: options.orderUpdates } : {})}
     >
       <RouterProvider router={router} />
     </AppProviders>,

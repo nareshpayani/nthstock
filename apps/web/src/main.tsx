@@ -31,7 +31,7 @@ async function boot() {
   // Sends the CSRF token and refreshes an expired session once on a 401 (T-089).
   const apiClient = createSessionApiClient({ baseUrl: config.apiBaseUrl });
   const router = createAppRouter({ queryClient, apiClient });
-  const { wsClient, quoteStore } = createLiveQuotes(config, window.location);
+  const { wsClient, quoteStore, orderUpdates } = createLiveQuotes(config, window.location);
   // Background tabs keep only the active watchlist live; focus and reconnects resync (T-077).
   startVisibilitySync({
     document,
@@ -45,6 +45,7 @@ async function boot() {
       <AppProviders
         queryClient={queryClient}
         quoteStore={quoteStore}
+        orderUpdates={orderUpdates}
         apiClient={apiClient}
         // The forced-open mock market (VITE_MOCK_MARKET_OPEN) shows LIVE badges at any hour.
         marketSession={{

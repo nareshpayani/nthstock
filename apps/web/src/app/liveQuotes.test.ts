@@ -1,5 +1,6 @@
 import { encodeQuoteFrame, instrumentOf, type Quote } from '@nthstock/contracts';
 import { describe, expect, it, vi } from 'vitest';
+import { testOrder } from '@/test/orders';
 import { createLiveQuotes } from './liveQuotes';
 
 describe('createLiveQuotes', () => {
@@ -84,6 +85,54 @@ describe('createLiveQuotes', () => {
     socket.onmessage?.({ data: encodeQuoteFrame([quote]).buffer });
     quoteStore.flush();
     expect(quoteStore.get('INFY', 'NSE')?.quote).toEqual(quote);
+    expect(listener).toHaveBeenCalledTimes(1);
+    wsClient.close();
+    vi.unstubAllGlobals();
+  });
+
+  it('delivers orderUpdate messages to order listeners and connects without a symbol', () => {
+    const sockets: {
+      onopen: (() => void) | null;
+      onmessage: ((e: { data: unknown }) => void) | null;
+      readyState: number;
+    }[] = [];
+    class OrderSocket {
+      readyState = 0;
+      binaryType = 'blob';
+      onopen: (() => void) | null = null;
+      onmessage: ((e: { data: unknown }) => void) | null = null;
+      onclose = null;
+      onerror = null;
+      constructor() {
+        sockets.push(this);
+      }
+      send() {}
+      close() {}
+    }
+    vi.stubGlobal('WebSocket', OrderSocket);
+    const { wsClient, orderUpdates } = createLiveQuotes(
+      { wsUrl: null },
+      { protocol: 'http:', host: 'localhost:5173' },
+    );
+    const listener = vi.fn();
+    const orderFixture = testOrder({ status: 'EXECUTED', filledQty: 10, avgFillPrice: 151_000 });
+    const stop = orderUpdates.onOrderUpdate(listener);
+    expect(sockets).toHaveLength(0);
+    orderUpdates.connect();
+    const socket = sockets[0];
+    if (!socket) throw new Error('no socket');
+    socket.readyState = 1;
+    socket.onopen?.();
+    socket.onmessage?.({ data: JSON.stringify({ v: 1, type: 'pong', id: 1 }) });
+    socket.onmessage?.({
+      data: JSON.stringify({ v: 1, type: 'orderUpdate', order: orderFixture }),
+    });
+    expect(listener).toHaveBeenCalledTimes(1);
+    expect(listener).toHaveBeenCalledWith(orderFixture);
+    stop();
+    socket.onmessage?.({
+      data: JSON.stringify({ v: 1, type: 'orderUpdate', order: orderFixture }),
+    });
     expect(listener).toHaveBeenCalledTimes(1);
     wsClient.close();
     vi.unstubAllGlobals();
