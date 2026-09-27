@@ -26,6 +26,9 @@ const rateLimitRedis = config.redisUrl
   ? new Redis(config.redisUrl, { enableOfflineQueue: false, maxRetriesPerRequest: 1 })
   : null;
 
+// One Redis publisher carries ticks and per-user order updates (T-133).
+const publisher = config.redisUrl ? createRedisPublisher(config.redisUrl, tickLog) : null;
+
 const app = buildApp({
   logger: true,
   ...(rateLimitRedis ? { rateLimitRedis } : {}),
@@ -36,7 +39,7 @@ const app = buildApp({
     // The mock SMS provider's dev log line (the OTP, outside production only).
     smsLog: (line) => process.stdout.write(`${line}\n`),
   },
-  ...(config.redisUrl ? { tickPublisher: createRedisPublisher(config.redisUrl, tickLog) } : {}),
+  ...(publisher ? { tickPublisher: publisher, orderPublisher: publisher } : {}),
 });
 
 app.addHook('onClose', async () => {
