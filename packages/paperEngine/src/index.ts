@@ -18,6 +18,21 @@ export {
   type MatchableOrder,
   type PathFill,
 } from './fillMatcher.js';
+export {
+  createMapInstrumentSource,
+  type InstrumentInfo,
+  type InstrumentSource,
+  type MapInstrumentSource,
+} from './instruments.js';
+export {
+  intradayWindowOpen,
+  isRequestError,
+  validateOrder,
+  type OrderDraft,
+  type OrderRejectionCode,
+  type ValidationContext,
+  type ValidationResult,
+} from './orderValidation.js';
 export { FundsLedger, type FundsLedgerOptions, type LedgerResult } from './fundsLedger.js';
 export {
   EMPTY_POSITION,
