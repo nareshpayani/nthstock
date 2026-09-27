@@ -1,4 +1,5 @@
-import { FundsSummary, LedgerEntry, PAPER_OPENING_BALANCE_PAISE } from '@nthstock/contracts';
+import type { LedgerEntry } from '@nthstock/contracts';
+import { FundsSummary, PAPER_OPENING_BALANCE_PAISE } from '@nthstock/contracts';
 import { fixedClock } from '@nthstock/utils';
 import { describe, expect, it } from 'vitest';
 import { createEngineContext, createMapPriceSource, createSequentialIds } from './context.js';
