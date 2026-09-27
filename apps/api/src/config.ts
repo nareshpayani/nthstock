@@ -11,6 +11,7 @@ const EnvSchema = z.object({
   HOST: z.string().min(1).default('0.0.0.0'),
   MOCK_MARKET_ALWAYS_OPEN: Flag,
   ENABLE_TEST_CONTROLS: Flag,
+  DEMO_SEED: Flag,
   JWT_SECRET: z.string().optional(),
   REDIS_URL: z
     .string()
@@ -38,6 +39,11 @@ export type ApiConfig = {
    * routes for E2E suites (T-162). Off by default; refused in any other NODE_ENV.
    */
   testControls: boolean;
+  /**
+   * `DEMO_SEED=true` (`npm run seed:demo`, T-174): load the demo watchlists and paper account for
+   * the demo user at start-up. Refused in production.
+   */
+  demoSeed: boolean;
 };
 
 /** Reads and validates the environment; throws at startup on a bad value. */
@@ -55,6 +61,9 @@ export function loadConfig(env: Readonly<Record<string, string | undefined>>): A
       `Invalid apps/api environment: ENABLE_TEST_CONTROLS needs NODE_ENV=test (got ${parsed.data.NODE_ENV}); the test routes never run in development or production`,
     );
   }
+  if (production && parsed.data.DEMO_SEED) {
+    throw new Error('Invalid apps/api environment: DEMO_SEED is for local demos, not production');
+  }
   return {
     production,
     port: parsed.data.PORT,
@@ -63,5 +72,6 @@ export function loadConfig(env: Readonly<Record<string, string | undefined>>): A
     jwtSecret: parsed.data.JWT_SECRET,
     redisUrl: parsed.data.REDIS_URL,
     testControls: parsed.data.ENABLE_TEST_CONTROLS,
+    demoSeed: parsed.data.DEMO_SEED,
   };
 }

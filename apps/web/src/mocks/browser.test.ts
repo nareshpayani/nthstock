@@ -71,4 +71,27 @@ describe('startMockWorker (T-050)', () => {
     adapter.dispose();
     info.mockRestore();
   });
+
+  it('loads the demo seed on ?demo=1 and drops the parameter (T-174)', async () => {
+    const info = vi.spyOn(console, 'info').mockImplementation(() => undefined);
+    window.sessionStorage.clear();
+    window.history.replaceState(null, '', '/dashboard?demo=1');
+    const { startMockWorker } = await import('./browser');
+    const { WATCHLIST_MOCK_STORAGE_KEY } = await import('./handlers');
+    const { adapter, orders } = await startMockWorker({
+      apiMode: 'msw',
+      apiBaseUrl: '',
+      wsUrl: null,
+      mockMarketOpen: false,
+      testControls: false,
+    });
+    expect(window.location.pathname + window.location.search).toBe('/dashboard');
+    expect(window.sessionStorage.getItem(WATCHLIST_MOCK_STORAGE_KEY)).toContain('usr_demo');
+    expect(info).toHaveBeenCalledWith(expect.stringContaining('Demo seed loaded'));
+    orders.dispose();
+    adapter.dispose();
+    window.sessionStorage.clear();
+    window.history.replaceState(null, '', '/');
+    info.mockRestore();
+  });
 });
