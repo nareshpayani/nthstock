@@ -3,7 +3,7 @@ import { cn } from '../lib/cn.js';
 import { useFieldControl } from './Field.js';
 
 export const inputFrameClass =
-  'flex h-10 items-center gap-2 rounded-md border border-line bg-surface px-3 text-body text-ink transition-colors focus-within:border-brand focus-within:ring-3 focus-within:ring-brand-soft has-[[aria-invalid=true]]:border-down has-disabled:opacity-50';
+  'flex h-10 items-center gap-2 rounded-md border border-line bg-surface px-3 text-body text-ink transition-colors focus-within:border-brand focus-within:ring-3 focus-within:ring-brand-soft has-[[aria-invalid=true]]:border-down has-[input:disabled]:opacity-50';
 
 export type InputProps = InputHTMLAttributes<HTMLInputElement> & {
   /** Content before the text, e.g. a search icon. */

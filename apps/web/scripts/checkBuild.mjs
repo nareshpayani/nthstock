@@ -6,7 +6,9 @@
 // - the charts library (TradingView Lightweight Charts) loads lazily, never in the initial JS (T-094);
 // - the order ticket is its own chunk, loaded on first open, never in the initial JS (T-135);
 // - mocks stay out of production paths (T-050): an api-mode build contains no MSW or mock-market
-//   code at all, and in an msw-mode build they load lazily, never in the initial JS.
+//   code at all, and in an msw-mode build they load lazily, never in the initial JS;
+// - no test controls (T-162): no build checked here carries the MSW /v1/__test handlers, which only
+//   the Playwright build (VITE_TEST_CONTROLS=true, its own dist-e2e folder) may contain.
 // Usage: node scripts/checkBuild.mjs [distDir]   (default dist)
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
@@ -79,6 +81,14 @@ if (apiMode === 'msw') {
   if (!shipped.some((file) => file.endsWith('mockServiceWorker.js'))) {
     failures.push('msw-mode build is missing mockServiceWorker.js');
   }
+}
+const testControlFiles = shipped.filter((file) =>
+  readFileSync(file, 'utf8').includes('/v1/__test'),
+);
+if (testControlFiles.length > 0) {
+  failures.push(
+    `build contains test controls (/v1/__test; was VITE_TEST_CONTROLS set?): ${testControlFiles.join(', ')}`,
+  );
 }
 const mockJs = mockFiles
   .filter((file) => file.endsWith('.js') && !file.endsWith('mockServiceWorker.js'))

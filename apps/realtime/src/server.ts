@@ -16,11 +16,29 @@ const secret = resolveJwtSecret({
       'JWT_SECRET is not set: using an ephemeral key, so no apps/api token will verify. Run npm run dev:api or set JWT_SECRET in both apps.',
     ),
 });
+// E2E only (T-162): NODE_ENV=test plus ENABLE_TEST_CONTROLS=true (loadConfig refuses the flag
+// anywhere else) lets POST /v1/__test/clock move the clock tokens are checked against, in step
+// with apps/api's test clock. Idle detection keeps real time.
+let clockOffset = 0;
+const tokenNow = () => Date.now() + clockOffset;
+if (config.testControls) {
+  jsonLogger.warn('ENABLE_TEST_CONTROLS: POST /v1/__test/clock is ON (NODE_ENV=test only).');
+}
 const server = createRealtimeServer({
   logger: jsonLogger,
   feed,
   orderFeed,
-  authenticate: createJwtCookieAuthenticator({ secret }),
+  authenticate: createJwtCookieAuthenticator({ secret, now: tokenNow }),
+  ...(config.testControls
+    ? {
+        testControls: {
+          setTime: (at: string) => {
+            clockOffset = Date.parse(at) - Date.now();
+          },
+          now: tokenNow,
+        },
+      }
+    : {}),
 });
 
 try {

@@ -1,6 +1,6 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
-import { WS_CLOSE_CODES } from '@nthstock/contracts';
+import { TEST_CONTROL_PATHS, TestClockRequest, WS_CLOSE_CODES } from '@nthstock/contracts';
 import { WebSocketServer, type RawData, type WebSocket } from 'ws';
 import type { WsAuthenticator } from './auth.js';
 import type { QuoteFeed } from './feed.js';
@@ -31,6 +31,28 @@ export type RealtimeServerOptions = {
   timers?: Timers;
   /** Clock for idle detection, epoch ms. */
   now?: () => number;
+  /**
+   * E2E only (T-162): answers `POST /v1/__test/clock` by calling `setTime` (the clock the
+   * authenticator checks token expiry against). Left out, the path is a 404 like any other.
+   * `server.ts` passes it only for `NODE_ENV=test` with `ENABLE_TEST_CONTROLS=true`.
+   */
+  testControls?: { setTime(at: string): void; now(): number };
+};
+
+/** Largest test-control body read (a small JSON object). */
+const MAX_TEST_BODY_BYTES = 1024;
+
+const parseJson = (text: string): unknown => {
+  try {
+    return JSON.parse(text) as unknown;
+  } catch {
+    return null;
+  }
+};
+
+const sendJson = (response: ServerResponse, status: number, body: unknown) => {
+  response.writeHead(status, { 'content-type': 'application/json' });
+  response.end(JSON.stringify(body));
 };
 
 export type RealtimeServer = {
@@ -70,15 +92,38 @@ export function createRealtimeServer(options: RealtimeServerOptions): RealtimeSe
   const detachFeed = options.feed?.onQuotes(hub.ingest);
   const detachOrders = options.orderFeed?.onOrderUpdate(hub.deliverOrder);
 
+  const testControls = options.testControls;
+  const handleTestClock = (request: IncomingMessage, response: ServerResponse) => {
+    const chunks: Buffer[] = [];
+    let size = 0;
+    request.on('data', (chunk: Buffer) => {
+      size += chunk.length;
+      if (size <= MAX_TEST_BODY_BYTES) chunks.push(chunk);
+    });
+    request.on('end', () => {
+      const parsed = TestClockRequest.safeParse(
+        size <= MAX_TEST_BODY_BYTES ? parseJson(Buffer.concat(chunks).toString('utf8')) : null,
+      );
+      if (!parsed.success || !testControls) {
+        sendJson(response, 400, { status: 'bad_request' });
+        return;
+      }
+      testControls.setTime(parsed.data.at);
+      sendJson(response, 200, { now: new Date(testControls.now()).toISOString() });
+    });
+  };
+
   const handleHttp = (request: IncomingMessage, response: ServerResponse) => {
     const path = (request.url ?? '/').split('?')[0];
     if (request.method === 'GET' && path === '/health') {
-      response.writeHead(200, { 'content-type': 'application/json' });
-      response.end(JSON.stringify({ status: 'ok', ...hub.stats() }));
+      sendJson(response, 200, { status: 'ok', ...hub.stats() });
       return;
     }
-    response.writeHead(404, { 'content-type': 'application/json' });
-    response.end(JSON.stringify({ status: 'not_found' }));
+    if (testControls && request.method === 'POST' && path === TEST_CONTROL_PATHS.clock) {
+      handleTestClock(request, response);
+      return;
+    }
+    sendJson(response, 404, { status: 'not_found' });
   };
 
   const http = createServer(handleHttp);

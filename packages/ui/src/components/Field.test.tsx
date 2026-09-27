@@ -54,6 +54,15 @@ function Qty({ initial = null as number | null, mode = 'integer' as 'integer' | 
 }
 
 describe('NumberInput', () => {
+  it('dims only a disabled field, not one whose stepper is at its limit (T-166 contrast)', () => {
+    render(<Qty initial={1} />);
+    expect(screen.getByRole('button', { name: 'Decrease quantity' })).toBeDisabled();
+    const frame = screen.getByLabelText('Value').parentElement;
+    // `has-disabled` matched the disabled stepper button and halved the value's contrast.
+    expect(frame?.className).toContain('has-[input:disabled]:opacity-50');
+    expect(frame?.className).not.toMatch(/(^|\s)has-disabled:/);
+  });
+
   it('steps integers with buttons and arrow keys within min/max', () => {
     render(<Qty initial={9} />);
     const input = screen.getByLabelText('Value');

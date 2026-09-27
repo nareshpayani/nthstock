@@ -60,6 +60,18 @@ function QuantityAndPrice() {
 
 export const NumberInputs: Story = { render: () => <QuantityAndPrice /> };
 
+function QuantityAtMinimum() {
+  const [qty, setQty] = useState<number | null>(1);
+  return (
+    <Field label="Quantity" hint="The decrease button is disabled; the value keeps full contrast">
+      <NumberInput mode="integer" value={qty} onChange={setQty} />
+    </Field>
+  );
+}
+
+/** At its minimum only the stepper is disabled, not the field, so the value is not dimmed. */
+export const NumberInputAtMinimum: Story = { render: () => <QuantityAtMinimum /> };
+
 function Otp({ error }: { error?: string }) {
   const [code, setCode] = useState('');
   return (

@@ -3,7 +3,7 @@ import { runScenarioSuite, scenarioGroups } from '@nthstock/contracts/testing';
 import { systemClock } from '@nthstock/utils';
 import { buildApp } from './app.js';
 import { injectBackend } from './test/injectBackend.js';
-import { offsetClock } from './test/offsetClock.js';
+import { offsetClock } from './modules/testControls/offsetClock.js';
 
 // The same scenario files run against the MSW node server in apps/web (ADR 0004).
 runScenarioSuite('apps/api (app.inject)', scenarioGroups, () => {

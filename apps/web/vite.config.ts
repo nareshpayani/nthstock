@@ -62,7 +62,12 @@ export default defineConfig(({ mode }) => {
   return {
     // The mode is a build-time constant: main.tsx's `=== 'msw'` check folds away in api builds,
     // taking the dynamic MSW import with it.
-    define: { 'import.meta.env.VITE_API_MODE': JSON.stringify(runtime.apiMode) },
+    // VITE_TEST_CONTROLS (E2E builds, T-162) is folded the same way, so no other build carries
+    // the MSW /v1/__test handlers.
+    define: {
+      'import.meta.env.VITE_API_MODE': JSON.stringify(runtime.apiMode),
+      'import.meta.env.VITE_TEST_CONTROLS': JSON.stringify(String(runtime.testControls)),
+    },
     plugins: [
       // File routes in src/routes (ADR 0005); each route becomes its own lazy chunk.
       tanstackRouter({

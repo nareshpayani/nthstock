@@ -14,6 +14,7 @@ import {
   startOrderUpdatePublisher,
   type OrderUpdatePublisher,
 } from './modules/orders/updatePublisher.js';
+import { testControlRoutes, type TestControls } from './modules/testControls/routes.js';
 import { watchlistRoutes } from './modules/watchlists/routes.js';
 import type { Publisher } from './ticks/publisher.js';
 import { startTickPump, type TickPump } from './ticks/tickPump.js';
@@ -44,6 +45,12 @@ export type AppOptions = {
    * pushed without a tick or a request. `null` turns it off (tests drive time themselves).
    */
   orderSweepMs?: number | null;
+  /**
+   * Registers the `/v1/__test` clock and price routes (T-162) for E2E suites. Left out (always, in
+   * production), those paths answer 404. `server.ts` passes it only for `NODE_ENV=test` with
+   * `ENABLE_TEST_CONTROLS=true`; `setTime` must move `deps.clock`.
+   */
+  testControls?: TestControls;
 };
 
 export const DEFAULT_RATE_LIMIT_PER_MINUTE = 600;
@@ -58,6 +65,9 @@ export type App = FastifyInstance & { deps: AppDeps };
 export function buildApp(options: AppOptions = {}): App {
   const app = Fastify(options.logger === undefined ? {} : { logger: options.logger });
   const deps = createDeps(options.deps);
+  if (options.testControls && deps.production) {
+    throw new Error('Test controls (/v1/__test) cannot be enabled in production');
+  }
   installErrorHandling(app);
   // Global per-IP limit; the auth routes set tighter ones (T-082). A 429 becomes an ApiError
   // RATE_LIMITED via the error handler.
@@ -126,5 +136,6 @@ export function buildApp(options: AppOptions = {}): App {
   app.register(orderRoutes(deps));
   app.register(portfolioRoutes(deps));
   app.register(fundsRoutes(deps));
+  if (options.testControls) app.register(testControlRoutes(deps, options.testControls));
   return Object.assign(app, { deps });
 }
