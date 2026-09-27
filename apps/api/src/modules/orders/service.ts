@@ -19,6 +19,7 @@ import {
   type DeskMarket,
   type OrderActionResult,
   type PaperEngine,
+  type PaperEngineSnapshot,
 } from '@nthstock/paperEngine';
 import type { Clock } from '@nthstock/utils';
 import { ApiHttpError } from '../../http/apiError.js';
@@ -194,6 +195,15 @@ export function createOrderService({
 
     /** Syncs every account, so session events run and are pushed without a request. */
     sweep: () => desk.sweep(),
+
+    /**
+     * Replaces the user's account with a saved one (the demo seed, T-174). Its ledger history is
+     * taken as already audited: those movements happened before this process, not in it.
+     */
+    restore: async (userId: string, snapshot: PaperEngineSnapshot): Promise<void> => {
+      await desk.restore(userId, snapshot);
+      auditedLedger.set(userId, desk.engineOf(userId).ledger.size);
+    },
 
     /** A scripted tick for tests and scenarios (see `PaperDesk.pinPrice`). */
     pinPrice: (token: InstrumentToken, ltp: number) => {

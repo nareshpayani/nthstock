@@ -83,3 +83,16 @@ export {
   type PaperDeskOptions,
 } from './paperDesk.js';
 export { orderApiError, type OrderApiError } from './orderErrors.js';
+export {
+  DEMO_SEEDED_AT,
+  DEMO_SEED_USER,
+  DEMO_SYMBOLS,
+  DEMO_TRADES,
+  DEMO_WATCHLISTS,
+  buildDemoAccount,
+  demoPrice,
+  demoWatchlists,
+  type DemoInstrument,
+  type DemoTrade,
+  type DemoWatchlistDef,
+} from './demoSeed.js';

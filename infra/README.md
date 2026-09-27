@@ -35,3 +35,8 @@ SKIP_REDIS_INTEGRATION=1 npm run test                # skip, with a printed noti
 ```
 
 Without Docker and without either variable, those suites fail with a message saying so.
+
+## k6 smoke tests
+
+[`k6/`](./k6/README.md) holds local-only load scripts (not run in CI): `wsSmoke.js` opens 1,000
+live-price sockets against apps/realtime and reports frames per second and p95 delivery latency.

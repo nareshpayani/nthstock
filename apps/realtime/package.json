@@ -10,7 +10,8 @@
     "start": "node dist/server.js",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run --coverage"
+    "test": "vitest run --coverage",
+    "test:latency": "vitest run --config vitest.latency.config.ts"
   },
   "dependencies": {
     "@nthstock/contracts": "0.0.0",

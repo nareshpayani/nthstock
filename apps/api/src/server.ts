@@ -2,6 +2,7 @@ import { Redis } from 'ioredis';
 import { buildApp } from './app.js';
 import { loadConfig } from './config.js';
 import { resolveJwtSecret } from './modules/auth/jwtSecret.js';
+import { seedDemo } from './modules/demo/seed.js';
 import { offsetClock } from './modules/testControls/offsetClock.js';
 import { createRedisPublisher } from './ticks/publisher.js';
 
@@ -59,6 +60,11 @@ app.addHook('onClose', async () => {
 });
 
 try {
+  // npm run seed:demo (T-174): the demo user's watchlists, holdings and ledger, before any request.
+  if (config.demoSeed) {
+    await seedDemo(app.deps);
+    app.log.info('DEMO_SEED: demo watchlists and paper account loaded for mobile 9000000001.');
+  }
   await app.listen({ port: config.port, host: config.host });
 } catch (error) {
   app.log.error(error);

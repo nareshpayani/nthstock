@@ -1,5 +1,6 @@
 import { setupWorker } from 'msw/browser';
 import { resolveWsUrl, type RuntimeConfig } from '@/app/runtimeConfig';
+import { seedMockDemo, wantsDemo, withoutDemoParam } from './demoSeed';
 import { ORDER_SWEEP_MS, createMockHandlers } from './handlers';
 import { createMockMarket } from './marketAdapter';
 import type { TestControls } from './testControls';
@@ -26,6 +27,18 @@ export async function startMockWorker(config: RuntimeConfig, testControls?: Test
     listStorage = window.sessionStorage;
   } catch {
     listStorage = undefined;
+  }
+  // ?demo=1 (T-174): the demo user's watchlists, holdings and ledger, as `npm run seed:demo` gives
+  // in api mode. Written before the mocks read their saved state; the parameter is then dropped so
+  // a reload keeps the demo's changes.
+  if (wantsDemo(window.location.search)) {
+    const seeded = listStorage ? seedMockDemo(listStorage, adapter.master) : false;
+    window.history.replaceState(window.history.state, '', withoutDemoParam(window.location.href));
+    console.info(
+      seeded
+        ? '[MSW] Demo seed loaded (?demo=1): log in as 9000000001 with OTP 123456.'
+        : '[MSW] Demo seed skipped: sessionStorage is unavailable.',
+    );
   }
   // E2E builds only (VITE_TEST_CONTROLS, T-162): the mocks share the test clock, so auth,
   // watchlists and orders all move when a test sets it.

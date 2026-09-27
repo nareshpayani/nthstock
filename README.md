@@ -16,6 +16,7 @@ npm run check      # format, lint, typecheck, test, build
 npm run storybook  # design system on http://localhost:6006
 npm run e2e        # Playwright E2E (Chrome), msw mode with the mock market forced open
 npm run e2e:api    # the @api specs against apps/api + apps/realtime (build them first; needs Redis)
+npm run e2e:perf   # the @perf specs: Web Vitals budgets and the 200-symbol render budget
 npm run infra:up   # Redis 7 in Docker Compose on 127.0.0.1:6379 (see infra/README.md)
 ```
 
@@ -39,6 +40,10 @@ MOCK_MARKET_ALWAYS_OPEN=true npm run dev:api
 The WebSocket needs a logged-in session: apps/realtime closes a connection without a valid access
 token cookie with code 4401. `npm run dev:api` generates one `JWT_SECRET` for apps/api and
 apps/realtime unless you set it. In dev the OTP is always `123456`, and apps/api prints it.
+
+For a ready-made demo account (two watchlists, holdings and a funds ledger), open the app with
+`?demo=1` in msw mode or run `npm run seed:demo` in api mode; both give the same starting state. See
+[`docs/runbooks/local-demo.md`](./docs/runbooks/local-demo.md).
 
 All web variables are listed in [`apps/web/.env.example`](./apps/web/.env.example)
 (`VITE_API_MODE=msw|api`, API and WS base URLs, the market-open override). A test page with live

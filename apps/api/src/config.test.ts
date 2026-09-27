@@ -11,6 +11,7 @@ describe('loadConfig', () => {
       jwtSecret: undefined,
       redisUrl: null,
       testControls: false,
+      demoSeed: false,
     });
     expect(loadConfig({ REDIS_URL: ' ' }).redisUrl).toBeNull();
   });
@@ -33,6 +34,7 @@ describe('loadConfig', () => {
       jwtSecret: 'test-only-secret-at-least-32-characters',
       redisUrl: 'redis://127.0.0.1:6379',
       testControls: false,
+      demoSeed: false,
     });
     expect(loadConfig({ MOCK_MARKET_ALWAYS_OPEN: '0' }).mockMarketAlwaysOpen).toBe(false);
   });
@@ -48,6 +50,17 @@ describe('loadConfig', () => {
         ENABLE_TEST_CONTROLS: '1',
       }),
     ).toThrow(/needs NODE_ENV=test \(got production\)/);
+  });
+
+  it('loads the demo seed on DEMO_SEED=true, never in production (T-174)', () => {
+    expect(loadConfig({ DEMO_SEED: 'true' }).demoSeed).toBe(true);
+    expect(() =>
+      loadConfig({
+        NODE_ENV: 'production',
+        JWT_SECRET: 'test-only-secret-at-least-32-characters',
+        DEMO_SEED: 'true',
+      }),
+    ).toThrow(/DEMO_SEED is for local demos/);
   });
 
   it('fails fast on a bad value', () => {

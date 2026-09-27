@@ -27,7 +27,9 @@ export async function expectNoSeriousA11yViolations(
   scope?: string,
 ): Promise<void> {
   const loaded = await page.evaluate(() => Boolean((window as AxeWindow).axe));
-  if (!loaded) await page.addScriptTag({ content: AXE_SOURCE });
+  // Evaluated over the DevTools protocol, not as an inline <script>: the preview server's CSP
+  // (script-src 'self', T-173) blocks inline scripts, and the page is tested under that CSP.
+  if (!loaded) await page.evaluate(AXE_SOURCE);
   const violations = await page.evaluate(
     async ({ tags, scope }) => {
       const axe = (window as AxeWindow).axe;

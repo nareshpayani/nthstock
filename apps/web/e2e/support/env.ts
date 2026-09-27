@@ -14,3 +14,11 @@ export const REALTIME_ORIGIN = `http://127.0.0.1:${String(E2E_PORTS.realtime)}`;
 
 /** Tag for specs that also run in api mode against the real backends. */
 export const API_TAG = '@api';
+
+/**
+ * Tag for the performance-budget specs (T-169, T-170). They run only with `E2E_PERF=1`
+ * (`npm run e2e:perf`), on one worker, so nothing else competes for the CPU while they measure.
+ */
+export const PERF_TAG = '@perf';
+
+export const E2E_PERF = process.env['E2E_PERF'] === '1';

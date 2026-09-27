@@ -7,6 +7,7 @@ import { loadEnv, type Plugin } from 'vite';
 import { configDefaults, defineConfig } from 'vitest/config';
 import { devProxy } from './src/app/devProxy.ts';
 import { parseRuntimeConfig, type ApiMode } from './src/app/runtimeConfig.ts';
+import { webSecurityHeaders } from './src/app/securityHeaders.ts';
 
 /** Adds <link rel="preload"> for every self-hosted woff2 font in the production bundle (T-010). */
 function preloadFonts(): Plugin {
@@ -58,7 +59,15 @@ export default defineConfig(({ mode }) => {
   // Validate VITE_* at start-up so a typo in the mode fails `vite`, `vite build` and Vitest at once.
   const runtime = parseRuntimeConfig(loadEnv(mode, process.cwd(), 'VITE_'));
   // api mode (T-076): /v1 → apps/api and /ws → apps/realtime, same origin for cookies.
-  const proxy = devProxy(runtime.apiMode, loadEnv(mode, process.cwd(), ''));
+  const serverEnv = loadEnv(mode, process.cwd(), '');
+  const proxy = devProxy(runtime.apiMode, serverEnv);
+  // T-173: CSP, X-Frame-Options DENY and friends on the preview server (not the dev server, whose
+  // HMR client needs inline scripts); HSTS only when SECURITY_HSTS=true, i.e. served over HTTPS.
+  const securityHeaders = webSecurityHeaders({
+    apiBaseUrl: runtime.apiBaseUrl,
+    wsUrl: runtime.wsUrl,
+    hsts: serverEnv['SECURITY_HSTS'] === 'true',
+  });
   return {
     // The mode is a build-time constant: main.tsx's `=== 'msw'` check folds away in api builds,
     // taking the dynamic MSW import with it.
@@ -86,7 +95,7 @@ export default defineConfig(({ mode }) => {
       alias: { '@': decodeURIComponent(new URL('./src', import.meta.url).pathname) },
     },
     server: { port: 5173, ...(proxy ? { proxy } : {}) },
-    preview: { port: 4173, ...(proxy ? { proxy } : {}) },
+    preview: { port: 4173, headers: securityHeaders, ...(proxy ? { proxy } : {}) },
     // The lazy MSW + mock-market chunk (msw mode only) is large by nature; real budgets are
     // enforced by scripts/checkBuild.mjs on the initial JS.
     build: { chunkSizeWarningLimit: 1_000 },

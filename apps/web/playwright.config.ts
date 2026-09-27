@@ -1,6 +1,14 @@
 import { randomBytes } from 'node:crypto';
 import { defineConfig, devices } from '@playwright/test';
-import { API_ORIGIN, API_TAG, E2E_MODE, E2E_PORTS, REALTIME_ORIGIN } from './e2e/support/env';
+import {
+  API_ORIGIN,
+  API_TAG,
+  E2E_MODE,
+  E2E_PERF,
+  E2E_PORTS,
+  PERF_TAG,
+  REALTIME_ORIGIN,
+} from './e2e/support/env';
 
 // E2E suites (T-030, T-078, T-163 to T-167). Chrome only (D4).
 //
@@ -12,6 +20,9 @@ import { API_ORIGIN, API_TAG, E2E_MODE, E2E_PORTS, REALTIME_ORIGIN } from './e2e
 // NODE_ENV=test and ENABLE_TEST_CONTROLS=true, over Redis at E2E_REDIS_URL (default
 // redis://127.0.0.1:6379, the CI service), plus an api-mode web build behind the preview proxy.
 // Only specs tagged @api run, one at a time, since they share one backend clock.
+//
+// perf (`E2E_PERF=1`, T-169 and T-170): the msw-mode build, only the specs tagged @perf (Web Vitals
+// and render budgets), one at a time so nothing competes for the CPU. The other modes skip them.
 //
 // The variables are set here, so CI needs no extra env. PW_CHROMIUM_PATH points at a preinstalled
 // Chromium in sandboxes; CI installs its own.
@@ -71,8 +82,12 @@ const apiServers = [
 
 export default defineConfig({
   testDir: './e2e',
-  fullyParallel: !api,
-  ...(api ? { workers: 1, grep: new RegExp(API_TAG) } : {}),
+  fullyParallel: !api && !E2E_PERF,
+  ...(api
+    ? { workers: 1, grep: new RegExp(API_TAG) }
+    : E2E_PERF
+      ? { workers: 1, grep: new RegExp(PERF_TAG) }
+      : { grepInvert: new RegExp(PERF_TAG) }),
   forbidOnly: Boolean(process.env['CI']),
   retries: process.env['CI'] ? 1 : 0,
   reporter: process.env['CI'] ? [['github'], ['html', { open: 'never' }]] : 'list',

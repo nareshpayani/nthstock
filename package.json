@@ -14,6 +14,7 @@
   "scripts": {
     "dev": "turbo run dev",
     "dev:api": "npm run infra:up && VITE_API_MODE=api REDIS_URL=${REDIS_URL:-redis://127.0.0.1:6379} JWT_SECRET=${JWT_SECRET:-$(node -e \"process.stdout.write(require('node:crypto').randomBytes(32).toString('base64url'))\")} turbo run dev --env-mode=loose --filter=@nthstock/api --filter=@nthstock/realtime --filter=@nthstock/web",
+    "seed:demo": "DEMO_SEED=true npm run dev:api",
     "infra:up": "docker compose -f infra/docker-compose.yml up -d --wait",
     "infra:down": "docker compose -f infra/docker-compose.yml down",
     "storybook": "npm run storybook -w @nthstock/ui",
@@ -26,7 +27,8 @@
     "format:check": "prettier --check .",
     "check": "npm run format:check && npm run lint && npm run typecheck && npm run test && npm run build",
     "e2e": "npm run e2e -w @nthstock/web",
-    "e2e:api": "npm run e2e:api -w @nthstock/web"
+    "e2e:api": "npm run e2e:api -w @nthstock/web",
+    "e2e:perf": "npm run e2e:perf -w @nthstock/web"
   },
   "devDependencies": {
     "prettier": "3.9.9",

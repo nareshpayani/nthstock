@@ -4,6 +4,7 @@ import type { Redis } from 'ioredis';
 import { createDeps, type AppDeps, type DepsOverrides } from './deps.js';
 import { installCsrfCheck } from './http/csrf.js';
 import { installErrorHandling } from './http/errorHandler.js';
+import { installSecurityHeaders } from './http/securityHeaders.js';
 import { authRoutes } from './modules/auth/routes.js';
 import { fundsRoutes } from './modules/funds/routes.js';
 import { healthRoutes } from './modules/health/routes.js';
@@ -69,6 +70,8 @@ export function buildApp(options: AppOptions = {}): App {
     throw new Error('Test controls (/v1/__test) cannot be enabled in production');
   }
   installErrorHandling(app);
+  // CSP, X-Frame-Options DENY and friends on every reply; HSTS outside local (T-173).
+  installSecurityHeaders(app, { hsts: deps.production });
   // Global per-IP limit; the auth routes set tighter ones (T-082). A 429 becomes an ApiError
   // RATE_LIMITED via the error handler.
   app.register(rateLimit, {
