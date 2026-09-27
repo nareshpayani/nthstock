@@ -1,6 +1,6 @@
 import { setupWorker } from 'msw/browser';
 import { resolveWsUrl, type RuntimeConfig } from '@/app/runtimeConfig';
-import { createHandlers } from './handlers';
+import { ORDER_SWEEP_MS, createMockHandlers } from './handlers';
 import { createMockMarket } from './marketAdapter';
 
 /**
@@ -26,14 +26,15 @@ export async function startMockWorker(config: RuntimeConfig) {
   } catch {
     listStorage = undefined;
   }
-  const worker = setupWorker(
-    ...createHandlers({
-      adapter,
-      wsUrl,
-      ...(storage ? { auth: { storage } } : {}),
-      ...(listStorage ? { watchlists: { storage: listStorage } } : {}),
-    }),
-  );
+  const { handlers, orders } = createMockHandlers({
+    adapter,
+    wsUrl,
+    ...(storage ? { auth: { storage } } : {}),
+    ...(listStorage ? { watchlists: { storage: listStorage } } : {}),
+    // Paper orders too (T-132); the sweep pushes 9:15 AMO release and end of day.
+    orders: { sweepMs: ORDER_SWEEP_MS, ...(listStorage ? { storage: listStorage } : {}) },
+  });
+  const worker = setupWorker(...handlers);
   // Assets, fonts and the Vite client go to the network untouched. MSW's own logging is off
   // because it would print every WebSocket frame (4 a second per symbol); one line says it is on.
   await worker.start({ onUnhandledRequest: 'bypass', quiet: true });
@@ -42,5 +43,5 @@ export async function startMockWorker(config: RuntimeConfig) {
       config.mockMarketOpen ? 'forced open (VITE_MOCK_MARKET_OPEN)' : 'on NSE hours'
     }.`,
   );
-  return { worker, adapter };
+  return { worker, adapter, orders };
 }

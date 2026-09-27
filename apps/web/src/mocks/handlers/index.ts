@@ -1,7 +1,9 @@
 import type { MarketDataAdapter } from '@nthstock/marketData';
+import type { HttpHandler } from 'msw';
 import type { RouteHandlerOptions } from '../handlerKit';
 import { createAuthMock, type AuthMockOptions } from './auth';
 import { marketHandlers } from './market';
+import { createOrdersMock, type OrdersMock, type OrdersMockOptions } from './orders';
 import { quoteStreamHandler, type QuoteStreamOptions } from './quoteStream';
 import { createWatchlistMock, type WatchlistMockOptions } from './watchlists';
 
@@ -13,28 +15,47 @@ export type MockHandlersOptions = {
   stream?: Omit<QuoteStreamOptions, 'url'>;
   auth?: AuthMockOptions;
   watchlists?: WatchlistMockOptions;
+  orders?: OrdersMockOptions;
 };
 
-/** Every MSW handler the app uses, REST and WebSocket, over one adapter. */
-export function createHandlers({
+/**
+ * Every MSW handler the app uses, REST and WebSocket, over one adapter, plus the orders mock (tests
+ * and scenarios script its prices).
+ */
+export function createMockHandlers({
   adapter,
   wsUrl,
   rest,
   stream,
   auth,
   watchlists,
-}: MockHandlersOptions) {
+  orders,
+}: MockHandlersOptions): { handlers: RequestHandlers; orders: OrdersMock } {
   const authMock = createAuthMock(auth);
-  return [
-    ...marketHandlers(adapter, rest),
-    ...authMock.handlers(rest),
-    // Watchlists take the auth clock, so a scenario that moves time moves both.
-    ...createWatchlistMock(adapter, authMock, {
-      ...(auth?.now ? { now: auth.now } : {}),
-      ...watchlists,
-    }).handlers(rest),
-    quoteStreamHandler(adapter, { ...stream, url: wsUrl }),
-  ];
+  // Watchlists and orders take the auth clock, so a scenario that moves time moves all three.
+  const now = auth?.now ? { now: auth.now } : {};
+  const ordersMock = createOrdersMock(adapter, authMock, { ...now, ...orders });
+  return {
+    handlers: [
+      ...marketHandlers(adapter, rest),
+      ...authMock.handlers(rest),
+      ...createWatchlistMock(adapter, authMock, { ...now, ...watchlists }).handlers(rest),
+      ...ordersMock.handlers(rest),
+      quoteStreamHandler(adapter, {
+        ...stream,
+        url: wsUrl,
+        orders: { onOrderUpdate: ordersMock.onOrderUpdate, activeUserId: authMock.activeUserId },
+      }),
+    ],
+    orders: ordersMock,
+  };
+}
+
+type RequestHandlers = (HttpHandler | ReturnType<typeof quoteStreamHandler>)[];
+
+/** Every MSW handler the app uses, REST and WebSocket, over one adapter. */
+export function createHandlers(options: MockHandlersOptions): RequestHandlers {
+  return createMockHandlers(options).handlers;
 }
 
 export { marketHandlers, MOCK_VERSION } from './market';
@@ -44,4 +65,16 @@ export {
   WATCHLIST_MOCK_STORAGE_KEY,
   type WatchlistMockOptions,
 } from './watchlists';
-export { QUOTE_FLUSH_MS, quoteStreamHandler, type QuoteStreamOptions } from './quoteStream';
+export {
+  QUOTE_FLUSH_MS,
+  quoteStreamHandler,
+  type OrderUpdateSource,
+  type QuoteStreamOptions,
+} from './quoteStream';
+export {
+  ORDER_SWEEP_MS,
+  ORDERS_MOCK_STORAGE_KEY,
+  createOrdersMock,
+  type OrdersMock,
+  type OrdersMockOptions,
+} from './orders';

@@ -12,7 +12,7 @@ describe('startMockWorker (T-050)', () => {
   it('registers REST and WebSocket handlers over one adapter and bypasses assets', async () => {
     const info = vi.spyOn(console, 'info').mockImplementation(() => undefined);
     const { startMockWorker } = await import('./browser');
-    const { adapter } = await startMockWorker({
+    const { adapter, orders } = await startMockWorker({
       apiMode: 'msw',
       apiBaseUrl: '',
       wsUrl: null,
@@ -22,9 +22,11 @@ describe('startMockWorker (T-050)', () => {
     expect(info).toHaveBeenCalledWith(
       expect.stringMatching(/^\[MSW\] Mocking enabled .*forced open/),
     );
-    // 28 REST routes (health, 12 market, 7 auth, 8 watchlists) plus the quote stream.
-    expect(setupWorker.mock.calls[0]).toHaveLength(29);
+    // 34 REST routes (health, 12 market, 7 auth, 8 watchlists, 6 orders and funds) plus the
+    // quote stream.
+    expect(setupWorker.mock.calls[0]).toHaveLength(35);
     expect(adapter.isOpen()).toBe(true);
+    orders.dispose();
     adapter.dispose();
     info.mockRestore();
   });
@@ -32,7 +34,7 @@ describe('startMockWorker (T-050)', () => {
   it('says when the mock market follows NSE hours', async () => {
     const info = vi.spyOn(console, 'info').mockImplementation(() => undefined);
     const { startMockWorker } = await import('./browser');
-    const { adapter } = await startMockWorker({
+    const { adapter, orders } = await startMockWorker({
       apiMode: 'msw',
       apiBaseUrl: '',
       wsUrl: 'ws://rt.test/ws',
@@ -41,6 +43,7 @@ describe('startMockWorker (T-050)', () => {
     expect(info).toHaveBeenCalledWith(
       expect.stringContaining('ws://rt.test/ws, mock market on NSE hours'),
     );
+    orders.dispose();
     adapter.dispose();
     info.mockRestore();
   });

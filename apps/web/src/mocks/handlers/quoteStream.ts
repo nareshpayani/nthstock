@@ -3,6 +3,7 @@ import {
   WS_PROTOCOL_VERSION,
   WsClientMessage,
   type Exchange,
+  type Order,
   type Quote,
   type WsError,
   type WsServerMessage,
@@ -26,11 +27,22 @@ const intervalTimers: IntervalTimers = {
   },
 };
 
+/**
+ * The private order channel (T-132): order updates from the orders mock, and who is signed in at
+ * the socket's host. An update goes to a connection only when its owner is that user, like
+ * apps/realtime sends a user's updates to that user's connections only (T-133).
+ */
+export type OrderUpdateSource = {
+  onOrderUpdate(listener: (userId: string, order: Order) => void): () => void;
+  activeUserId(host: string): string | null;
+};
+
 export type QuoteStreamOptions = {
   /** The WebSocket URL to intercept (the same one the app's WS client connects to). */
   url: string;
   flushMs?: number;
   timers?: IntervalTimers;
+  orders?: OrderUpdateSource;
 };
 
 const keyOf = (symbol: string, exchange: Exchange) => `${exchange}:${symbol}`;
@@ -39,7 +51,8 @@ const keyOf = (symbol: string, exchange: Exchange) => `${exchange}:${symbol}`;
  * The mock realtime server (T-055), speaking the contracts WS protocol over MSW's `ws` API. Each
  * connection keeps its own subscriptions; adapter ticks are conflated per symbol (latest wins) and
  * flushed as one `quotes` frame every 250 ms. A subscribe gets the current quote on the next flush,
- * so prices show even while the market is closed.
+ * so prices show even while the market is closed. Order updates of the signed-in user go out at
+ * once as `orderUpdate` messages (see `OrderUpdateSource`).
  */
 export function quoteStreamHandler(adapter: MarketDataAdapter, options: QuoteStreamOptions) {
   const flushMs = options.flushMs ?? QUOTE_FLUSH_MS;
@@ -58,6 +71,13 @@ export function quoteStreamHandler(adapter: MarketDataAdapter, options: QuoteStr
     const error = (message: WsError) => {
       send(message);
     };
+
+    const { orders } = options;
+    const stopOrders = orders?.onOrderUpdate((userId, order) => {
+      if (orders.activeUserId(client.url.host) === userId) {
+        send({ v: WS_PROTOCOL_VERSION, type: 'orderUpdate', order });
+      }
+    });
 
     const flushTimer = timers.setInterval(() => {
       if (pending.size === 0) return;
@@ -161,6 +181,7 @@ export function quoteStreamHandler(adapter: MarketDataAdapter, options: QuoteStr
 
     client.addEventListener('close', () => {
       closed = true;
+      stopOrders?.();
       timers.clearInterval(flushTimer);
       for (const stop of subscriptions.values()) stop();
       subscriptions.clear();
