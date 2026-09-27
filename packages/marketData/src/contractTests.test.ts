@@ -4,6 +4,7 @@ import type {
   Depth,
   IndexSummary,
   Instrument,
+  InstrumentProfile,
   InstrumentStats,
   MoverDirection,
   Movers,
@@ -221,6 +222,20 @@ class StubAdapter implements MarketDataAdapter {
       peX100: null,
       dividendYieldBp: null,
       asOf: TS,
+    });
+  }
+  getProfile(symbol: string): Promise<InstrumentProfile | null> {
+    const q = quotes[symbol];
+    if (!q || symbol === 'IDX') return Promise.resolve(null);
+    return Promise.resolve({
+      token: q.token,
+      symbol,
+      exchange: 'NSE',
+      name: `${symbol} Ltd`,
+      sector: 'Information Technology',
+      capCategory: 'LARGE',
+      about: `${symbol} Ltd is a stub company.`,
+      indices: [{ symbol: 'IDX', name: 'Stub Index' }],
     });
   }
   getIndices(): Promise<IndexSummary[]> {

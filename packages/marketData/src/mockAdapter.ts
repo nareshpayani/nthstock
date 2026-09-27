@@ -4,7 +4,9 @@ import type {
   Depth,
   Exchange,
   IndexSummary,
+  IndexRef,
   Instrument,
+  InstrumentProfile,
   InstrumentStats,
   MoverDirection,
   Movers,
@@ -37,6 +39,7 @@ import {
   rankMovers,
   type LiveEquity,
 } from './lists.js';
+import { profileAbout } from './profile.js';
 import { changeBasisPoints, circuitBand, clamp, roundToTick } from './price.js';
 import { hashSeed, mulberry32, randomNormal, type Rng } from './prng.js';
 import { SearchIndex, toSearchHit } from './search.js';
@@ -134,6 +137,8 @@ export class MockMarketDataAdapter implements MarketDataAdapter {
   private readonly indexEntries: IndexEntry[] = [];
   private readonly instruments: Instrument[];
   private readonly searchIndex: SearchIndex;
+  /** Indices each equity is a constituent of, in index-definition order. */
+  private readonly membership = new Map<string, IndexRef[]>();
   private readonly subscriptions = new Set<Subscription>();
   private sessionKey: string;
   private timer: unknown = null;
@@ -188,6 +193,11 @@ export class MockMarketDataAdapter implements MarketDataAdapter {
       this.refreshIndex(entry);
       this.entries.set(master.instrument.symbol, entry);
       this.indexEntries.push(entry);
+      const ref = { symbol: master.instrument.symbol, name: master.instrument.name };
+      for (const member of members) {
+        const symbol = member.master.instrument.symbol;
+        this.membership.set(symbol, [...(this.membership.get(symbol) ?? []), ref]);
+      }
     }
 
     this.instruments = [
@@ -291,6 +301,29 @@ export class MockMarketDataAdapter implements MarketDataAdapter {
         master.peX100 === null ? null : Math.round((master.peX100 * state.ltp) / master.basePrice),
       dividendYieldBp: Math.round((master.dividendYieldBp * master.basePrice) / state.ltp),
       asOf: this.nowIso(),
+    });
+  }
+
+  getProfile(symbol: string, exchange?: Exchange): Promise<InstrumentProfile | null> {
+    const entry = this.resolve(symbol, exchange);
+    if (entry?.kind !== 'equity') return Promise.resolve(null);
+    const { instrument, sector, capBucket } = entry.master;
+    const indices = this.membership.get(instrument.symbol) ?? [];
+    return Promise.resolve({
+      token: instrument.token,
+      symbol: instrument.symbol,
+      exchange: instrument.exchange,
+      name: instrument.name,
+      sector,
+      capCategory: capBucket,
+      about: profileAbout({
+        name: instrument.name,
+        sector,
+        capCategory: capBucket,
+        exchange: instrument.exchange,
+        indices,
+      }),
+      indices: [...indices],
     });
   }
 

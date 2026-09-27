@@ -104,6 +104,7 @@ describe('route map', () => {
         'instrument',
         'instrumentCandles',
         'instrumentDepth',
+        'instrumentProfile',
         'instrumentStats',
         'watchlistsList',
         'watchlistCreate',

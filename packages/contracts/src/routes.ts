@@ -17,6 +17,7 @@ import {
   ExchangeQuery,
   IndicesResponse,
   Instrument,
+  InstrumentProfile,
   InstrumentStats,
   Movers,
   MoversQuery,
@@ -194,6 +195,14 @@ export const routes = {
     params: SymbolParams,
     query: ExchangeQuery,
     response: Depth,
+  },
+  instrumentProfile: {
+    method: 'GET',
+    path: '/v1/market/instruments/:symbol/profile',
+    auth: 'public',
+    params: SymbolParams,
+    query: ExchangeQuery,
+    response: InstrumentProfile,
   },
   instrumentStats: {
     method: 'GET',

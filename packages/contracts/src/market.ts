@@ -177,6 +177,31 @@ export const Depth = z.object({
 });
 export type Depth = z.infer<typeof Depth>;
 
+export const MarketCapCategory = z.enum(['LARGE', 'MID', 'SMALL']);
+export type MarketCapCategory = z.infer<typeof MarketCapCategory>;
+
+/** An index an equity is a constituent of, for the overview chips. */
+export const IndexRef = z.object({ symbol: TradingSymbol, name: z.string().min(1).max(60) });
+export type IndexRef = z.infer<typeof IndexRef>;
+
+export const PROFILE_ABOUT_MAX = 2_000;
+
+/**
+ * Company overview for stock detail (T-111): about text, sector, market-cap category and the
+ * indices the equity belongs to. Equities only.
+ */
+export const InstrumentProfile = z.object({
+  token: InstrumentToken,
+  symbol: TradingSymbol,
+  exchange: Exchange,
+  name: z.string().min(1).max(120),
+  sector: z.string().min(1).max(60),
+  capCategory: MarketCapCategory,
+  about: z.string().min(1).max(PROFILE_ABOUT_MAX),
+  indices: z.array(IndexRef).max(20),
+});
+export type InstrumentProfile = z.infer<typeof InstrumentProfile>;
+
 /** An index card: value in hundredths of a point (same integer scale as paise), plus a sparkline. */
 export const IndexSummary = z.object({
   token: InstrumentToken,

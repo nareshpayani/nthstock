@@ -6,6 +6,7 @@ import {
   indexSummaryFixture,
   instrumentFixture,
   moversFixture,
+  profileFixture,
   quoteFixture,
   quoteRowFixture,
   searchResponseFixture,
@@ -23,6 +24,7 @@ import {
   IndexSummary,
   IndicesResponse,
   Instrument,
+  InstrumentProfile,
   InstrumentStats,
   Movers,
   MoversQuery,
@@ -47,6 +49,7 @@ describe('market fixtures round-trip', () => {
     ['InstrumentStats', InstrumentStats, statsFixture],
     ['CandleSeries', CandleSeries, candleSeriesFixture],
     ['Depth', Depth, depthFixture],
+    ['InstrumentProfile', InstrumentProfile, profileFixture],
     ['IndexSummary', IndexSummary, indexSummaryFixture],
     ['IndicesResponse', IndicesResponse, { items: [indexSummaryFixture] }],
     ['QuoteRow', QuoteRow, quoteRowFixture],
@@ -92,6 +95,16 @@ describe('market rules', () => {
       Depth.safeParse({ ...depthFixture, asks: [...depthFixture.asks, depthFixture.asks[0]] })
         .success,
     ).toBe(false);
+  });
+
+  it('requires profile about text within the limit and a known cap category', () => {
+    expect(InstrumentProfile.safeParse({ ...profileFixture, about: '' }).success).toBe(false);
+    expect(
+      InstrumentProfile.safeParse({ ...profileFixture, about: 'x'.repeat(2_001) }).success,
+    ).toBe(false);
+    expect(InstrumentProfile.safeParse({ ...profileFixture, capCategory: 'MEGA' }).success).toBe(
+      false,
+    );
   });
 
   it('splits and validates batch quote symbols', () => {

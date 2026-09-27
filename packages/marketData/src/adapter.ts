@@ -5,6 +5,7 @@ import type {
   Exchange,
   IndexSummary,
   Instrument,
+  InstrumentProfile,
   InstrumentStats,
   MoverDirection,
   Movers,
@@ -54,6 +55,8 @@ export interface MarketDataAdapter {
   getDepth(symbol: string, exchange?: Exchange): Promise<Depth | null>;
   /** Key stats; `null` for unknown symbols and for indices. */
   getStats(symbol: string, exchange?: Exchange): Promise<InstrumentStats | null>;
+  /** Company overview (about, sector, index membership); `null` for unknown symbols and indices. */
+  getProfile(symbol: string, exchange?: Exchange): Promise<InstrumentProfile | null>;
 
   getIndices(): Promise<IndexSummary[]>;
 
