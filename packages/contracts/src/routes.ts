@@ -33,6 +33,7 @@ import {
 import {
   ModifyOrderRequest,
   Order,
+  OrderHistoryResponse,
   OrderParams,
   OrdersPage,
   OrdersQuery,
@@ -287,6 +288,13 @@ export const routes = {
     auth: 'user',
     params: OrderParams,
     response: Order,
+  },
+  orderHistory: {
+    method: 'GET',
+    path: '/v1/orders/:id/history',
+    auth: 'user',
+    params: OrderParams,
+    response: OrderHistoryResponse,
   },
   orderPlace: {
     method: 'POST',

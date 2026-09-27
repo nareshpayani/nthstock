@@ -23,7 +23,12 @@ import type {
   SearchResponse,
   StockList,
 } from './market.js';
-import type { ModifyOrderRequest, Order, PlaceOrderRequest } from './orders.js';
+import type {
+  ModifyOrderRequest,
+  Order,
+  OrderHistoryResponse,
+  PlaceOrderRequest,
+} from './orders.js';
 import type {
   FundsSummary,
   Holding,
@@ -285,6 +290,32 @@ export const orderFixture: Order = {
   statusReason: null,
   placedAt: TS,
   updatedAt: TS,
+};
+
+export const orderHistoryFixture: OrderHistoryResponse = {
+  orderId: 'ord_1',
+  items: [
+    {
+      event: 'PLACED',
+      status: 'OPEN',
+      at: TS,
+      qty: 10,
+      type: 'LIMIT',
+      price: 152_345,
+      fillPrice: null,
+      note: null,
+    },
+    {
+      event: 'EXECUTED',
+      status: 'EXECUTED',
+      at: '2026-09-25T04:05:00.000Z',
+      qty: 10,
+      type: 'LIMIT',
+      price: 152_345,
+      fillPrice: 152_340,
+      note: null,
+    },
+  ],
 };
 
 export const positionFixture: Position = {
