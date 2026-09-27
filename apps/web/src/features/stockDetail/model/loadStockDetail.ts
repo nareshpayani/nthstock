@@ -2,7 +2,13 @@ import { isApiError, type ApiClient } from '@nthstock/apiClient';
 import type { CandleRange, Exchange, Instrument } from '@nthstock/contracts';
 import type { QueryClient } from '@tanstack/react-query';
 import { candlesQuery } from '@/features/charts';
-import { instrumentQuery, quoteSnapshotQuery, statsQuery } from '../api/stockDetailQueries';
+import {
+  depthQuery,
+  instrumentQuery,
+  profileQuery,
+  quoteSnapshotQuery,
+  statsQuery,
+} from '../api/stockDetailQueries';
 import { DEFAULT_STOCK_RANGE } from './stockDetailSearch';
 
 export type LoadStockDetailParams = {
@@ -17,7 +23,8 @@ const isMissing = (error: unknown) =>
 
 /**
  * Route loader work for /stocks/:symbol (T-105). Waits only for the instrument, which decides
- * between the page and not-found; the quote snapshot, stats and candles start in parallel and
+ * between the page and not-found; the quote snapshot, candles, stats, depth
+ * and profile start in parallel and
  * are not awaited, so each section shows its own skeleton instead of holding up the page.
  * Resolves `null` for an unknown symbol; any other failure (offline, 5xx) rejects, so the route
  * shows its error state with a retry.
@@ -39,6 +46,10 @@ export async function loadStockDetail(
   void queryClient.prefetchQuery(
     candlesQuery(api, { ...listed, range: range ?? DEFAULT_STOCK_RANGE }),
   );
-  if (instrument.type === 'EQUITY') void queryClient.prefetchQuery(statsQuery(api, listed));
+  if (instrument.type === 'EQUITY') {
+    void queryClient.prefetchQuery(statsQuery(api, listed));
+    void queryClient.prefetchQuery(depthQuery(api, listed));
+    void queryClient.prefetchQuery(profileQuery(api, listed));
+  }
   return instrument;
 }
