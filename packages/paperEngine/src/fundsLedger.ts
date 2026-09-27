@@ -1,7 +1,7 @@
 import {
+  LedgerEntry,
   PAPER_OPENING_BALANCE_PAISE,
   type FundsSummary,
-  type LedgerEntry,
   type LedgerEntryType,
 } from '@nthstock/contracts';
 import { formatInr } from '@nthstock/utils';
@@ -14,6 +14,12 @@ export type LedgerResult =
 export type FundsLedgerOptions = {
   /** Defaults to ₹10,00,000 (`PAPER_OPENING_BALANCE_PAISE`). */
   openingBalance?: number;
+  /**
+   * Entries of a saved ledger (`entries()` of an earlier one) to carry on from instead of a fresh
+   * opening credit. Replayed and checked: each must be a valid `LedgerEntry`, the first the
+   * `OPENING_CREDIT` of `openingBalance`, and every `balanceAfter` must add up.
+   */
+  entries?: readonly LedgerEntry[];
 };
 
 /**
@@ -46,7 +52,8 @@ export class FundsLedger {
     this.openingBalance = options.openingBalance ?? PAPER_OPENING_BALANCE_PAISE;
     assertPaise(this.openingBalance, 'Opening balance');
     if (this.openingBalance < 0) throw new RangeError('Opening balance must not be negative');
-    this.#append('OPENING_CREDIT', this.openingBalance, null, 'Opening paper balance');
+    if (options.entries) this.#replay(options.entries);
+    else this.#append('OPENING_CREDIT', this.openingBalance, null, 'Opening paper balance');
   }
 
   /** Cash free to trade with. */
@@ -136,6 +143,30 @@ export class FundsLedger {
       realisedPnlToday,
       asOf: this.#ctx.nowIso(),
     };
+  }
+
+  /** Rebuilds balances and per-order blocks from saved entries (see `FundsLedgerOptions.entries`). */
+  #replay(entries: readonly LedgerEntry[]): void {
+    const [first] = entries;
+    if (first?.type !== 'OPENING_CREDIT' || first.amount !== this.openingBalance) {
+      throw new RangeError('A saved ledger must start with its opening credit');
+    }
+    for (const raw of entries) {
+      const entry = LedgerEntry.parse(raw);
+      this.#available += entry.amount;
+      if (entry.balanceAfter !== this.#available) {
+        throw new RangeError(`Saved ledger entry ${entry.id} does not add up`);
+      }
+      if (entry.type === 'ORDER_BLOCK' || entry.type === 'ORDER_RELEASE') {
+        if (entry.orderId === null) throw new RangeError(`Ledger entry ${entry.id} has no order`);
+        const held = this.blockedFor(entry.orderId) - entry.amount;
+        if (held < 0) throw new RangeError(`Ledger entry ${entry.id} releases more than blocked`);
+        if (held === 0) this.#blocks.delete(entry.orderId);
+        else this.#blocks.set(entry.orderId, held);
+        this.#blocked -= entry.amount;
+      }
+      this.#entries.push(Object.freeze(entry));
+    }
   }
 
   #releasable(orderId: string, amount: number | undefined): number {
