@@ -19,7 +19,8 @@ test('/ redirects to the dashboard and shows the shell', async ({ page }) => {
     page.getByRole('banner').getByText('NIFTY 50', { exact: true }).first(),
   ).toBeVisible();
   await expect(page.getByRole('complementary', { name: 'Watchlist and search' })).toBeVisible();
-  await expect(page.getByText('Your watchlist is empty').first()).toBeVisible();
+  // Signed out, the watchlist invites a login.
+  await expect(page.getByText('Track stocks in watchlists').first()).toBeVisible();
 
   // Orders needs a session (T-089): signed out, it goes to login with a way back.
   await nav.getByRole('link', { name: 'Orders' }).click();
