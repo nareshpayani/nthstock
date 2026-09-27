@@ -4,6 +4,7 @@
 // - every page route is code-split into its own chunk (T-022);
 // - icons are tree-shaken: only icons imported somewhere in src end up in the bundle (T-021);
 // - the charts library (TradingView Lightweight Charts) loads lazily, never in the initial JS (T-094);
+// - the order ticket is its own chunk, loaded on first open, never in the initial JS (T-135);
 // - mocks stay out of production paths (T-050): an api-mode build contains no MSW or mock-market
 //   code at all, and in an msw-mode build they load lazily, never in the initial JS.
 // Usage: node scripts/checkBuild.mjs [distDir]   (default dist)
@@ -102,6 +103,12 @@ const chartsJs = chartChunks.reduce(
   0,
 );
 
+const ticketChunks = assets.filter((file) => /^OrderTicket-.*\.js$/.test(file));
+if (ticketChunks.length === 0) failures.push('the order ticket has no lazy chunk of its own');
+const eagerTicket = ticketChunks.filter((file) => initialScripts.includes(`assets/${file}`));
+if (eagerTicket.length > 0)
+  failures.push(`order ticket in the initial JS: ${eagerTicket.join(', ')}`);
+
 const ROUTE_CHUNKS = ['dashboard', 'portfolio', 'positions', 'orders', 'funds', 'login', '_symbol'];
 const missingChunks = ROUTE_CHUNKS.filter(
   (name) => !assets.some((file) => file.startsWith(`${name}-`) && file.endsWith('.js')),
@@ -146,6 +153,7 @@ console.log(
 console.log(
   `checkBuild: ${DIST} is an ${String(apiMode)}-mode build; lazy mock JS ${(mockJs / 1024).toFixed(1)} KB gzipped`,
 );
+console.log(`checkBuild: order ticket in lazy chunk(s) ${ticketChunks.join(', ') || 'none'}`);
 console.log(
   `checkBuild: charts library in ${String(chartChunks.length)} lazy chunk(s), ${(chartsJs / 1024).toFixed(1)} KB gzipped`,
 );
