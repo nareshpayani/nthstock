@@ -29,5 +29,6 @@ export async function logIn(page: Page, mobile: string = uniqueMobile()): Promis
   await expect(skip).toBeVisible();
   await skip.focus();
   await page.keyboard.press('Enter');
-  await expect(page.getByRole('textbox', { name: 'Mobile number' })).toHaveCount(0);
+  // The login page stays up until the redirect target has loaded.
+  await expect(skip).toBeHidden();
 }
