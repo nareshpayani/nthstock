@@ -127,6 +127,20 @@ describe('Tabs', () => {
     fireEvent.mouseDown(screen.getByRole('tab', { name: 'Losers' }), { button: 0 });
     expect(screen.getByRole('tabpanel')).toHaveTextContent('Losers panel');
   });
+
+  it('draws a focus ring on the panel, which is a Tab stop (T-167)', () => {
+    render(
+      <Tabs defaultValue="a">
+        <TabsList aria-label="Lists">
+          <TabsTrigger value="a">Gainers</TabsTrigger>
+        </TabsList>
+        <TabsContent value="a">Gainers panel</TabsContent>
+      </Tabs>,
+    );
+    const panel = screen.getByRole('tabpanel');
+    expect(panel).toHaveAttribute('tabindex', '0');
+    expect(panel.className).toContain('focus-visible:ring-2');
+  });
 });
 
 describe('DropdownMenu', () => {

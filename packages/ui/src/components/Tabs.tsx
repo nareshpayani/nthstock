@@ -25,6 +25,10 @@ export function TabsTrigger({ className, ...rest }: ComponentProps<typeof TabsPr
   );
 }
 
+/** Radix makes the panel a Tab stop, so keyboard focus on it draws a ring (WCAG 2.4.7). */
+const tabsContentClass =
+  'rounded-sm pt-4 outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2';
+
 export function TabsContent({ className, ...rest }: ComponentProps<typeof TabsPrimitive.Content>) {
-  return <TabsPrimitive.Content className={cn('pt-4 outline-none', className)} {...rest} />;
+  return <TabsPrimitive.Content className={cn(tabsContentClass, className)} {...rest} />;
 }
