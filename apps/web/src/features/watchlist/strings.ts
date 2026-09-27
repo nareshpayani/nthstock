@@ -57,12 +57,6 @@ export const strings = {
     removeLabel: (symbol: string) => `Remove ${symbol}`,
     dragLabel: (symbol: string) => `Drag to reorder ${symbol}`,
     keyHint: 'On a stock: B buy, S sell, Alt+↑/↓ move, Delete remove.',
-    ticketSoon: {
-      title: (side: string, symbol: string) => `${side} ${symbol}`,
-      body: 'The order ticket arrives in a later release. Paper trading only.',
-    },
-    buyWord: 'Buy',
-    sellWord: 'Sell',
   },
   /** Live-region announcements. */
   announce: {

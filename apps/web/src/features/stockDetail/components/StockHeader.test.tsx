@@ -65,7 +65,7 @@ describe('stock detail header (T-106)', () => {
     expect(quotes.subscribed.get('NSE:INFY')).toBe(1);
   });
 
-  it('clicking Buy when signed in sets ticketIntent to the symbol with side BUY', async () => {
+  it('clicking Buy when signed in sets ticketIntent to the symbol with side BUY and opens the ticket', async () => {
     signIn();
     await openStock('/stocks/INFY');
     fireEvent.click(screen.getByRole('button', { name: 'Buy INFY' }));
@@ -76,7 +76,10 @@ describe('stock detail header (T-106)', () => {
         side: 'BUY',
       }),
     );
-    expect(await screen.findByText('Buy INFY')).toBeInTheDocument();
+    const ticket = await screen.findByRole('dialog', { name: 'Trade INFY' });
+    fireEvent.keyDown(ticket, { key: 'Escape' });
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    expect(useTicketIntentStore.getState().intent).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: 'Sell INFY' }));
     await waitFor(() => expect(useTicketIntentStore.getState().intent?.side).toBe('SELL'));
   });

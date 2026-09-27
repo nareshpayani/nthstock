@@ -8,9 +8,10 @@ import { useTicketIntentStore, type TicketIntent } from '@/shared/lib/ticketInte
 export type OpenTicketResult = 'opened' | 'login';
 
 /**
- * What a Buy or Sell button does (T-106): records the ticket intent and, when nobody is logged in,
- * goes to /login?redirect=<this page>. The intent stays in memory across that client-side
- * navigation, so the ticket (T-135) can open once the user is back.
+ * What a Buy or Sell button does (T-106): records the ticket intent, which opens the order ticket
+ * slide-over (T-135) once a session is held. When nobody is logged in it goes to
+ * /login?redirect=<this page>; the intent stays in memory across that client-side navigation, so
+ * the ticket opens when the user is back.
  */
 export function useOpenTicket(): (intent: TicketIntent) => Promise<OpenTicketResult> {
   const api = useApiClient();

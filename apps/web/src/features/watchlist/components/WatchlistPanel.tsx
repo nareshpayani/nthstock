@@ -1,5 +1,5 @@
 import type { OrderSide, Watchlist, WatchlistItem } from '@nthstock/contracts';
-import { Button, EmptyState, IconPlus, useToast } from '@nthstock/ui';
+import { Button, EmptyState, IconPlus } from '@nthstock/ui';
 import { useCallback } from 'react';
 import { useKeepLive } from '@/shared/hooks/useKeepLive';
 import { useOpenTicket } from '@/shared/hooks/useOpenTicket';
@@ -33,7 +33,6 @@ export function WatchlistPanel({ list, onAddStock }: WatchlistPanelProps) {
   const { mutate: reorderItems } = useReorderWatchlistItems();
   const { mutate: removeItem } = useRemoveFromWatchlist();
   const openTicket = useOpenTicket();
-  const toast = useToast();
 
   useKeepLive(symbolsOn(list.items, 'NSE'), 'NSE');
   useKeepLive(symbolsOn(list.items, 'BSE'), 'BSE');
@@ -60,17 +59,10 @@ export function WatchlistPanel({ list, onAddStock }: WatchlistPanelProps) {
 
   const onTrade = useCallback(
     (item: WatchlistItem, side: OrderSide) => {
-      void openTicket({ symbol: item.symbol, exchange: item.exchange, side }).then((result) => {
-        if (result !== 'opened') return;
-        const word = side === 'BUY' ? strings.row.buyWord : strings.row.sellWord;
-        // The order ticket (T-135) will open from the intent; until then, say what it will do.
-        toast.show({
-          title: strings.row.ticketSoon.title(word, item.symbol),
-          description: strings.row.ticketSoon.body,
-        });
-      });
+      // The order ticket slide-over (T-135) opens from the intent.
+      void openTicket({ symbol: item.symbol, exchange: item.exchange, side });
     },
-    [openTicket, toast],
+    [openTicket],
   );
 
   if (list.items.length === 0) {
