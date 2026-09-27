@@ -3,6 +3,7 @@ import { fixedClock } from '@nthstock/utils';
 import { describe, expect, it } from 'vitest';
 import { createEngineContext, createMapPriceSource } from './context.js';
 import { FundsLedger } from './fundsLedger.js';
+import { seeded } from './testHarness.js';
 
 const newLedger = (openingBalance?: number) =>
   new FundsLedger(
@@ -138,16 +139,36 @@ describe('FundsLedger (T-066)', () => {
 });
 
 /** Small seeded PRNG so the randomised test is reproducible (mulberry32). */
-function seeded(seed: number): () => number {
-  let a = seed >>> 0;
-  return () => {
-    a = (a + 0x6d2b79f5) >>> 0;
-    let t = a;
-    t = Math.imul(t ^ (t >>> 15), t | 1);
-    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
-}
+describe('FundsLedger.settleForcedBuy (T-130)', () => {
+  it('debits an intraday square-off even when it overdraws, and the summary shows it', () => {
+    const ledger = newLedger(1_000_00);
+    expect(ledger.settleBuy('o1', 1_500_00)).toMatchObject({ ok: false });
+    const result = ledger.settleForcedBuy('o1', 1_500_00);
+    expect(result).toMatchObject({
+      ok: true,
+      entries: [{ type: 'TRADE_DEBIT', amount: -1_500_00, balanceAfter: -500_00, orderId: 'o1' }],
+    });
+    const summary = ledger.summary();
+    expect(FundsSummary.parse(summary)).toMatchObject({ available: -500_00, balance: -500_00 });
+    expect(sum(ledger.entries())).toBe(ledger.available);
+  });
+
+  it('releases any block the order still has', () => {
+    const ledger = newLedger(1_000_00);
+    ledger.block('o1', 400_00);
+    const result = ledger.settleForcedBuy('o1', 300_00);
+    expect(result).toMatchObject({
+      ok: true,
+      entries: [
+        { type: 'ORDER_RELEASE', amount: 400_00 },
+        { type: 'TRADE_DEBIT', amount: -300_00 },
+      ],
+    });
+    expect(ledger.blocked).toBe(0);
+    expect(ledger.available).toBe(700_00);
+    expect(() => ledger.settleForcedBuy('o1', 0)).toThrow(/positive/);
+  });
+});
 
 describe('FundsLedger randomised sequences (T-066)', () => {
   it.each([1, 7, 42, 2026, 90210])('keeps its invariants for seed %i', (seed) => {

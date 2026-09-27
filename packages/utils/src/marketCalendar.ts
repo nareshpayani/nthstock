@@ -5,6 +5,8 @@ import { fromIst, istDateKey, toIstParts, type Clock } from './time.js';
 export const PRE_OPEN_START = 9 * 60;
 export const MARKET_OPEN = 9 * 60 + 15;
 export const MARKET_CLOSE = 15 * 60 + 30;
+/** Open intraday (MIS) positions are squared off at 15:20 IST, ten minutes before the close. */
+export const INTRADAY_SQUARE_OFF = 15 * 60 + 20;
 
 export type MarketState = 'preOpen' | 'open' | 'closed';
 export type ClosedReason = 'beforeHours' | 'afterHours' | 'weekend' | 'holiday';
