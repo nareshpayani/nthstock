@@ -1,5 +1,13 @@
 import { Toast as ToastPrimitive } from 'radix-ui';
-import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from 'react';
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useMemo,
+  useState,
+  type ReactElement,
+  type ReactNode,
+} from 'react';
 import { IconClose } from '../icons/icons.js';
 import { cn } from '../lib/cn.js';
 
@@ -9,6 +17,11 @@ export type ToastMessage = {
   title: string;
   description?: string;
   tone?: ToastTone;
+  /**
+   * One follow-up action, e.g. a "View orders" link. `element` is a link or button; `altText`
+   * tells screen-reader users how to reach it another way (toasts time out).
+   */
+  action?: { element: ReactElement; altText: string };
 };
 
 type ToastEntry = ToastMessage & { id: number };
@@ -61,6 +74,15 @@ export function ToastProvider({
                 <ToastPrimitive.Description className="text-label text-ink-muted">
                   {toast.description}
                 </ToastPrimitive.Description>
+              ) : null}
+              {toast.action ? (
+                <ToastPrimitive.Action
+                  asChild
+                  altText={toast.action.altText}
+                  className="justify-self-start text-label font-semibold text-brand underline-offset-2 hover:underline"
+                >
+                  {toast.action.element}
+                </ToastPrimitive.Action>
               ) : null}
             </div>
             <ToastPrimitive.Close aria-label="Dismiss" className="text-ink-muted hover:text-ink">

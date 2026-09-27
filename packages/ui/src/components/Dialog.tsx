@@ -97,7 +97,27 @@ export function Dialog({
 export type SheetProps = DialogProps & {
   /** Which edge the panel slides from. Right for the order ticket, left for the nav drawer. */
   side?: 'right' | 'left';
+  /**
+   * Where focus goes on close when the sheet has no `trigger` (opened from a store, e.g. the order
+   * ticket): usually the button that asked for it. Ignored when the element is gone.
+   */
+  returnFocus?: RefObject<HTMLElement | null>;
+  /**
+   * `dim` (default) shades the page behind; `light` barely tints it, so the page (chart, watchlist)
+   * stays readable next to a slide-over such as the order ticket.
+   */
+  overlay?: 'dim' | 'light';
 };
+
+function focusReturn(returnFocus: SheetProps['returnFocus']) {
+  if (!returnFocus) return undefined;
+  return (event: Event) => {
+    const target = returnFocus.current;
+    if (!target?.isConnected) return;
+    event.preventDefault();
+    target.focus();
+  };
+}
 
 /** Slide-over panel (order ticket, mobile drawer) with the same focus and Esc behaviour. */
 export function Sheet({
@@ -109,16 +129,22 @@ export function Sheet({
   className,
   side = 'right',
   initialFocus,
+  returnFocus,
+  overlay = 'dim',
   ...root
 }: SheetProps) {
   return (
     <DialogPrimitive.Root {...root}>
       {trigger ? <DialogPrimitive.Trigger asChild>{trigger}</DialogPrimitive.Trigger> : null}
       <DialogPrimitive.Portal>
-        <DialogPrimitive.Overlay className={overlayClass} />
+        <DialogPrimitive.Overlay
+          className={cn(overlayClass, overlay === 'light' && 'bg-ink/10')}
+          data-overlay={overlay}
+        />
         <DialogPrimitive.Content
           {...(description ? {} : { 'aria-describedby': undefined })}
           onOpenAutoFocus={focusInitial(initialFocus)}
+          onCloseAutoFocus={focusReturn(returnFocus)}
           onEscapeKeyDown={keepEscapeForOpenPopup}
           className={cn(
             'fixed inset-y-0 z-(--nth-z-overlay) flex w-[min(420px,calc(100vw-48px))] flex-col bg-surface shadow-overlay outline-none',
