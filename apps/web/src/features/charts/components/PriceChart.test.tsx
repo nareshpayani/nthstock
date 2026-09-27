@@ -1,4 +1,5 @@
 import { act, render, screen } from '@testing-library/react';
+import { StrictMode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { chartsMock } from '@/test/chartsMock';
 import { makeCandles } from '@/test/candles';
@@ -100,5 +101,74 @@ describe('PriceChart (T-094)', () => {
     );
     expect(screen.queryByRole('status')).toBeNull();
     expect(chartsMock.charts).toHaveLength(0);
+  });
+});
+
+describe('PriceChart disposal (T-113)', () => {
+  it('replaces the chart when the type changes: one live chart and one observer', async () => {
+    const candles = makeCandles({ count: 3 });
+    const view = render(<PriceChart candles={candles} label="c" type="area" />);
+    await screen.findByTestId('chart-host');
+    view.rerender(<PriceChart candles={candles} label="c" type="candle" />);
+    expect(chartsMock.charts).toHaveLength(2);
+    expect(chartsMock.charts[0]?.removed).toBe(true);
+    expect(chartsMock.active()).toHaveLength(1);
+    expect(chartsMock.active()[0]?.series[0]?.type).toBe('Candlestick');
+    expect(resize.observers.size).toBe(1);
+    view.unmount();
+    expect(chartsMock.active()).toHaveLength(0);
+    expect(resize.observers.size).toBe(0);
+  });
+
+  it('disposes the chart when the candles become empty', async () => {
+    const view = render(<PriceChart candles={makeCandles({ count: 3 })} label="c" />);
+    await screen.findByTestId('chart-host');
+    view.rerender(<PriceChart candles={[]} label="c" />);
+    expect(screen.getByRole('figure', { name: 'c' })).toHaveTextContent(
+      'No chart data for this range yet.',
+    );
+    expect(screen.queryByTestId('chart-host')).toBeNull();
+    expect(chartsMock.active()).toHaveLength(0);
+    expect(resize.observers.size).toBe(0);
+  });
+
+  it('unsubscribes the tooltip crosshair handler on unmount', async () => {
+    const view = render(<PriceChart candles={makeCandles({ count: 3 })} label="c" tooltip />);
+    await screen.findByTestId('chart-host');
+    const [chart] = chartsMock.charts;
+    expect(chart?.crosshair.size).toBe(1);
+    view.unmount();
+    expect(chart?.crosshair.size).toBe(0);
+    expect(chartsMock.active()).toHaveLength(0);
+    expect(resize.observers.size).toBe(0);
+  });
+
+  it('leaves exactly one chart after a StrictMode mount, unmount and remount, and none after', async () => {
+    const view = render(
+      <StrictMode>
+        <PriceChart candles={makeCandles({ count: 3 })} label="c" tooltip />
+      </StrictMode>,
+    );
+    await screen.findByTestId('chart-host');
+    expect(chartsMock.active()).toHaveLength(1);
+    expect(resize.observers.size).toBe(1);
+    view.unmount();
+    expect(chartsMock.active()).toHaveLength(0);
+    expect(resize.observers.size).toBe(0);
+    for (const chart of chartsMock.charts) expect(chart.crosshair.size).toBe(0);
+  });
+
+  it('creates no chart when unmounted before the lazy chunk has loaded', async () => {
+    // A fresh module graph, so the lazy import is still pending on first render.
+    vi.resetModules();
+    const { PriceChart: FreshPriceChart } = await import('./PriceChart');
+    const { chartsMock: freshMock } = await import('@/test/chartsMock');
+    const view = render(<FreshPriceChart candles={makeCandles({ count: 3 })} label="c" />);
+    expect(screen.getByRole('status', { name: 'Loading chart' })).toBeInTheDocument();
+    view.unmount();
+    await vi.dynamicImportSettled();
+    expect(freshMock.charts).toHaveLength(0);
+    expect(chartsMock.charts).toHaveLength(0);
+    expect(resize.observers.size).toBe(0);
   });
 });
