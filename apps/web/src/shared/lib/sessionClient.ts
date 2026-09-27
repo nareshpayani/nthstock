@@ -6,6 +6,7 @@ import {
 } from '@nthstock/apiClient';
 import type { Session } from '@nthstock/contracts';
 import type { QueryClient } from '@tanstack/react-query';
+import { gateFetch } from './networkGate';
 import { useSessionStore } from './sessionStore';
 
 /**
@@ -51,15 +52,25 @@ export async function ensureSession(apiClient: ApiClient): Promise<Session | nul
   return useSessionStore.getState().session;
 }
 
+export type SessionApiClientOptions = Omit<ApiClientOptions, 'csrfToken' | 'onUnauthorized'> & {
+  /**
+   * msw mode (T-169): every request waits for this, the MSW worker's start, so the page renders
+   * first. Omitted in api mode.
+   */
+  ready?: Promise<unknown>;
+};
+
 /**
  * The app's REST client: sends the session's CSRF token (or the pre-session value) and, when a
  * user route answers 401 because the 15-minute access token expired, refreshes once and retries.
  */
-export function createSessionApiClient(
-  options: Omit<ApiClientOptions, 'csrfToken' | 'onUnauthorized'> = {},
-): ApiClient {
+export function createSessionApiClient({
+  ready,
+  ...options
+}: SessionApiClientOptions = {}): ApiClient {
   const apiClient: ApiClient = createApiClient({
     ...options,
+    ...(ready ? { fetch: gateFetch(ready, options.fetch) } : {}),
     csrfToken: () => useSessionStore.getState().session?.csrfToken ?? PRE_SESSION_CSRF,
     onUnauthorized: () => refreshSession(apiClient),
   });

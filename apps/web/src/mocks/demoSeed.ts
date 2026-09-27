@@ -20,20 +20,6 @@ import { ORDERS_MOCK_STORAGE_KEY, WATCHLIST_MOCK_STORAGE_KEY } from './handlers'
  * written there, in their own formats, before they start. Other users' state is kept.
  */
 
-/** `?demo=1` asks for the demo seed. */
-export const DEMO_QUERY_PARAM = 'demo';
-
-export function wantsDemo(search: string): boolean {
-  return new URLSearchParams(search).get(DEMO_QUERY_PARAM) === '1';
-}
-
-/** The URL without `demo=1`, so a reload keeps the demo's changes instead of seeding again. */
-export function withoutDemoParam(href: string): string {
-  const url = new URL(href);
-  url.searchParams.delete(DEMO_QUERY_PARAM);
-  return `${url.pathname}${url.search}${url.hash}`;
-}
-
 export function demoInstrumentsOfMaster(master: Pick<SymbolMaster, 'equities'>): DemoInstrument[] {
   return master.equities.map(({ instrument, basePrice }) => ({
     token: instrument.token,

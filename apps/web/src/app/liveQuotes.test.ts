@@ -137,4 +137,42 @@ describe('createLiveQuotes', () => {
     wsClient.close();
     vi.unstubAllGlobals();
   });
+
+  it('in msw mode, opens the socket only once the mock worker is ready (T-169)', async () => {
+    const urls: string[] = [];
+    class FakeSocket {
+      readyState = 0;
+      onopen = null;
+      onmessage = null;
+      onclose = null;
+      onerror = null;
+      constructor(url: string) {
+        urls.push(url);
+      }
+      send() {}
+      close() {}
+    }
+    vi.stubGlobal('WebSocket', FakeSocket);
+    let markReady: () => void = () => undefined;
+    const ready = new Promise<void>((resolve) => {
+      markReady = resolve;
+    });
+    const { wsClient, quoteStore, orderUpdates } = createLiveQuotes(
+      { wsUrl: null },
+      { protocol: 'http:', host: '127.0.0.1:4173' },
+      ready,
+    );
+    const stop = quoteStore.subscribe('INFY', 'NSE', () => undefined);
+    orderUpdates.connect();
+    await Promise.resolve();
+    expect(urls).toEqual([]);
+    markReady();
+    await ready;
+    await Promise.resolve();
+    expect(urls).toEqual(['ws://127.0.0.1:4173/ws']);
+    expect(wsClient.subscriptionCount()).toBe(1);
+    stop();
+    wsClient.close();
+    vi.unstubAllGlobals();
+  });
 });
