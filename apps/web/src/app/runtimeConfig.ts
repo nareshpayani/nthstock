@@ -46,6 +46,11 @@ export const runtimeEnvSchema = z.object({
   VITE_WS_URL: optional(wsUrl).transform((value) => value ?? null),
   /** msw mode only: tick the mock market even outside NSE hours, for demos and e2e. */
   VITE_MOCK_MARKET_OPEN: optional(flag).transform((value) => value ?? false),
+  /**
+   * msw mode, E2E builds only (T-162): ship the MSW `/v1/__test` clock and price handlers. A
+   * build-time constant; never set it for a build anyone else will load.
+   */
+  VITE_TEST_CONTROLS: optional(flag).transform((value) => value ?? false),
 });
 
 export type RuntimeConfig = {
@@ -55,6 +60,8 @@ export type RuntimeConfig = {
   /** Explicit WebSocket URL, or null to derive it from the page location. */
   wsUrl: string | null;
   mockMarketOpen: boolean;
+  /** VITE_TEST_CONTROLS: the build carries the MSW test controls (E2E only). */
+  testControls: boolean;
 };
 
 export class RuntimeConfigError extends Error {
@@ -74,11 +81,17 @@ export function parseRuntimeConfig(env: Readonly<Record<string, unknown>>): Runt
     throw new RuntimeConfigError(`Invalid web runtime config: ${problems}`);
   }
   const data = parsed.data;
+  if (data.VITE_TEST_CONTROLS && data.VITE_API_MODE !== 'msw') {
+    throw new RuntimeConfigError(
+      'Invalid web runtime config: VITE_TEST_CONTROLS is for msw mode only (api mode uses apps/api test controls)',
+    );
+  }
   return {
     apiMode: data.VITE_API_MODE,
     apiBaseUrl: data.VITE_API_BASE_URL,
     wsUrl: data.VITE_WS_URL,
     mockMarketOpen: data.VITE_MOCK_MARKET_OPEN,
+    testControls: data.VITE_TEST_CONTROLS,
   };
 }
 

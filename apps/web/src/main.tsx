@@ -24,7 +24,13 @@ async function boot() {
   // and the MSW chunk it imports are removed entirely (T-050).
   if (import.meta.env.VITE_API_MODE === 'msw') {
     const { startMockWorker } = await import('./mocks/browser');
-    await startMockWorker(config);
+    // E2E builds only (T-162): VITE_TEST_CONTROLS is a build-time constant too, so every other
+    // build drops this import and has no /v1/__test handler (scripts/checkBuild.mjs checks).
+    const testControls =
+      import.meta.env.VITE_TEST_CONTROLS === 'true'
+        ? (await import('./mocks/testControls')).createTestControls()
+        : undefined;
+    await startMockWorker(config, testControls);
   }
 
   const queryClient = createQueryClient();

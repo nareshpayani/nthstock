@@ -15,6 +15,7 @@ describe('parseRuntimeConfig', () => {
       apiBaseUrl: '',
       wsUrl: null,
       mockMarketOpen: false,
+      testControls: false,
     });
     expect(
       parseRuntimeConfig({ VITE_API_MODE: '', VITE_API_BASE_URL: ' ', VITE_MOCK_MARKET_OPEN: '' }),
@@ -34,9 +35,18 @@ describe('parseRuntimeConfig', () => {
       apiBaseUrl: 'https://api.nthstock.test',
       wsUrl: 'wss://rt.nthstock.test/ws',
       mockMarketOpen: true,
+      testControls: false,
     });
     expect(parseRuntimeConfig({ VITE_MOCK_MARKET_OPEN: '1' }).mockMarketOpen).toBe(true);
     expect(parseRuntimeConfig({ VITE_MOCK_MARKET_OPEN: '0' }).mockMarketOpen).toBe(false);
+  });
+
+  it('turns the MSW test controls on only when asked, and only in msw mode (T-162)', () => {
+    expect(parseRuntimeConfig({ VITE_TEST_CONTROLS: 'true' }).testControls).toBe(true);
+    expect(parseRuntimeConfig({ VITE_TEST_CONTROLS: 'false' }).testControls).toBe(false);
+    expect(() => parseRuntimeConfig({ VITE_API_MODE: 'api', VITE_TEST_CONTROLS: 'true' })).toThrow(
+      /VITE_TEST_CONTROLS is for msw mode only/,
+    );
   });
 
   it('fails fast on an invalid mode', () => {
