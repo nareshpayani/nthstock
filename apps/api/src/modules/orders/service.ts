@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import type {
   FundsSummary,
   Holding,
+  LedgerPage,
   InstrumentToken,
   ModifyOrderRequest,
   Order,
@@ -17,6 +18,7 @@ import {
   orderApiError,
   type DeskMarket,
   type OrderActionResult,
+  type PaperEngine,
 } from '@nthstock/paperEngine';
 import type { Clock } from '@nthstock/utils';
 import { ApiHttpError } from '../../http/apiError.js';
@@ -55,6 +57,30 @@ export function createOrderService({
   newId = () => `pe_${randomUUID().replaceAll('-', '')}`,
 }: OrderServiceDeps) {
   const listeners = new Set<OrderUpdateListener>();
+  /** How many of each user's ledger entries are in the audit log already. */
+  const auditedLedger = new Map<string, number>();
+
+  /** Writes every funds ledger entry not yet audited: each fund movement gets its own entry. */
+  function auditFundMovements(userId: string, engine: PaperEngine): void {
+    const from = auditedLedger.get(userId) ?? 0;
+    if (engine.ledger.size <= from) return;
+    for (const entry of engine.ledger.entriesFrom(from)) {
+      audit.append({
+        actor: { type: 'system' },
+        userId,
+        action: 'FUNDS_MOVEMENT',
+        orderId: entry.orderId,
+        outcome: 'OK',
+        detail: {
+          entryId: entry.id,
+          type: entry.type,
+          amount: entry.amount,
+          balanceAfter: entry.balanceAfter,
+        },
+      });
+    }
+    auditedLedger.set(userId, engine.ledger.size);
+  }
 
   const desk = new PaperDesk({
     clock,
@@ -72,6 +98,7 @@ export function createOrderService({
       });
       for (const listener of [...listeners]) listener(userId, order);
     },
+    onChange: auditFundMovements,
   });
 
   /** Runs a user's order action, audits it, and answers with the order or the ApiError. */
@@ -130,6 +157,23 @@ export function createOrderService({
     },
 
     funds: (userId: string): FundsSummary => desk.fundsSummary(userId),
+
+    /** One page of the user's funds ledger, newest first (T-155); 400 for an unknown cursor. */
+    ledger(userId: string, query: { cursor?: string | undefined; limit?: number | undefined }) {
+      const page: LedgerPage | null = desk.ledgerPage(userId, {
+        ...(query.cursor ? { cursor: query.cursor } : {}),
+        ...(query.limit ? { limit: query.limit } : {}),
+      });
+      if (!page) throw new ApiHttpError(400, 'VALIDATION_ERROR', 'Invalid cursor');
+      return page;
+    },
+
+    /**
+     * Resets the user's paper account (T-155): cancels open orders (each audited and pushed as an
+     * order update), clears positions and holdings, and restores the opening balance with a
+     * `RESET` ledger entry (audited as a fund movement).
+     */
+    reset: (userId: string): FundsSummary => desk.reset(userId),
 
     /** Today's positions, marked to the LTP the engines see (read by the portfolio module). */
     positions: (userId: string): Promise<Position[]> => desk.positions(userId),

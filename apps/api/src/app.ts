@@ -5,6 +5,7 @@ import { createDeps, type AppDeps, type DepsOverrides } from './deps.js';
 import { installCsrfCheck } from './http/csrf.js';
 import { installErrorHandling } from './http/errorHandler.js';
 import { authRoutes } from './modules/auth/routes.js';
+import { fundsRoutes } from './modules/funds/routes.js';
 import { healthRoutes } from './modules/health/routes.js';
 import { marketRoutes } from './modules/market/routes.js';
 import { orderRoutes } from './modules/orders/routes.js';
@@ -124,5 +125,6 @@ export function buildApp(options: AppOptions = {}): App {
   app.register(watchlistRoutes(deps));
   app.register(orderRoutes(deps));
   app.register(portfolioRoutes(deps));
+  app.register(fundsRoutes(deps));
   return Object.assign(app, { deps });
 }

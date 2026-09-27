@@ -12,7 +12,11 @@ export type AuditAction =
   | 'ORDER_MODIFY'
   | 'ORDER_CANCEL'
   /** Any change to an order's state: stored, opened, filled, rejected, cancelled. */
-  | 'ORDER_UPDATE';
+  | 'ORDER_UPDATE'
+  /** A funds ledger entry: opening credit, block, release, trade debit or credit, reset. */
+  | 'FUNDS_MOVEMENT'
+  /** The user reset their paper balance (T-155). */
+  | 'FUNDS_RESET';
 
 export type AuditOutcome = 'OK' | 'REFUSED';
 
