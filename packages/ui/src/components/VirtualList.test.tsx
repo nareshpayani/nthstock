@@ -90,6 +90,48 @@ describe('VirtualList', () => {
   });
 });
 
+describe('VirtualList onEndReached', () => {
+  const page = rows.slice(0, 50);
+  const renderPage = (onEndReached: () => void) =>
+    render(
+      <VirtualList
+        items={page}
+        label="Ledger"
+        rowHeight={40}
+        height={320}
+        columns="1fr"
+        onEndReached={onEndReached}
+        renderRow={(row) => <VirtualCell>{row.symbol}</VirtualCell>}
+      />,
+    );
+
+  it('fires when scrolling brings the last rows into view, not before', async () => {
+    const onEndReached = vi.fn();
+    renderPage(onEndReached);
+    const grid = screen.getByRole('grid', { name: 'Ledger' });
+    expect(onEndReached).not.toHaveBeenCalled();
+    grid.scrollTop = 40 * 50 - 320;
+    fireEvent.scroll(grid);
+    await waitFor(() => expect(onEndReached).toHaveBeenCalled());
+  });
+
+  it('fires at once for a list shorter than the view', () => {
+    const onEndReached = vi.fn();
+    render(
+      <VirtualList
+        items={rows.slice(0, 3)}
+        label="Short"
+        rowHeight={40}
+        height={320}
+        columns="1fr"
+        onEndReached={onEndReached}
+        renderRow={(row) => <VirtualCell>{row.symbol}</VirtualCell>}
+      />,
+    );
+    expect(onEndReached).toHaveBeenCalled();
+  });
+});
+
 describe('Table', () => {
   it('renders semantic table parts with numeric alignment', () => {
     render(

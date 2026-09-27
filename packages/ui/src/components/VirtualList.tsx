@@ -27,6 +27,14 @@ export type VirtualListProps<T> = {
   getKey?: (item: T, index: number) => Key;
   /** Enter on the focused row. */
   onRowActivate?: (item: T, index: number) => void;
+  /**
+   * Called when the rendered rows reach the end of `items` (within `endThreshold` rows), by
+   * scrolling or by keyboard, e.g. to load the next page. It may be called again on later renders
+   * while the end stays in view, so guard it (TanStack Query: `hasNextPage && !isFetchingNextPage`).
+   */
+  onEndReached?: () => void;
+  /** How many rows before the end `onEndReached` fires. Default 5. */
+  endThreshold?: number;
   overscan?: number;
   className?: string;
 };
@@ -77,6 +85,8 @@ export function VirtualList<T>({
   renderRow,
   getKey,
   onRowActivate,
+  onEndReached,
+  endThreshold = 5,
   overscan = 6,
   className,
 }: VirtualListProps<T>) {
@@ -95,6 +105,17 @@ export function VirtualList<T>({
     scrollPaddingStart: headerOffset,
     ...(getKey ? { getItemKey: (index: number) => getKey(items[index] as T, index) } : {}),
   });
+
+  const lastRendered = virtualizer.getVirtualItems().at(-1)?.index ?? -1;
+  const endReached = useRef(onEndReached);
+  useEffect(() => {
+    endReached.current = onEndReached;
+  });
+  useEffect(() => {
+    if (items.length > 0 && lastRendered >= items.length - 1 - endThreshold) {
+      endReached.current?.();
+    }
+  }, [lastRendered, items.length, endThreshold]);
 
   useEffect(() => {
     if (!focusPending.current) return;
