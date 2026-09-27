@@ -180,7 +180,7 @@ export const watchlistScenarios = defineScenarios('watchlists', [
         'VALIDATION_ERROR',
       );
       await expectError(
-        client.callError('watchlistCreate', { body: { name: 'x'.repeat(31) } }),
+        client.callError('watchlistCreate', { body: { name: 'x'.repeat(25) } }),
         400,
         'VALIDATION_ERROR',
       );

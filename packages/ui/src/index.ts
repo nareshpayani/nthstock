@@ -18,10 +18,13 @@ export { Dialog, Sheet, type DialogProps, type SheetProps } from './components/D
 export { Tabs, TabsContent, TabsList, TabsTrigger } from './components/Tabs.js';
 export {
   DropdownMenu,
+  DropdownMenuCheckboxItem,
   DropdownMenuContent,
   DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuLabel,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from './components/DropdownMenu.js';

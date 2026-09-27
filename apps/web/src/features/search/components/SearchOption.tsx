@@ -1,4 +1,6 @@
 import type { SearchHit } from '@nthstock/contracts';
+import { IconCheck, IconPlus } from '@nthstock/ui';
+import { strings } from '../strings';
 import { highlightName, highlightSymbol, type TextPart } from '../model/highlight';
 
 function Marked({ parts }: { parts: TextPart[] }) {
@@ -21,10 +23,20 @@ export type SearchOptionProps = {
   selected: boolean;
   onChoose: () => void;
   onHover: () => void;
+  /** Adding to a watchlist (T-121): the list's name, whether the stock is in it, and the add. */
+  add?: { listName: string; added: boolean; onAdd: () => void } | undefined;
 };
 
 /** One listbox row: symbol and name (matches marked) and the exchange. */
-export function SearchOption({ id, hit, query, selected, onChoose, onHover }: SearchOptionProps) {
+export function SearchOption({
+  id,
+  hit,
+  query,
+  selected,
+  onChoose,
+  onHover,
+  add,
+}: SearchOptionProps) {
   return (
     <div
       role="option"
@@ -45,6 +57,31 @@ export function SearchOption({ id, hit, query, selected, onChoose, onHover }: Se
       <span className="shrink-0 rounded-sm border border-line px-1.5 text-label text-ink-muted">
         {hit.exchange}
       </span>
+      {add ? (
+        <>
+          {add.added ? <span className="sr-only">{strings.inList(add.listName)}</span> : null}
+          {/*
+            Pointer shortcut only. Options cannot hold focusable controls (focus stays in the
+            combobox), so keyboard users add with Shift+Enter and the state is in the text above.
+          */}
+          <span
+            aria-hidden="true"
+            data-add-to-watchlist={hit.symbol}
+            title={add.added ? strings.inList(add.listName) : strings.addTo(add.listName)}
+            onClick={(event) => {
+              event.stopPropagation();
+              if (!add.added) add.onAdd();
+            }}
+            className={
+              add.added
+                ? 'flex size-7 shrink-0 items-center justify-center rounded-md text-up'
+                : 'flex size-7 shrink-0 items-center justify-center rounded-md border border-line text-brand hover:bg-brand-soft'
+            }
+          >
+            {add.added ? <IconCheck size={16} /> : <IconPlus size={16} />}
+          </span>
+        </>
+      ) : null}
     </div>
   );
 }

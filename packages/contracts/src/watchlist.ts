@@ -3,7 +3,7 @@ import { Exchange, Id, InstrumentToken, IsoUtc, TradingSymbol } from './primitiv
 
 export const WATCHLIST_MAX_LISTS = 10;
 export const WATCHLIST_MAX_ITEMS = 50;
-export const WATCHLIST_NAME_MAX = 30;
+export const WATCHLIST_NAME_MAX = 24;
 /** The list every user starts with; the backends create it on the user's first watchlist call. */
 export const WATCHLIST_DEFAULT_NAME = 'My Watchlist';
 

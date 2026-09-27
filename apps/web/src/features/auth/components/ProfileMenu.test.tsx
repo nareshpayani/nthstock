@@ -51,7 +51,14 @@ describe('profile menu (T-090)', () => {
     fireEvent.click(within(menu).getByRole('menuitem', { name: /Log out/ }));
 
     await waitFor(() => expect(router.state.location.pathname).toBe('/login'));
-    expect(queryClient.getQueryCache().getAll()).toHaveLength(0);
+    // No cached data outlives the session. Components still on screen until the navigation may
+    // re-register their (now disabled, empty) queries, so count the entries that hold data.
+    expect(
+      queryClient
+        .getQueryCache()
+        .getAll()
+        .filter((query) => query.state.data !== undefined),
+    ).toHaveLength(0);
     expect(useSessionStore.getState().status).toBe('anonymous');
     await screen.findByRole('heading', { level: 1, name: 'Log in to nthstock' });
     // The server session is gone too: the refresh cookie no longer works.

@@ -1,13 +1,16 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { useRef } from 'react';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { Button } from './Button.js';
 import { Dialog, Sheet } from './Dialog.js';
 import {
   DropdownMenu,
+  DropdownMenuCheckboxItem,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuLabel,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from './DropdownMenu.js';
@@ -114,6 +117,42 @@ describe('DropdownMenu', () => {
       'Settings',
       'Log out',
     ]);
+  });
+});
+
+describe('DropdownMenu radio and checkbox items', () => {
+  it('marks the chosen radio item and toggles checkbox items', async () => {
+    const onValueChange = vi.fn();
+    const onCheckedChange = vi.fn();
+    render(
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button>Sort</Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent>
+          <DropdownMenuRadioGroup value="name" onValueChange={onValueChange}>
+            <DropdownMenuRadioItem value="name">Name</DropdownMenuRadioItem>
+            <DropdownMenuRadioItem value="ltp">Last price</DropdownMenuRadioItem>
+          </DropdownMenuRadioGroup>
+          <DropdownMenuCheckboxItem checked onCheckedChange={onCheckedChange}>
+            Banks
+          </DropdownMenuCheckboxItem>
+        </DropdownMenuContent>
+      </DropdownMenu>,
+    );
+    fireEvent.keyDown(screen.getByRole('button', { name: 'Sort' }), { key: 'Enter' });
+    const name = await screen.findByRole('menuitemradio', { name: 'Name' });
+    expect(name).toHaveAttribute('aria-checked', 'true');
+    expect(screen.getByRole('menuitemradio', { name: 'Last price' })).toHaveAttribute(
+      'aria-checked',
+      'false',
+    );
+    expect(screen.getByRole('menuitemcheckbox', { name: 'Banks' })).toHaveAttribute(
+      'aria-checked',
+      'true',
+    );
+    fireEvent.click(screen.getByRole('menuitemradio', { name: 'Last price' }));
+    expect(onValueChange).toHaveBeenCalledWith('ltp');
   });
 });
 

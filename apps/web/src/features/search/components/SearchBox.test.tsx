@@ -4,7 +4,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest
 import { createMockApi } from '@/test/mockApi';
 import { renderWithProviders } from '@/test/renderWithProviders';
 import { RECENT_SEARCHES_KEY, readRecentSearches } from '../model/recentSearches';
-import { SearchBox } from './SearchBox';
+import { SearchBox, type SearchBoxProps } from './SearchBox';
 
 const api = createMockApi();
 beforeAll(() => api.listen());
@@ -14,7 +14,7 @@ afterEach(() => {
 });
 afterAll(() => api.close());
 
-async function renderSearch(props: { onNavigate?: () => void } = {}) {
+async function renderSearch(props: Pick<SearchBoxProps, 'onNavigate' | 'addTo'> = {}) {
   const view = renderWithProviders(
     <div>
       <button type="button">Before</button>
@@ -204,5 +204,58 @@ describe('SearchBox keyboard, recent and popular (T-104)', () => {
     fireEvent.keyDown(input, { key: 'ArrowDown' });
     expect(input).toHaveAttribute('aria-expanded', 'true');
     expect(input).not.toHaveAttribute('aria-activedescendant');
+  });
+});
+
+describe('SearchBox add to watchlist (T-121)', () => {
+  function adder(inList: string[] = []) {
+    const added: string[] = [];
+    return {
+      added,
+      addTo: {
+        listName: 'Banks',
+        has: (hit: { symbol: string }) => inList.includes(hit.symbol),
+        add: (hit: { symbol: string }) => {
+          added.push(hit.symbol);
+        },
+      },
+    };
+  }
+
+  it('Shift+Enter adds the highlighted result and keeps the list open', async () => {
+    const { added, addTo } = adder();
+    const { input, router } = await renderSearch({ addTo });
+    await typeAndWait(input(), 'infy');
+    expect(listbox().parentElement).toHaveTextContent(
+      'Shift+Enter adds the highlighted stock to Banks',
+    );
+    fireEvent.keyDown(input(), { key: 'ArrowDown' });
+    fireEvent.keyDown(input(), { key: 'Enter', shiftKey: true });
+    expect(added).toEqual(['INFY']);
+    expect(input()).toHaveAttribute('aria-expanded', 'true');
+    expect(router.state.location.pathname).toBe('/');
+  });
+
+  it('the + on a result adds it without opening the stock; members say so', async () => {
+    const { added, addTo } = adder(['TCS']);
+    const { input, router } = await renderSearch({ addTo });
+    await typeAndWait(input(), 'infy');
+    const plus = document.querySelector('[data-add-to-watchlist="INFY"]') as HTMLElement;
+    expect(plus).toHaveAttribute('title', 'Add to Banks');
+    fireEvent.click(plus);
+    expect(added).toEqual(['INFY']);
+    expect(router.state.location.pathname).toBe('/');
+
+    fireEvent.change(input(), { target: { value: 'tcs' } });
+    await waitFor(() => expect(options()[0]).toHaveTextContent('In Banks'));
+  });
+
+  it('Shift+Enter with no watchlist does nothing special', async () => {
+    const { input, router } = await renderSearch();
+    await typeAndWait(input(), 'infy');
+    expect(document.querySelector('[data-add-to-watchlist]')).toBeNull();
+    fireEvent.keyDown(input(), { key: 'ArrowDown' });
+    fireEvent.keyDown(input(), { key: 'Enter', shiftKey: true });
+    await waitFor(() => expect(router.state.location.pathname).toBe('/stocks/INFY'));
   });
 });
