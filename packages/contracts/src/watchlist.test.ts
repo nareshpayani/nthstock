@@ -66,7 +66,8 @@ describe('watchlist requests', () => {
   it('trims names and rejects empty or long ones', () => {
     expect(CreateWatchlistRequest.parse({ name: '  Banks  ' })).toEqual({ name: 'Banks' });
     expect(CreateWatchlistRequest.safeParse({ name: '   ' }).success).toBe(false);
-    expect(RenameWatchlistRequest.safeParse({ name: 'x'.repeat(31) }).success).toBe(false);
+    expect(RenameWatchlistRequest.safeParse({ name: 'x'.repeat(24) }).success).toBe(true);
+    expect(RenameWatchlistRequest.safeParse({ name: 'x'.repeat(25) }).success).toBe(false);
   });
 
   it('rejects duplicate or oversized reorders', () => {
