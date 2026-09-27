@@ -7,7 +7,15 @@ import type {
   PlaceOrderRequest,
   ProductType,
 } from '@nthstock/contracts';
-import { getMarketStatus, nseHolidays2026, type HolidayTable } from '@nthstock/utils';
+import {
+  MARKET_OPEN,
+  fromIst,
+  getMarketStatus,
+  isTradingDay,
+  nseHolidays2026,
+  toIstParts,
+  type HolidayTable,
+} from '@nthstock/utils';
 import { assertQty, type EngineContext } from './context.js';
 import { matchFill } from './fillMatcher.js';
 import { FundsLedger, type FundsLedgerOptions, type LedgerResult } from './fundsLedger.js';
@@ -98,8 +106,9 @@ const CANCELLED_BY_USER = 'Cancelled by you.';
  * - `place()` validates (T-127) and stores the order as REJECTED, AMO (market closed) or OPEN,
  *   blocks cash for a BUY, and matches it at once when the market is open.
  * - `modify()` and `cancel()` follow the order state machine (T-128).
- * - `sync()` brings the engine up to the clock and matches OPEN orders against current prices.
- *   Call it on every tick.
+ * - `sync()` brings the engine up to the clock, then matches OPEN orders against current prices.
+ *   Call it on every tick. Session events run on IST trading days only (market hours and
+ *   holidays from `@nthstock/utils`): at 9:15 AMOs are released (T-129).
  */
 export class PaperEngine {
   readonly #ctx: EngineContext;
@@ -114,12 +123,26 @@ export class PaperEngine {
   readonly #holdingSales = new Map<InstrumentToken, HoldingSale>();
   readonly #rejectCodes = new Map<string, OrderRejectionCode>();
   readonly #collectors = new Set<Order[]>();
+  /** Scheduled session events up to this instant have run. */
+  #syncedTo: Date;
+  /** While a scheduled event runs, the instant it was due; the engine's "now" for that event. */
+  #eventAt: Date | null = null;
+  /** Session events in IST minutes of each trading day, in time order. */
+  readonly #schedule: readonly (readonly [minuteOfDay: number, run: () => void])[] = [
+    [
+      MARKET_OPEN,
+      () => {
+        this.#releaseAmos();
+      },
+    ],
+  ];
 
   constructor(options: PaperEngineOptions) {
     this.#ctx = options.ctx;
     this.#instruments = options.instruments;
     this.#holidays = options.holidays ?? nseHolidays2026;
     this.#onOrderUpdate = options.onOrderUpdate;
+    this.#syncedTo = this.#ctx.now();
     this.#funds = new FundsLedger(
       { nowIso: () => this.#now().toISOString(), nextId: () => this.#ctx.nextId() },
       options.funds,
@@ -268,6 +291,7 @@ export class PaperEngine {
     const changed: Order[] = [];
     this.#collectors.add(changed);
     try {
+      this.#runSchedule(this.#ctx.now());
       for (const order of this.#orders.values()) {
         if (order.status === 'OPEN') this.#match(order);
       }
@@ -316,7 +340,73 @@ export class PaperEngine {
   }
 
   #now(): Date {
-    return this.#ctx.now();
+    return this.#eventAt ?? this.#ctx.now();
+  }
+
+  /**
+   * Runs every session event due after the last sync and up to `until`, in time order, each at
+   * its own instant (timestamps and market hours read that instant, prices are current). Only
+   * trading days have events.
+   */
+  #runSchedule(until: Date): void {
+    const from = this.#syncedTo;
+    if (until.getTime() <= from.getTime()) {
+      // A clock moved backwards (a test override): follow it. Every event acts only on the
+      // current state (AMOs waiting, open intraday positions, open day orders), so running one
+      // again later never repeats work already done.
+      this.#syncedTo = until;
+      return;
+    }
+    const start = toIstParts(from);
+    for (let offset = 0; ; offset += 1) {
+      const dayStart = fromIst(start.year, start.month, start.day + offset, 0);
+      if (dayStart.getTime() > until.getTime()) break;
+      if (!isTradingDay(dayStart, this.#holidays)) continue;
+      for (const [minute, run] of this.#schedule) {
+        const at = fromIst(start.year, start.month, start.day + offset, minute);
+        if (at.getTime() <= from.getTime() || at.getTime() > until.getTime()) continue;
+        this.#eventAt = at;
+        try {
+          run();
+        } finally {
+          this.#eventAt = null;
+        }
+      }
+    }
+    this.#syncedTo = until;
+  }
+
+  /**
+   * 9:15 IST (T-129): every AMO goes to the exchange in the order it was placed. It is validated
+   * again at the opening price, circuit band, cash and holdings; a failure rejects it with the
+   * reason and releases its cash. Otherwise it becomes OPEN, a MARKET BUY's block moves to
+   * qty × the opening LTP, and it is matched at once.
+   */
+  #releaseAmos(): void {
+    for (const order of this.#orders.values()) {
+      if (order.status !== 'AMO') continue;
+      const checked = validateOrder(order, {
+        now: this.#now(),
+        holidays: this.#holidays,
+        instrument: this.#instruments.getInstrument(order.token),
+        ltp: this.#ctx.ltp(order.token),
+        availableCash: this.#funds.available + this.#funds.blockedFor(order.id),
+        sellableQty: this.#sellableQty(order.token, order.id),
+      });
+      order.updatedAt = this.#now().toISOString();
+      if (!checked.ok) {
+        this.#funds.release(order.id);
+        order.status = transitionOrder(order.status, 'REJECT');
+        order.statusReason = checked.reason;
+        this.#rejectCodes.set(order.id, checked.code);
+        this.#emit(order);
+        continue;
+      }
+      this.#reblock(order.id, checked.blockAmount);
+      order.status = transitionOrder(order.status, 'RELEASE');
+      this.#emit(order);
+      this.#match(order);
+    }
   }
 
   #marketOpen(): boolean {

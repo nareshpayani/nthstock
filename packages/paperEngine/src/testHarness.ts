@@ -8,7 +8,11 @@ import {
   type ManualClock,
   type MapPriceSource,
 } from './context.js';
-import { createMapInstrumentSource, type InstrumentInfo } from './instruments.js';
+import {
+  createMapInstrumentSource,
+  type InstrumentInfo,
+  type MapInstrumentSource,
+} from './instruments.js';
 import { PaperEngine, type PaperEngineOptions } from './paperEngine.js';
 
 export const INFY: InstrumentInfo = {
@@ -34,6 +38,7 @@ export type Harness = {
   engine: PaperEngine;
   clock: ManualClock;
   prices: MapPriceSource;
+  instruments: MapInstrumentSource;
   updates: Order[];
 };
 
@@ -46,17 +51,18 @@ export function createHarness(
     [INFY.token, 1_500_00],
     [TCS.token, 3_800_00],
   ]);
+  const instruments = createMapInstrumentSource([INFY, TCS]);
   const updates: Order[] = [];
   const engine = new PaperEngine({
     ctx: createEngineContext({ clock, prices }),
-    instruments: createMapInstrumentSource([INFY, TCS]),
+    instruments,
     onOrderUpdate: (order) => {
       // Every update must be a valid contract Order (it becomes an orderUpdate frame).
       updates.push(Order.parse(order));
     },
     ...rest,
   });
-  return { engine, clock, prices, updates };
+  return { engine, clock, prices, instruments, updates };
 }
 
 export const order = (overrides: Partial<PlaceOrderRequest> = {}): PlaceOrderRequest => ({
