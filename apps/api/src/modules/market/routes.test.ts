@@ -6,6 +6,7 @@ import {
   Depth,
   IndicesResponse,
   Instrument,
+  InstrumentProfile,
   InstrumentStats,
   Movers,
   SearchResponse,
@@ -223,6 +224,24 @@ describe('GET /v1/market/instruments/:symbol/depth', () => {
     expect(index.status).toBe(404);
     expect(ApiError.parse(index.body).error.message).toBe('Depth for NIFTY50 not found');
     expect((await get('/v1/market/instruments/NOPE/depth')).status).toBe(404);
+  });
+});
+
+describe('GET /v1/market/instruments/:symbol/profile', () => {
+  it('returns the overview with index membership for an equity', async () => {
+    const { status, body } = await get('/v1/market/instruments/INFY/profile');
+
+    expect(status).toBe(200);
+    const profile = InstrumentProfile.parse(body);
+    expect(profile.sector).toBe('Information Technology');
+    expect(profile.indices.map((ix) => ix.symbol)).toContain('NIFTYIT');
+  });
+
+  it('answers 404 for an index and an unknown symbol', async () => {
+    const index = await get('/v1/market/instruments/NIFTY50/profile');
+    expect(index.status).toBe(404);
+    expect(ApiError.parse(index.body).error.message).toBe('Profile for NIFTY50 not found');
+    expect((await get('/v1/market/instruments/NOPE/profile')).status).toBe(404);
   });
 });
 

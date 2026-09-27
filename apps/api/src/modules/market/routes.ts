@@ -56,13 +56,21 @@ export const marketRoutes =
         notFound(`Symbol ${params.symbol}`),
     );
 
-    // Indices do not trade, so depth and stats are 404 for them as for unknown symbols.
+    // Indices do not trade, so depth, profile and stats are 404 for them as for unknown symbols.
     registerRoute(
       app,
       'instrumentDepth',
       async ({ params, query }) =>
         (await market.getDepth(params.symbol, query.exchange)) ??
         notFound(`Depth for ${params.symbol}`),
+    );
+
+    registerRoute(
+      app,
+      'instrumentProfile',
+      async ({ params, query }) =>
+        (await market.getProfile(params.symbol, query.exchange)) ??
+        notFound(`Profile for ${params.symbol}`),
     );
 
     registerRoute(

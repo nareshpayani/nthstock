@@ -71,6 +71,13 @@ export function marketHandlers(
       options,
     ),
     defineRoute(
+      'instrumentProfile',
+      async ({ params, query }) =>
+        (await adapter.getProfile(params.symbol, query.exchange)) ??
+        notFound(`Profile for ${params.symbol}`),
+      options,
+    ),
+    defineRoute(
       'instrumentStats',
       async ({ params, query }) =>
         (await adapter.getStats(params.symbol, query.exchange)) ??
