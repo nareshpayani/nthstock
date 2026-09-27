@@ -9,6 +9,7 @@ import { createMockServer } from '@/mocks/node';
 import { resetFillToasts } from '@/shared/lib/fillToasts';
 import type { MarketSession } from '@/shared/lib/marketSessionContext';
 import type { OrderUpdateSource } from '@/shared/lib/orderUpdatesContext';
+import { initialSearchFocusState, useSearchFocusStore } from '@/shared/lib/searchFocusStore';
 import { initialTicketIntentState, useTicketIntentStore } from '@/shared/lib/ticketIntentStore';
 import { createTestQuoteStore } from '@/test/quotes';
 import { renderWithProviders } from '@/test/renderWithProviders';
@@ -178,12 +179,16 @@ describe('order book (T-144)', () => {
   );
 
   it(
-    'shows an empty state per tab',
+    'shows an empty state per tab, whose button opens search (T-153)',
     async () => {
       const { api } = await setup();
       renderBook(api, { tab: 'executed' });
       expect(await screen.findByText('No executed orders')).toBeInTheDocument();
       expect(await tab(/^Open \(0\)$/)).toBeInTheDocument();
+      const panel = screen.getByRole('tabpanel', { name: /Executed/ });
+      fireEvent.click(within(panel).getByRole('button', { name: 'Search stocks' }));
+      expect(useSearchFocusStore.getState().requests).toBe(1);
+      useSearchFocusStore.setState(initialSearchFocusState);
     },
     HEAVY,
   );
