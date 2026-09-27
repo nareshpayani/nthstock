@@ -1,10 +1,15 @@
 import type { Clock } from '@nthstock/utils';
 
-export type OffsetClock = Clock & { advance(ms: number): void };
+export type OffsetClock = Clock & {
+  advance(ms: number): void;
+  /** Jumps to `at`; the clock runs on from there. */
+  set(at: string | number | Date): void;
+};
 
 /**
  * The system clock plus an offset that only the test moves: for suites that run against a live
- * backend (the scenario suite) but need to jump past a throttle or an expiry.
+ * backend (the scenario suite) but need to jump past a throttle or an expiry, or to a fixed
+ * instant (order scenarios pick a trading day and time).
  */
 export function offsetClock(): OffsetClock {
   let offset = 0;
@@ -12,6 +17,9 @@ export function offsetClock(): OffsetClock {
     now: () => new Date(Date.now() + offset),
     advance: (ms) => {
       offset += ms;
+    },
+    set: (at) => {
+      offset = new Date(at).getTime() - Date.now();
     },
   };
 }

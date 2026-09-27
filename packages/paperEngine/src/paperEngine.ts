@@ -1,8 +1,10 @@
 import {
+  Order as OrderSchema,
   TICK_SIZE_PAISE,
   type Exchange,
   type FundsSummary,
   type InstrumentToken,
+  type LedgerEntry,
   type ModifyOrderRequest,
   type Order,
   type OrderStatus,
@@ -21,7 +23,7 @@ import {
   toIstParts,
   type HolidayTable,
 } from '@nthstock/utils';
-import { assertQty, type EngineContext } from './context.js';
+import { assertPaise, assertQty, type EngineContext } from './context.js';
 import { matchFill } from './fillMatcher.js';
 import { FundsLedger, type FundsLedgerOptions, type LedgerResult } from './fundsLedger.js';
 import type { InstrumentSource } from './instruments.js';
@@ -57,6 +59,31 @@ export type PaperEngineOptions = {
   holdings?: Iterable<readonly [InstrumentToken, HoldingLot]>;
   /** Called with a copy of the order every time one is stored or changes (orderUpdate frames). */
   onOrderUpdate?: (order: Order) => void;
+  /**
+   * Carry on from a saved state (`snapshot()` of an earlier engine) instead of a fresh account.
+   * `funds` and `holdings` must then be left out: the snapshot has both.
+   */
+  snapshot?: PaperEngineSnapshot;
+};
+
+export const PAPER_ENGINE_SNAPSHOT_VERSION = 1;
+
+/**
+ * An engine's whole state as plain JSON-safe data, for keeping it between page loads (MSW keeps
+ * it in sessionStorage) or processes. Timestamps are ISO 8601 UTC; money is integer paise.
+ */
+export type PaperEngineSnapshot = {
+  v: typeof PAPER_ENGINE_SNAPSHOT_VERSION;
+  /** Session events up to this instant have run. */
+  syncedTo: string;
+  orders: Order[];
+  /** Why each REJECTED order was rejected, by order id. */
+  rejectCodes: [orderId: string, code: OrderRejectionCode][];
+  positions: EnginePosition[];
+  holdings: EngineHolding[];
+  holdingSales: HoldingSale[];
+  openingBalance: number;
+  ledger: LedgerEntry[];
 };
 
 export type OrderActionErrorCode =
@@ -168,14 +195,40 @@ export class PaperEngine {
     this.#holidays = options.holidays ?? nseHolidays2026;
     this.#onOrderUpdate = options.onOrderUpdate;
     this.#syncedTo = this.#ctx.now();
+    const { snapshot } = options;
+    if (snapshot && (options.funds || options.holdings)) {
+      throw new Error('Pass either a snapshot or funds and holdings, not both');
+    }
+    const ledgerCtx = {
+      nowIso: () => this.#now().toISOString(),
+      nextId: () => this.#ctx.nextId(),
+    };
     this.#funds = new FundsLedger(
-      { nowIso: () => this.#now().toISOString(), nextId: () => this.#ctx.nextId() },
-      options.funds,
+      ledgerCtx,
+      snapshot
+        ? { openingBalance: snapshot.openingBalance, entries: snapshot.ledger }
+        : options.funds,
     );
     for (const [token, lot] of options.holdings ?? []) {
       assertQty(lot.qty, 'Holding quantity');
       this.#holdings.set(token, { ...lot });
     }
+    if (snapshot) this.#restore(snapshot);
+  }
+
+  /** The whole state as plain data; `new PaperEngine({ ..., snapshot })` carries on from it. */
+  snapshot(): PaperEngineSnapshot {
+    return {
+      v: PAPER_ENGINE_SNAPSHOT_VERSION,
+      syncedTo: this.#syncedTo.toISOString(),
+      orders: [...this.#orders.values()].map(copy),
+      rejectCodes: [...this.#rejectCodes],
+      positions: [...this.#positions.values()].map((p) => ({ ...p, book: { ...p.book } })),
+      holdings: this.holdings() as EngineHolding[],
+      holdingSales: this.holdingSales() as HoldingSale[],
+      openingBalance: this.#funds.openingBalance,
+      ledger: [...this.#funds.entries()],
+    };
   }
 
   /** The funds ledger: balances and the append-only entries. */
@@ -352,6 +405,40 @@ export class PaperEngine {
 
   #now(): Date {
     return this.#eventAt ?? this.#ctx.now();
+  }
+
+  /** Loads a snapshot, checking every order against the contract and every amount is paise. */
+  #restore(snapshot: PaperEngineSnapshot): void {
+    if (snapshot.v !== PAPER_ENGINE_SNAPSHOT_VERSION) {
+      throw new Error(`Unsupported engine snapshot version ${String(snapshot.v)}`);
+    }
+    const syncedTo = new Date(snapshot.syncedTo);
+    if (Number.isNaN(syncedTo.getTime())) throw new RangeError('Invalid snapshot syncedTo');
+    this.#syncedTo = syncedTo;
+    for (const raw of snapshot.orders) {
+      const order = OrderSchema.parse(raw);
+      this.#orders.set(order.id, order);
+      if (order.clientOrderId !== null) this.#byClientOrderId.set(order.clientOrderId, order.id);
+    }
+    for (const [id, code] of snapshot.rejectCodes) {
+      if (this.#orders.get(id)?.status === 'REJECTED') this.#rejectCodes.set(id, code);
+    }
+    for (const position of snapshot.positions) {
+      for (const value of Object.values(position.book)) assertPaise(value, 'Position value');
+      const key = `${String(position.token)}:${position.product}`;
+      this.#positions.set(key, { ...position, book: { ...position.book } });
+    }
+    for (const { token, lot } of snapshot.holdings) {
+      assertQty(lot.qty, 'Holding quantity');
+      assertPaise(lot.investedValue, 'Holding value');
+      this.#holdings.set(token, { ...lot });
+    }
+    for (const sale of snapshot.holdingSales) {
+      assertQty(sale.qty, 'Sold quantity');
+      assertPaise(sale.proceeds, 'Sale proceeds');
+      assertPaise(sale.realisedPnl, 'Sale P&L');
+      this.#holdingSales.set(sale.token, { ...sale });
+    }
   }
 
   /**

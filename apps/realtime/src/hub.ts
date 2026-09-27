@@ -5,6 +5,7 @@ import {
   WS_PROTOCOL_VERSION,
   encodeQuoteFrame,
   instrumentOf,
+  type Order,
   type Quote,
   type WsInstrument,
   type WsServerMessage,
@@ -39,10 +40,19 @@ export type Connection = {
   closed(): void;
 };
 
+/** Who a connection belongs to, from its access token (T-083). */
+export type ConnectionIdentity = { userId: string };
+
 export type Hub = {
-  open(socket: ClientSocket): Connection;
+  /** Opens a connection; with an identity it also gets that user's private order updates. */
+  open(socket: ClientSocket, identity?: ConnectionIdentity): Connection;
   /** Quotes from the feed; each goes only to connections subscribed to its symbol. */
   ingest(quotes: readonly Quote[]): void;
+  /**
+   * The private channel (T-133): an order update goes, as an `orderUpdate` message, to every open
+   * connection of the user it belongs to and to no one else. It is never conflated or dropped.
+   */
+  deliverOrder(userId: string, order: Order): void;
   /** Sends every connection's pending quotes now, one frame each. The flush timer calls this. */
   flush(): void;
   /** Pings live connections and closes idle ones. The heartbeat timer calls this. */
@@ -83,6 +93,8 @@ export type HubOptions = {
 
 type Session = {
   socket: ClientSocket;
+  /** The connection's user, or null for a connection without one (unit tests). */
+  userId: string | null;
   /** Latest quote per subscribed key since the last flush (last value wins). */
   pending: Map<SubscriptionKey, Quote>;
   /** What this client was last told about each subscribed key's instrument (T-074). */
@@ -115,12 +127,14 @@ export function createHub(options: HubOptions = {}): Hub {
   const sessions = new Map<Connection, Session>();
   /** Sessions with pending quotes, so a flush touches only those. */
   const dirty = new Set<Session>();
+  /** Open sessions per user, for the private order channel. */
+  const byUser = new Map<string, Set<Session>>();
 
   const sendJson = (socket: ClientSocket, message: WsServerMessage) => {
     socket.send(JSON.stringify(message));
   };
 
-  const open = (socket: ClientSocket): Connection => {
+  const open = (socket: ClientSocket, identity?: ConnectionIdentity): Connection => {
     const openedAt = now();
     const connection: Connection = {
       receive(text) {
@@ -168,10 +182,16 @@ export function createHub(options: HubOptions = {}): Hub {
         registry.removeConnection(connection);
         sessions.delete(connection);
         dirty.delete(session);
+        if (session.userId !== null) {
+          const own = byUser.get(session.userId);
+          own?.delete(session);
+          if (own?.size === 0) byUser.delete(session.userId);
+        }
       },
     };
     const session: Session = {
       socket,
+      userId: identity?.userId ?? null,
       pending: new Map(),
       instruments: new Map(),
       lastSeen: openedAt,
@@ -180,7 +200,22 @@ export function createHub(options: HubOptions = {}): Hub {
       connection,
     };
     sessions.set(connection, session);
+    if (session.userId !== null) {
+      const own = byUser.get(session.userId) ?? new Set<Session>();
+      own.add(session);
+      byUser.set(session.userId, own);
+    }
     return connection;
+  };
+
+  const deliverOrder = (userId: string, order: Order) => {
+    for (const session of byUser.get(userId) ?? []) {
+      try {
+        sendJson(session.socket, { v: WS_PROTOCOL_VERSION, type: 'orderUpdate', order });
+      } catch (error) {
+        logger.warn('order update send failed', { error: String(error) });
+      }
+    }
   };
 
   /** Conflation (T-073): only the latest quote per symbol waits for the next flush. */
@@ -284,6 +319,7 @@ export function createHub(options: HubOptions = {}): Hub {
   return {
     open,
     ingest,
+    deliverOrder,
     flush,
     heartbeat,
     registry,

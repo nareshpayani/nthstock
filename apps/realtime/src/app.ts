@@ -4,6 +4,7 @@ import { WS_CLOSE_CODES } from '@nthstock/contracts';
 import { WebSocketServer, type RawData, type WebSocket } from 'ws';
 import type { WsAuthenticator } from './auth.js';
 import type { QuoteFeed } from './feed.js';
+import type { OrderFeed } from './orderFeed.js';
 import { createHub, type Connection } from './hub.js';
 import { silentLogger, type Logger } from './logger.js';
 import type { Timers } from './timers.js';
@@ -21,6 +22,11 @@ export type RealtimeServerOptions = {
   logger?: Logger;
   /** Where quotes come from; the server closes it on close. Left out, nothing is fanned out. */
   feed?: QuoteFeed;
+  /**
+   * Per-user order updates (T-133), delivered on each user's own connections only. The server
+   * watches a user while they have a connection here and closes the feed on close.
+   */
+  orderFeed?: OrderFeed;
   /** Flush and heartbeat timers; tests inject manual ones. */
   timers?: Timers;
   /** Clock for idle detection, epoch ms. */
@@ -62,6 +68,7 @@ export function createRealtimeServer(options: RealtimeServerOptions): RealtimeSe
     ...(options.now ? { now: options.now } : {}),
   });
   const detachFeed = options.feed?.onQuotes(hub.ingest);
+  const detachOrders = options.orderFeed?.onOrderUpdate(hub.deliverOrder);
 
   const handleHttp = (request: IncomingMessage, response: ServerResponse) => {
     const path = (request.url ?? '/').split('?')[0];
@@ -92,13 +99,15 @@ export function createRealtimeServer(options: RealtimeServerOptions): RealtimeSe
             client.close(WS_CLOSE_CODES.unauthorized, 'Unauthorized');
             return;
           }
-          wss.emit('connection', client, request);
+          accept(client, claims.sub);
         });
       });
   });
 
-  wss.on('connection', (socket: WebSocket) => {
-    const connection = hub.open(socket);
+  /** A connection of user `userId` (the token's subject): quotes, and that user's orders only. */
+  const accept = (socket: WebSocket, userId: string) => {
+    const connection = hub.open(socket, { userId });
+    const unwatch = options.orderFeed?.watch(userId);
     socket.on('message', (data, isBinary) => {
       connection.receive(textOf(data, isBinary));
     });
@@ -107,11 +116,12 @@ export function createRealtimeServer(options: RealtimeServerOptions): RealtimeSe
     });
     socket.on('close', () => {
       connection.closed();
+      unwatch?.();
     });
     socket.on('error', (error) => {
       logger.warn('socket error', { error: error.message });
     });
-  });
+  };
 
   let closing: Promise<void> | null = null;
 
@@ -128,8 +138,10 @@ export function createRealtimeServer(options: RealtimeServerOptions): RealtimeSe
     close() {
       closing ??= (async () => {
         detachFeed?.();
+        detachOrders?.();
         hub.close();
         await options.feed?.close();
+        await options.orderFeed?.close();
         for (const client of wss.clients) client.terminate();
         wss.close();
         if (http.listening) await new Promise<void>((resolve) => http.close(() => resolve()));

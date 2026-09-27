@@ -184,6 +184,26 @@ describe('createScenarioClient: cookies, CSRF and time', () => {
     );
     await expect(without.advanceTime(1)).rejects.toThrow(/cannot move its clock/);
   });
+
+  it('sets the backend clock and scripts prices, or says it cannot', async () => {
+    const setTime = vi.fn();
+    const setPrice = vi.fn();
+    const withControls = createScenarioClient({
+      ...fakeBackend(() => ({ status: 200, body: HEALTH })).backend,
+      setTime,
+      setPrice,
+    });
+    await withControls.setTime('2026-09-28T04:30:00.000Z');
+    await withControls.setPrice(1594, 150_000);
+    expect(setTime).toHaveBeenCalledWith('2026-09-28T04:30:00.000Z');
+    expect(setPrice).toHaveBeenCalledWith(1594, 150_000);
+
+    const without = createScenarioClient(
+      fakeBackend(() => ({ status: 200, body: HEALTH })).backend,
+    );
+    await expect(without.setTime('2026-09-28T04:30:00.000Z')).rejects.toThrow(/set its clock/);
+    await expect(without.setPrice(1, 5)).rejects.toThrow(/script prices/);
+  });
 });
 
 describe('runScenarioSuite scopes', () => {
@@ -257,9 +277,13 @@ describe('fetchBackend: cookies, scopes and time', () => {
       }),
     );
     const advanceTime = vi.fn();
+    const setTime = vi.fn();
+    const setPrice = vi.fn();
     const backend = fetchBackend('http://api.test', fetch, {
       scopeOrigin: (index) => `http://s${String(index)}.api.test`,
       advanceTime,
+      setTime,
+      setPrice,
     });
 
     const response = await backend.scope?.(2)?.send({
@@ -268,6 +292,8 @@ describe('fetchBackend: cookies, scopes and time', () => {
       headers: { cookie: 'a=0' },
     });
     await backend.advanceTime?.(10);
+    await backend.scope?.(3).setTime?.('2026-09-28T04:30:00.000Z');
+    await backend.setPrice?.(7, 100);
 
     expect(response).toEqual({ status: 200, body: {}, setCookies: ['a=1; Path=/'] });
     expect(fetch).toHaveBeenCalledWith('http://s2.api.test/v1/x', {
@@ -275,6 +301,8 @@ describe('fetchBackend: cookies, scopes and time', () => {
       headers: { accept: 'application/json', cookie: 'a=0' },
     });
     expect(advanceTime).toHaveBeenCalledWith(10);
+    expect(setTime).toHaveBeenCalledWith('2026-09-28T04:30:00.000Z');
+    expect(setPrice).toHaveBeenCalledWith(7, 100);
     expect(backend.close).toBeUndefined();
   });
 });

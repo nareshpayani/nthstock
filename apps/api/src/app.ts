@@ -7,6 +7,11 @@ import { installErrorHandling } from './http/errorHandler.js';
 import { authRoutes } from './modules/auth/routes.js';
 import { healthRoutes } from './modules/health/routes.js';
 import { marketRoutes } from './modules/market/routes.js';
+import { orderRoutes } from './modules/orders/routes.js';
+import {
+  startOrderUpdatePublisher,
+  type OrderUpdatePublisher,
+} from './modules/orders/updatePublisher.js';
 import { watchlistRoutes } from './modules/watchlists/routes.js';
 import type { Publisher } from './ticks/publisher.js';
 import { startTickPump, type TickPump } from './ticks/tickPump.js';
@@ -27,9 +32,20 @@ export type AppOptions = {
    * Left out, the API serves REST only. The app closes the publisher when it closes.
    */
   tickPublisher?: Publisher;
+  /**
+   * Publishes every order change to its user's Redis channel (T-133); apps/realtime delivers it.
+   * May be the same publisher as `tickPublisher`. The app closes it when it closes.
+   */
+  orderPublisher?: Publisher;
+  /**
+   * How often every paper account is synced, so AMO release (9:15 IST) and end of day run and are
+   * pushed without a tick or a request. `null` turns it off (tests drive time themselves).
+   */
+  orderSweepMs?: number | null;
 };
 
 export const DEFAULT_RATE_LIMIT_PER_MINUTE = 600;
+export const DEFAULT_ORDER_SWEEP_MS = 15_000;
 
 export type App = FastifyInstance & { deps: AppDeps };
 
@@ -65,12 +81,46 @@ export function buildApp(options: AppOptions = {}): App {
     });
     app.addHook('onClose', async () => {
       pump?.stop();
-      await publisher.close();
+    });
+  }
+  const orderPublisher = options.orderPublisher;
+  if (orderPublisher) {
+    let updates: OrderUpdatePublisher | null = null;
+    app.addHook('onReady', async () => {
+      updates = startOrderUpdatePublisher({
+        orders: deps.orders,
+        publisher: orderPublisher,
+        log: app.log,
+      });
+    });
+    app.addHook('onClose', async () => {
+      updates?.stop();
+    });
+  }
+  // Each publisher is closed once, even when ticks and order updates share one.
+  for (const owned of new Set([publisher, orderPublisher])) {
+    if (owned) app.addHook('onClose', () => owned.close());
+  }
+  const sweepMs =
+    options.orderSweepMs === undefined ? DEFAULT_ORDER_SWEEP_MS : options.orderSweepMs;
+  if (sweepMs !== null) {
+    let sweeper: ReturnType<typeof setInterval> | null = null;
+    app.addHook('onReady', async () => {
+      sweeper = setInterval(() => {
+        deps.orders.sweep().catch((error: unknown) => {
+          app.log.error({ error }, 'order sweep failed');
+        });
+      }, sweepMs);
+      sweeper.unref();
+    });
+    app.addHook('onClose', async () => {
+      if (sweeper) clearInterval(sweeper);
     });
   }
   app.register(healthRoutes(deps));
   app.register(marketRoutes(deps));
   app.register(authRoutes(deps));
   app.register(watchlistRoutes(deps));
+  app.register(orderRoutes(deps));
   return Object.assign(app, { deps });
 }

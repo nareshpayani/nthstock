@@ -7,6 +7,8 @@ import {
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createRealtimeServer, WS_PATH, type RealtimeServer } from './app.js';
 import { createMemoryQuoteFeed } from './feed.js';
+import { createMemoryOrderFeed } from './orderFeed.js';
+import { testOrder } from './test/orders.js';
 import { quoteFramesOf } from './test/frames.js';
 import { manualTimers } from './test/manualTimers.js';
 import { testQuote } from './test/quotes.js';
@@ -170,6 +172,46 @@ describe('realtime server idle timeout', () => {
       code: WS_CLOSE_CODES.idleTimeout,
       reason: 'idle timeout',
     });
+    await own.close();
+  });
+});
+
+describe('private order channel (T-133)', () => {
+  it("user A receives their fill and never user B's", async () => {
+    const orderFeed = createMemoryOrderFeed();
+    const own = createRealtimeServer({ authenticate: testAuthenticator(), orderFeed });
+    const port = await own.listen(0, '127.0.0.1');
+    const url = `ws://127.0.0.1:${port}${WS_PATH}`;
+    const alice = await connectAuthed(url, 'usr_alice');
+    const bob = await connectAuthed(url, 'usr_bob');
+    await alice.drain();
+    await bob.drain();
+    expect(orderFeed.watching('usr_alice')).toBe(true);
+    expect(orderFeed.watching('usr_bob')).toBe(true);
+
+    orderFeed.emit('usr_bob', testOrder('o_bob'));
+    orderFeed.emit('usr_alice', testOrder('o_alice'));
+
+    expect(await alice.drain()).toEqual([
+      {
+        kind: 'json',
+        message: { v: WS_PROTOCOL_VERSION, type: 'orderUpdate', order: testOrder('o_alice') },
+      },
+    ]);
+    expect(await bob.drain()).toEqual([
+      {
+        kind: 'json',
+        message: { v: WS_PROTOCOL_VERSION, type: 'orderUpdate', order: testOrder('o_bob') },
+      },
+    ]);
+
+    alice.close();
+    await alice.closed;
+    await vi.waitFor(() => {
+      expect(orderFeed.watching('usr_alice')).toBe(false);
+    });
+    expect(orderFeed.watching('usr_bob')).toBe(true);
+    bob.close();
     await own.close();
   });
 });

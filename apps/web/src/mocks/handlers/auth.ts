@@ -165,6 +165,8 @@ export function createAuthMock({
   const pins = new Map<string, PinRecord>();
   const sessions = new Map<string, SessionRecord>();
   const tables = { users, otps, lastOtpAt, devices, deviceTokens, pins, sessions };
+  /** The signed-in user per host (see `activeUserId`); not persisted, the next request sets it. */
+  const activeUsers = new Map<string, string>();
 
   users.set(MOCK_DEMO_USER.mobile, {
     ...MOCK_DEMO_USER,
@@ -330,6 +332,7 @@ export function createAuthMock({
     if (!bearer && request.method !== 'GET' && csrfHeaderOf(request) !== session.csrfToken) {
       throw fail(403, 'FORBIDDEN', 'Invalid CSRF token. Reload the page and try again.');
     }
+    activeUsers.set(new URL(request.url).host, session.userId);
     return session;
   }
 
@@ -501,6 +504,7 @@ export function createAuthMock({
       'logout',
       (context) => {
         authenticate(context).revoked = true;
+        activeUsers.delete(new URL(context.request.url).host);
         clearSessionCookie(context.headers);
         return { ok: true as const };
       },
@@ -516,6 +520,13 @@ export function createAuthMock({
      */
     userIdOf: (context: Pick<ResolverContext<RouteName>, 'request' | 'cookies'>) =>
       authenticate(context).userId,
+    /**
+     * Who is signed in at `host` (e.g. `localhost:5173`): the user of the latest authenticated
+     * request there, until they log out. The mock WebSocket uses it for the private order channel,
+     * since an intercepted socket carries no cookies. A browser has one session per host, so this
+     * is the user whose tab opened the socket.
+     */
+    activeUserId: (host: string): string | null => activeUsers.get(host) ?? null,
   };
 }
 

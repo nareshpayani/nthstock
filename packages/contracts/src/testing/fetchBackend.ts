@@ -16,6 +16,10 @@ export type FetchBackendOptions = {
   scopeOrigin?: (index: number) => string;
   /** Moves the backend's auth clock forward. */
   advanceTime?: (ms: number) => void | Promise<void>;
+  /** Sets the backend's clock (`ScenarioBackend.setTime`). */
+  setTime?: (at: string) => void | Promise<void>;
+  /** A scripted tick (`ScenarioBackend.setPrice`). */
+  setPrice?: (token: number, ltp: number) => void | Promise<void>;
 };
 
 /**
@@ -48,6 +52,8 @@ export function fetchBackend(
       };
     },
     ...(options.advanceTime ? { advanceTime: options.advanceTime } : {}),
+    ...(options.setTime ? { setTime: options.setTime } : {}),
+    ...(options.setPrice ? { setPrice: options.setPrice } : {}),
   });
 
   const root = at(origin);

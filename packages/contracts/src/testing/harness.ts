@@ -45,6 +45,17 @@ export interface ScenarioBackend {
   scope?(index: number): ScenarioBackend;
   /** Moves the backend's auth clock forward (OTP throttle, token expiry). */
   advanceTime?(ms: number): void | Promise<void>;
+  /**
+   * Sets the backend's clock (auth, orders, everything but the simulated market's own ticks) to
+   * the instant `at`, an ISO UTC string; it runs on from there. Order scenarios pick a trading
+   * day and time with it, so market hours and AMO never depend on when CI runs.
+   */
+  setTime?(at: string): void | Promise<void>;
+  /**
+   * A scripted tick: from now on the backend's paper engines see `ltp` paise for `token`, whatever
+   * the simulated feed says, and orders it crosses fill at once (as on a real tick).
+   */
+  setPrice?(token: number, ltp: number): void | Promise<void>;
 }
 
 type QueryValue = string | number | boolean | undefined;
@@ -98,6 +109,10 @@ export interface ScenarioClient {
   csrfToken(): string | null;
   /** Moves the backend's auth clock forward; fails when the backend cannot. */
   advanceTime(ms: number): Promise<void>;
+  /** Sets the backend's clock (see `ScenarioBackend.setTime`); fails when the backend cannot. */
+  setTime(at: string): Promise<void>;
+  /** A scripted tick (see `ScenarioBackend.setPrice`); fails when the backend cannot. */
+  setPrice(token: number, ltp: number): Promise<void>;
 }
 
 /** `{ q: 'inf', limit: 5 }` → `?q=inf&limit=5`; undefined values are left out. */
@@ -165,6 +180,14 @@ export function createScenarioClient(backend: ScenarioBackend): ScenarioClient {
     async advanceTime(ms) {
       if (!backend.advanceTime) throw new Error('This backend cannot move its clock');
       await backend.advanceTime(ms);
+    },
+    async setTime(at) {
+      if (!backend.setTime) throw new Error('This backend cannot set its clock');
+      await backend.setTime(at);
+    },
+    async setPrice(token, ltp) {
+      if (!backend.setPrice) throw new Error('This backend cannot script prices');
+      await backend.setPrice(token, ltp);
     },
   };
 }
