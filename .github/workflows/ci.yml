@@ -100,6 +100,44 @@ jobs:
           path: apps/web/playwright-report
           retention-days: 7
 
+  # T-164: the golden path and the scripted-order scenarios (@api specs) against the real backends:
+  # apps/api and apps/realtime from their builds (NODE_ENV=test, ENABLE_TEST_CONTROLS=true, a
+  # per-run JWT key made by playwright.config.ts), Redis as a service container, and an api-mode
+  # web build behind the preview proxy. Runs beside the other jobs, so it adds no time to them.
+  e2e-api:
+    name: Playwright golden path (api mode)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - run: npx turbo run build --filter=@nthstock/web^... --filter=@nthstock/api --filter=@nthstock/realtime
+      - name: Install Chrome for Testing (Chromium)
+        run: npx playwright install --with-deps chromium
+      - run: npm run e2e:api
+        env:
+          E2E_REDIS_URL: redis://127.0.0.1:6379
+      - if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report-api
+          path: apps/web/playwright-report
+          retention-days: 7
+
   audit:
     name: Dependency audit
     runs-on: ubuntu-latest

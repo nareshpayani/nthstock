@@ -11,6 +11,7 @@
     "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.e2e.json",
     "test": "vitest run --coverage",
     "e2e": "playwright test",
+    "e2e:api": "E2E_MODE=api playwright test",
     "build:api-check": "VITE_API_MODE=api vite build --outDir dist-api --emptyOutDir --logLevel warn && node scripts/checkBuild.mjs dist-api"
   },
   "devDependencies": {

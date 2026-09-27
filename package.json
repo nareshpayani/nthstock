@@ -25,7 +25,8 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "check": "npm run format:check && npm run lint && npm run typecheck && npm run test && npm run build",
-    "e2e": "npm run e2e -w @nthstock/web"
+    "e2e": "npm run e2e -w @nthstock/web",
+    "e2e:api": "npm run e2e:api -w @nthstock/web"
   },
   "devDependencies": {
     "prettier": "3.9.9",
