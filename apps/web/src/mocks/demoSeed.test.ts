@@ -5,7 +5,8 @@ import { generateSymbolMaster } from '@nthstock/marketData';
 import { DEMO_SEED_USER, buildDemoAccount, demoWatchlists } from '@nthstock/paperEngine';
 import { fixedClock, fromIst } from '@nthstock/utils';
 import { afterEach, describe, expect, it } from 'vitest';
-import { demoInstrumentsOfMaster, seedMockDemo, wantsDemo, withoutDemoParam } from './demoSeed';
+import { wantsDemo, withoutDemoParam } from './demoParam';
+import { demoInstrumentsOfMaster, seedMockDemo } from './demoSeed';
 import { ORDERS_MOCK_STORAGE_KEY, WATCHLIST_MOCK_STORAGE_KEY } from './handlers';
 import { TEST_API_ORIGIN, createMockServer } from './node';
 

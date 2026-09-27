@@ -94,4 +94,42 @@ describe('startMockWorker (T-050)', () => {
     window.history.replaceState(null, '', '/');
     info.mockRestore();
   });
+
+  it('loads the demo seed when main.tsx already read and dropped ?demo=1 (T-169)', async () => {
+    const info = vi.spyOn(console, 'info').mockImplementation(() => undefined);
+    window.sessionStorage.clear();
+    window.history.replaceState(null, '', '/dashboard');
+    const { startMockWorker } = await import('./browser');
+    const { WATCHLIST_MOCK_STORAGE_KEY } = await import('./handlers');
+    const { adapter, orders } = await startMockWorker(
+      { apiMode: 'msw', apiBaseUrl: '', wsUrl: null, mockMarketOpen: false, testControls: false },
+      undefined,
+      { demo: true },
+    );
+    expect(window.location.pathname + window.location.search).toBe('/dashboard');
+    expect(window.sessionStorage.getItem(WATCHLIST_MOCK_STORAGE_KEY)).toContain('usr_demo');
+    orders.dispose();
+    adapter.dispose();
+    window.sessionStorage.clear();
+    window.history.replaceState(null, '', '/');
+    info.mockRestore();
+  });
+
+  it('skips the demo seed when told so, even with ?demo=1 in the URL', async () => {
+    const info = vi.spyOn(console, 'info').mockImplementation(() => undefined);
+    window.sessionStorage.clear();
+    window.history.replaceState(null, '', '/dashboard?demo=1');
+    const { startMockWorker } = await import('./browser');
+    const { WATCHLIST_MOCK_STORAGE_KEY } = await import('./handlers');
+    const { adapter, orders } = await startMockWorker(
+      { apiMode: 'msw', apiBaseUrl: '', wsUrl: null, mockMarketOpen: false, testControls: false },
+      undefined,
+      { demo: false },
+    );
+    expect(window.sessionStorage.getItem(WATCHLIST_MOCK_STORAGE_KEY)).toBeNull();
+    orders.dispose();
+    adapter.dispose();
+    window.history.replaceState(null, '', '/');
+    info.mockRestore();
+  });
 });

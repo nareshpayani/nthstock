@@ -1,6 +1,7 @@
 import { setupWorker } from 'msw/browser';
 import { resolveWsUrl, type RuntimeConfig } from '@/app/runtimeConfig';
-import { seedMockDemo, wantsDemo, withoutDemoParam } from './demoSeed';
+import { wantsDemo, withoutDemoParam } from './demoParam';
+import { seedMockDemo } from './demoSeed';
 import { ORDER_SWEEP_MS, createMockHandlers } from './handlers';
 import { createMockMarket } from './marketAdapter';
 import type { TestControls } from './testControls';
@@ -9,7 +10,19 @@ import type { TestControls } from './testControls';
  * Starts MSW in the browser (msw mode only). main.tsx imports this module dynamically behind a
  * build-time mode check, so api-mode builds contain no MSW code at all (T-050).
  */
-export async function startMockWorker(config: RuntimeConfig, testControls?: TestControls) {
+export type StartMockWorkerOptions = {
+  /**
+   * Load the demo seed. main.tsx reads `?demo=1` and drops it before the router starts (T-169);
+   * without this option the parameter is read, and dropped, here.
+   */
+  demo?: boolean;
+};
+
+export async function startMockWorker(
+  config: RuntimeConfig,
+  testControls?: TestControls,
+  options: StartMockWorkerOptions = {},
+) {
   const adapter = createMockMarket({ alwaysOpen: config.mockMarketOpen });
   const wsUrl = resolveWsUrl(config, window.location);
   // The auth mock keeps its users, PINs and trusted devices in localStorage, so "reload and log
@@ -31,9 +44,11 @@ export async function startMockWorker(config: RuntimeConfig, testControls?: Test
   // ?demo=1 (T-174): the demo user's watchlists, holdings and ledger, as `npm run seed:demo` gives
   // in api mode. Written before the mocks read their saved state; the parameter is then dropped so
   // a reload keeps the demo's changes.
-  if (wantsDemo(window.location.search)) {
+  if (options.demo ?? wantsDemo(window.location.search)) {
     const seeded = listStorage ? seedMockDemo(listStorage, adapter.master) : false;
-    window.history.replaceState(window.history.state, '', withoutDemoParam(window.location.href));
+    if (wantsDemo(window.location.search)) {
+      window.history.replaceState(window.history.state, '', withoutDemoParam(window.location.href));
+    }
     console.info(
       seeded
         ? '[MSW] Demo seed loaded (?demo=1): log in as 9000000001 with OTP 123456.'

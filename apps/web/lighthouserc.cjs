@@ -53,9 +53,9 @@ module.exports = {
         // TBT is the lab proxy for INP (< 150 ms).
         'total-blocking-time': below(150),
         // Initial JS < 200 KB gzipped: a warning here, enforced by scripts/checkBuild.mjs on every
-        // build. Lighthouse sums every script fetched while the page settles, so in msw mode it
-        // counts the lazy MSW + mock-market chunk (about 350 KB, never shipped in api mode) and
-        // misses the chunks the MSW service worker passes through (0 bytes transferred).
+        // build. Lighthouse sums every script fetched while the page settles, so it also counts
+        // the lazy route chunks and, in msw mode, the lazy MSW + mock-market chunk (about 350 KB,
+        // never shipped in api mode).
         'resource-summary:script:size': [
           'warn',
           { maxNumericValue: 200 * 1024, aggregationMethod: 'median-run' },

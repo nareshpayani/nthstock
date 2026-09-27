@@ -1,4 +1,5 @@
 import { createQuoteStore, createWsClient } from '@nthstock/apiClient';
+import { gateWsClient } from '@/shared/lib/networkGate';
 import type { OrderUpdateSource } from '@/shared/lib/orderUpdatesContext';
 import { resolveWsUrl, type RuntimeConfig } from './runtimeConfig';
 
@@ -11,8 +12,11 @@ import { resolveWsUrl, type RuntimeConfig } from './runtimeConfig';
 export function createLiveQuotes(
   config: Pick<RuntimeConfig, 'wsUrl'>,
   location: { protocol: string; host: string },
+  /** msw mode (T-169): the socket opens only once this, the MSW worker's start, settles. */
+  ready?: Promise<unknown>,
 ) {
-  const wsClient = createWsClient({ url: resolveWsUrl(config, location) });
+  const client = createWsClient({ url: resolveWsUrl(config, location) });
+  const wsClient = ready ? gateWsClient(client, ready) : client;
   const quoteStore = createQuoteStore({ source: wsClient });
   const orderUpdates: OrderUpdateSource = {
     onOrderUpdate: (listener) =>
