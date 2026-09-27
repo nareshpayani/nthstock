@@ -18,7 +18,9 @@ import { ledgerTimeLabel, signedAmount } from '../model/ledgerFormat';
 import { strings } from '../strings';
 
 const ROW_HEIGHT = 48;
-const COLUMNS = 'minmax(200px,1.3fr) minmax(112px,0.8fr) minmax(200px,2fr) 136px 152px';
+const COLUMNS = 'minmax(200px,1.3fr) minmax(112px,0.8fr) minmax(180px,2fr) 168px 168px';
+/** At most this tall; a short ledger is only as tall as its rows. */
+const MAX_HEIGHT = 560;
 const HEADERS = [
   { key: 'time', numeric: false },
   { key: 'type', numeric: false },
@@ -81,9 +83,9 @@ export function LedgerList() {
           items={entries}
           label={strings.ledger.label}
           rowHeight={ROW_HEIGHT}
-          height="min(60dvh, 560px)"
+          height={`min(60dvh, ${String(Math.min(MAX_HEIGHT, (entries.length + 1) * ROW_HEIGHT + 2))}px)`}
           columns={COLUMNS}
-          className="min-w-[840px]"
+          className="min-w-[880px]"
           getKey={(entry) => entry.id}
           onEndReached={loadMore}
           header={HEADERS.map((column) => (
