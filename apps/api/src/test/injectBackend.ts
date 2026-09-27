@@ -4,6 +4,10 @@ import type { FastifyInstance } from 'fastify';
 export type InjectBackendOptions = {
   /** Moves the app's injected clock forward (see `offsetClock`). */
   advanceTime?: (ms: number) => void;
+  /** Sets the app's injected clock (`ScenarioBackend.setTime`). */
+  setTime?: (at: string) => void;
+  /** A scripted tick for the paper engines (`ScenarioBackend.setPrice`). */
+  setPrice?: (token: number, ltp: number) => void;
 };
 
 /** A private-range client address per scenario, so per-IP limits never carry over. */
@@ -36,6 +40,8 @@ export function injectBackend(
       };
     },
     ...(options.advanceTime ? { advanceTime: options.advanceTime } : {}),
+    ...(options.setTime ? { setTime: options.setTime } : {}),
+    ...(options.setPrice ? { setPrice: options.setPrice } : {}),
   });
 
   return {
