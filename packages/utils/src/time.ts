@@ -26,6 +26,13 @@ const timeFormat = new Intl.DateTimeFormat('en-IN', {
   minute: '2-digit',
   hour12: true,
 });
+const secondsFormat = new Intl.DateTimeFormat('en-IN', {
+  timeZone: IST_TIME_ZONE,
+  hour: '2-digit',
+  minute: '2-digit',
+  second: '2-digit',
+  hour12: true,
+});
 const dateFormat = new Intl.DateTimeFormat('en-IN', {
   timeZone: IST_TIME_ZONE,
   day: 'numeric',
@@ -36,6 +43,11 @@ const dateFormat = new Intl.DateTimeFormat('en-IN', {
 /** "09:15 am" in IST. */
 export function formatIstTime(date: Date): string {
   return timeFormat.format(date);
+}
+
+/** "09:15:04 am" in IST: order times and status timelines, where seconds matter. */
+export function formatIstTimeSeconds(date: Date): string {
+  return secondsFormat.format(date);
 }
 
 /** "25 Sept 2026" in IST (month abbreviation as Chrome's en-IN locale prints it). */

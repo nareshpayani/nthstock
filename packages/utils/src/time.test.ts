@@ -3,6 +3,7 @@ import {
   fixedClock,
   formatIstDate,
   formatIstTime,
+  formatIstTimeSeconds,
   fromIst,
   istDateKey,
   systemClock,
@@ -15,6 +16,9 @@ const marketOpenUtc = new Date('2026-09-25T03:45:00Z');
 describe('IST helpers', () => {
   it('formats time and date in IST whatever the machine time zone is', () => {
     expect(formatIstTime(marketOpenUtc).toLowerCase()).toBe('09:15 am');
+    expect(formatIstTimeSeconds(new Date(marketOpenUtc.getTime() + 4_000)).toLowerCase()).toBe(
+      '09:15:04 am',
+    );
     expect(formatIstDate(marketOpenUtc)).toMatch(/^25 Sept? 2026$/);
   });
 
