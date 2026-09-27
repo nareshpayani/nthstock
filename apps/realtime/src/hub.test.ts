@@ -10,6 +10,7 @@ import {
 import { fakeSocket } from './test/fakeSocket.js';
 import { quoteFramesOf } from './test/frames.js';
 import { manualTimers } from './test/manualTimers.js';
+import { testOrder } from './test/orders.js';
 import { testQuote } from './test/quotes.js';
 
 const subscribe = (symbols: string[], exchange = 'NSE') =>
@@ -288,5 +289,55 @@ describe('hub slow consumers', () => {
         .flat()
         .map((q) => q.ltp),
     ).toEqual([150_200]);
+  });
+});
+
+describe('hub private order channel (T-133)', () => {
+  it("sends each user's order updates to all their connections and nobody else's", () => {
+    const hub = createHub({ timers: manualTimers() });
+    const aliceTab1 = fakeSocket();
+    const aliceTab2 = fakeSocket();
+    const bob = fakeSocket();
+    const anonymous = fakeSocket();
+    hub.open(aliceTab1, { userId: 'usr_alice' });
+    const tab2 = hub.open(aliceTab2, { userId: 'usr_alice' });
+    hub.open(bob, { userId: 'usr_bob' });
+    hub.open(anonymous);
+
+    hub.deliverOrder('usr_alice', testOrder('o_alice'));
+    hub.deliverOrder('usr_bob', testOrder('o_bob'));
+    hub.deliverOrder('usr_nobody', testOrder('o_nobody'));
+    tab2.closed();
+    tab2.closed();
+    hub.deliverOrder('usr_alice', testOrder('o_alice_2'));
+
+    const ids = (socket: typeof bob) =>
+      socket.json().flatMap((m) => (m.type === 'orderUpdate' ? [m.order.id] : []));
+    expect(ids(aliceTab1)).toEqual(['o_alice', 'o_alice_2']);
+    expect(ids(aliceTab2)).toEqual(['o_alice']);
+    expect(ids(bob)).toEqual(['o_bob']);
+    expect(anonymous.sent).toEqual([]);
+    expect(aliceTab1.json()[0]).toEqual({
+      v: WS_PROTOCOL_VERSION,
+      type: 'orderUpdate',
+      order: testOrder('o_alice'),
+    });
+  });
+
+  it('logs a failed send and carries on with the next connection', () => {
+    const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn() };
+    const hub = createHub({ timers: manualTimers(), logger });
+    const broken = fakeSocket();
+    broken.send = () => {
+      throw new Error('socket gone');
+    };
+    const fine = fakeSocket();
+    hub.open(broken, { userId: 'usr_a' });
+    hub.open(fine, { userId: 'usr_a' });
+    hub.deliverOrder('usr_a', testOrder('o1'));
+    expect(fine.json()).toHaveLength(1);
+    expect(logger.warn).toHaveBeenCalledWith('order update send failed', {
+      error: 'Error: socket gone',
+    });
   });
 });
