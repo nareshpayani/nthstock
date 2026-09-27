@@ -117,6 +117,8 @@ export const strings = {
   },
   fill: {
     title: 'Order executed',
+    viewOrders: 'View orders',
+    viewOrdersAlt: 'Open Orders from the main navigation to see this order.',
     description: (side: OrderSide, qty: number, symbol: string, price: string) =>
       `${side} ${String(qty)} ${symbol} @ ${price}`,
   },
