@@ -2,8 +2,9 @@ import { Sheet } from '@nthstock/ui';
 import { Link } from '@tanstack/react-router';
 import { OrderTicketHost } from '@/features/orderTicket';
 import { OrderUpdatesBridge } from '@/features/orders';
-import { useRef, type ReactNode } from 'react';
+import { useEffect, useRef, type ReactNode } from 'react';
 import { useShortcut } from '@/shared/hooks/useShortcut';
+import { useSearchFocusStore } from '@/shared/lib/searchFocusStore';
 import { useShellStore } from '../shellStore';
 import { strings } from '../strings';
 import { Header } from './Header';
@@ -17,7 +18,8 @@ export type AppShellProps = {
 
 /**
  * Header, left rail and main area (T-024). At 1024 px and up the rail is a sticky column; below
- * that it lives in a left drawer together with the main tabs. "/" focuses search, "?" opens help.
+ * that it lives in a left drawer together with the main tabs. "/" focuses search (as does "Search
+ * stocks" on an empty list), "?" opens help.
  * The order ticket slide-over (T-135) is mounted here, so it opens over any page, and so is the
  * order-update listener (T-147), so fills refresh the book and toast on any page.
  */
@@ -36,6 +38,15 @@ export function AppShell({ children }: AppShellProps) {
     else if (drawerOpen) drawerSearch.current?.focus();
     else setDrawerOpen(true);
   };
+
+  // "Search stocks" on an empty orders, positions or holdings list (T-153).
+  const searchRequests = useSearchFocusStore((s) => s.requests);
+  const handledRequests = useRef(searchRequests);
+  useEffect(() => {
+    if (searchRequests === handledRequests.current) return;
+    handledRequests.current = searchRequests;
+    focusSearch();
+  });
 
   useShortcut('/', focusSearch, { enabled: !helpOpen });
   useShortcut('?', () => setHelpOpen(true), { enabled: !helpOpen });

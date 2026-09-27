@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { createTestQuoteStore, testQuote } from '@/test/quotes';
 import { renderApp } from '@/test/renderApp';
 import { resetSession, signIn, signOut } from '@/test/session';
+import { useSearchFocusStore } from '@/shared/lib/searchFocusStore';
 import { initialShellState, useShellStore } from '../shellStore';
 
 afterEach(() => {
@@ -84,6 +85,20 @@ describe('shortcuts (T-028)', () => {
   it('/ opens the drawer with search when the rail is hidden (jsdom has no layout)', async () => {
     await renderDashboard();
     fireEvent.keyDown(document.body, { key: '/' });
+    const drawer = await screen.findByRole('dialog', { name: 'Menu' });
+    await waitFor(() =>
+      expect(within(drawer).getByRole('combobox', { name: 'Search stocks' })).toHaveFocus(),
+    );
+  });
+});
+
+describe('search requests (T-153)', () => {
+  it('"Search stocks" from an empty list opens search in the shell', async () => {
+    await renderDashboard();
+    expect(screen.queryByRole('dialog', { name: 'Menu' })).not.toBeInTheDocument();
+    act(() => {
+      useSearchFocusStore.getState().requestSearch();
+    });
     const drawer = await screen.findByRole('dialog', { name: 'Menu' });
     await waitFor(() =>
       expect(within(drawer).getByRole('combobox', { name: 'Search stocks' })).toHaveFocus(),
