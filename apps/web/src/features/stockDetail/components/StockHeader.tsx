@@ -1,5 +1,6 @@
 import type { Exchange, Instrument, OrderSide, Quote } from '@nthstock/contracts';
 import { Button, SegmentedControl, useToast } from '@nthstock/ui';
+import { WatchlistStar } from '@/features/watchlist';
 import { LiveChange } from '@/shared/components/LiveChange';
 import { PriceCell } from '@/shared/components/PriceCell';
 import { useOpenTicket } from '@/shared/hooks/useOpenTicket';
@@ -40,7 +41,10 @@ export function StockHeader({ instrument, snapshot, onExchangeChange }: StockHea
     <div className="grid gap-4 rounded-lg border border-line bg-surface p-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end lg:p-5">
       <div className="grid min-w-0 gap-3">
         <div className="grid gap-1">
-          <h1 className="text-title break-words text-ink">{instrument.name}</h1>
+          <div className="flex items-start gap-3">
+            <h1 className="text-title min-w-0 flex-1 break-words text-ink">{instrument.name}</h1>
+            {type === 'EQUITY' ? <WatchlistStar instrument={instrument} /> : null}
+          </div>
           <p className="flex flex-wrap items-center gap-2 text-body text-ink-muted">
             <span className="font-mono font-medium text-ink">{symbol}</span>
             <span aria-hidden="true">·</span>
