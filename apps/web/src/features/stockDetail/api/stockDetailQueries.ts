@@ -19,7 +19,18 @@ export const stockDetailKeys = {
     ['stockDetail', 'quote', { symbol: params.symbol, ...withExchange(params.exchange) }] as const,
   stats: (params: InstrumentParams) =>
     ['stockDetail', 'stats', { symbol: params.symbol, ...withExchange(params.exchange) }] as const,
+  depth: (params: InstrumentParams) =>
+    ['stockDetail', 'depth', { symbol: params.symbol, ...withExchange(params.exchange) }] as const,
+  profile: (params: InstrumentParams) =>
+    [
+      'stockDetail',
+      'profile',
+      { symbol: params.symbol, ...withExchange(params.exchange) },
+    ] as const,
 };
+
+/** How often market depth refreshes while it is on screen and the market is open (T-110). */
+export const DEPTH_REFRESH_MS = 1_000;
 
 /** `GET /v1/market/instruments/:symbol` (T-105). The symbol master rarely changes. */
 export function instrumentQuery(api: ApiClient, params: InstrumentParams) {
@@ -64,5 +75,36 @@ export function statsQuery(api: ApiClient, params: InstrumentParams) {
         signal,
       }),
     staleTime: 60_000,
+  });
+}
+
+/**
+ * `GET /v1/market/instruments/:symbol/depth` (T-110): top-5 bids and offers. Fresh for one
+ * refresh interval; the card decides when to poll.
+ */
+export function depthQuery(api: ApiClient, params: InstrumentParams) {
+  return queryOptions({
+    queryKey: stockDetailKeys.depth(params),
+    queryFn: ({ signal }) =>
+      api.request('instrumentDepth', {
+        params: { symbol: params.symbol },
+        query: withExchange(params.exchange),
+        signal,
+      }),
+    staleTime: DEPTH_REFRESH_MS,
+  });
+}
+
+/** `GET /v1/market/instruments/:symbol/profile` (T-111): about text, sector and indices. */
+export function profileQuery(api: ApiClient, params: InstrumentParams) {
+  return queryOptions({
+    queryKey: stockDetailKeys.profile(params),
+    queryFn: ({ signal }) =>
+      api.request('instrumentProfile', {
+        params: { symbol: params.symbol },
+        query: withExchange(params.exchange),
+        signal,
+      }),
+    staleTime: 30 * 60_000,
   });
 }

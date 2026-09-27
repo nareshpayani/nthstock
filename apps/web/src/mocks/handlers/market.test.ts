@@ -71,7 +71,7 @@ describe('MSW market handlers (T-052) through the API client (T-053)', () => {
     expect(popular.items.every((hit) => hit.type === 'EQUITY')).toBe(true);
   });
 
-  it('instrument, candles, depth and stats', async () => {
+  it('instrument, candles, depth, profile and stats', async () => {
     const params = { symbol: 'INFY' };
     await valid('instrument', client.request('instrument', { params }));
     for (const range of ['1D', '1W', '1M', '1Y', '5Y'] as const) {
@@ -81,6 +81,7 @@ describe('MSW market handlers (T-052) through the API client (T-053)', () => {
       );
     }
     await valid('instrumentDepth', client.request('instrumentDepth', { params }));
+    await valid('instrumentProfile', client.request('instrumentProfile', { params }));
     await valid('instrumentStats', client.request('instrumentStats', { params }));
   });
 
@@ -113,6 +114,12 @@ describe('errors map to ApiError', () => {
     [
       'index depth',
       () => client.request('instrumentDepth', { params: { symbol: 'NIFTY50' } }),
+      404,
+      'NOT_FOUND',
+    ],
+    [
+      'index profile',
+      () => client.request('instrumentProfile', { params: { symbol: 'SENSEX' } }),
       404,
       'NOT_FOUND',
     ],

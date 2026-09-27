@@ -48,7 +48,12 @@ describe('stock detail header (T-106)', () => {
     expect(await screen.findByText('INFY is not listed on BSE.')).toBeInTheDocument();
     // Before any live tick, the REST snapshot's price shows.
     const snapshot = await api.adapter.getQuote('INFY');
-    expect(await screen.findByText(formatInr(snapshot?.ltp ?? 0))).toBeInTheDocument();
+    // Scoped to the header: the depth book can hold a level at the same price.
+    const header = screen.getByRole('heading', { level: 1 }).closest('div.grid.gap-4');
+    expect(header).not.toBeNull();
+    expect(
+      await within(header as HTMLElement).findByText(formatInr(snapshot?.ltp ?? 0)),
+    ).toBeInTheDocument();
   });
 
   it('shows the live price and change from the quote store, with ▲▼ in the text', async () => {

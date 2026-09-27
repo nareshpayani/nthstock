@@ -4,6 +4,7 @@ import {
   Depth,
   IndexSummary,
   Instrument,
+  InstrumentProfile,
   InstrumentStats,
   Movers,
   Quote,
@@ -149,6 +150,14 @@ export function runAdapterContractTests(
       expect(stats.upperCircuit).toBeGreaterThanOrEqual(quote.ltp);
       expect(stats.week52Low).toBeLessThanOrEqual(stats.week52High);
       expect(await adapter.getStats(UNKNOWN_SYMBOL)).toBeNull();
+    });
+
+    it('returns an equity profile listing its indices, null for an index or unknown', async () => {
+      const profile = InstrumentProfile.parse(await adapter.getProfile(equity));
+      expect(profile.symbol).toBe(equity);
+      expect(profile.indices.map((ix) => ix.symbol)).toContain(index);
+      expect(await adapter.getProfile(index)).toBeNull();
+      expect(await adapter.getProfile(UNKNOWN_SYMBOL)).toBeNull();
     });
 
     it('returns index summaries that parse, including the known index', async () => {

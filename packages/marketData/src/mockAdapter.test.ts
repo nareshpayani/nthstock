@@ -320,6 +320,33 @@ describe('MockMarketDataAdapter data', () => {
     expect((await adapter.getStats(loss?.instrument.symbol ?? ''))?.peX100).toBeNull();
   });
 
+  it('builds profiles from the master: sector, cap bucket and every index the equity is in', async () => {
+    const profile = await adapter.getProfile('INFY');
+    const infy = master.equityBySymbol.get('INFY');
+    expect(profile?.sector).toBe(infy?.sector);
+    expect(profile?.capCategory).toBe(infy?.capBucket);
+    const expected = master.indices
+      .filter((ix) => ix.constituents.includes('INFY'))
+      .map((ix) => ix.instrument.symbol);
+    expect(profile?.indices.map((ix) => ix.symbol)).toEqual(expected);
+    expect(expected).toContain('NIFTYIT');
+    expect(profile?.about).toContain('Infosys Ltd is a large-cap company');
+    expect(await adapter.getProfile('INFY', 'BSE')).toBeNull();
+    expect(await adapter.getProfile('SENSEX')).toBeNull();
+  });
+
+  it('gives the same depth for the same price and volume, and new depth after a tick', async () => {
+    const one = new MockMarketDataAdapter({ master, clock: openClock });
+    const twin = new MockMarketDataAdapter({ master, clock: openClock });
+    const first = await one.getDepth('INFY');
+    expect(await one.getDepth('INFY')).toEqual(first);
+    expect(await twin.getDepth('INFY')).toEqual(first);
+    twin.tick();
+    expect((await twin.getDepth('INFY'))?.bids).not.toEqual(first?.bids);
+    one.dispose();
+    twin.dispose();
+  });
+
   it('searches through the index', async () => {
     expect((await adapter.search('inf'))[0]?.symbol).toBe('INFY');
   });

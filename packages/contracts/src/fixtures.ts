@@ -15,6 +15,7 @@ import type {
   Depth,
   IndexSummary,
   Instrument,
+  InstrumentProfile,
   InstrumentStats,
   Movers,
   Quote,
@@ -137,6 +138,20 @@ export const depthFixture: Depth = {
   totalBidQty: 270,
   totalAskQty: 210,
   ts: TS,
+};
+
+export const profileFixture: InstrumentProfile = {
+  token: 408065,
+  symbol: 'INFY',
+  exchange: 'NSE',
+  name: 'Infosys Ltd',
+  sector: 'Information Technology',
+  capCategory: 'LARGE',
+  about: 'Infosys Ltd is a large-cap company in the Information Technology sector.',
+  indices: [
+    { symbol: 'NIFTY50', name: 'NIFTY 50' },
+    { symbol: 'NIFTYIT', name: 'NIFTY IT' },
+  ],
 };
 
 export const indexSummaryFixture: IndexSummary = {

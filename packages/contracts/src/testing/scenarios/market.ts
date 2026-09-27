@@ -328,4 +328,46 @@ export const marketScenarios = defineScenarios('market', [
       );
     },
   },
+
+  // ---- Profile ----------------------------------------------------------------------------
+  {
+    name: 'profile: about text, sector, cap category and index membership for an equity',
+    async run(client) {
+      const profile = await client.call('instrumentProfile', { params: { symbol: 'INFY' } });
+
+      expect(profile.symbol).toBe('INFY');
+      expect(profile.name).toBe('Infosys Ltd');
+      expect(profile.sector).toBe('Information Technology');
+      expect(profile.capCategory).toBe('LARGE');
+      expect(profile.about).toContain('Infosys Ltd');
+      const indices = profile.indices.map((ix) => ix.symbol);
+      expect(indices).toContain('NIFTY50');
+      expect(indices).toContain('NIFTYIT');
+      expect(indices).not.toContain('NIFTYBANK');
+    },
+  },
+  {
+    name: 'profile: an index, unknown symbol or other exchange is 404',
+    async run(client) {
+      await expectError(
+        client.callError('instrumentProfile', { params: { symbol: 'NIFTY50' } }),
+        404,
+        'NOT_FOUND',
+        'Profile for NIFTY50 not found',
+      );
+      await expectError(
+        client.callError('instrumentProfile', { params: { symbol: 'NOPE' } }),
+        404,
+        'NOT_FOUND',
+      );
+      await expectError(
+        client.callError('instrumentProfile', {
+          params: { symbol: 'INFY' },
+          query: { exchange: 'BSE' },
+        }),
+        404,
+        'NOT_FOUND',
+      );
+    },
+  },
 ]);

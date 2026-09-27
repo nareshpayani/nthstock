@@ -1,4 +1,4 @@
-import { screen, waitFor } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { chartsMock } from '@/test/chartsMock';
 import { createMockApi } from '@/test/mockApi';
@@ -32,6 +32,18 @@ describe('stock detail route (T-105)', () => {
     // The page loader asks once; the exchange toggle's lookup of BSE is a separate request.
     const loads = api.requestsTo('/instruments/INFY').filter((url) => !url.search);
     expect(loads).toHaveLength(1);
+  });
+
+  it('orders the sections chart, depth, key stats, overview for an equity (T-112)', async () => {
+    renderApp('/stocks/INFY', { apiClient: api.apiClient });
+    await screen.findByRole('region', { name: 'Overview' });
+    const main = screen.getByRole('main');
+    const names = within(main)
+      .getAllByRole('region')
+      .map((region) => region.getAttribute('aria-labelledby'))
+      .map((id) => (id ? document.getElementById(id)?.textContent : null))
+      .filter(Boolean);
+    expect(names).toEqual(['Price chart', 'Market depth', 'Key stats', 'Overview']);
   });
 
   it('/stocks/NOPE shows not-found with the symbol and a way back', async () => {

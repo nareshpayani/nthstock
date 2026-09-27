@@ -13,6 +13,8 @@ import {
 } from '../model/stockDetailSearch';
 import { strings } from '../strings';
 import { KeyStatsCard } from './KeyStatsCard';
+import { MarketDepthCard } from './MarketDepthCard';
+import { OverviewCard } from './OverviewCard';
 import { StockChartCard } from './StockChartCard';
 import { StockHeader } from './StockHeader';
 
@@ -39,7 +41,10 @@ function Section({ label, children }: { label: string; children: ReactNode }) {
   );
 }
 
-/** Stock detail (E5): header, chart and key stats for one instrument on one exchange. */
+/**
+ * Stock detail (E5): header, chart, market depth, key stats and overview for one instrument on
+ * one exchange. Indices show the header and chart only.
+ */
 export function StockDetailPage({
   instrument,
   search = {},
@@ -58,10 +63,15 @@ export function StockDetailPage({
         snapshot={snapshot.data}
         onExchangeChange={(exchange) => onSearchChange({ exchange })}
       />
+      {/*
+        T-112: one column under 1024 px, in reading order chart, depth, stats, overview. From
+        1024 px (lg) chart, stats and overview fill the left column and depth sits at the top of
+        a narrower right column, spanning the left column's rows.
+      */}
       <div
         className={cn(
           'grid grid-cols-[minmax(0,1fr)] gap-4 lg:gap-6',
-          equity && 'xl:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]',
+          equity && 'lg:grid-cols-[minmax(0,1fr)_minmax(17rem,22rem)] lg:items-start',
         )}
       >
         <Section label={strings.chart.title}>
@@ -74,9 +84,23 @@ export function StockDetailPage({
           />
         </Section>
         {equity ? (
-          <Section label={strings.stats.title}>
-            <KeyStatsCard instrument={instrument} snapshot={snapshot.data} />
-          </Section>
+          <>
+            <div className="min-w-0 lg:col-start-2 lg:row-span-3 lg:row-start-1">
+              <Section label={strings.depth.title}>
+                <MarketDepthCard instrument={instrument} />
+              </Section>
+            </div>
+            <div className="min-w-0 lg:col-start-1">
+              <Section label={strings.stats.title}>
+                <KeyStatsCard instrument={instrument} snapshot={snapshot.data} />
+              </Section>
+            </div>
+            <div className="min-w-0 lg:col-start-1">
+              <Section label={strings.overview.title}>
+                <OverviewCard instrument={instrument} />
+              </Section>
+            </div>
+          </>
         ) : null}
       </div>
     </div>
