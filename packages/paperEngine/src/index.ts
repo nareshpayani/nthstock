@@ -47,6 +47,7 @@ export {
   type OrderEvent,
 } from './orderStateMachine.js';
 export {
+  PAPER_ENGINE_SNAPSHOT_VERSION,
   PaperEngine,
   type EngineHolding,
   type EnginePosition,
@@ -54,6 +55,7 @@ export {
   type OrderActionErrorCode,
   type OrderActionResult,
   type PaperEngineOptions,
+  type PaperEngineSnapshot,
 } from './paperEngine.js';
 export { FundsLedger, type FundsLedgerOptions, type LedgerResult } from './fundsLedger.js';
 export {
@@ -72,3 +74,11 @@ export {
   type PositionValues,
   type Trade,
 } from './positionMath.js';
+export {
+  PaperDesk,
+  type DeskMarket,
+  type EngineRegistry,
+  type OrdersPageQuery,
+  type PaperDeskOptions,
+} from './paperDesk.js';
+export { orderApiError, type OrderApiError } from './orderErrors.js';
