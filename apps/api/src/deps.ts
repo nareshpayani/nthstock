@@ -10,11 +10,13 @@ import {
   type SmsProvider,
 } from './modules/auth/smsProvider.js';
 import { createMemoryUsersRepo, type UsersRepo } from './modules/users/repo.js';
+import { createMemoryWatchlistsRepo, type WatchlistsRepo } from './modules/watchlists/repo.js';
 
 /** Every module's storage seam. In-memory in the mock phase (ADR 0004 §3). */
 export type Repos = {
   users: UsersRepo;
   auth: AuthRepo;
+  watchlists: WatchlistsRepo;
 };
 
 /** What modules get injected instead of reaching for globals: time, storage and market data. */
@@ -65,6 +67,7 @@ export function createDeps(overrides: DepsOverrides = {}): AppDeps {
     repos: {
       users: overrides.repos?.users ?? createMemoryUsersRepo({ clock }),
       auth: overrides.repos?.auth ?? createMemoryAuthRepo(),
+      watchlists: overrides.repos?.watchlists ?? createMemoryWatchlistsRepo(),
     },
     market,
     production,

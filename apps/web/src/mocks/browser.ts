@@ -18,8 +18,21 @@ export async function startMockWorker(config: RuntimeConfig) {
   } catch {
     storage = undefined;
   }
+  // Watchlists live in sessionStorage (T-116): a reload keeps them, a new browser session starts
+  // from the default list.
+  let listStorage: Storage | undefined;
+  try {
+    listStorage = window.sessionStorage;
+  } catch {
+    listStorage = undefined;
+  }
   const worker = setupWorker(
-    ...createHandlers({ adapter, wsUrl, ...(storage ? { auth: { storage } } : {}) }),
+    ...createHandlers({
+      adapter,
+      wsUrl,
+      ...(storage ? { auth: { storage } } : {}),
+      ...(listStorage ? { watchlists: { storage: listStorage } } : {}),
+    }),
   );
   // Assets, fonts and the Vite client go to the network untouched. MSW's own logging is off
   // because it would print every WebSocket frame (4 a second per symbol); one line says it is on.

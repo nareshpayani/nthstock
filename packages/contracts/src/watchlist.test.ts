@@ -6,12 +6,16 @@ import {
   RenameWatchlistRequest,
   ReorderWatchlistItemsRequest,
   ReorderWatchlistsRequest,
+  WATCHLIST_DEFAULT_NAME,
   WATCHLIST_MAX_ITEMS,
   WATCHLIST_MAX_LISTS,
+  WATCHLIST_MESSAGES,
   Watchlist,
   WatchlistItem,
   WatchlistItemParams,
+  WatchlistName,
   WatchlistsResponse,
+  sameWatchlistName,
 } from './watchlist.js';
 
 const items = (count: number) =>
@@ -82,5 +86,19 @@ describe('watchlist requests', () => {
     });
     expect(WatchlistItemParams.safeParse({ id: 'wl_1', token: 'abc' }).success).toBe(false);
     expect(WatchlistItemParams.safeParse({ id: 'wl_1', token: '1.5' }).success).toBe(false);
+  });
+});
+
+describe('watchlist rules shared by both backends', () => {
+  it('names the default list and compares names trimmed and case-insensitively', () => {
+    expect(WatchlistName.parse(WATCHLIST_DEFAULT_NAME)).toBe('My Watchlist');
+    expect(sameWatchlistName('Banks', ' banks ')).toBe(true);
+    expect(sameWatchlistName('Banks', 'Bank')).toBe(false);
+  });
+
+  it('has plain-language messages that name the limits', () => {
+    expect(WATCHLIST_MESSAGES.itemLimit).toContain('50 stocks');
+    expect(WATCHLIST_MESSAGES.listLimit).toContain('10 watchlists');
+    expect(WATCHLIST_MESSAGES.duplicateItem('INFY')).toBe('INFY is already in this watchlist.');
   });
 });

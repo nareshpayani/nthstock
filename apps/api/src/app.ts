@@ -7,6 +7,7 @@ import { installErrorHandling } from './http/errorHandler.js';
 import { authRoutes } from './modules/auth/routes.js';
 import { healthRoutes } from './modules/health/routes.js';
 import { marketRoutes } from './modules/market/routes.js';
+import { watchlistRoutes } from './modules/watchlists/routes.js';
 import type { Publisher } from './ticks/publisher.js';
 import { startTickPump, type TickPump } from './ticks/tickPump.js';
 
@@ -70,5 +71,6 @@ export function buildApp(options: AppOptions = {}): App {
   app.register(healthRoutes(deps));
   app.register(marketRoutes(deps));
   app.register(authRoutes(deps));
+  app.register(watchlistRoutes(deps));
   return Object.assign(app, { deps });
 }

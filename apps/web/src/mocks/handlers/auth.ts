@@ -508,8 +508,18 @@ export function createAuthMock({
     ),
   ];
 
-  return { handlers };
+  return {
+    handlers,
+    /**
+     * The signed-in user's id for another mock's route (401 without a live session, 403 on a bad
+     * CSRF token), so every user route shares the auth rules.
+     */
+    userIdOf: (context: Pick<ResolverContext<RouteName>, 'request' | 'cookies'>) =>
+      authenticate(context).userId,
+  };
 }
+
+export type AuthMock = ReturnType<typeof createAuthMock>;
 
 /** Auth handlers over a fresh in-memory auth backend. */
 export function authHandlers(

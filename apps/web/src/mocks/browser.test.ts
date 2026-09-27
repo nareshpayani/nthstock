@@ -22,8 +22,8 @@ describe('startMockWorker (T-050)', () => {
     expect(info).toHaveBeenCalledWith(
       expect.stringMatching(/^\[MSW\] Mocking enabled .*forced open/),
     );
-    // 20 REST routes (health, 12 market, 7 auth) plus the quote stream.
-    expect(setupWorker.mock.calls[0]).toHaveLength(21);
+    // 28 REST routes (health, 12 market, 7 auth, 8 watchlists) plus the quote stream.
+    expect(setupWorker.mock.calls[0]).toHaveLength(29);
     expect(adapter.isOpen()).toBe(true);
     adapter.dispose();
     info.mockRestore();
