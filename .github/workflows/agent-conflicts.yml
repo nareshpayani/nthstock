@@ -14,6 +14,8 @@ permissions:
   pull-requests: write
   issues: write
   id-token: write
+  # Starts CI after a clean-merge push: pushes made with GITHUB_TOKEN start no workflows.
+  actions: write
 
 concurrency:
   group: agent-conflicts
@@ -65,7 +67,7 @@ jobs:
       PR: ${{ matrix.pr.number }}
       BRANCH: ${{ matrix.pr.branch }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: ${{ matrix.pr.branch }}
           fetch-depth: 0
@@ -103,6 +105,8 @@ jobs:
           npm ci
           npm run check
           git push origin "HEAD:$BRANCH"
+          # This push used GITHUB_TOKEN, which starts no workflows, so start CI on the new head.
+          gh workflow run ci.yml --repo "$GITHUB_REPOSITORY" --ref "$BRANCH"
           gh pr edit "$PR" --repo "$GITHUB_REPOSITORY" --remove-label agent:conflict
       - if: steps.merge.outputs.clean == 'false' && env.HAS_AGENT_TOKEN != 'true'
         run: |
