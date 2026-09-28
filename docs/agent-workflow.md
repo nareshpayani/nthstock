@@ -1,7 +1,9 @@
 # Agent workflow
 
 nthstock is built by a team of Claude agents running on GitHub Actions. The owner approves plans and
-specs; everything else is automatic, including merging PRs once every check is green.
+specs; everything else is automatic, including merging a PR once the Reviewer labels it
+`ready-to-merge` and every check is green (ADR 0006). The owner still merges spec PRs and PRs that
+change agent or CI config (`.github/`, `.claude/`, `CLAUDE.md`).
 
 ## The loop
 
@@ -12,6 +14,7 @@ Owner merges the spec PR
   └─► stories move to `agent:ready` ─► Developer ─► PR (`agent:pr`, "Closes #N")
 PR opened or updated
   └─► Reviewer ─┬─ no blocking findings ─► `ready-to-merge` ─► all checks green ─► auto-merge (squash)
+                │                           (spec PRs and agent/CI config changes: the owner merges)
                 ├─ blocking findings ─► `agent:fix-needed` ─► Fixer pushes to the same PR ─► Reviewer again
                 └─ bug outside the PR's scope ─► new `bug` issue (`agent:ready`) ─► Developer
 CI red on an owner, agent or Dependabot PR
@@ -25,7 +28,7 @@ Every 2 hours (Watchdog)
 Hourly sweep
   └─► catches red PRs the events missed (Dependabot runs get no secrets; PRs red only because main was red)
 Push to main makes an open PR conflict
-  └─► Conflict resolver merges main INTO the PR branch ─┬─ clean ─► checks pass ─► push to PR
+  └─► Conflict resolver merges main INTO the PR branch ─┬─ clean ─► checks pass ─► push to PR ─► CI dispatched
                                                         ├─ conflicts ─► Fixer resolves, checks pass ─► push to PR
                                                         └─ can't keep both sides ─► `needs-human`
 ```
@@ -52,16 +55,22 @@ Dependabot rebases its own PRs, but their CI failures go to the Fixer.
   default `claude[bot]`), and the Reviewer only runs on PRs from this repo by those two authors.
   Strangers opening issues or PRs on this public repo cannot spend usage or inject prompts.
 - **Loop limits:** after 3 CI-fix attempts on a PR it gets `needs-human`; only one fix-main PR is open at a time.
+- **One healer for main:** the Fixer does not open a fix-main PR while a `watchdog` issue is open, and
+  the watchdog does not open an issue while a `claude/fix-main-*` PR is open.
 - **Loop limit:** after 3 agent reviews (`AGENT_MAX_REVIEW_ROUNDS`) a PR gets `needs-human` and agents stop.
-- **Auto-merge (owner decision 2026-09-26):** `agent-automerge.yml` squash-merges an open PR into `main`
-  when it is from the owner or an agent, not a draft or fork, mergeable, and every check on its head
-  commit is green. It runs after CI and CodeQL finish, on label changes, and hourly. It skips spec PRs
-  (the owner still approves specs), Dependabot PRs, and PRs labelled `needs-human`, `agent:fix-needed`
-  or `do-not-merge`. To hold a PR, add `do-not-merge`. To turn auto-merge off, set the repository
+- **Auto-merge (owner decision 2026-09-26, ADR 0006):** `agent-automerge.yml` squash-merges an open PR
+  into `main` when the Reviewer has labelled it `ready-to-merge`, it is from the owner or an agent, not
+  a draft or fork, mergeable, and every check on its head commit is green. It runs after CI and CodeQL
+  finish, on label changes, and hourly. It skips spec PRs (the owner still approves specs), PRs that
+  change `.github/**`, `.claude/**` or `CLAUDE.md` (the owner merges agent and CI config; see
+  `.github/CODEOWNERS`), Dependabot PRs, and PRs labelled `needs-human`, `agent:fix-needed` or
+  `do-not-merge`. To hold a PR, add `do-not-merge`. To turn auto-merge off, set the repository
   variable `AGENT_AUTOMERGE` to `false`. It merges one PR per run, because the other PRs' checks ran
-  against the old `main`. After merging it starts CI, CodeQL and the conflict resolver on `main`,
-  because merges made with the Actions token don't trigger push workflows.
-- **Agents never merge by hand, never push to `main`, never touch secrets or deploy.**
+  against the old `main`. After merging it starts CI, CodeQL, the conflict resolver and the label sync
+  on `main`, because merges made with the Actions token don't trigger push workflows.
+- **Agents never merge by hand, never push to `main`, never touch secrets or deploy.** Every agent job
+  that can push installs a pre-push hook that refuses `main`, and the Fixer's `gh` access excludes
+  `gh pr merge`.
 - **Cost caps:** `--max-turns` per agent, job timeouts, one run per issue/PR at a time.
 
 ## One-time setup (owner)
@@ -69,8 +78,11 @@ Dependabot rebases its own PRs, but their CI failures go to the Fixer.
    (Settings → Secrets and variables → Actions → New repository secret).
 2. Make sure the Claude GitHub App is installed on the repo (it already is).
 3. Actions → "Agent: Sync labels" → Run workflow (creates the labels).
-4. Settings → Branches → add a rule for `main`: require a pull request, require status checks
-   ("Lint, typecheck, test, build", "Dependency audit", "Secret scan"), block force pushes.
+4. Settings → Branches → add a rule for `main`: require a pull request, block force pushes, and
+   require these status checks (every `ci.yml` job, plus CodeQL): "Lint, typecheck, test, build",
+   "Storybook build and a11y", "Playwright smoke (Chrome)", "Web vitals and render budgets (Chrome)",
+   "Playwright golden path (api mode)", "Dependency audit", "Secret scan" and
+   "Analyze JavaScript/TypeScript". Requiring an approving review would block auto-merge (ADR 0006).
 
 Optional repository variables: `OWNER_LOGIN`, `AGENT_BOT_LOGIN`, `AGENT_MAX_REVIEW_ROUNDS`,
 `AGENT_MAX_CI_FIX_ATTEMPTS` (default 3), `AGENT_AUTOMERGE` (default `true`), `AGENT_WATCHDOG` (default on; `false` stops the 2-hourly check).
@@ -80,5 +92,7 @@ Optional repository variables: `OWNER_LOGIN`, `AGENT_BOT_LOGIN`, `AGENT_MAX_REVI
   Or Actions → "Agent: Planner" → Run workflow with a request.
 - **Approve a spec:** review and merge the spec PR. Stories start automatically.
 - **Report a bug:** open a Bug issue and add `agent:ready`.
-- **Merge:** happens automatically when checks are green. Add `do-not-merge` to hold a PR for your review.
+- **Merge:** happens automatically once the Reviewer labels a PR `ready-to-merge` and checks are green.
+  You merge spec PRs and PRs that change `.github/`, `.claude/` or `CLAUDE.md`. Add `do-not-merge`
+  to hold any PR for your review.
 - **Stop an agent:** remove its label, or cancel the run in the Actions tab.

@@ -19,7 +19,10 @@ You are the **Reviewer** for nthstock. Read `CLAUDE.md` first, then the PR diff 
    verdict (`APPROVED` or `CHANGES NEEDED`), a numbered list of blocking findings, and suggestions.
 3. Route the outcome with labels:
    - Any blocking finding → add `agent:fix-needed`, remove `ready-to-merge`.
-   - No blocking findings → add `ready-to-merge`, remove `agent:fix-needed`.
+   - No blocking findings → add `ready-to-merge`, remove `agent:fix-needed`. This label is what lets
+     `agent-automerge.yml` squash-merge the PR once every check is green (ADR 0006), so add it only
+     when you would merge the PR yourself. Spec PRs and PRs touching `.github/`, `.claude/` or
+     `CLAUDE.md` still wait for the owner.
 4. A real bug you find **outside this PR's scope** → open a new issue titled `fix(<area>): …`
    with steps to reproduce and expected behaviour, labelled `bug`, `agent:ready`, and an `area:*` label.
    Mention it in your summary. Do not block this PR on it.
