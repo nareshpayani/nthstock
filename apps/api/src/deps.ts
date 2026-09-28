@@ -6,7 +6,8 @@ import { createPiiCrypto, resolvePiiKeys, type PiiKeys } from './db/crypto.js';
 import { createMockCaptchaVerifier, type CaptchaVerifier } from './modules/auth/captcha.js';
 import { resolveJwtSecret } from './modules/auth/jwtSecret.js';
 import { createArgon2PinHasher, type PinHasher } from './modules/auth/pinHasher.js';
-import { createMemoryAuthRepo, type AuthRepo } from './modules/auth/repo.js';
+import { createPgAuthRepo } from './modules/auth/pgRepo.js';
+import { createMemoryAuthRepo, createMemoryOtpStore, type AuthRepo } from './modules/auth/repo.js';
 import {
   createMockSmsProvider,
   type SmsLog,
@@ -22,8 +23,8 @@ import { createMemoryWatchlistsRepo, type WatchlistsRepo } from './modules/watch
 
 /**
  * Every module's storage seam (ADR 0004 §3). Each module's Postgres repo (`pgRepo.ts`) takes over
- * under `DB_DRIVER=postgres` as it lands (ADR 0007); so far the audit log (T-187) and users
- * (T-190). The rest are in memory under both drivers.
+ * under `DB_DRIVER=postgres` as it lands (ADR 0007); so far the audit log (T-187), users
+ * (T-190) and auth devices and PINs (T-191). The rest are in memory under both drivers.
  */
 export type Repos = {
   users: UsersRepo;
@@ -133,7 +134,11 @@ export function createDeps(overrides: DepsOverrides = {}): AppDeps {
       (database && pii
         ? createPgUsersRepo({ database, clock, pii })
         : createMemoryUsersRepo({ clock })),
-    auth: overrides.repos?.auth ?? createMemoryAuthRepo(),
+    auth:
+      overrides.repos?.auth ??
+      (database
+        ? createPgAuthRepo({ database, clock, otp: createMemoryOtpStore() })
+        : createMemoryAuthRepo()),
     watchlists: overrides.repos?.watchlists ?? createMemoryWatchlistsRepo(),
     orders: overrides.repos?.orders ?? createMemoryOrdersRepo(),
     audit:

@@ -36,6 +36,13 @@
       "when": 1790600440563,
       "tag": "0004_users_and_consents",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1790601038944,
+      "tag": "0005_devices_and_pins",
+      "breakpoints": true
     }
   ]
 }
