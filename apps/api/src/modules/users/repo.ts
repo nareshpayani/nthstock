@@ -17,17 +17,35 @@ export type UserRecord = {
 export type NewUser = Pick<UserRecord, 'mobile'> & Partial<Pick<UserRecord, 'name' | 'email'>>;
 export type UserPatch = Partial<Omit<UserRecord, 'id' | 'mobile' | 'createdAt'>>;
 
+/** Thrown by `create` when a live user already has the mobile. */
+export class DuplicateMobileError extends Error {
+  constructor() {
+    super('A user with this mobile already exists');
+    this.name = 'DuplicateMobileError';
+  }
+}
+
 /**
- * Storage seam for the users module (ADR 0004 §3). In-memory now; a Drizzle/Postgres
- * implementation replaces it in Phase 3 without changes to callers.
+ * Storage seam for the users module (ADR 0004 §3): in memory (unit tests, `DB_DRIVER=memory`) or
+ * in Postgres (`pgRepo.ts`, T-190), both held to one conformance suite (`repo.test.ts`).
  */
 export interface UsersRepo {
   findById(id: string): Promise<UserRecord | null>;
+  /** The live (not deleted) user with this mobile. */
   findByMobile(mobile: string): Promise<UserRecord | null>;
+  /** Throws `DuplicateMobileError` when a live user already has the mobile. */
   create(user: NewUser): Promise<UserRecord>;
   /** Applies `patch`; resolves to `null` when the user does not exist. */
   update(id: string, patch: UserPatch): Promise<UserRecord | null>;
-  /** Drops every change and restores the seeded demo user. Tests call it between cases. */
+  /**
+   * Stores this exact user (id and timestamps included) unless a user with its id or its mobile
+   * exists; resolves true when it did. For fixed seed users such as the demo user.
+   */
+  ensureSeeded(user: UserRecord): Promise<boolean>;
+  /**
+   * Tests only: drops every change and restores the seeded demo user. The Postgres repo refuses
+   * (tests truncate its tables as the owner).
+   */
   reset(): Promise<void>;
 }
 
@@ -77,7 +95,7 @@ export function createMemoryUsersRepo({
     },
     create: async (user) => {
       if ([...byId.values()].some((u) => u.mobile === user.mobile)) {
-        throw new Error('A user with this mobile already exists');
+        throw new DuplicateMobileError();
       }
       const record: UserRecord = {
         id: newId(),
@@ -98,6 +116,13 @@ export function createMemoryUsersRepo({
       const next = { ...current, ...patch };
       byId.set(id, next);
       return Promise.resolve(copy(next));
+    },
+    ensureSeeded: (user) => {
+      if (byId.has(user.id) || [...byId.values()].some((u) => u.mobile === user.mobile)) {
+        return Promise.resolve(false);
+      }
+      byId.set(user.id, copy(user));
+      return Promise.resolve(true);
     },
     reset: () => {
       seed();

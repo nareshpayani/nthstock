@@ -2,6 +2,7 @@ import { MockMarketDataAdapter, type MarketDataAdapter } from '@nthstock/marketD
 import { systemClock, type Clock } from '@nthstock/utils';
 import type { DbDriver } from './config.js';
 import { createDatabase, type Database } from './db/client.js';
+import { createPiiCrypto, resolvePiiKeys, type PiiKeys } from './db/crypto.js';
 import { createMockCaptchaVerifier, type CaptchaVerifier } from './modules/auth/captcha.js';
 import { resolveJwtSecret } from './modules/auth/jwtSecret.js';
 import { createArgon2PinHasher, type PinHasher } from './modules/auth/pinHasher.js';
@@ -15,13 +16,14 @@ import { createPgAuditRepo } from './modules/audit/pgRepo.js';
 import { createMemoryAuditRepo, type AuditRepo } from './modules/audit/repo.js';
 import { createMemoryOrdersRepo, type OrdersRepo } from './modules/orders/repo.js';
 import { createOrderService, type OrderService } from './modules/orders/service.js';
+import { createPgUsersRepo } from './modules/users/pgRepo.js';
 import { createMemoryUsersRepo, type UsersRepo } from './modules/users/repo.js';
 import { createMemoryWatchlistsRepo, type WatchlistsRepo } from './modules/watchlists/repo.js';
 
 /**
  * Every module's storage seam (ADR 0004 §3). Each module's Postgres repo (`pgRepo.ts`) takes over
- * under `DB_DRIVER=postgres` as it lands (ADR 0007); so far the audit log (T-187). The rest are
- * in memory under both drivers.
+ * under `DB_DRIVER=postgres` as it lands (ADR 0007); so far the audit log (T-187) and users
+ * (T-190). The rest are in memory under both drivers.
  */
 export type Repos = {
   users: UsersRepo;
@@ -87,6 +89,11 @@ export type DepsOverrides = {
   database?: Database;
   /** Where the pool reports errors on idle connections; default: nowhere. */
   onDatabaseError?: (error: Error) => void;
+  /**
+   * PII column keys for the Postgres repos (`PII_ENC_KEYS`, `PII_HMAC_KEY`; T-189). Left out, the
+   * development keys, which production refuses.
+   */
+  piiKeys?: PiiKeys;
   /** Where a failed background audit write (fills, fund movements) is reported; default stderr. */
   onAuditError?: (error: Error) => void;
 };
@@ -115,8 +122,17 @@ export function createDeps(overrides: DepsOverrides = {}): AppDeps {
   const dbDriver = overrides.dbDriver ?? (overrides.database ? 'postgres' : 'memory');
   const database = openDatabase(overrides, dbDriver);
   const ownedDatabase = overrides.database ? null : database;
+  const pii = database
+    ? createPiiCrypto(
+        overrides.piiKeys ?? resolvePiiKeys({ encKeys: undefined, hmacKey: undefined, production }),
+      )
+    : null;
   const repos: Repos = {
-    users: overrides.repos?.users ?? createMemoryUsersRepo({ clock }),
+    users:
+      overrides.repos?.users ??
+      (database && pii
+        ? createPgUsersRepo({ database, clock, pii })
+        : createMemoryUsersRepo({ clock })),
     auth: overrides.repos?.auth ?? createMemoryAuthRepo(),
     watchlists: overrides.repos?.watchlists ?? createMemoryWatchlistsRepo(),
     orders: overrides.repos?.orders ?? createMemoryOrdersRepo(),

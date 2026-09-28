@@ -14,6 +14,20 @@ import {
 import { authRateLimit } from './rateLimits.js';
 import { createSessionService, sessionEnded, type IssuedSession } from './sessionService.js';
 import { toCurrentSession, toDevice, toSession } from './views.js';
+import { DuplicateMobileError, type UserRecord, type UsersRepo } from '../users/repo.js';
+
+/** The mobile's user, created on first login; a racing sign-up for the same mobile reads theirs. */
+async function findOrCreateUser(users: UsersRepo, mobile: string): Promise<UserRecord> {
+  const existing = await users.findByMobile(mobile);
+  if (existing) return existing;
+  try {
+    return await users.create({ mobile });
+  } catch (error) {
+    const winner = error instanceof DuplicateMobileError ? await users.findByMobile(mobile) : null;
+    if (winner) return winner;
+    throw error;
+  }
+}
 
 /** Auth routes (E3): OTP request and verify, sessions, PIN. */
 export const authRoutes =
@@ -58,9 +72,7 @@ export const authRoutes =
       'otpVerify',
       async ({ body, request, reply }) => {
         const { mobile } = await otp.verify(body);
-        const user =
-          (await deps.repos.users.findByMobile(mobile)) ??
-          (await deps.repos.users.create({ mobile }));
+        const user = await findOrCreateUser(deps.repos.users, mobile);
         // A verified OTP proves the owner: it lifts a PIN lock, and a trusted device stays trusted.
         await pins.unlock(user.id);
         const trusted = await pins.trustedDevice(requestCookies(request)[AUTH_COOKIES.device]);
