@@ -5,6 +5,7 @@ import { seedMockDemo } from './demoSeed';
 import { ORDER_SWEEP_MS, createMockHandlers } from './handlers';
 import { createMockMarket } from './marketAdapter';
 import type { TestControls } from './testControls';
+import { startWorkerKeeper } from './workerKeeper';
 
 /**
  * Starts MSW in the browser (msw mode only). main.tsx imports this module dynamically behind a
@@ -79,5 +80,7 @@ export async function startMockWorker(
     }.`,
   );
   if (testControls) console.info('[MSW] Test controls on (VITE_TEST_CONTROLS): E2E build only.');
-  return { worker, adapter, orders };
+  // Chrome stops idle service workers; this re-registers the tab with a restarted one.
+  const keeper = startWorkerKeeper();
+  return { worker, adapter, orders, ensureActive: keeper.ensureActive };
 }
