@@ -52,7 +52,7 @@ describe('PriceCell + quote store (T-056, T-057)', () => {
     expect(cell.querySelector('[data-tick]')).toHaveAttribute('data-tick', 'flat');
     act(() => push(testQuote('INFY', 151230)));
     expect(cell.querySelector('[data-tick]')).toHaveAttribute('data-tick', 'down');
-    expect(cell.querySelector('[data-tick]')).toHaveClass('animate-flash-down-b');
+    expect(cell.querySelector('[data-tick]')?.className).not.toMatch(/animate-/);
   });
 
   it('subscribes on mount and releases on unmount, one source subscription per symbol', () => {
