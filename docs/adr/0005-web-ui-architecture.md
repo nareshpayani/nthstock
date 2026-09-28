@@ -22,7 +22,9 @@ and the later React Native app must reuse as much as possible (D10). Decisions c
 **Folders** (`apps/web/src`):
 ```
 main.tsx
-app/        providers/, layouts/ (AppShell, AuthLayout), router.ts, queryClient.ts
+app/        providers/, layouts/ (AppShell, AuthLayout), router.ts, queryClient.ts, strings.ts,
+            plus app-wide wiring: runtimeConfig, liveQuotes (quote store + WS), visibilitySync,
+            shellStore, and devProxy / securityHeaders (read by vite.config.ts)
 routes/     TanStack Router file routes (UI-01): __root.tsx, login.tsx, _app/… (authenticated)
 features/<feature>/
             index.ts, components/, hooks/, api/ (queryOptions factories + keys),
@@ -39,7 +41,7 @@ Features, one per business capability (UI-02): `auth`, `dashboard`, `marketTicke
 - URL state (tabs, chart range, sort, filters) lives in search params validated with Zod, not in stores.
 - Server state is TanStack Query only. Each feature exports `queryOptions` factories with keys shaped `[feature, entity, params]`. Mutations invalidate by key.
 - UI state uses a small Zustand store per feature, only when distant components share it. Otherwise `useState`.
-- Live prices use a framework-agnostic `quoteStore` in `packages/apiClient` (UI-03), flushed once per animation frame and read with `useQuote(symbol)` via `useSyncExternalStore`. Only `<PriceCell>` subscribes.
+- Live prices use a framework-agnostic `quoteStore` in `packages/apiClient` (UI-03), flushed once per animation frame and read with `useQuote(symbol)` via `useSyncExternalStore`. Components get live prices only through `useQuote` or `<PriceCell>` (a value derived from several quotes, such as live P&L, uses `useLiveSelection`, which subscribes the same way).
 - Styling is Tailwind from the token preset only (no raw colours in components). Variants use `class-variance-authority` + `tailwind-merge` (UI-05).
 - Forms use React Hook Form with `zodResolver`, reusing the schema from `packages/contracts`.
 - Errors and loading: each route has an `errorComponent` and a skeleton `pendingComponent`. Query errors show inline and mutation errors as a toast. `ApiError` is typed, and its user copy comes from `strings.ts`.
