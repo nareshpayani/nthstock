@@ -7,6 +7,8 @@ import { createMockMarket } from './marketAdapter';
 import type { TestControls } from './testControls';
 import { startWorkerKeeper } from './workerKeeper';
 
+export { ensureWorkerControl } from './workerControl';
+
 /**
  * Starts MSW in the browser (msw mode only). main.tsx imports this module dynamically behind a
  * build-time mode check, so api-mode builds contain no MSW code at all (T-050).

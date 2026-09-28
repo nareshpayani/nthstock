@@ -58,16 +58,17 @@ describe('IndexChartCard (T-095)', () => {
     expect(screen.getByText('+212.45, up 0.84 percent')).toBeInTheDocument();
   });
 
-  it('shows the LIVE badge while NSE is open', async () => {
+  it('shows the LIVE badge beside the heading while NSE is open', async () => {
     renderCard(tradingClock);
-    const heading = await screen.findByRole('heading', { name: /NIFTY 50/ });
-    expect(heading).toHaveTextContent(/Live/);
+    // The badge is not part of the heading, so the section keeps the plain name "NIFTY 50".
+    expect(await screen.findByRole('heading', { name: 'NIFTY 50' })).toBeInTheDocument();
+    expect(screen.getByTitle(/market is open/i)).toHaveTextContent(/Live/);
   });
 
   it('hides the LIVE badge on a holiday clock', async () => {
     renderCard(holidayClock);
-    const heading = await screen.findByRole('heading', { name: /NIFTY 50/ });
-    expect(heading).not.toHaveTextContent(/Live/);
+    await screen.findByRole('heading', { name: 'NIFTY 50' });
+    expect(screen.queryByTitle(/market is open/i)).not.toBeInTheDocument();
   });
 
   it('switching range refetches the candles for that range', async () => {

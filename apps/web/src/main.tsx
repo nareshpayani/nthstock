@@ -24,14 +24,16 @@ const config = parseRuntimeConfig(import.meta.env);
  * msw mode: loads the lazy MSW + mock-market chunk and starts the worker, beside the first render
  * (T-169). The REST client and the quote socket wait for the returned promise; the shell, header
  * and hero do not. It resolves to `ensureActive`, which the REST client runs before each request
- * so a service worker Chrome stopped while the tab sat idle is mocking again. `?demo=1` is read and dropped here, before the router starts (T-174).
+ * so a service worker Chrome stopped while the tab sat idle is mocking again. After a hard reload
+ * the worker does not control the page at all, so the page reloads once instead. `?demo=1` is read
+ * and dropped here, before the router starts (T-174).
  */
 async function startMocks(): Promise<() => Promise<void>> {
   const demo = wantsDemo(window.location.search);
   if (demo) {
     window.history.replaceState(window.history.state, '', withoutDemoParam(window.location.href));
   }
-  const { startMockWorker } = await import('./mocks/browser');
+  const { startMockWorker, ensureWorkerControl } = await import('./mocks/browser');
   // E2E builds only (T-162): VITE_TEST_CONTROLS is a build-time constant too, so every other
   // build drops this import and has no /v1/__test handler (scripts/checkBuild.mjs checks).
   const testControls =
@@ -39,6 +41,21 @@ async function startMocks(): Promise<() => Promise<void>> {
       ? (await import('./mocks/testControls')).createTestControls()
       : undefined;
   const { ensureActive } = await startMockWorker(config, testControls, { demo });
+  // After a hard reload the worker is not in control, so reload once; hold every request until then.
+  let storage: Storage | undefined;
+  try {
+    storage = window.sessionStorage;
+  } catch {
+    storage = undefined;
+  }
+  const control = ensureWorkerControl({
+    serviceWorker: 'serviceWorker' in navigator ? navigator.serviceWorker : undefined,
+    reload: () => {
+      window.location.reload();
+    },
+    storage,
+  });
+  if (control === 'reloading') await new Promise<never>(() => undefined);
   return ensureActive;
 }
 
