@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { loadConfig } from './config.js';
+import { devPiiKeys } from './db/crypto.js';
+
+// Test-only PII keys: base64 of 32 fixed bytes each (not secrets).
+const ENC_KEY = Buffer.alloc(32, 7).toString('base64');
+const HMAC_KEY = Buffer.alloc(32, 9).toString('base64');
 
 describe('loadConfig', () => {
   it('uses defaults for an empty environment', () => {
@@ -15,6 +20,7 @@ describe('loadConfig', () => {
       dbDriver: 'memory',
       testControls: false,
       demoSeed: false,
+      pii: { keys: devPiiKeys(), devKeys: true },
     });
     expect(loadConfig({ REDIS_URL: ' ' }).redisUrl).toBeNull();
     expect(loadConfig({ DATABASE_URL: ' ' }).databaseUrl).toBeNull();
@@ -32,6 +38,8 @@ describe('loadConfig', () => {
         DATABASE_URL: 'postgres://nthstock_app:pw@127.0.0.1:5432/nthstock',
         PG_POOL_MAX: '20',
         DB_DRIVER: 'postgres',
+        PII_ENC_KEYS: `2:${ENC_KEY}`,
+        PII_HMAC_KEY: HMAC_KEY,
       }),
     ).toEqual({
       production: true,
@@ -45,6 +53,14 @@ describe('loadConfig', () => {
       dbDriver: 'postgres',
       testControls: false,
       demoSeed: false,
+      pii: {
+        keys: {
+          encryption: new Map([[2, Buffer.alloc(32, 7)]]),
+          currentKeyId: 2,
+          hmac: Buffer.alloc(32, 9),
+        },
+        devKeys: false,
+      },
     });
     expect(loadConfig({ MOCK_MARKET_ALWAYS_OPEN: '0' }).mockMarketAlwaysOpen).toBe(false);
   });
@@ -92,6 +108,26 @@ describe('loadConfig', () => {
       /DB_DRIVER=postgres needs DATABASE_URL/,
     );
     expect(() => loadConfig({ DB_DRIVER: 'sqlite' })).toThrow(/DB_DRIVER/);
+  });
+
+  it('refuses to start in production without the PII keys, or with bad ones (T-189)', () => {
+    const production = {
+      NODE_ENV: 'production',
+      JWT_SECRET: 'test-only-secret-at-least-32-characters',
+    };
+    expect(() => loadConfig(production)).toThrow(
+      /Invalid apps\/api environment: PII_ENC_KEYS and PII_HMAC_KEY must be set in production/,
+    );
+    expect(() => loadConfig({ ...production, PII_ENC_KEYS: `1:${ENC_KEY}` })).toThrow(
+      /must be set in production/,
+    );
+    expect(
+      loadConfig({ ...production, PII_ENC_KEYS: `1:${ENC_KEY}`, PII_HMAC_KEY: HMAC_KEY }).pii
+        .devKeys,
+    ).toBe(false);
+    expect(() => loadConfig({ PII_ENC_KEYS: '1:short', PII_HMAC_KEY: HMAC_KEY })).toThrow(
+      /PII_ENC_KEYS key 1 must be base64 of exactly 32 bytes/,
+    );
   });
 
   it('fails fast on a bad value', () => {
