@@ -14,6 +14,7 @@
       "outputs": ["coverage/**"],
       "passThroughEnv": [
         "REDIS_TEST_URL",
+        "POSTGRES_TEST_URL",
         "SKIP_REDIS_INTEGRATION",
         "DOCKER_HOST",
         "TESTCONTAINERS_*"

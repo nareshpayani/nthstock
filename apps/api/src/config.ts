@@ -21,6 +21,20 @@ const EnvSchema = z.object({
     .pipe(
       z.url({ protocol: /^rediss?$/, error: 'must be a redis:// or rediss:// URL' }).nullable(),
     ),
+  DATABASE_URL: z
+    .string()
+    .trim()
+    .optional()
+    .transform((value) => (value ? value : null))
+    .pipe(
+      z
+        .url({
+          protocol: /^postgres(ql)?$/,
+          error: 'must be a postgres:// or postgresql:// URL',
+        })
+        .nullable(),
+    ),
+  PG_POOL_MAX: z.coerce.number().int().min(1).max(100).default(10),
 });
 
 export type ApiConfig = {
@@ -34,6 +48,13 @@ export type ApiConfig = {
   jwtSecret: string | undefined;
   /** Redis for publishing ticks to apps/realtime; null (blank) serves REST only. */
   redisUrl: string | null;
+  /**
+   * `DATABASE_URL`, the PostgreSQL connection as the DML-only `nthstock_app` role (ADR 0007);
+   * null when blank. Migrations use `DATABASE_MIGRATION_URL` instead (`npm run db:migrate`).
+   */
+  databaseUrl: string | null;
+  /** `PG_POOL_MAX`: connections in this process's one `pg` Pool (default 10). */
+  pgPoolMax: number;
   /**
    * `ENABLE_TEST_CONTROLS=true` with `NODE_ENV=test`: registers the `/v1/__test` clock and price
    * routes for E2E suites (T-162). Off by default; refused in any other NODE_ENV.
@@ -71,6 +92,8 @@ export function loadConfig(env: Readonly<Record<string, string | undefined>>): A
     mockMarketAlwaysOpen: parsed.data.MOCK_MARKET_ALWAYS_OPEN,
     jwtSecret: parsed.data.JWT_SECRET,
     redisUrl: parsed.data.REDIS_URL,
+    databaseUrl: parsed.data.DATABASE_URL,
+    pgPoolMax: parsed.data.PG_POOL_MAX,
     testControls: parsed.data.ENABLE_TEST_CONTROLS,
     demoSeed: parsed.data.DEMO_SEED,
   };
