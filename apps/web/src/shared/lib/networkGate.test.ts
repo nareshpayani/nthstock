@@ -66,6 +66,19 @@ describe('gateFetch (T-169)', () => {
     expect(fetchImpl).toHaveBeenCalledTimes(1);
   });
 
+  it('runs a function gate before every request, and a failing one still lets it through', async () => {
+    const check = vi
+      .fn<() => Promise<unknown>>()
+      .mockResolvedValueOnce(undefined)
+      .mockRejectedValueOnce(new Error('worker gone'));
+    const fetchImpl = vi.fn(() => Promise.resolve(okResponse()));
+    const gated = gateFetch(check, fetchImpl);
+    await gated('/v1/health', {});
+    await gated('/v1/health', {});
+    expect(check).toHaveBeenCalledTimes(2);
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+  });
+
   it('uses the global fetch by default', async () => {
     const globalFetch = vi.fn(() => Promise.resolve(okResponse()));
     vi.stubGlobal('fetch', globalFetch);
