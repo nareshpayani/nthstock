@@ -11,6 +11,7 @@ import {
   type TicketFormValues,
 } from './ticketForm';
 import { testOrder } from '@/test/orders';
+import { strings } from '../strings';
 
 const base: TicketFormValues = defaultTicketValues('BUY');
 
@@ -40,7 +41,7 @@ describe('ticket form schema (T-136) validation matrix', () => {
     [{ type: 'MARKET', price: null }, {}],
     [{ type: 'MARKET', price: 150003 }, {}],
     [{ type: 'LIMIT', price: 151235 }, {}],
-    [{ type: 'LIMIT', price: null }, { price: 'Enter a limit price' }],
+    [{ type: 'LIMIT', price: null }, { price: strings.form.limitPriceRequired }],
     [{ type: 'LIMIT', price: 150003 }, { price: 'Price must be a multiple of 5 paise' }],
     [{ type: 'LIMIT', price: 0 }, { price: expect.any(String) as string }],
     [{ type: 'LIMIT', price: -5 }, { price: expect.any(String) as string }],

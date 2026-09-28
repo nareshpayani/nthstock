@@ -1,0 +1,7 @@
+# The owner reviews everything; agent and CI config, the agent brief and ADRs need the owner (ADR 0006).
+# Later matching lines take precedence.
+*                @nareshpayani
+/.github/        @nareshpayani
+/.claude/        @nareshpayani
+/CLAUDE.md       @nareshpayani
+/docs/adr/       @nareshpayani

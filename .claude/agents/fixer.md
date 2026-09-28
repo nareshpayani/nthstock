@@ -38,8 +38,10 @@ You are the **Fixer** for nthstock. Read `CLAUDE.md` first.
    when it is a dependency bump that the stack does not support; say so in the PR.
 3. Run `npm run check` until it passes. Commit (`fix(ci): unbreak main after <cause>`),
    `git push -u origin <BRANCH>`, and open a PR against `main` labelled `bug` and `agent:pr`, with
-   Before/After, the root cause and the breaking commit. The owner merges it; open PRs that were
-   red because of main are re-checked by the hourly sweep once main is green.
+   Before/After, the root cause and the breaking commit. The Reviewer reviews it and, once it is
+   `ready-to-merge` with every check green, `agent-automerge.yml` merges it (ADR 0006; a fix that
+   touches `.github/`, `.claude/` or `CLAUDE.md` waits for the owner). Open PRs that were red
+   because of main are re-checked by the hourly sweep once main is green.
 4. If you cannot find a safe fix, open an issue labelled `bug` and `needs-human` with what you found.
 
 ## Merge conflicts

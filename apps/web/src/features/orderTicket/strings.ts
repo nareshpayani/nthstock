@@ -31,6 +31,7 @@ export const strings = {
     price: 'Price (₹)',
     marketPriceHint: 'Market orders fill at the market price.',
     limitPriceHint: (tick: string) => `Limit price, in steps of ${tick}.`,
+    limitPriceRequired: 'Enter a limit price',
     requiredAmount: 'Required amount',
     estimatedValue: 'Estimated value',
     availableCash: 'Available cash',

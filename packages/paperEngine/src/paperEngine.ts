@@ -765,7 +765,9 @@ export class PaperEngine {
     extra: { fillPrice?: number; note?: string | null } = {},
   ): void {
     const entries = this.#history.get(order.id) ?? [];
-    entries.push(historyEntry(order, event, this.#now().toISOString(), extra));
+    // PLACED reuses placedAt: reading the clock again can land a millisecond later.
+    const at = event === 'PLACED' ? order.placedAt : this.#now().toISOString();
+    entries.push(historyEntry(order, event, at, extra));
     this.#history.set(order.id, entries);
   }
 

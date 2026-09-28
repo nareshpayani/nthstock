@@ -2,7 +2,8 @@
 
 > Status: **v0.3** (2026-09-25). All requirement questions settled; full Q&A log in `docs/requirements-qa.md`.
 > Owner: Naresh Payani (@nareshpayani). Every agent working on this project reads this file first.
-> Phase 1 (Foundation and design system) in progress.
+> Phase 1 foundation work complete (2026-09-28): implementation list T-001 to T-174 built on the mock
+> backend (`docs/research/implementation-tasks.md`); phase demo T-175 awaiting owner sign-off.
 
 ## 0. Decisions (confirmed by owner, 2026-09-25)
 | # | Topic | Decision |
@@ -17,7 +18,7 @@
 | D8 | Design | Same layout and information architecture as the reference, with **nthstock's own light theme** (own palette, typography, logo). Storybook is the design source. |
 | D9 | Repository | **Public**: https://github.com/nareshpayani/nthstock. No secrets, keys or real user data ever committed. |
 | D10 | Platforms | Desktop web first; mobile app later (React Native + Expo), so tokens, API client, contracts and utils live in `packages/*`. |
-| D11 | Tooling | **npm workspaces + Turborepo** (not pnpm). ESLint + Prettier. No git hooks; CI enforces. Conventional Commits, squash merge. |
+| D11 | Tooling | **npm workspaces + Turborepo** (not pnpm). ESLint + Prettier. No local git hooks; CI enforces (CI agent runners install a pre-push guard against pushing to `main`). Conventional Commits, squash merge. |
 
 ## 1. Product vision
 
@@ -123,15 +124,23 @@ nthstock/
 ├── CLAUDE.md
 ├── apps/
 │   ├── web/                   # Vite React SPA
+│   │   ├── e2e/               # Playwright specs (msw and api mode, perf)
+│   │   ├── scripts/           # post-build budget checks and guards (no raw hex, import boundaries)
 │   │   └── src/
 │   │       ├── app/           # providers, layouts (AppShell), router, queryClient
 │   │       ├── routes/        # TanStack Router file routes; thin: loader prefetch → feature page
 │   │       ├── features/      # dashboard, watchlist, search, stockDetail, orderTicket, orders… (ADR 0005)
 │   │       │   └── <feature>/ { index.ts, components/, hooks/, api/, store/, model/, strings.ts }
 │   │       ├── shared/        # cross-feature components, hooks, lib
-│   │       └── mocks/         # MSW handlers
+│   │       ├── mocks/         # MSW handlers
+│   │       ├── styles/        # global CSS (token imports, Tailwind base layer)
+│   │       └── test/          # test helpers: render wrappers, fixtures, browser API stubs
 │   ├── api/                   # Fastify modular monolith
-│   │   └── src/modules/<module>/ { routes.ts, service.ts, repo.ts, schema.ts, *.test.ts }
+│   │   └── src/
+│   │       ├── modules/<module>/ { routes.ts, service.ts, repo.ts, schema.ts, *.test.ts } (where relevant)
+│   │       ├── http/          # cross-module HTTP plumbing: errors, cookies, CSRF, security headers
+│   │       ├── ticks/         # mock tick pump and quote publisher
+│   │       └── test/          # test helpers: injected backend, manual clock, test Redis
 │   ├── realtime/              # WebSocket server
 │   └── mobile/                # (later) React Native + Expo
 ├── packages/
@@ -144,10 +153,12 @@ nthstock/
 │   ├── config/                # eslint, tsconfig, prettier, vitest presets
 │   └── utils/                 # INR formatting, market hours, IST dates
 ├── infra/                     # docker-compose, terraform
+├── tools/research/            # reference capture scripts, run locally by the owner (observe only)
 ├── docs/
 │   ├── requirements-qa.md     # every requirement question and answer
 │   ├── adr/                   # architecture decision records (NNNN-title.md)
-│   ├── specs/                 # one spec per feature, approved before build
+│   ├── specs/                 # one spec per feature, approved before build (index in README.md)
+│   ├── research/              # reference research, tech direction, implementation task list
 │   └── runbooks/
 ├── .claude/                   # agent settings, hooks, skills, subagents
 └── .github/                   # workflows, PR template, CODEOWNERS
@@ -157,8 +168,8 @@ nthstock/
 
 ### Code
 - TypeScript `strict: true`; no `any` without a comment explaining why.
-- Naming: camelCase for files, folders, variables and functions (`useQuotes.ts`, `formatInr.ts`); PascalCase for React component files, components and types (`WatchlistCard.tsx`). Named exports only.
-- Money: never floats. Store paise as integers; format with `Intl.NumberFormat('en-IN')` (₹, lakh/crore grouping).
+- Naming: camelCase for files, folders, variables and functions (`useQuotes.ts`, `formatInr.ts`); PascalCase for React component files, components and types (`WatchlistCard.tsx`). Module-level constants may be UPPER_SNAKE_CASE (`MAX_ROWS`). Named exports only; default exports only where tooling requires them (Storybook stories, config files).
+- Money: never floats. Store paise as integers; format with `Intl.NumberFormat('en-IN')` (₹, lakh/crore grouping). A money field is paise because its contract type says so (the `Paise` schema in `packages/contracts`), not because of a name suffix.
 - Time: store UTC, display IST (`Asia/Kolkata`). Market hours and holidays live in `packages/utils`.
 - Every API and WS message is typed from `packages/contracts`.
 - Web UI layers and patterns follow ADR 0005: imports go routes → features → shared → packages;
@@ -201,10 +212,10 @@ Humans set direction and approve; agents plan, build, test and review.
 1. **Spec first.** Every feature starts as `docs/specs/<feature>.md` (problem, UX, API contract, acceptance criteria). Owner approves the spec in chat before code.
 2. **Architecture changes** go through an ADR in `docs/adr/`.
 3. **Tracking:** one GitHub Issue per spec/task; a GitHub Projects board per phase.
-4. **Agent team** (details in `docs/agent-workflow.md`, ADR 0003): **Planner**, **Developer**, **Reviewer**, **Fixer**, running on GitHub Actions with role definitions in `.claude/agents/`. Labels drive the loop: `plan:approved` → spec PR + stories → merge spec → `agent:ready` → PR → review → `agent:fix-needed` (Fixer, same PR) or `ready-to-merge`. Once every check is green, `agent-automerge.yml` squash-merges the PR (owner decision 2026-09-26; spec PRs, drafts, Dependabot and PRs labelled `needs-human`, `agent:fix-needed` or `do-not-merge` are skipped). Max 3 review rounds, then `needs-human`.
+4. **Agent team** (details in `docs/agent-workflow.md`, ADR 0003, ADR 0006): **Planner**, **Developer**, **Reviewer**, **Fixer**, running on GitHub Actions with role definitions in `.claude/agents/`. Labels drive the loop: `plan:approved` → spec PR + stories → merge spec → `agent:ready` → PR → review → `agent:fix-needed` (Fixer, same PR) or `ready-to-merge`. Green non-spec PRs labelled `ready-to-merge` auto-merge per ADR 0006 (`agent-automerge.yml`, owner decision 2026-09-26); the owner merges spec PRs and PRs that touch agent/CI config (`.github/`, `.claude/`, `CLAUDE.md`). Max 3 review rounds, then `needs-human`.
 5. **Agents may:** write specs, code and tests; open PRs; fix CI failures and review comments on their own.
-6. **Agents never:** merge a PR by hand (only `agent-automerge.yml` merges, and only green PRs), push to `main`, deploy to production, touch real money, commit secrets, or add a paid service or a dependency outside the approved stack without asking.
-7. **Review:** a review agent comments on every PR; green PRs merge automatically, and the owner approves specs and can hold any PR with `do-not-merge`.
+6. **Agents never:** merge a PR by hand (only `agent-automerge.yml` merges, per ADR 0006), push to `main`, deploy to production, touch real money, commit secrets, or add a paid service or a dependency outside the approved stack without asking.
+7. **Review:** a review agent comments on every PR; green non-spec PRs auto-merge per ADR 0006; the owner merges spec PRs and PRs touching agent/CI config, and can hold any PR with `do-not-merge`.
 8. **Environments:** local Docker Compose → free preview deploy per PR (web) → staging + prod from Phase 6.
 9. **Budget:** free tiers until Phase 6; owner approves any paid service.
 10. **One phase at a time.** No phase starts without owner sign-off in the project chat.

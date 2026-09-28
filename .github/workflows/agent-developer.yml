@@ -35,6 +35,10 @@ jobs:
       ISSUE: ${{ github.event.issue.number || github.event.inputs.issue }}
     steps:
       - uses: actions/checkout@v7
+      - name: Block pushes to main
+        run: |
+          printf '#!/bin/sh\nwhile read -r _ _ ref _; do [ "$ref" = refs/heads/main ] && { echo "Pushing to main is not allowed." >&2; exit 1; }; done\nexit 0\n' > .git/hooks/pre-push
+          chmod +x .git/hooks/pre-push
       - uses: actions/setup-node@v7
         with:
           node-version-file: .nvmrc
