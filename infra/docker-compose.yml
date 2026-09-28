@@ -45,6 +45,23 @@ services:
       retries: 30
     restart: unless-stopped
 
+  pgbouncer:
+    # Optional (T-184), only with the `pool` profile: PgBouncer in transaction mode on
+    # 127.0.0.1:6432, for running apps/api or its tests through a pooler like production (Phase 6).
+    #   docker compose -f infra/docker-compose.yml --profile pool up -d --wait
+    # Pinned by digest (v1.25.2-p0). Config and dev userlist from infra/pgbouncer/.
+    image: edoburu/pgbouncer:v1.25.2-p0@sha256:7d7a27d9e90985cab5cf42256f5c13a3120baa4b055b69df37beb272b89b2340
+    profiles: ['pool']
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./pgbouncer/pgbouncer.ini:/etc/pgbouncer/pgbouncer.ini:ro
+      - ./pgbouncer/userlist.txt:/etc/pgbouncer/userlist.txt:ro
+    ports:
+      - '127.0.0.1:6432:6432'
+    restart: unless-stopped
+
 volumes:
   # Survives `npm run infra:down`; `docker compose -f infra/docker-compose.yml down -v` resets it.
   postgres-data:

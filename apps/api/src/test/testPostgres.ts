@@ -12,6 +12,9 @@ import { runMigrations } from '../db/migrate.js';
  * - `POSTGRES_TEST_URL=postgres://postgres:…@127.0.0.1:5432/postgres`: uses that server instead
  *   (CI's service container, `npm run infra:up`, or a local cluster). It must be a superuser: the
  *   helper creates the roles and one database per worker.
+ * - `POSTGRES_TEST_POOLER_URL=postgres://127.0.0.1:6432` (optional, T-184): the app and purge
+ *   roles connect through this PgBouncer (transaction mode) instead, like production; setup,
+ *   migrations and truncation still go straight to Postgres.
  * - `SKIP_PG_INTEGRATION=1`: the only way to skip these suites, for a machine with neither. It is
  *   explicit, printed, and shows up as skipped tests in the Vitest summary. CI never sets it.
  *
@@ -76,6 +79,15 @@ export function withCredentials(
   return next.toString();
 }
 
+/** `url` with the host and port of `other`. */
+function withHostOf(url: string, other: string): string {
+  const next = new URL(url);
+  const { hostname, port } = new URL(other);
+  next.hostname = hostname;
+  next.port = port;
+  return next.toString();
+}
+
 async function startServer(): Promise<string> {
   const external = process.env.POSTGRES_TEST_URL;
   if (external) return external;
@@ -120,6 +132,8 @@ async function createTestDatabase(): Promise<TestPostgres> {
   await withClient(adminUrl, (client) => client.query(initSql));
   const as = (user: keyof typeof ROLE_PASSWORDS) =>
     withCredentials(serverUrl, { user, password: ROLE_PASSWORDS[user], database });
+  const pooler = process.env.POSTGRES_TEST_POOLER_URL;
+  const pooled = (url: string) => (pooler ? withHostOf(url, pooler) : url);
   const ownerUrl = as('nthstock_owner');
   await runMigrations(ownerUrl);
   // One owner connection for truncation; it does not keep the worker alive.
@@ -129,8 +143,8 @@ async function createTestDatabase(): Promise<TestPostgres> {
     database,
     adminUrl,
     ownerUrl,
-    appUrl: as('nthstock_app'),
-    purgeUrl: as('nthstock_purge'),
+    appUrl: pooled(as('nthstock_app')),
+    purgeUrl: pooled(as('nthstock_purge')),
     async truncate() {
       const { rows } = await owner.query<{ name: string }>(
         `select format('%I.%I', schemaname, tablename) as name

@@ -32,6 +32,43 @@ docker compose -f infra/docker-compose.yml down -v   # delete the volume: an emp
 
 `init.sql` runs only on an empty volume. After changing it, reset the volume as above.
 
+## PgBouncer (optional, profile `pool`)
+
+Production (Phase 6) puts PgBouncer in **transaction mode** between apps/api and Postgres
+(CLAUDE.md §4, ADR 0007): a server connection goes back to the pool after every transaction and
+the next transaction may belong to another client. apps/api must work unchanged through it.
+
+### PgBouncer rules
+
+1. **Unnamed statements only.** Drizzle with `pg` sends unnamed statements; never call Drizzle's
+   `.prepare()` or SQL `PREPARE` (`max_prepared_statements = 0` here).
+2. **`SET LOCAL` only.** No `SET`, `SET SESSION` or `RESET` outside a transaction; use `SET LOCAL`
+   or `set_config(name, value, true)` inside one (`Database.transaction` sets `statement_timeout`
+   this way).
+3. **No `LISTEN`/`NOTIFY`** (or `pg_notify`). Cross-process events go over Redis pub/sub.
+4. **No session advisory locks** (`pg_advisory_lock`, `pg_try_advisory_lock`); use
+   `pg_advisory_xact_lock` or row locks inside a transaction.
+5. **No temp tables** (the app role cannot create them anyway).
+
+`apps/api/src/db/pgbouncerRules.test.ts` greps every non-test file in `apps/api/src` for these
+forms on every `npm run test`.
+
+### Running through PgBouncer locally
+
+[`pgbouncer/pgbouncer.ini`](./pgbouncer/pgbouncer.ini) listens on `127.0.0.1:6432`, forwards every
+database to the compose Postgres, and authenticates `nthstock_app` and `nthstock_purge` from the dev
+`pgbouncer/userlist.txt`. The owner and superuser connect to Postgres directly.
+
+```bash
+docker compose -f infra/docker-compose.yml --profile pool up -d --wait
+# apps/api through the pooler
+DATABASE_URL=postgres://nthstock_app:nthstock_app_dev@127.0.0.1:6432/nthstock npm run dev:api
+# the integration suite: setup and migrations direct, app-role connections through the pooler
+POSTGRES_TEST_URL=postgres://postgres:postgres_dev@127.0.0.1:5432/postgres \
+POSTGRES_TEST_POOLER_URL=postgres://127.0.0.1:6432 npm run test -w @nthstock/api
+docker compose -f infra/docker-compose.yml --profile pool down   # stops PgBouncer too
+```
+
 ## Redis 7 (Docker Compose)
 
 `docker-compose.yml` runs Redis 7 on `127.0.0.1:6379` with no password and no persistence. It

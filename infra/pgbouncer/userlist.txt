@@ -1,0 +1,2 @@
+"nthstock_app" "nthstock_app_dev"
+"nthstock_purge" "nthstock_purge_dev"
