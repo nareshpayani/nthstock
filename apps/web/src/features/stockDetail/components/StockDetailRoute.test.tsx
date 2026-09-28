@@ -38,12 +38,15 @@ describe('stock detail route (T-105)', () => {
     renderApp('/stocks/INFY', { apiClient: api.apiClient });
     await screen.findByRole('region', { name: 'Overview' });
     const main = screen.getByRole('main');
+    const titles = ['Price chart', 'Market depth', 'Key stats', 'Overview'];
     const names = within(main)
       .getAllByRole('region')
       .map((region) => region.getAttribute('aria-labelledby'))
       .map((id) => (id ? document.getElementById(id)?.textContent : null))
-      .filter(Boolean);
-    expect(names).toEqual(['Price chart', 'Market depth', 'Key stats', 'Overview']);
+      .filter((text): text is string => Boolean(text))
+      // During NSE hours the chart heading also holds the LIVE badge's text, so match by prefix.
+      .map((text) => titles.find((title) => text.startsWith(title)) ?? text);
+    expect(names).toEqual(titles);
   });
 
   it('/stocks/NOPE shows not-found with the symbol and a way back', async () => {

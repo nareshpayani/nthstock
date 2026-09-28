@@ -3,6 +3,7 @@ import { systemClock } from '@nthstock/utils';
 import { RouterProvider } from '@tanstack/react-router';
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
+import { z } from 'zod';
 import { createLiveQuotes } from './app/liveQuotes';
 import { AppProviders } from './app/providers/AppProviders';
 import { createQueryClient } from './app/queryClient';
@@ -12,15 +13,22 @@ import { restSnapshot, startVisibilitySync } from './app/visibilitySync';
 import { wantsDemo, withoutDemoParam } from './mocks/demoParam';
 import { createSessionApiClient } from './shared/lib/sessionClient';
 
+// Zod would otherwise probe `new Function` once, which the CSP (script-src 'self') reports as a
+// violation; its interpreter is plenty fast for this app's payloads.
+z.config({ jitless: true });
+
 // Fails fast on an invalid VITE_API_MODE or URL (T-049).
 const config = parseRuntimeConfig(import.meta.env);
 
 /**
  * msw mode: loads the lazy MSW + mock-market chunk and starts the worker, beside the first render
  * (T-169). The REST client and the quote socket wait for the returned promise; the shell, header
- * and hero do not. `?demo=1` is read and dropped here, before the router starts (T-174).
+ * and hero do not. It resolves to `ensureActive`, which the REST client runs before each request
+ * so a service worker Chrome stopped while the tab sat idle is mocking again. After a hard reload
+ * the worker does not control the page at all, so the page reloads once instead. `?demo=1` is read
+ * and dropped here, before the router starts (T-174).
  */
-async function startMocks(): Promise<void> {
+async function startMocks(): Promise<() => Promise<void>> {
   const demo = wantsDemo(window.location.search);
   if (demo) {
     window.history.replaceState(window.history.state, '', withoutDemoParam(window.location.href));
@@ -32,7 +40,7 @@ async function startMocks(): Promise<void> {
     import.meta.env.VITE_TEST_CONTROLS === 'true'
       ? (await import('./mocks/testControls')).createTestControls()
       : undefined;
-  await startMockWorker(config, testControls, { demo });
+  const { ensureActive } = await startMockWorker(config, testControls, { demo });
   // After a hard reload the worker is not in control, so reload once; hold every request until then.
   let storage: Storage | undefined;
   try {
@@ -48,6 +56,7 @@ async function startMocks(): Promise<void> {
     storage,
   });
   if (control === 'reloading') await new Promise<never>(() => undefined);
+  return ensureActive;
 }
 
 function boot() {
@@ -58,10 +67,13 @@ function boot() {
 
   // VITE_API_MODE is a build-time constant (vite.config.ts), so in an api-mode build this branch
   // and the MSW chunk it imports are removed entirely (T-050), and nothing is gated.
-  let mocksReady: Promise<void> | undefined;
+  let mocksReady: Promise<unknown> | undefined;
+  let beforeRequest: (() => Promise<unknown>) | undefined;
   if (import.meta.env.VITE_API_MODE === 'msw') {
-    mocksReady = startMocks();
-    mocksReady.catch((error: unknown) => {
+    const started = startMocks();
+    mocksReady = started;
+    beforeRequest = () => started.then((ensureActive) => ensureActive());
+    started.catch((error: unknown) => {
       console.error('The mock worker did not start; requests go to the network.', error);
     });
   }
@@ -70,7 +82,7 @@ function boot() {
   // Sends the CSRF token and refreshes an expired session once on a 401 (T-089).
   const apiClient = createSessionApiClient({
     baseUrl: config.apiBaseUrl,
-    ...(mocksReady ? { ready: mocksReady } : {}),
+    ...(beforeRequest ? { ready: beforeRequest } : {}),
   });
   const router = createAppRouter({ queryClient, apiClient });
   const { wsClient, quoteStore, orderUpdates } = createLiveQuotes(

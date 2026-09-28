@@ -55,9 +55,10 @@ export async function ensureSession(apiClient: ApiClient): Promise<Session | nul
 export type SessionApiClientOptions = Omit<ApiClientOptions, 'csrfToken' | 'onUnauthorized'> & {
   /**
    * msw mode (T-169): every request waits for this, the MSW worker's start, so the page renders
-   * first. Omitted in api mode.
+   * first. As a function it runs before each request (the worker keep-alive check). Omitted in
+   * api mode.
    */
-  ready?: Promise<unknown>;
+  ready?: Promise<unknown> | (() => Promise<unknown>);
 };
 
 /**
