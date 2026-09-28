@@ -66,6 +66,21 @@ SKIP_REDIS_INTEGRATION=1 npm run test                # skip, with a printed noti
 
 Without Docker and without either variable, those suites fail with a message saying so.
 
+## Postgres in tests
+
+Postgres integration tests in `apps/api` (`describeWithPostgres`, helper
+`apps/api/src/test/testPostgres.ts`) start `postgres:16-alpine` with Testcontainers, so they need
+Docker. Each test worker gets its own database (`nthstock_test_api_<n>`) with the roles from
+`postgres/init.sql` and every migration applied; suites connect as `nthstock_app` and the helper
+truncates as `nthstock_owner` between tests.
+
+Locally without Docker, point them at any Postgres 16 **superuser** URL, or skip them explicitly:
+
+```bash
+POSTGRES_TEST_URL=postgres://postgres:postgres_dev@127.0.0.1:5432/postgres npm run test
+SKIP_PG_INTEGRATION=1 npm run test   # skip, with a printed notice; never in CI
+```
+
 ## k6 smoke tests
 
 [`k6/`](./k6/README.md) holds local-only load scripts (not run in CI): `wsSmoke.js` opens 1,000

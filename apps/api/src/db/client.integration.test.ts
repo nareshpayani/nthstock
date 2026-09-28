@@ -1,12 +1,15 @@
 import { sql } from 'drizzle-orm';
-import { afterAll, describe, expect, it } from 'vitest';
-import { createDatabase } from './client.js';
+import { afterAll, beforeAll, expect, it } from 'vitest';
+import { describeWithPostgres, useTestPostgres } from '../test/testPostgres.js';
+import { createDatabase, type Database } from './client.js';
 
-// Smoke test against a running Postgres (`npm run infra:up`, or any server) at POSTGRES_TEST_URL.
-const url = process.env.POSTGRES_TEST_URL;
+describeWithPostgres('Postgres client (integration)', () => {
+  let database: Database;
 
-describe.skipIf(!url)('Postgres client (integration)', () => {
-  const database = createDatabase({ url: url ?? '', poolMax: 2 });
+  beforeAll(async () => {
+    // As nthstock_app, like apps/api.
+    database = createDatabase({ url: (await useTestPostgres()).appUrl, poolMax: 2 });
+  }, 180_000);
 
   afterAll(async () => {
     await database.close();
