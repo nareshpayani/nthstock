@@ -8,6 +8,8 @@ import {
 import { beforeEach, describe, expect, it } from 'vitest';
 import { ApiHttpError } from '../../http/apiError.js';
 import { manualClock, type ManualClock } from '../../test/manualClock.js';
+import { createMemoryAuditRepo } from '../audit/repo.js';
+import { createMemoryUsersRepo } from '../users/repo.js';
 import { createMockCaptchaVerifier } from './captcha.js';
 import { createOtpService, type OtpService } from './otpService.js';
 import { createMemoryAuthRepo } from './repo.js';
@@ -26,6 +28,8 @@ function build(production = false) {
   service = createOtpService({
     clock,
     repo: createMemoryAuthRepo(),
+    users: createMemoryUsersRepo({ clock }),
+    audit: createMemoryAuditRepo({ clock }),
     sms: createMockSmsProvider({ log: (line) => lines.push(line), production }),
     captcha: createMockCaptchaVerifier({ production }),
     production,

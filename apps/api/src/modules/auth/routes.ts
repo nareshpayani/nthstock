@@ -22,6 +22,8 @@ export const authRoutes =
     const otp = createOtpService({
       clock: deps.clock,
       repo: deps.repos.auth,
+      users: deps.repos.users,
+      audit: deps.repos.audit,
       sms: deps.sms,
       captcha: deps.captcha,
       production: deps.production,
@@ -31,6 +33,7 @@ export const authRoutes =
       repo: deps.repos.auth,
       users: deps.repos.users,
       secret: deps.jwtSecret,
+      audit: deps.repos.audit,
     });
     const authenticate = createAuthenticate(sessions);
     const pins = createPinService({
@@ -39,6 +42,7 @@ export const authRoutes =
       users: deps.repos.users,
       sessions,
       hasher: deps.pinHasher,
+      audit: deps.repos.audit,
     });
     const secure = deps.production;
 
@@ -62,6 +66,7 @@ export const authRoutes =
         const trusted = await pins.trustedDevice(requestCookies(request)[AUTH_COOKIES.device]);
         const issued = await sessions.start({
           user,
+          method: 'OTP',
           userAgent: request.headers['user-agent'],
           deviceId: trusted?.userId === user.id ? trusted.id : null,
         });
@@ -120,7 +125,7 @@ export const authRoutes =
       app,
       'logout',
       async ({ request, reply }) => {
-        await sessions.revoke(authContextOf(request).session.id);
+        await sessions.logout(authContextOf(request));
         clearSessionCookies(reply, { secure });
         return { ok: true as const };
       },

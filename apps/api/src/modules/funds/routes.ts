@@ -19,6 +19,7 @@ export const fundsRoutes =
         repo: deps.repos.auth,
         users: deps.repos.users,
         secret: deps.jwtSecret,
+        audit: deps.repos.audit,
       }),
     );
     const funds = createFundsService({ orders: deps.orders });

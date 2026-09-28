@@ -16,6 +16,10 @@ export type AuditActor = { type: 'user'; userId: string } | { type: 'system' };
  * - `FUNDS_MOVEMENT`: a funds ledger entry: opening credit, block, release, trade debit or credit,
  *   reset.
  * - `FUNDS_RESET`: the user reset their paper balance (T-155).
+ * - Auth (T-188): `LOGIN_SUCCESS` (detail: method OTP or PIN), `LOGIN_FAILED` (method, reason:
+ *   the error code), `PIN_SET`, `PIN_LOCKED` (the wrong PIN that locked it), `LOGOUT`,
+ *   `REFRESH_REUSE_DETECTED` (a rotated refresh token came back; the family is revoked) and
+ *   `SESSION_REVOKED` (a session ended on someone's behalf).
  */
 export const AUDIT_ACTIONS = [
   'ORDER_PLACE',
@@ -24,6 +28,13 @@ export const AUDIT_ACTIONS = [
   'ORDER_UPDATE',
   'FUNDS_MOVEMENT',
   'FUNDS_RESET',
+  'LOGIN_SUCCESS',
+  'LOGIN_FAILED',
+  'PIN_SET',
+  'PIN_LOCKED',
+  'LOGOUT',
+  'REFRESH_REUSE_DETECTED',
+  'SESSION_REVOKED',
 ] as const;
 
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];

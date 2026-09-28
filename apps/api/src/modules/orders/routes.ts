@@ -18,6 +18,7 @@ export const orderRoutes =
         repo: deps.repos.auth,
         users: deps.repos.users,
         secret: deps.jwtSecret,
+        audit: deps.repos.audit,
       }),
     );
     const { orders } = deps;
