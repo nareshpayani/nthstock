@@ -62,11 +62,6 @@ jobs:
             [ -n "$(gh pr list --repo "$repo" --state open --limit 100 --json headRefName \
               --jq '.[] | select(.headRefName | startswith("claude/fix-main-")) | .headRefName')" ]
           }
-          # The watchdog already handed a broken main to the Developer; one healer at a time.
-          watchdog_issue_open() {
-            [ -n "$(gh issue list --repo "$repo" --label watchdog --state open --limit 1 \
-              --json number --jq '.[0].number // ""')" ]
-          }
           main_is_red() {
             # The latest finished run on main: a push, the post-merge dispatch or a scheduled health run.
             [ "$(gh run list --repo "$repo" --workflow ci.yml --branch main \
@@ -109,7 +104,6 @@ jobs:
             [ "$RUN_CONCLUSION" = "failure" ] && [ "$RUN_HEAD_REPO" = "$repo" ] || exit 0
             if [ "$RUN_BRANCH" = "main" ] && [[ "$RUN_EVENT" =~ ^(push|schedule|workflow_dispatch)$ ]]; then
               fix_main_pr_open && { echo "A fix-main PR is already open."; exit 0; }
-              watchdog_issue_open && { echo "An open watchdog issue already covers main."; exit 0; }
               emit main "" "claude/fix-main-${RUN_SHA:0:7}" "CI is red on main ($RUN_URL)"
               exit 0
             fi
@@ -124,7 +118,7 @@ jobs:
 
           # schedule / workflow_dispatch: sweep. main first, then the oldest red PR.
           if main_is_red; then
-            fix_main_pr_open || watchdog_issue_open || emit main "" "claude/fix-main-$(git ls-remote "https://github.com/$repo" refs/heads/main | cut -c1-7)" "CI is red on main"
+            fix_main_pr_open || emit main "" "claude/fix-main-$(git ls-remote "https://github.com/$repo" refs/heads/main | cut -c1-7)" "CI is red on main"
             exit 0
           fi
           for row in $(gh pr list --repo "$repo" --state open --limit 100 \

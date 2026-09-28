@@ -38,18 +38,15 @@ makes the Fixer open one `claude/fix-main-*` PR, which then goes through review 
 **Scheduled health checks** (`ci.yml`). Full CI runs on `main` at 09:20 and 12:30 IST on weekdays
 (NSE open) and 20:00 IST daily (market closed), so time-dependent breakage is caught.
 
-**Watchdog** (`agent-watchdog.yml`, #233, merged by the owner 2026-09-28). Every 2 hours it runs the
-unit tests and Playwright on `main`. When red it opens one `bug` + `watchdog` issue and starts the
-Developer; when green it closes that issue. `AGENT_WATCHDOG=false` turns it off.
-
-Only one healer works on `main` at a time: the Fixer skips while a `watchdog` issue is open, and the
-watchdog skips while a `claude/fix-main-*` PR is open.
+**No separate watchdog.** A 2-hourly watchdog (`agent-watchdog.yml`, #233) was added and then removed
+the same day by owner decision (2026-09-28): it overlapped the scheduled health runs and could open a
+second fix for the same breakage. The Fixer is the only healer for `main`.
 
 ## Consequences
 
 - PRs merge within minutes of going green, so fewer go stale or conflict.
 - The owner reviews after the fact, or holds a PR with `do-not-merge`. A mistake the Reviewer and CI
-  both miss reaches `main`; the health runs and the watchdog shorten how long it stays there.
+  both miss reaches `main`; the scheduled health runs shorten how long it stays there.
 - If `main`'s branch protection requires an approving review, auto-merge fails until that is relaxed.
 - Agent and CI config changes, and specs, still wait for the owner.
-- Scheduled runs and the watchdog spend Actions minutes and, when red, Claude usage.
+- Scheduled runs spend Actions minutes and, when red, Claude usage.
