@@ -9,6 +9,7 @@ export const strings = {
     funds: 'Funds',
   },
   header: {
+    home: 'nthstock home',
     openMenu: 'Open menu',
     support: 'Help and support',
     more: 'More',

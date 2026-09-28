@@ -38,7 +38,7 @@ export function Header({ onOpenMenu, onOpenHelp }: HeaderProps) {
           onClick={onOpenMenu}
           className="lg:hidden"
         />
-        <Link to="/dashboard" aria-label="nthstock home" className="shrink-0 rounded-md">
+        <Link to="/dashboard" aria-label={strings.header.home} className="shrink-0 rounded-md">
           <Logo />
         </Link>
         <HeaderTickers

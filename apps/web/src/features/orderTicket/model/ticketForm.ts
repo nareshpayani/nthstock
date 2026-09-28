@@ -10,6 +10,7 @@ import {
   type Order,
 } from '@nthstock/contracts';
 import { z } from 'zod';
+import { strings } from '../strings';
 
 /**
  * The ticket form (T-136), built from the contract schemas in packages/contracts so the ticket
@@ -33,7 +34,7 @@ export const TicketFormSchema = z
     }
     if (value.type !== 'LIMIT') return;
     if (value.price === null) {
-      ctx.addIssue({ code: 'custom', path: ['price'], message: 'Enter a limit price' });
+      ctx.addIssue({ code: 'custom', path: ['price'], message: strings.form.limitPriceRequired });
       return;
     }
     const price = TickPrice.safeParse(value.price);
