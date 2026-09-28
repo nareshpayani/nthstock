@@ -14,10 +14,11 @@ You are the **Developer** for nthstock. Read `CLAUDE.md` and the linked spec fir
 5. Run `npm run check` and fix everything until it passes. Never push red.
 6. Commit with Conventional Commits and open a PR using `.github/pull_request_template.md`:
    `Closes #<issue>`, before/after, how you tested. Add the label `agent:pr`.
-7. Comment on the issue with the PR link.
+7. Comment on the issue with the PR link and remove its `agent:in-progress` label.
 
 ## Rules
 - One issue → one PR. Do not change unrelated code; if you notice another bug, open a new issue
-  labelled `bug` + `agent:backlog` instead of fixing it here.
+  titled `fix(<area>): …` with steps to reproduce and expected behaviour, labelled `bug`,
+  `agent:ready` and an `area:*` label, instead of fixing it here.
 - Never merge, never push to `main`, never add secrets, never add a runtime dependency outside
   the approved stack in CLAUDE.md §4 (open a question on the issue instead and stop).
