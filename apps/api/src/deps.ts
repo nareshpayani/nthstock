@@ -1,4 +1,5 @@
 import { MockMarketDataAdapter, type MarketDataAdapter } from '@nthstock/marketData';
+import type { Redis } from 'ioredis';
 import { systemClock, type Clock } from '@nthstock/utils';
 import type { DbDriver } from './config.js';
 import { createDatabase, type Database } from './db/client.js';
@@ -7,6 +8,7 @@ import { createMockCaptchaVerifier, type CaptchaVerifier } from './modules/auth/
 import { resolveJwtSecret } from './modules/auth/jwtSecret.js';
 import { createArgon2PinHasher, type PinHasher } from './modules/auth/pinHasher.js';
 import { createPgAuthRepo } from './modules/auth/pgRepo.js';
+import { createRedisOtpStore } from './modules/auth/redisOtpStore.js';
 import { createMemoryAuthRepo, createMemoryOtpStore, type AuthRepo } from './modules/auth/repo.js';
 import {
   createMockSmsProvider,
@@ -24,7 +26,7 @@ import { createMemoryWatchlistsRepo, type WatchlistsRepo } from './modules/watch
 /**
  * Every module's storage seam (ADR 0004 §3). Each module's Postgres repo (`pgRepo.ts`) takes over
  * under `DB_DRIVER=postgres` as it lands (ADR 0007); so far the audit log (T-187), users
- * (T-190) and auth devices and PINs (T-191). The rest are in memory under both drivers.
+ * (T-190), and auth devices, PINs and sessions (T-191, T-192) with OTPs in Redis (T-193). The rest are in memory under both drivers.
  */
 export type Repos = {
   users: UsersRepo;
@@ -91,6 +93,13 @@ export type DepsOverrides = {
   /** Where the pool reports errors on idle connections; default: nowhere. */
   onDatabaseError?: (error: Error) => void;
   /**
+   * Redis for short-lived auth state under `DB_DRIVER=postgres` (ADR 0007): OTP challenges and the
+   * resend throttle (T-193). Left out, that state stays in this process. The caller owns the client.
+   */
+  redis?: Redis;
+  /** Namespace of the keys apps/api writes to `redis`; default `nthstock:` (tests use their own). */
+  redisKeyPrefix?: string;
+  /**
    * PII column keys for the Postgres repos (`PII_ENC_KEYS`, `PII_HMAC_KEY`; T-189). Left out, the
    * development keys, which production refuses.
    */
@@ -136,8 +145,18 @@ export function createDeps(overrides: DepsOverrides = {}): AppDeps {
         : createMemoryUsersRepo({ clock })),
     auth:
       overrides.repos?.auth ??
-      (database
-        ? createPgAuthRepo({ database, clock, otp: createMemoryOtpStore() })
+      (database && pii
+        ? createPgAuthRepo({
+            database,
+            clock,
+            otp: overrides.redis
+              ? createRedisOtpStore({
+                  redis: overrides.redis,
+                  pii,
+                  ...(overrides.redisKeyPrefix ? { prefix: overrides.redisKeyPrefix } : {}),
+                })
+              : createMemoryOtpStore(),
+          })
         : createMemoryAuthRepo()),
     watchlists: overrides.repos?.watchlists ?? createMemoryWatchlistsRepo(),
     orders: overrides.repos?.orders ?? createMemoryOrdersRepo(),

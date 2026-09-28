@@ -102,12 +102,15 @@ describe('loadConfig', () => {
     expect(() => loadConfig({ PG_POOL_MAX: 'many' })).toThrow(/PG_POOL_MAX/);
   });
 
-  it('picks the storage driver; postgres needs DATABASE_URL (T-182)', () => {
+  it('picks the storage driver; postgres needs DATABASE_URL and REDIS_URL (T-182, T-193)', () => {
     expect(loadConfig({ DB_DRIVER: 'memory' }).dbDriver).toBe('memory');
     expect(() => loadConfig({ DB_DRIVER: 'postgres' })).toThrow(
       /DB_DRIVER=postgres needs DATABASE_URL/,
     );
     expect(() => loadConfig({ DB_DRIVER: 'sqlite' })).toThrow(/DB_DRIVER/);
+    expect(() =>
+      loadConfig({ DB_DRIVER: 'postgres', DATABASE_URL: 'postgres://u:p@db:5432/nthstock' }),
+    ).toThrow(/DB_DRIVER=postgres needs REDIS_URL/);
   });
 
   it('refuses to start in production without the PII keys, or with bad ones (T-189)', () => {

@@ -64,7 +64,7 @@ export type ApiConfig = {
   pgPoolMax: number;
   /**
    * `DB_DRIVER` (T-182): `memory` (default; unit tests) or `postgres` (`npm run dev:api`, E2E),
-   * which needs DATABASE_URL.
+   * which needs DATABASE_URL and REDIS_URL.
    */
   dbDriver: DbDriver;
   /**
@@ -102,6 +102,11 @@ export function loadConfig(env: Readonly<Record<string, string | undefined>>): A
   }
   if (parsed.data.DB_DRIVER === 'postgres' && !parsed.data.DATABASE_URL) {
     throw new Error('Invalid apps/api environment: DB_DRIVER=postgres needs DATABASE_URL');
+  }
+  if (parsed.data.DB_DRIVER === 'postgres' && !parsed.data.REDIS_URL) {
+    // Short-lived auth state (OTP challenges, the session revocation cache) lives in Redis, so
+    // that apps/api holds no state of its own (T-193).
+    throw new Error('Invalid apps/api environment: DB_DRIVER=postgres needs REDIS_URL');
   }
   if (production && parsed.data.DEMO_SEED) {
     throw new Error('Invalid apps/api environment: DEMO_SEED is for local demos, not production');

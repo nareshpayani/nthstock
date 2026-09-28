@@ -29,6 +29,13 @@ const rateLimitRedis = config.redisUrl
   ? new Redis(config.redisUrl, { enableOfflineQueue: false, maxRetriesPerRequest: 1 })
   : null;
 
+// Short-lived auth state for DB_DRIVER=postgres (OTP challenges, T-193), so apps/api holds none.
+// Commands queue while it connects, unlike the rate-limit client, which fails fast.
+const stateRedis =
+  config.dbDriver === 'postgres' && config.redisUrl
+    ? new Redis(config.redisUrl, { maxRetriesPerRequest: 2 })
+    : null;
+
 // One Redis publisher carries ticks and per-user order updates (T-133).
 const publisher = config.redisUrl ? createRedisPublisher(config.redisUrl, tickLog) : null;
 
@@ -51,6 +58,7 @@ const app = buildApp({
     dbDriver: config.dbDriver,
     ...(config.databaseUrl ? { databaseUrl: config.databaseUrl } : {}),
     pgPoolMax: config.pgPoolMax,
+    ...(stateRedis ? { redis: stateRedis } : {}),
     onDatabaseError: (error) => process.stderr.write(`postgres pool error: ${error.message}\n`),
     marketAlwaysOpen: config.mockMarketAlwaysOpen,
     production: config.production,
@@ -67,6 +75,7 @@ const app = buildApp({
 
 app.addHook('onClose', async () => {
   await rateLimitRedis?.quit();
+  await stateRedis?.quit();
 });
 
 if (config.dbDriver === 'postgres' && config.pii.devKeys) {
