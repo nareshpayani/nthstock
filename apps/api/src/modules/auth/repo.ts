@@ -33,6 +33,16 @@ export type DeviceTokenRecord = {
   expiresAt: Date;
 };
 
+/** Why a session ended (spec backend-core §4.1). */
+export const SESSION_REVOKED_REASONS = [
+  'LOGOUT',
+  'USER_REVOKED',
+  'REUSE_DETECTED',
+  'ACCOUNT_DELETED',
+  'FACTOR_CHANGED',
+] as const;
+export type SessionRevokedReason = (typeof SESSION_REVOKED_REASONS)[number];
+
 /** A login session; its id is also the refresh token family. */
 export type SessionRecord = {
   id: string;
@@ -41,8 +51,12 @@ export type SessionRecord = {
   /** Must come back as the CSRF header on cookie-authenticated state-changing requests. */
   csrfToken: string;
   createdAt: Date;
+  /** Last authenticated request or refresh, written at most about once a minute. */
+  lastSeenAt: Date;
   expiresAt: Date;
   revokedAt: Date | null;
+  /** Set together with `revokedAt`. */
+  revokedReason: SessionRevokedReason | null;
 };
 
 /** One refresh token, stored by the SHA-256 of its value. */
@@ -96,8 +110,11 @@ export interface AuthRepo {
 
   createSession(session: SessionRecord): Promise<void>;
   getSession(id: string): Promise<SessionRecord | null>;
-  /** Marks the session (the whole refresh token family) revoked. */
-  revokeSession(id: string, at: Date): Promise<void>;
+  /**
+   * Marks the session (the whole refresh token family) revoked, for `reason`. A session already
+   * revoked keeps its first time and reason.
+   */
+  revokeSession(id: string, at: Date, reason: SessionRevokedReason): Promise<void>;
 
   /** `hash` is the SHA-256 of the token in hex. */
   putRefreshToken(hash: string, token: RefreshTokenRecord): Promise<void>;
@@ -169,7 +186,7 @@ export function composeAuthRepo(stores: {
     clearPinFailures: (userId) => devices.clearPinFailures(userId),
     createSession: (session) => sessions.createSession(session),
     getSession: (id) => sessions.getSession(id),
-    revokeSession: (id, at) => sessions.revokeSession(id, at),
+    revokeSession: (id, at, reason) => sessions.revokeSession(id, at, reason),
     putRefreshToken: (hash, token) => sessions.putRefreshToken(hash, token),
     useRefreshToken: (hash, at) => sessions.useRefreshToken(hash, at),
     reset: async () => {
@@ -193,6 +210,7 @@ const copyDevice = (d: DeviceRecord): DeviceRecord => ({
 const copySession = (s: SessionRecord): SessionRecord => ({
   ...s,
   createdAt: new Date(s.createdAt),
+  lastSeenAt: new Date(s.lastSeenAt),
   expiresAt: new Date(s.expiresAt),
   revokedAt: s.revokedAt ? new Date(s.revokedAt) : null,
 });
@@ -314,9 +332,12 @@ export function createMemorySessionStore(): SessionStore {
       const found = sessions.get(id);
       return Promise.resolve(found ? copySession(found) : null);
     },
-    revokeSession: (id, at) => {
+    revokeSession: (id, at, reason) => {
       const found = sessions.get(id);
-      if (found && !found.revokedAt) found.revokedAt = new Date(at);
+      if (found && !found.revokedAt) {
+        found.revokedAt = new Date(at);
+        found.revokedReason = reason;
+      }
       return Promise.resolve();
     },
     putRefreshToken: (hash, token) => {

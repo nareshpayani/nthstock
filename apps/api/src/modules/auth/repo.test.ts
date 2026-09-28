@@ -6,10 +6,15 @@ import { manualClock } from '../../test/manualClock.js';
 import { createPgUsersRepo } from '../users/pgRepo.js';
 import { DEMO_USER } from '../users/repo.js';
 import { createPgAuthRepo } from './pgRepo.js';
-import { createMemoryAuthRepo, createMemoryOtpStore, type DeviceRecord } from './repo.js';
+import {
+  createMemoryAuthRepo,
+  createMemoryOtpStore,
+  type DeviceRecord,
+  type SessionRecord,
+} from './repo.js';
 
 // The auth repo conformance suite: memory and Postgres behave the same. Devices, device tokens
-// and PINs (T-191).
+// and PINs (T-191); sessions and refresh tokens (T-192).
 
 const clock = manualClock('2026-09-28T04:30:00.000Z');
 const at = (iso: string) => new Date(iso);
@@ -25,6 +30,18 @@ const device = (id: string, userId: string = 'usr_a'): DeviceRecord => ({
   trusted: false,
   createdAt: at('2026-09-28T04:30:00.000Z'),
   lastSeenAt: at('2026-09-28T04:30:00.000Z'),
+});
+
+const session = (id: string, userId: string = 'usr_a', deviceId = 'dev_1'): SessionRecord => ({
+  id,
+  userId,
+  deviceId,
+  csrfToken: `csrf-${id}`,
+  createdAt: at('2026-09-28T04:30:00.000Z'),
+  lastSeenAt: at('2026-09-28T04:30:00.000Z'),
+  expiresAt: at('2026-10-28T04:30:00.000Z'),
+  revokedAt: null,
+  revokedReason: null,
 });
 
 describeRepoConformance(
@@ -141,6 +158,91 @@ describeRepoConformance(
 
       expect(counts.toSorted((x, y) => x - y)).toEqual([1, 2, 3, 4, 5]);
       expect((await repo().getPin('usr_a'))?.failures).toBe(5);
+    });
+
+    // ---- Sessions (T-192) --------------------------------------------------------------------
+    it('creates and reads a session; an unknown one is null', async () => {
+      await repo().createDevice(device('dev_1'));
+      await repo().createSession(session('ses_1'));
+
+      expect(await repo().getSession('ses_1')).toEqual(session('ses_1'));
+      expect(await repo().getSession('ses_missing')).toBeNull();
+    });
+
+    it('revokes a session with its reason, keeping the first revocation', async () => {
+      await repo().createDevice(device('dev_1'));
+      await repo().createSession(session('ses_1'));
+      await repo().createSession(session('ses_2'));
+
+      await repo().revokeSession('ses_1', at('2026-09-28T05:00:00.000Z'), 'LOGOUT');
+      await repo().revokeSession('ses_1', at('2026-09-28T06:00:00.000Z'), 'REUSE_DETECTED');
+      await repo().revokeSession('ses_missing', at('2026-09-28T06:00:00.000Z'), 'LOGOUT');
+
+      expect(await repo().getSession('ses_1')).toEqual({
+        ...session('ses_1'),
+        revokedAt: at('2026-09-28T05:00:00.000Z'),
+        revokedReason: 'LOGOUT',
+      });
+      expect(await repo().getSession('ses_2')).toEqual(session('ses_2'));
+    });
+
+    it('hands out copies of sessions', async () => {
+      await repo().createDevice(device('dev_1'));
+      await repo().createSession(session('ses_1'));
+      const read = await repo().getSession('ses_1');
+      read?.expiresAt.setUTCFullYear(1999);
+
+      expect(await repo().getSession('ses_1')).toEqual(session('ses_1'));
+    });
+
+    // ---- Refresh tokens (T-192) --------------------------------------------------------------
+    it('uses a refresh token once: the first use sees it unused, later ones see when', async () => {
+      await repo().createDevice(device('dev_1'));
+      await repo().createSession(session('ses_1'));
+      const expiresAt = at('2026-10-28T04:30:00.000Z');
+      await repo().putRefreshToken(hashOf('r1'), { sessionId: 'ses_1', expiresAt, usedAt: null });
+
+      expect(await repo().useRefreshToken(hashOf('r1'), at('2026-09-28T05:00:00.000Z'))).toEqual({
+        sessionId: 'ses_1',
+        expiresAt,
+        usedAt: null,
+      });
+      expect(await repo().useRefreshToken(hashOf('r1'), at('2026-09-28T06:00:00.000Z'))).toEqual({
+        sessionId: 'ses_1',
+        expiresAt,
+        usedAt: at('2026-09-28T05:00:00.000Z'),
+      });
+      // The first use's time stays.
+      expect(await repo().useRefreshToken(hashOf('r1'), at('2026-09-28T07:00:00.000Z'))).toEqual({
+        sessionId: 'ses_1',
+        expiresAt,
+        usedAt: at('2026-09-28T05:00:00.000Z'),
+      });
+      expect(await repo().useRefreshToken(hashOf('unknown'), at('2026-09-28T05:00:00.000Z'))).toBe(
+        null,
+      );
+    });
+
+    it('lets exactly one of 10 concurrent uses of one refresh token see it unused', async () => {
+      await repo().createDevice(device('dev_1'));
+      await repo().createSession(session('ses_1'));
+      await repo().putRefreshToken(hashOf('r1'), {
+        sessionId: 'ses_1',
+        expiresAt: at('2026-10-28T04:30:00.000Z'),
+        usedAt: null,
+      });
+
+      const results = await Promise.all(
+        Array.from({ length: 10 }, (_, i) =>
+          repo().useRefreshToken(hashOf('r1'), at(`2026-09-28T05:00:0${String(i)}.000Z`)),
+        ),
+      );
+
+      expect(results.filter((result) => result?.usedAt === null)).toHaveLength(1);
+      const firstUse = results.find((result) => result?.usedAt)?.usedAt;
+      for (const result of results) {
+        if (result?.usedAt) expect(result.usedAt).toEqual(firstUse);
+      }
     });
 
     if (driver === 'postgres') {

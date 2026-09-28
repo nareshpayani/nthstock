@@ -1,17 +1,20 @@
 import type { Clock } from '@nthstock/utils';
-import { eq, sql } from 'drizzle-orm';
+import { and, eq, isNull, sql } from 'drizzle-orm';
 import type { Database } from '../../db/client.js';
-import { deviceTokens, devices, pins } from '../../db/schema/auth.js';
+import { deviceTokens, devices, pins, refreshTokens, sessions } from '../../db/schema/auth.js';
 import {
   composeAuthRepo,
-  createMemorySessionStore,
   type AuthRepo,
   type DeviceRecord,
   type DeviceStore,
   type OtpStore,
+  type SessionRecord,
+  type SessionRevokedReason,
+  type SessionStore,
 } from './repo.js';
 
 type DeviceRow = typeof devices.$inferSelect;
+type SessionRow = typeof sessions.$inferSelect;
 
 /** A SHA-256 in hex (how the services pass token hashes) as the 32 bytes the tables store. */
 export function tokenHashBytes(hash: string): Buffer {
@@ -131,6 +134,89 @@ export function createPgDeviceStore({
   };
 }
 
+const toSession = (row: SessionRow): SessionRecord => ({
+  id: row.id,
+  userId: row.userId,
+  deviceId: row.deviceId,
+  csrfToken: row.csrfToken,
+  createdAt: row.createdAt,
+  lastSeenAt: row.lastSeenAt,
+  expiresAt: row.expiresAt,
+  revokedAt: row.revokedAt,
+  // The table's CHECK holds this to SESSION_REVOKED_REASONS.
+  revokedReason: row.revokedReason as SessionRevokedReason | null,
+});
+
+/**
+ * Sessions and refresh tokens in Postgres (T-192, spec backend-core §4.1, §5.2 and §7.1).
+ * `useRefreshToken` is one statement that locks the token row, sets `used_at` if it is unset, and
+ * returns the value it had before, so of two concurrent uses exactly one sees it unused.
+ */
+export function createPgSessionStore({ database }: { database: Database }): SessionStore {
+  const { db } = database;
+  return {
+    async createSession(session) {
+      await db.insert(sessions).values({
+        id: session.id,
+        userId: session.userId,
+        deviceId: session.deviceId,
+        csrfToken: session.csrfToken,
+        createdAt: session.createdAt,
+        lastSeenAt: session.lastSeenAt,
+        expiresAt: session.expiresAt,
+        revokedAt: session.revokedAt,
+        revokedReason: session.revokedReason,
+      });
+    },
+
+    async getSession(id) {
+      const [row] = await db.select().from(sessions).where(eq(sessions.id, id));
+      return row ? toSession(row) : null;
+    },
+
+    async revokeSession(id, at, reason) {
+      // A revoked session keeps its first time and reason.
+      await db
+        .update(sessions)
+        .set({ revokedAt: at, revokedReason: reason })
+        .where(and(eq(sessions.id, id), isNull(sessions.revokedAt)));
+    },
+
+    async putRefreshToken(hash, token) {
+      await db.insert(refreshTokens).values({
+        tokenHash: tokenHashBytes(hash),
+        sessionId: token.sessionId,
+        expiresAt: token.expiresAt,
+        usedAt: token.usedAt,
+      });
+    },
+
+    async useRefreshToken(hash, at) {
+      // UPDATE … FROM (SELECT … FOR UPDATE) RETURNING the old used_at: the second of two racing
+      // calls waits for the first's row lock, then reads the used_at the first one set.
+      const before = db
+        .select({ tokenHash: refreshTokens.tokenHash, usedAt: refreshTokens.usedAt })
+        .from(refreshTokens)
+        .where(eq(refreshTokens.tokenHash, tokenHashBytes(hash)))
+        .for('update')
+        .as('before');
+      const [row] = await db
+        .update(refreshTokens)
+        .set({ usedAt: sql`coalesce(${refreshTokens.usedAt}, ${at.toISOString()}::timestamptz)` })
+        .from(before)
+        .where(eq(refreshTokens.tokenHash, before.tokenHash))
+        .returning({
+          sessionId: refreshTokens.sessionId,
+          expiresAt: refreshTokens.expiresAt,
+          usedAt: before.usedAt,
+        });
+      return row ?? null;
+    },
+
+    reset: refuseReset('session store'),
+  };
+}
+
 export type PgAuthRepoOptions = {
   database: Database;
   clock: Clock;
@@ -139,13 +225,13 @@ export type PgAuthRepoOptions = {
 };
 
 /**
- * AuthRepo for `DB_DRIVER=postgres`: devices, device tokens and PINs in Postgres (T-191); OTPs in
- * the given store; sessions and refresh tokens in memory until T-192.
+ * AuthRepo for `DB_DRIVER=postgres`: devices, device tokens and PINs (T-191) and sessions and
+ * refresh tokens (T-192) in Postgres; OTPs in the given store.
  */
 export function createPgAuthRepo({ database, clock, otp }: PgAuthRepoOptions): AuthRepo {
   return composeAuthRepo({
     otp,
     devices: createPgDeviceStore({ database, clock }),
-    sessions: createMemorySessionStore(),
+    sessions: createPgSessionStore({ database }),
   });
 }

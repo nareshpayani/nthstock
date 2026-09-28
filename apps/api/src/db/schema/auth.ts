@@ -1,6 +1,7 @@
 import { sql } from 'drizzle-orm';
 import { boolean, check, index, pgTable, smallint, text } from 'drizzle-orm/pg-core';
-import { bytea, instant } from './columns.js';
+import { SESSION_REVOKED_REASONS } from '../../modules/auth/repo.js';
+import { bytea, instant, sqlList } from './columns.js';
 import { users } from './users.js';
 
 /**
@@ -58,4 +59,68 @@ export const pins = pgTable(
     updatedAt: instant('updated_at').notNull(),
   },
   (table) => [check('pins_failures_check', sql`${table.failures} >= 0`)],
+);
+
+/**
+ * Sessions (T-192, spec backend-core §4.1 and §7.2). The id is the refresh-token family.
+ * `revoked_at` is the record of revocation (Redis only caches it, T-194) and always comes with its
+ * reason. `last_seen_at` is written at most about once a minute; `stepped_up_at` backs step-up
+ * re-authentication (T-214).
+ */
+export const sessions = pgTable(
+  'sessions',
+  {
+    id: text('id').primaryKey(),
+    userId: text('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    deviceId: text('device_id')
+      .notNull()
+      .references(() => devices.id, { onDelete: 'cascade' }),
+    csrfToken: text('csrf_token').notNull(),
+    createdAt: instant('created_at').notNull(),
+    lastSeenAt: instant('last_seen_at').notNull(),
+    expiresAt: instant('expires_at').notNull(),
+    steppedUpAt: instant('stepped_up_at'),
+    revokedAt: instant('revoked_at'),
+    revokedReason: text('revoked_reason'),
+  },
+  (table) => [
+    // The active sessions list (T-223) and revoking a user's sessions.
+    index('sessions_user_id_live_idx')
+      .on(table.userId)
+      .where(sql`${table.revokedAt} IS NULL`),
+    // Cleanup of sessions expired over 30 days (T-210).
+    index('sessions_expires_at_idx').on(table.expiresAt),
+    check(
+      'sessions_revoked_reason_check',
+      sql`${table.revokedReason} IN (${sqlList(SESSION_REVOKED_REASONS)})`,
+    ),
+    check(
+      'sessions_revoked_check',
+      sql`(${table.revokedAt} IS NULL) = (${table.revokedReason} IS NULL)`,
+    ),
+  ],
+);
+
+/**
+ * Refresh tokens (T-192), stored by the SHA-256 of the token. `used_at` is set when the token is
+ * rotated, in the same statement that reads its old value, so exactly one of two racing refreshes
+ * wins and the other is reuse.
+ */
+export const refreshTokens = pgTable(
+  'refresh_tokens',
+  {
+    tokenHash: bytea('token_hash').primaryKey(),
+    sessionId: text('session_id')
+      .notNull()
+      .references(() => sessions.id, { onDelete: 'cascade' }),
+    expiresAt: instant('expires_at').notNull(),
+    usedAt: instant('used_at'),
+  },
+  (table) => [
+    index('refresh_tokens_session_id_idx').on(table.sessionId),
+    index('refresh_tokens_expires_at_idx').on(table.expiresAt),
+    check('refresh_tokens_token_hash_check', sql`octet_length(${table.tokenHash}) = 32`),
+  ],
 );

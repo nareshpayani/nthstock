@@ -100,4 +100,62 @@ describeWithPostgres('auth services on Postgres (integration)', () => {
     });
     expect(session.device).toMatchObject({ id: issued.device.id, trusted: true });
   });
+
+  it('gives exactly one winner for two concurrent refreshes, and revokes the family (T-192)', async () => {
+    const { users, repo, audit, sessions } = services();
+    const user = await users.create({ mobile: '9876543210' });
+    const issued = await sessions.start({ user, method: 'OTP', userAgent: undefined });
+
+    const results = await Promise.allSettled([
+      sessions.refresh(issued.refreshToken),
+      sessions.refresh(issued.refreshToken),
+    ]);
+
+    const won = results.filter((result) => result.status === 'fulfilled');
+    const lost = results.filter((result) => result.status === 'rejected');
+    expect(won).toHaveLength(1);
+    expect(lost).toHaveLength(1);
+    expect(lost[0]?.reason).toMatchObject({ status: 401, code: 'UNAUTHORIZED' });
+    // Reuse ends the whole family: the winner's new token is dead too.
+    expect(await repo.getSession(issued.session.id)).toMatchObject({
+      revokedReason: 'REUSE_DETECTED',
+      revokedAt: expect.any(Date) as Date,
+    });
+    const winner = won[0];
+    if (winner?.status !== 'fulfilled') throw new Error('no winner');
+    await expect(sessions.refresh(winner.value.refreshToken)).rejects.toMatchObject({
+      status: 401,
+    });
+    expect(await sessions.authenticate(winner.value.access.token, 'bearer')).toBeNull();
+    const actions = (await audit.list(user.id)).map((entry) => entry.action);
+    expect(actions.filter((action) => action === 'REFRESH_REUSE_DETECTED')).toHaveLength(1);
+  });
+
+  it('stores the session, its refresh tokens and the logout reason in Postgres (T-192)', async () => {
+    const { users, repo, sessions } = services();
+    const user = await users.create({ mobile: '9876543210' });
+    const issued = await sessions.start({ user, method: 'OTP', userAgent: 'Mozilla/5.0 Chrome' });
+    const rotated = await sessions.refresh(issued.refreshToken);
+    const context = await sessions.authenticate(rotated.access.token, 'cookie');
+    if (!context) throw new Error('no context');
+
+    await sessions.logout(context);
+
+    const { rows } = await pgRows(
+      'SELECT s.revoked_reason, count(r.*)::int AS tokens FROM sessions s JOIN refresh_tokens r ON r.session_id = s.id GROUP BY s.id',
+    );
+    expect(rows).toEqual([{ revoked_reason: 'LOGOUT', tokens: 2 }]);
+    expect(await repo.getSession(issued.session.id)).toMatchObject({ revokedReason: 'LOGOUT' });
+  });
+
+  async function pgRows(query: string) {
+    const { Client } = await import('pg');
+    const client = new Client({ connectionString: pg.appUrl });
+    await client.connect();
+    try {
+      return await client.query<Record<string, unknown>>(query);
+    } finally {
+      await client.end();
+    }
+  }
 });

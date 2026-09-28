@@ -131,8 +131,10 @@ export function createSessionService({
         deviceId: device.id,
         csrfToken: randomBytes(32).toString('base64url'),
         createdAt: now,
+        lastSeenAt: now,
         expiresAt: new Date(now.getTime() + REFRESH_TOKEN_TTL_SEC * 1000),
         revokedAt: null,
+        revokedReason: null,
       };
       await repo.createSession(session);
       const issued = await issue(session, input.user, device);
@@ -152,7 +154,7 @@ export function createSessionService({
       const token = await repo.useRefreshToken(hashToken(refreshToken), now);
       if (!token) throw sessionEnded();
       if (token.usedAt) {
-        await repo.revokeSession(token.sessionId, now);
+        await repo.revokeSession(token.sessionId, now, 'REUSE_DETECTED');
         const family = await repo.getSession(token.sessionId);
         await audit.append({
           actor: { type: 'system' },
@@ -191,7 +193,7 @@ export function createSessionService({
     },
 
     async logout(context) {
-      await repo.revokeSession(context.session.id, clock.now());
+      await repo.revokeSession(context.session.id, clock.now(), 'LOGOUT');
       await audit.append({
         actor: { type: 'user', userId: context.user.id },
         userId: context.user.id,
@@ -205,7 +207,7 @@ export function createSessionService({
     async revoke(sessionId, actor) {
       const session = await repo.getSession(sessionId);
       if (!session) return;
-      await repo.revokeSession(sessionId, clock.now());
+      await repo.revokeSession(sessionId, clock.now(), 'USER_REVOKED');
       await audit.append({
         actor,
         userId: session.userId,
