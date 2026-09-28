@@ -1,9 +1,10 @@
 import { Client } from 'pg';
-import { afterAll, beforeAll, beforeEach, expect, it } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { AUDIT_ACTIONS } from '../modules/audit/schema.js';
 import { describeWithPostgres, useTestPostgres, type TestPostgres } from '../test/testPostgres.js';
 
-// The audit_log table as the migrations build it (T-185, spec backend-core §4.4).
+// The audit_log table as the migrations build it (T-185, spec backend-core §4.4) and its
+// append-only enforcement (T-186, §8).
 
 describeWithPostgres('audit_log table (integration)', () => {
   let pg: TestPostgres;
@@ -104,5 +105,80 @@ describeWithPostgres('audit_log table (integration)', () => {
       constraint: 'audit_log_detail_check',
     });
     await insert({ ...systemEntry, actor_type: 'user', actor_user_id: 'usr_a', user_id: 'usr_a' });
+  });
+
+  describe('append-only (T-186)', () => {
+    let owner: Client;
+    let purge: Client;
+
+    beforeAll(async () => {
+      owner = new Client({ connectionString: pg.ownerUrl });
+      purge = new Client({ connectionString: pg.purgeUrl });
+      await Promise.all([owner.connect(), purge.connect()]);
+    });
+
+    afterAll(async () => {
+      await Promise.all([owner.end(), purge.end()]);
+    });
+
+    const count = async () =>
+      Number((await app.query<{ n: string }>('select count(*) as n from audit_log')).rows[0]?.n);
+
+    it('lets the app role INSERT and SELECT', async () => {
+      await insert(systemEntry);
+      await insert({ ...systemEntry, user_id: 'usr_a' });
+
+      expect(await count()).toBe(2);
+    });
+
+    it('refuses UPDATE, DELETE and TRUNCATE to the app role', async () => {
+      await insert(systemEntry);
+
+      for (const statement of [
+        "UPDATE audit_log SET outcome = 'REFUSED'",
+        'DELETE FROM audit_log',
+        'TRUNCATE audit_log',
+      ]) {
+        await expect(app.query(statement)).rejects.toMatchObject({ code: '42501' });
+      }
+      expect(await count()).toBe(1);
+    });
+
+    it('refuses UPDATE and DELETE to the purge role, which may still insert', async () => {
+      await purge.query(
+        `INSERT INTO audit_log (actor_type, action, outcome) VALUES ('system', 'ORDER_UPDATE', 'OK')`,
+      );
+
+      await expect(purge.query('DELETE FROM audit_log')).rejects.toMatchObject({ code: '42501' });
+      await expect(purge.query("UPDATE audit_log SET user_id = 'x'")).rejects.toMatchObject({
+        code: '42501',
+      });
+      expect(await count()).toBe(1);
+    });
+
+    it('rejects UPDATE and DELETE for the owner too, through the trigger', async () => {
+      await insert({ ...systemEntry, user_id: 'usr_a' });
+
+      await expect(owner.query("UPDATE audit_log SET outcome = 'REFUSED'")).rejects.toMatchObject({
+        code: '23001',
+        message: 'audit_log is append-only: UPDATE is not allowed',
+      });
+      await expect(
+        owner.query("DELETE FROM audit_log WHERE user_id = 'usr_a'"),
+      ).rejects.toMatchObject({
+        code: '23001',
+        message: 'audit_log is append-only: DELETE is not allowed',
+      });
+      const { rows } = await app.query<{ outcome: string }>('select outcome from audit_log');
+      expect(rows).toEqual([{ outcome: 'OK' }]);
+    });
+
+    it('still lets the owner TRUNCATE (how tests reset it)', async () => {
+      await insert(systemEntry);
+
+      await owner.query('TRUNCATE audit_log');
+
+      expect(await count()).toBe(0);
+    });
   });
 });
