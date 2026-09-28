@@ -29,7 +29,8 @@ const rateLimitRedis = config.redisUrl
   ? new Redis(config.redisUrl, { enableOfflineQueue: false, maxRetriesPerRequest: 1 })
   : null;
 
-// Short-lived auth state for DB_DRIVER=postgres (OTP challenges, T-193), so apps/api holds none.
+// Short-lived auth state for DB_DRIVER=postgres (OTP challenges, T-193; the session revocation
+// cache and event, T-194), so apps/api holds none.
 // Commands queue while it connects, unlike the rate-limit client, which fails fast.
 const stateRedis =
   config.dbDriver === 'postgres' && config.redisUrl

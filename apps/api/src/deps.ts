@@ -31,7 +31,8 @@ import { createMemoryWatchlistsRepo, type WatchlistsRepo } from './modules/watch
 /**
  * Every module's storage seam (ADR 0004 §3). Each module's Postgres repo (`pgRepo.ts`) takes over
  * under `DB_DRIVER=postgres` as it lands (ADR 0007); so far the audit log (T-187), users
- * (T-190), and auth devices, PINs and sessions (T-191, T-192) with OTPs in Redis (T-193). The rest are in memory under both drivers.
+ * (T-190), and auth devices, PINs and sessions (T-191, T-192), with OTPs in Redis (T-193). The
+ * rest are in memory under both drivers.
  */
 export type Repos = {
   users: UsersRepo;
