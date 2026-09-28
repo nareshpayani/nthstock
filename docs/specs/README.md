@@ -28,3 +28,9 @@ it to `agent:ready`.
 
 Architecture decisions behind these epics are in [`docs/adr/`](../adr/) (notably ADR 0004, the mock
 backend and paper engine, and ADR 0005, the web UI architecture).
+
+## Phase 2 in chat numbering (CLAUDE.md §7 Phase 3, Backend core)
+
+| Spec | Epics | Tasks | Status |
+|---|---|---|---|
+| [Backend core on PostgreSQL](backend-core.md) ([task list](backend-core-tasks.md)) | E11 to E21 | T-176 to T-244 | Draft, awaiting owner approval |
