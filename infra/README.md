@@ -2,6 +2,36 @@
 
 Local infrastructure for development (CLAUDE.md D7). Terraform for AWS arrives in Phase 6.
 
+## Docker Compose: Redis 7 and PostgreSQL 16
+
+`npm run infra:up` starts both and waits for their health checks; `npm run infra:down` stops them.
+Both ports are bound to `127.0.0.1` only.
+
+## PostgreSQL 16
+
+`docker-compose.yml` runs `postgres:16-alpine` on `127.0.0.1:5432` with database `nthstock` in the
+named volume `postgres-data`, so data survives `infra:down`. On the first start of an empty volume,
+[`postgres/init.sql`](./postgres/init.sql) creates three roles (ADR 0007):
+
+| Role | Used for | May |
+| --- | --- | --- |
+| `nthstock_owner` | migrations (`DATABASE_MIGRATION_URL`) | own and change the schema |
+| `nthstock_app` | apps/api (`DATABASE_URL`) | read and write rows; no DDL, no temp tables |
+| `nthstock_purge` | the account purge job | like the app role, plus deleting ledger rows (later migration) |
+
+The passwords (`nthstock_app_dev` and so on, superuser `postgres_dev`) are non-secret local values,
+also in `apps/api/.env.example`. Never reuse them anywhere else.
+
+```bash
+npm run infra:up
+psql postgres://nthstock_app:nthstock_app_dev@127.0.0.1:5432/nthstock -c 'select 1'   # works
+psql postgres://nthstock_app:nthstock_app_dev@127.0.0.1:5432/nthstock -c 'create table t (id int)'
+# ERROR:  permission denied for schema public
+docker compose -f infra/docker-compose.yml down -v   # delete the volume: an empty database next time
+```
+
+`init.sql` runs only on an empty volume. After changing it, reset the volume as above.
+
 ## Redis 7 (Docker Compose)
 
 `docker-compose.yml` runs Redis 7 on `127.0.0.1:6379` with no password and no persistence. It
