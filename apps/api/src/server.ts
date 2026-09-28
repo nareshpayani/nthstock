@@ -3,6 +3,7 @@ import { buildApp } from './app.js';
 import { loadConfig } from './config.js';
 import { resolveJwtSecret } from './modules/auth/jwtSecret.js';
 import { seedDemo } from './modules/demo/seed.js';
+import { DEMO_USER } from './modules/users/repo.js';
 import { offsetClock } from './modules/testControls/offsetClock.js';
 import { createRedisPublisher } from './ticks/publisher.js';
 
@@ -28,6 +29,14 @@ const rateLimitRedis = config.redisUrl
   ? new Redis(config.redisUrl, { enableOfflineQueue: false, maxRetriesPerRequest: 1 })
   : null;
 
+// Short-lived auth state for DB_DRIVER=postgres (OTP challenges, T-193; the session revocation
+// cache and event, T-194), so apps/api holds none.
+// Commands queue while it connects, unlike the rate-limit client, which fails fast.
+const stateRedis =
+  config.dbDriver === 'postgres' && config.redisUrl
+    ? new Redis(config.redisUrl, { maxRetriesPerRequest: 2 })
+    : null;
+
 // One Redis publisher carries ticks and per-user order updates (T-133).
 const publisher = config.redisUrl ? createRedisPublisher(config.redisUrl, tickLog) : null;
 
@@ -50,10 +59,13 @@ const app = buildApp({
     dbDriver: config.dbDriver,
     ...(config.databaseUrl ? { databaseUrl: config.databaseUrl } : {}),
     pgPoolMax: config.pgPoolMax,
+    ...(stateRedis ? { redis: stateRedis } : {}),
     onDatabaseError: (error) => process.stderr.write(`postgres pool error: ${error.message}\n`),
     marketAlwaysOpen: config.mockMarketAlwaysOpen,
     production: config.production,
     jwtSecret,
+    // PII_ENC_KEYS and PII_HMAC_KEY for the Postgres repos (T-189); development keys when unset.
+    piiKeys: config.pii.keys,
     ...(testClock ? { clock: testClock } : {}),
     // The mock SMS provider's dev log line (the OTP, outside production only).
     smsLog: (line) => process.stdout.write(`${line}\n`),
@@ -64,9 +76,17 @@ const app = buildApp({
 
 app.addHook('onClose', async () => {
   await rateLimitRedis?.quit();
+  await stateRedis?.quit();
 });
 
+if (config.dbDriver === 'postgres' && config.pii.devKeys) {
+  app.log.warn('PII_ENC_KEYS and PII_HMAC_KEY are not set: using the throwaway development keys.');
+}
+
 try {
+  // The demo user (mobile 9000000001) exists outside production on every driver, as it always has
+  // in memory and in msw mode; on Postgres it is stored once (T-190).
+  if (!config.production) await app.deps.repos.users.ensureSeeded(DEMO_USER);
   // npm run seed:demo (T-174): the demo user's watchlists, holdings and ledger, before any request.
   if (config.demoSeed) {
     await seedDemo(app.deps);

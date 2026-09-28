@@ -6,7 +6,11 @@ import {
   TICK_BATCH_VERSION,
   TICKS_CHANNEL,
   TickBatch,
+  SESSION_REVOKED_EVENT_VERSION,
+  SessionRevokedEvent,
   orderUpdatesChannel,
+  sessionRevokedChannel,
+  sessionRevokedKey,
 } from './pubsub.js';
 
 const quote = {
@@ -69,5 +73,22 @@ describe('OrderUpdateEvent', () => {
     expect(OrderUpdateEvent.safeParse({ ...event, order: { ...order, qty: 0 } }).success).toBe(
       false,
     );
+  });
+});
+
+describe('SessionRevokedEvent (T-194)', () => {
+  it('names a versioned channel and a per-session key in a namespace', () => {
+    expect(sessionRevokedChannel()).toBe('nthstock:auth:sessionRevoked:v1');
+    expect(sessionRevokedChannel('test:1:')).toBe('test:1:auth:sessionRevoked:v1');
+    expect(sessionRevokedKey('ses_1')).toBe('nthstock:sess:revoked:ses_1');
+    expect(sessionRevokedKey('ses_1', 'test:1:')).toBe('test:1:sess:revoked:ses_1');
+    expect(() => sessionRevokedKey('ses:*')).toThrow();
+  });
+
+  it('carries the session and its user, versioned', () => {
+    const event = { v: SESSION_REVOKED_EVENT_VERSION, sessionId: 'ses_1', userId: 'usr_a' };
+    expect(SessionRevokedEvent.parse(event)).toEqual(event);
+    expect(SessionRevokedEvent.safeParse({ ...event, v: 2 }).success).toBe(false);
+    expect(SessionRevokedEvent.safeParse({ ...event, sessionId: 'a b' }).success).toBe(false);
   });
 });

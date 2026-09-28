@@ -6,6 +6,7 @@ import {
   type DemoInstrument,
 } from '@nthstock/paperEngine';
 import type { AppDeps } from '../../deps.js';
+import { DEMO_USER } from '../users/repo.js';
 import type { WatchlistRecord } from '../watchlists/schema.js';
 
 /**
@@ -29,8 +30,12 @@ export function demoInstrumentsOf(market: MarketDataAdapter): DemoInstrument[] {
   }));
 }
 
-/** Loads the demo watchlists and paper account for the seeded demo user, replacing theirs. */
+/**
+ * Loads the demo watchlists and paper account for the seeded demo user, replacing theirs. On
+ * Postgres the demo user is stored first if it is missing (the memory repo always has it).
+ */
 export async function seedDemo(deps: Pick<AppDeps, 'market' | 'repos' | 'orders'>): Promise<void> {
+  await deps.repos.users.ensureSeeded(DEMO_USER);
   const user = await deps.repos.users.findById(DEMO_SEED_USER.id);
   if (user?.mobile !== DEMO_SEED_USER.mobile) {
     throw new Error('The demo seed needs the seeded demo user');

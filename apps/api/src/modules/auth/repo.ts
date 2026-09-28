@@ -33,6 +33,16 @@ export type DeviceTokenRecord = {
   expiresAt: Date;
 };
 
+/** Why a session ended (spec backend-core §4.1). */
+export const SESSION_REVOKED_REASONS = [
+  'LOGOUT',
+  'USER_REVOKED',
+  'REUSE_DETECTED',
+  'ACCOUNT_DELETED',
+  'FACTOR_CHANGED',
+] as const;
+export type SessionRevokedReason = (typeof SESSION_REVOKED_REASONS)[number];
+
 /** A login session; its id is also the refresh token family. */
 export type SessionRecord = {
   id: string;
@@ -41,8 +51,12 @@ export type SessionRecord = {
   /** Must come back as the CSRF header on cookie-authenticated state-changing requests. */
   csrfToken: string;
   createdAt: Date;
+  /** Last authenticated request or refresh, written at most about once a minute. */
+  lastSeenAt: Date;
   expiresAt: Date;
   revokedAt: Date | null;
+  /** Set together with `revokedAt`. */
+  revokedReason: SessionRevokedReason | null;
 };
 
 /** One refresh token, stored by the SHA-256 of its value. */
@@ -54,10 +68,15 @@ export type RefreshTokenRecord = {
 };
 
 /**
- * Storage seam for auth state (ADR 0004 §3). In-memory in the mock phase; Redis (OTPs, throttles,
- * sessions) and Postgres (devices, PINs) implementations replace it later without changes to the
- * services. Methods that must be atomic under concurrency (counters) are single calls here so a
- * Redis version can use INCR.
+ * Storage seam for auth state (ADR 0004 §3, ADR 0007). Callers see one interface; inside it is
+ * three stores that live in different places (spec backend-core §5.2):
+ *
+ * - `OtpStore`: OTP challenges and the resend throttle; short-lived (memory or Redis).
+ * - `DeviceStore`: devices, trusted-device tokens and PINs (memory or Postgres).
+ * - `SessionStore`: sessions and refresh tokens (memory or Postgres).
+ *
+ * Methods that must be atomic under concurrency (counters, one-time use) are single calls, so a
+ * Postgres or Redis store implements each as one statement or script.
  */
 export interface AuthRepo {
   /** Stores the mobile's current OTP, replacing any earlier one (only the latest OTP works). */
@@ -77,7 +96,7 @@ export interface AuthRepo {
     id: string,
     patch: Partial<Pick<DeviceRecord, 'trusted' | 'lastSeenAt'>>,
   ): Promise<DeviceRecord | null>;
-  /** Replaces any earlier trusted-device token of the device. */
+  /** Replaces any earlier trusted-device token of the device. `hash` is its SHA-256 in hex. */
   putDeviceToken(hash: string, token: DeviceTokenRecord): Promise<void>;
   getDeviceToken(hash: string): Promise<DeviceTokenRecord | null>;
 
@@ -91,18 +110,100 @@ export interface AuthRepo {
 
   createSession(session: SessionRecord): Promise<void>;
   getSession(id: string): Promise<SessionRecord | null>;
-  /** Marks the session (the whole refresh token family) revoked. */
-  revokeSession(id: string, at: Date): Promise<void>;
+  /**
+   * Marks the session (the whole refresh token family) revoked, for `reason`. A session already
+   * revoked keeps its first time and reason.
+   */
+  revokeSession(id: string, at: Date, reason: SessionRevokedReason): Promise<void>;
+  /**
+   * Sets the session's `lastSeenAt` to `at` only if it is at or before `staleBefore`, in one
+   * conditional write, so instances racing on one session write it once.
+   */
+  touchSession(id: string, at: Date, staleBefore: Date): Promise<void>;
 
+  /** `hash` is the SHA-256 of the token in hex. */
   putRefreshToken(hash: string, token: RefreshTokenRecord): Promise<void>;
   /**
    * Marks the token used and resolves to it as it was before this call, so exactly one caller sees
-   * `usedAt: null` (a Redis version uses GETSET). Null when the token is unknown.
+   * `usedAt: null`. Null when the token is unknown.
    */
   useRefreshToken(hash: string, at: Date): Promise<RefreshTokenRecord | null>;
 
-  /** Drops all state. Tests call it between cases. */
+  /** Tests only: drops all state. Postgres stores refuse (tests truncate as the owner). */
   reset(): Promise<void>;
+}
+
+type Resettable = { reset(): Promise<void> };
+
+export type OtpStore = Pick<
+  AuthRepo,
+  | 'putOtpChallenge'
+  | 'getOtpChallenge'
+  | 'recordOtpFailure'
+  | 'consumeOtpChallenge'
+  | 'getLastOtpRequestAt'
+  | 'setLastOtpRequestAt'
+> &
+  Resettable;
+
+export type DeviceStore = Pick<
+  AuthRepo,
+  | 'createDevice'
+  | 'getDevice'
+  | 'updateDevice'
+  | 'putDeviceToken'
+  | 'getDeviceToken'
+  | 'setPin'
+  | 'getPin'
+  | 'recordPinFailure'
+  | 'clearPinFailures'
+> &
+  Resettable;
+
+export type SessionStore = Pick<
+  AuthRepo,
+  | 'createSession'
+  | 'getSession'
+  | 'revokeSession'
+  | 'touchSession'
+  | 'putRefreshToken'
+  | 'useRefreshToken'
+> &
+  Resettable;
+
+/** One AuthRepo from its three stores. */
+export function composeAuthRepo(stores: {
+  otp: OtpStore;
+  devices: DeviceStore;
+  sessions: SessionStore;
+}): AuthRepo {
+  const { otp, devices, sessions } = stores;
+  return {
+    putOtpChallenge: (challenge) => otp.putOtpChallenge(challenge),
+    getOtpChallenge: (mobile) => otp.getOtpChallenge(mobile),
+    recordOtpFailure: (mobile, requestId) => otp.recordOtpFailure(mobile, requestId),
+    consumeOtpChallenge: (mobile, requestId) => otp.consumeOtpChallenge(mobile, requestId),
+    getLastOtpRequestAt: (mobile) => otp.getLastOtpRequestAt(mobile),
+    setLastOtpRequestAt: (mobile, at) => otp.setLastOtpRequestAt(mobile, at),
+    createDevice: (device) => devices.createDevice(device),
+    getDevice: (id) => devices.getDevice(id),
+    updateDevice: (id, patch) => devices.updateDevice(id, patch),
+    putDeviceToken: (hash, token) => devices.putDeviceToken(hash, token),
+    getDeviceToken: (hash) => devices.getDeviceToken(hash),
+    setPin: (userId, hash) => devices.setPin(userId, hash),
+    getPin: (userId) => devices.getPin(userId),
+    recordPinFailure: (userId) => devices.recordPinFailure(userId),
+    clearPinFailures: (userId) => devices.clearPinFailures(userId),
+    createSession: (session) => sessions.createSession(session),
+    getSession: (id) => sessions.getSession(id),
+    revokeSession: (id, at, reason) => sessions.revokeSession(id, at, reason),
+    touchSession: (id, at, staleBefore) => sessions.touchSession(id, at, staleBefore),
+    putRefreshToken: (hash, token) => sessions.putRefreshToken(hash, token),
+    useRefreshToken: (hash, at) => sessions.useRefreshToken(hash, at),
+    reset: async () => {
+      await Promise.all([otp.reset(), devices.reset(), sessions.reset()]);
+    },
+  };
 }
 
 const copyChallenge = (c: OtpChallenge): OtpChallenge => ({
@@ -120,6 +221,7 @@ const copyDevice = (d: DeviceRecord): DeviceRecord => ({
 const copySession = (s: SessionRecord): SessionRecord => ({
   ...s,
   createdAt: new Date(s.createdAt),
+  lastSeenAt: new Date(s.lastSeenAt),
   expiresAt: new Date(s.expiresAt),
   revokedAt: s.revokedAt ? new Date(s.revokedAt) : null,
 });
@@ -130,15 +232,9 @@ const copyRefresh = (r: RefreshTokenRecord): RefreshTokenRecord => ({
   usedAt: r.usedAt ? new Date(r.usedAt) : null,
 });
 
-export function createMemoryAuthRepo(): AuthRepo {
+export function createMemoryOtpStore(): OtpStore {
   const challenges = new Map<string, OtpChallenge>();
   const lastRequest = new Map<string, Date>();
-  const devices = new Map<string, DeviceRecord>();
-  const sessions = new Map<string, SessionRecord>();
-  const refreshTokens = new Map<string, RefreshTokenRecord>();
-  const deviceTokens = new Map<string, DeviceTokenRecord>();
-  const pins = new Map<string, PinRecord>();
-
   return {
     putOtpChallenge: (challenge) => {
       challenges.set(challenge.mobile, copyChallenge(challenge));
@@ -168,6 +264,19 @@ export function createMemoryAuthRepo(): AuthRepo {
       lastRequest.set(mobile, new Date(at));
       return Promise.resolve();
     },
+    reset: () => {
+      challenges.clear();
+      lastRequest.clear();
+      return Promise.resolve();
+    },
+  };
+}
+
+export function createMemoryDeviceStore(): DeviceStore {
+  const devices = new Map<string, DeviceRecord>();
+  const deviceTokens = new Map<string, DeviceTokenRecord>();
+  const pins = new Map<string, PinRecord>();
+  return {
     createDevice: (device) => {
       devices.set(device.id, copyDevice(device));
       return Promise.resolve();
@@ -213,6 +322,19 @@ export function createMemoryAuthRepo(): AuthRepo {
       if (found) found.failures = 0;
       return Promise.resolve();
     },
+    reset: () => {
+      devices.clear();
+      deviceTokens.clear();
+      pins.clear();
+      return Promise.resolve();
+    },
+  };
+}
+
+export function createMemorySessionStore(): SessionStore {
+  const sessions = new Map<string, SessionRecord>();
+  const refreshTokens = new Map<string, RefreshTokenRecord>();
+  return {
     createSession: (session) => {
       sessions.set(session.id, copySession(session));
       return Promise.resolve();
@@ -221,9 +343,17 @@ export function createMemoryAuthRepo(): AuthRepo {
       const found = sessions.get(id);
       return Promise.resolve(found ? copySession(found) : null);
     },
-    revokeSession: (id, at) => {
+    revokeSession: (id, at, reason) => {
       const found = sessions.get(id);
-      if (found && !found.revokedAt) found.revokedAt = new Date(at);
+      if (found && !found.revokedAt) {
+        found.revokedAt = new Date(at);
+        found.revokedReason = reason;
+      }
+      return Promise.resolve();
+    },
+    touchSession: (id, at, staleBefore) => {
+      const found = sessions.get(id);
+      if (found && found.lastSeenAt <= staleBefore) found.lastSeenAt = new Date(at);
       return Promise.resolve();
     },
     putRefreshToken: (hash, token) => {
@@ -238,14 +368,18 @@ export function createMemoryAuthRepo(): AuthRepo {
       return Promise.resolve(before);
     },
     reset: () => {
-      challenges.clear();
-      lastRequest.clear();
-      devices.clear();
       sessions.clear();
       refreshTokens.clear();
-      deviceTokens.clear();
-      pins.clear();
       return Promise.resolve();
     },
   };
+}
+
+/** Everything in process memory (unit tests, `DB_DRIVER=memory`). */
+export function createMemoryAuthRepo(): AuthRepo {
+  return composeAuthRepo({
+    otp: createMemoryOtpStore(),
+    devices: createMemoryDeviceStore(),
+    sessions: createMemorySessionStore(),
+  });
 }

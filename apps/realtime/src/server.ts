@@ -4,10 +4,12 @@ import { loadConfig } from './config.js';
 import { createRedisQuoteFeed } from './feed.js';
 import { jsonLogger } from './logger.js';
 import { createRedisOrderFeed } from './orderFeed.js';
+import { createRedisSessionRevocationFeed } from './sessionRevocationFeed.js';
 
 const config = loadConfig(process.env);
 const feed = createRedisQuoteFeed({ url: config.redisUrl, logger: jsonLogger });
 const orderFeed = createRedisOrderFeed({ url: config.redisUrl, logger: jsonLogger });
+const revocations = createRedisSessionRevocationFeed({ url: config.redisUrl, logger: jsonLogger });
 const secret = resolveJwtSecret({
   value: config.jwtSecret,
   production: config.production,
@@ -28,6 +30,7 @@ const server = createRealtimeServer({
   logger: jsonLogger,
   feed,
   orderFeed,
+  revocations,
   authenticate: createJwtCookieAuthenticator({ secret, now: tokenNow }),
   ...(config.testControls
     ? {

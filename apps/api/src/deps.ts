@@ -1,11 +1,20 @@
 import { MockMarketDataAdapter, type MarketDataAdapter } from '@nthstock/marketData';
+import type { Redis } from 'ioredis';
 import { systemClock, type Clock } from '@nthstock/utils';
 import type { DbDriver } from './config.js';
 import { createDatabase, type Database } from './db/client.js';
+import { createPiiCrypto, resolvePiiKeys, type PiiKeys } from './db/crypto.js';
 import { createMockCaptchaVerifier, type CaptchaVerifier } from './modules/auth/captcha.js';
 import { resolveJwtSecret } from './modules/auth/jwtSecret.js';
 import { createArgon2PinHasher, type PinHasher } from './modules/auth/pinHasher.js';
-import { createMemoryAuthRepo, type AuthRepo } from './modules/auth/repo.js';
+import { createPgAuthRepo } from './modules/auth/pgRepo.js';
+import { createRedisOtpStore } from './modules/auth/redisOtpStore.js';
+import {
+  createMemorySessionRevocations,
+  createRedisSessionRevocations,
+  type SessionRevocations,
+} from './modules/auth/sessionRevocations.js';
+import { createMemoryAuthRepo, createMemoryOtpStore, type AuthRepo } from './modules/auth/repo.js';
 import {
   createMockSmsProvider,
   type SmsLog,
@@ -15,13 +24,15 @@ import { createPgAuditRepo } from './modules/audit/pgRepo.js';
 import { createMemoryAuditRepo, type AuditRepo } from './modules/audit/repo.js';
 import { createMemoryOrdersRepo, type OrdersRepo } from './modules/orders/repo.js';
 import { createOrderService, type OrderService } from './modules/orders/service.js';
+import { createPgUsersRepo } from './modules/users/pgRepo.js';
 import { createMemoryUsersRepo, type UsersRepo } from './modules/users/repo.js';
 import { createMemoryWatchlistsRepo, type WatchlistsRepo } from './modules/watchlists/repo.js';
 
 /**
  * Every module's storage seam (ADR 0004 §3). Each module's Postgres repo (`pgRepo.ts`) takes over
- * under `DB_DRIVER=postgres` as it lands (ADR 0007); so far the audit log (T-187). The rest are
- * in memory under both drivers.
+ * under `DB_DRIVER=postgres` as it lands (ADR 0007); so far the audit log (T-187), users
+ * (T-190), and auth devices, PINs and sessions (T-191, T-192), with OTPs in Redis (T-193). The
+ * rest are in memory under both drivers.
  */
 export type Repos = {
   users: UsersRepo;
@@ -53,6 +64,11 @@ export type AppDeps = {
   dbDriver: DbDriver;
   /** The process's Postgres pool under `DB_DRIVER=postgres`; null on the memory driver. */
   database: Database | null;
+  /**
+   * Session revocations shared by every instance (T-194): the Redis cache and
+   * `auth:sessionRevoked` event under `DB_DRIVER=postgres` with Redis, else in process.
+   */
+  sessionRevocations: SessionRevocations;
   /**
    * Releases what `createDeps` created itself (the orders desk's subscriptions, the adapter's
    * timers, the Postgres pool). Injected parts are left alone.
@@ -87,6 +103,19 @@ export type DepsOverrides = {
   database?: Database;
   /** Where the pool reports errors on idle connections; default: nowhere. */
   onDatabaseError?: (error: Error) => void;
+  /**
+   * Redis for short-lived auth state under `DB_DRIVER=postgres` (ADR 0007): OTP challenges and the
+   * resend throttle (T-193), and the session-revocation cache and event (T-194). Left out, that
+   * state stays in this process. The caller owns the client.
+   */
+  redis?: Redis;
+  /** Namespace of the keys apps/api writes to `redis`; default `nthstock:` (tests use their own). */
+  redisKeyPrefix?: string;
+  /**
+   * PII column keys for the Postgres repos (`PII_ENC_KEYS`, `PII_HMAC_KEY`; T-189). Left out, the
+   * development keys, which production refuses.
+   */
+  piiKeys?: PiiKeys;
   /** Where a failed background audit write (fills, fund movements) is reported; default stderr. */
   onAuditError?: (error: Error) => void;
 };
@@ -115,9 +144,30 @@ export function createDeps(overrides: DepsOverrides = {}): AppDeps {
   const dbDriver = overrides.dbDriver ?? (overrides.database ? 'postgres' : 'memory');
   const database = openDatabase(overrides, dbDriver);
   const ownedDatabase = overrides.database ? null : database;
+  const pii = database
+    ? createPiiCrypto(
+        overrides.piiKeys ?? resolvePiiKeys({ encKeys: undefined, hmacKey: undefined, production }),
+      )
+    : null;
+  const redisState = database && overrides.redis ? overrides.redis : null;
+  const redisPrefix = overrides.redisKeyPrefix ? { prefix: overrides.redisKeyPrefix } : {};
   const repos: Repos = {
-    users: overrides.repos?.users ?? createMemoryUsersRepo({ clock }),
-    auth: overrides.repos?.auth ?? createMemoryAuthRepo(),
+    users:
+      overrides.repos?.users ??
+      (database && pii
+        ? createPgUsersRepo({ database, clock, pii })
+        : createMemoryUsersRepo({ clock })),
+    auth:
+      overrides.repos?.auth ??
+      (database && pii
+        ? createPgAuthRepo({
+            database,
+            clock,
+            otp: redisState
+              ? createRedisOtpStore({ redis: redisState, pii, ...redisPrefix })
+              : createMemoryOtpStore(),
+          })
+        : createMemoryAuthRepo()),
     watchlists: overrides.repos?.watchlists ?? createMemoryWatchlistsRepo(),
     orders: overrides.repos?.orders ?? createMemoryOrdersRepo(),
     audit:
@@ -146,6 +196,12 @@ export function createDeps(overrides: DepsOverrides = {}): AppDeps {
     orders,
     dbDriver,
     database,
+    sessionRevocations: redisState
+      ? createRedisSessionRevocations({
+          redis: redisState,
+          ...(overrides.redisKeyPrefix ? { namespace: overrides.redisKeyPrefix } : {}),
+        })
+      : createMemorySessionRevocations(),
     dispose: async () => {
       // Audit entries still queued are written before the pool closes.
       await orders.flushAudit();

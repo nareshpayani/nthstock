@@ -29,6 +29,27 @@
       "when": 1790594183789,
       "tag": "0003_audit_auth_actions",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1790600440563,
+      "tag": "0004_users_and_consents",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1790601038944,
+      "tag": "0005_devices_and_pins",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1790601335389,
+      "tag": "0006_sessions_and_refresh_tokens",
+      "breakpoints": true
     }
   ]
 }
