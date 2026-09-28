@@ -5,17 +5,17 @@ import { LivePrice, type LivePriceTick } from './LivePrice.js';
 const meta = {
   title: 'Data/LivePrice',
   component: LivePrice,
-  args: { value: 151235, tick: 'flat', seq: 0 },
+  args: { value: 151235, tick: 'flat' },
 } satisfies Meta<typeof LivePrice>;
 
 export default meta;
 type Story = StoryObj<typeof meta>;
 
 export const Flat: Story = {};
-export const Up: Story = { args: { value: 151240, tick: 'up', seq: 1 } };
-export const Down: Story = { args: { value: 151230, tick: 'down', seq: 1 } };
+export const Up: Story = { args: { value: 151240, tick: 'up' } };
+export const Down: Story = { args: { value: 151230, tick: 'down' } };
 export const IndexLevel: Story = {
-  args: { value: 2541860, tick: 'up', seq: 1, format: 'index', size: 'lg' },
+  args: { value: 2541860, tick: 'up', format: 'index', size: 'lg' },
 };
 
 /** Simulated ticks: a seeded walk on the 5-paise tick, one step every 700 ms. */
@@ -23,7 +23,6 @@ function Ticking() {
   const [state, setState] = useState({
     value: 151235,
     tick: 'flat' as LivePriceTick,
-    seq: 0,
     n: 0,
   });
   useEffect(() => {
@@ -34,7 +33,6 @@ function Ticking() {
         return {
           value: s.value + step,
           tick: step > 0 ? 'up' : 'down',
-          seq: s.seq + 1,
           n: s.n + 1,
         };
       });
@@ -44,7 +42,7 @@ function Ticking() {
   return (
     <div className="flex items-center gap-3 rounded-md border border-line bg-surface px-4 py-3">
       <span className="text-label font-semibold text-ink-muted">INFY</span>
-      <LivePrice value={state.value} tick={state.tick} seq={state.seq} />
+      <LivePrice value={state.value} tick={state.tick} />
     </div>
   );
 }
