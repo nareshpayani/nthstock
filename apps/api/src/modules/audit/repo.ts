@@ -23,6 +23,7 @@ export function createMemoryAuditRepo({ clock }: { clock: Clock }): AuditRepo {
         ...entry,
         id: `aud_${randomUUID().replaceAll('-', '')}`,
         at: clock.now(),
+        requestId: entry.requestId ?? null,
         detail: Object.freeze({ ...entry.detail }),
       });
       entries.push(record);

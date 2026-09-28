@@ -8,6 +8,13 @@
       "when": 1790591573926,
       "tag": "0000_baseline",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1790593402438,
+      "tag": "0001_audit_log",
+      "breakpoints": true
     }
   ]
 }

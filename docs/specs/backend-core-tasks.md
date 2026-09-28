@@ -57,7 +57,7 @@ Everything in the definition of done of `implementation-tasks.md`, plus:
 
 ## E12: Audit log
 
-- [ ] T-185 [BE] Add the audit_log table (bigserial id, at, actor_type, actor_user_id, user_id nullable, action with a CHECK, order_id, outcome, request_id, detail jsonb) with indexes (user_id, at) and (action, at) and no foreign keys. Depends: T-179. Done when: the migration applies and db:check is clean.
+- [x] T-185 [BE] Add the audit_log table (bigserial id, at, actor_type, actor_user_id, user_id nullable, action with a CHECK, order_id, outcome, request_id, detail jsonb) with indexes (user_id, at) and (action, at) and no foreign keys. Depends: T-179. Done when: the migration applies and db:check is clean.
 - [ ] T-186 [BE] Make audit_log append-only: nthstock_app gets INSERT and SELECT only, and a BEFORE UPDATE OR DELETE trigger rejects changes for every role. Depends: T-185. Done when: integration tests show UPDATE and DELETE fail as nthstock_app and as nthstock_owner, and INSERT works.
 - [ ] T-187 [BE] Make AuditRepo.append async, add appendMany(entries, tx?) and a Postgres implementation, and reject detail keys on the deny list (mobile, otp, pin, code, token, secret, name, email). Depends: T-186, T-183. Done when: the audit conformance suite passes on both implementations and a detail with a mobile key is refused (test).
 - [ ] T-188 [BE] Add the auth audit actions (LOGIN_SUCCESS, LOGIN_FAILED, PIN_SET, PIN_LOCKED, LOGOUT, REFRESH_REUSE_DETECTED, SESSION_REVOKED) and write them from the OTP, PIN and session services. Depends: T-187. Done when: an OTP login, a wrong PIN, a PIN lock and a refresh reuse each write exactly one entry with no PII in detail (tests).
