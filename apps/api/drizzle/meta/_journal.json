@@ -50,6 +50,20 @@
       "when": 1790601335389,
       "tag": "0006_sessions_and_refresh_tokens",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1790603580019,
+      "tag": "0007_watchlists",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1790603584573,
+      "tag": "0008_watchlists_deferrable_positions",
+      "breakpoints": true
     }
   ]
 }
