@@ -1,9 +1,11 @@
 name: 'Agent: Auto-merge'
 
-# Squash-merges a PR into main as soon as every check on its head commit is green.
-# Owner decision 2026-09-26 (ADR 0003 amendment): agent PRs no longer wait for a manual merge.
-# Skipped: drafts, forks, Dependabot, spec PRs (the owner still approves specs), and any PR
-# labelled needs-human, agent:fix-needed or do-not-merge. Add do-not-merge to hold a PR.
+# Squash-merges a PR into main once the Reviewer has labelled it ready-to-merge and every check
+# on its head commit is green. Owner decision 2026-09-26 (ADR 0006): agent PRs no longer wait for
+# a manual merge. Skipped: PRs without ready-to-merge, drafts, forks, Dependabot, spec PRs (the
+# owner still approves specs), PRs that change .github/**, .claude/** or CLAUDE.md (agent and CI
+# config needs the owner), and any PR labelled needs-human, agent:fix-needed or do-not-merge.
+# Add do-not-merge to hold a PR.
 
 on:
   workflow_run:
@@ -57,6 +59,15 @@ jobs:
             if pr '[.labels[].name] | map(select(. == "needs-human" or . == "agent:fix-needed" or . == "do-not-merge" or . == "spec")) | length' | grep -qv '^0$'; then
               echo "#$num: blocking label, skipping"; continue
             fi
+            pr '[.labels[].name] | index("ready-to-merge") != null' | grep -qx true \
+              || { echo "#$num: no ready-to-merge label from the Reviewer, skipping"; continue; }
+            # Agent and CI config is merged by the owner only.
+            files=$(gh api "repos/$repo/pulls/$num/files" --paginate --jq '.[].filename') \
+              || { echo "#$num: could not list changed files, skipping"; continue; }
+            protected=$(echo "$files" | grep -E '^(\.github/|\.claude/|CLAUDE\.md$)' || true)
+            if [ -n "$protected" ]; then
+              echo "#$num: changes agent or CI config ($(echo "$protected" | head -3 | tr '\n' ' ')), left for the owner"; continue
+            fi
             [ "$(pr .mergeable)" = "MERGEABLE" ] || { echo "#$num: not mergeable ($(pr .mergeable)), skipping"; continue; }
             sha=$(pr .headRefOid)
             runs=$(gh api "repos/$repo/commits/$sha/check-runs?per_page=100" \
@@ -77,7 +88,7 @@ jobs:
           done
           # Merges made with GITHUB_TOKEN do not trigger push workflows, so start them on main explicitly.
           if [ "$merged" -eq 1 ]; then
-            for wf in ci.yml codeql.yml agent-conflicts.yml; do
+            for wf in ci.yml codeql.yml agent-conflicts.yml agent-labels.yml; do
               gh workflow run "$wf" --repo "$repo" --ref main
             done
           fi
