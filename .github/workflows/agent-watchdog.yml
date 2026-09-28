@@ -1,0 +1,107 @@
+name: 'Agent: Watchdog'
+
+# Keeps an eye on main between pushes. CI only runs when code changes, so a bug that shows up
+# only at certain times (market hours, a date, the clock) or after main moved can sit there
+# unnoticed until the owner trips over it. Every 2 hours this runs the unit tests and the
+# Playwright suite on main. When anything fails it opens one `watchdog` bug issue and starts
+# the Developer on it; the fix then goes through Reviewer and auto-merge like any other PR.
+# When main is green again it closes that issue. Turn off with the repository variable
+# AGENT_WATCHDOG=false.
+
+on:
+  schedule:
+    # Every 2 hours, which includes NSE hours (09:15-15:30 IST = 03:45-10:00 UTC).
+    - cron: '23 */2 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+  actions: write
+
+concurrency:
+  group: agent-watchdog
+  cancel-in-progress: false
+
+jobs:
+  check:
+    if: vars.AGENT_WATCHDOG != 'false'
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    outputs:
+      tests: ${{ steps.tests.outcome }}
+      e2e: ${{ steps.e2e.outcome }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: main
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - id: tests
+        continue-on-error: true
+        run: npm run test
+      - id: e2e
+        continue-on-error: true
+        run: |
+          npx turbo run build --filter=@nthstock/web^...
+          npx playwright install --with-deps chromium
+          npm run e2e
+      - if: steps.e2e.outcome == 'failure'
+        uses: actions/upload-artifact@v4
+        with:
+          name: watchdog-playwright-report
+          path: apps/web/playwright-report
+
+  report:
+    needs: check
+    if: always() && needs.check.result == 'success'
+    runs-on: ubuntu-latest
+    steps:
+      - env:
+          GH_TOKEN: ${{ github.token }}
+          TESTS: ${{ needs.check.outputs.tests }}
+          E2E: ${{ needs.check.outputs.e2e }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          repo="$GITHUB_REPOSITORY"
+          gh label create watchdog --repo "$repo" --color "B60205" \
+            --description "Opened by the watchdog: main is broken" --force >/dev/null
+          open=$(gh issue list --repo "$repo" --label watchdog --state open --limit 1 \
+            --json number --jq '.[0].number // ""')
+          if [ "$TESTS" = success ] && [ "$E2E" = success ]; then
+            if [ -n "$open" ]; then
+              gh issue close "$open" --repo "$repo" --comment "Watchdog: main is green again ($RUN_URL)."
+            fi
+            echo "main is green."
+            exit 0
+          fi
+
+          failed=""
+          [ "$TESTS" = success ] || failed="unit tests (\`npm run test\`)"
+          [ "$E2E" = success ] || failed="${failed:+$failed and }Playwright (\`npm run e2e\`)"
+          if [ -n "$open" ]; then
+            # One issue at a time: the Developer is already on it, or it is waiting for its PR.
+            gh issue comment "$open" --repo "$repo" --body "Watchdog: still failing: $failed ($RUN_URL)."
+            exit 0
+          fi
+          body=$(cat <<EOF
+          The scheduled watchdog found main broken: $failed failed.
+
+          Run: $RUN_URL (logs, and the Playwright report artifact when e2e failed)
+
+          ## Acceptance criteria
+          - Find the root cause from the failing run and fix it. Do not skip, retry or loosen a test to hide it.
+          - If the failure depends on the time or date (market hours, holidays, the day), make the code
+            and the tests correct at any time, and add a test that pins the clock to the failing case.
+          - \`npm run check\` and \`npm run e2e\` pass.
+          EOF
+          )
+          issue=$(gh issue create --repo "$repo" --title "Watchdog: main is failing ($failed)" \
+            --label bug --label watchdog --label agent:ready --body "$body" | grep -o '[0-9]*$')
+          # Labels added with GITHUB_TOKEN do not start workflows, so start the Developer directly.
+          gh workflow run agent-developer.yml --repo "$repo" -f issue="$issue"
+          echo "Opened #$issue and started the Developer."

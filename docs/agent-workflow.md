@@ -19,6 +19,9 @@ CI red on an owner, agent or Dependabot PR
       └─ Dependabot bump the stack can't take ─► `@dependabot ignore this major version`
 CI red on main
   └─► Fixer opens a `claude/fix-main-*` PR (never pushes to main) ─► Reviewer ─► checks green ─► auto-merge
+Every 2 hours (Watchdog)
+  └─► runs the unit tests and Playwright on main ─┬─ green ─► closes any open `watchdog` issue
+                                                  └─ red ─► one `bug` + `watchdog` issue ─► Developer ─► PR ─► auto-merge
 Hourly sweep
   └─► catches red PRs the events missed (Dependabot runs get no secrets; PRs red only because main was red)
 Push to main makes an open PR conflict
@@ -40,6 +43,7 @@ Dependabot rebases its own PRs, but their CI failures go to the Fixer.
 | Fixer | `.github/workflows/agent-fixer.yml` | `.claude/agents/fixer.md` |
 | Conflict resolver | `.github/workflows/agent-conflicts.yml` | `.claude/agents/fixer.md` (Merge conflicts) |
 | Auto-merge | `.github/workflows/agent-automerge.yml` | — |
+| Watchdog | `.github/workflows/agent-watchdog.yml` | `.claude/agents/developer.md` (via the issue it opens) |
 | (glue) | `agent-promote-stories.yml`, `agent-labels.yml` | — |
 
 ## Guardrails
@@ -69,7 +73,7 @@ Dependabot rebases its own PRs, but their CI failures go to the Fixer.
    ("Lint, typecheck, test, build", "Dependency audit", "Secret scan"), block force pushes.
 
 Optional repository variables: `OWNER_LOGIN`, `AGENT_BOT_LOGIN`, `AGENT_MAX_REVIEW_ROUNDS`,
-`AGENT_MAX_CI_FIX_ATTEMPTS` (default 3), `AGENT_AUTOMERGE` (default `true`).
+`AGENT_MAX_CI_FIX_ATTEMPTS` (default 3), `AGENT_AUTOMERGE` (default `true`), `AGENT_WATCHDOG` (default on; `false` stops the 2-hourly check).
 
 ## Everyday use
 - **Plan something:** open an issue describing the phase step or feature, add `plan:approved`.
