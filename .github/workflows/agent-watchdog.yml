@@ -17,6 +17,7 @@ on:
 permissions:
   contents: read
   issues: write
+  pull-requests: read
   actions: write
 
 concurrency:
@@ -59,6 +60,7 @@ jobs:
     needs: check
     if: always() && needs.check.result == 'success'
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - env:
           GH_TOKEN: ${{ github.token }}
@@ -86,6 +88,13 @@ jobs:
           if [ -n "$open" ]; then
             # One issue at a time: the Developer is already on it, or it is waiting for its PR.
             gh issue comment "$open" --repo "$repo" --body "Watchdog: still failing: $failed ($RUN_URL)."
+            exit 0
+          fi
+          # The Fixer is already healing main (CI went red on a push or health run); one healer at a time.
+          fixing=$(gh pr list --repo "$repo" --state open --limit 100 --json number,headRefName \
+            --jq '[.[] | select(.headRefName | startswith("claude/fix-main-")) | .number] | first // ""')
+          if [ -n "$fixing" ]; then
+            echo "Fix-main PR #$fixing is already open; not opening a watchdog issue."
             exit 0
           fi
           body=$(cat <<EOF
