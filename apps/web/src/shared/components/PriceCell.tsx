@@ -9,7 +9,7 @@ export type PriceCellProps = {
   /** `index` for index levels (hundredths of a point), `inr` for prices in paise. */
   format?: 'inr' | 'index';
   size?: 'sm' | 'md' | 'lg';
-  /** Price from a REST snapshot, shown (without a flash) until the first live quote arrives. */
+  /** Price from a REST snapshot, shown until the first live quote arrives. */
   initial?: number | undefined;
   className?: string;
 };
@@ -32,14 +32,7 @@ export const PriceCell = memo(function PriceCell({
   const live = useQuote(symbol, exchange);
   if (!live && initial !== undefined) {
     return (
-      <LivePrice
-        value={initial}
-        tick="flat"
-        seq={0}
-        format={format}
-        size={size}
-        className={className}
-      />
+      <LivePrice value={initial} tick="flat" format={format} size={size} className={className} />
     );
   }
   if (!live) {
@@ -51,7 +44,6 @@ export const PriceCell = memo(function PriceCell({
     <LivePrice
       value={live.quote.ltp}
       tick={live.tick}
-      seq={live.seq}
       format={format}
       size={size}
       className={className}
