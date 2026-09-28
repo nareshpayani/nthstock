@@ -176,7 +176,7 @@ describe('order routes (T-131)', () => {
     expect(summary).toMatchObject({ blocked: 0, available: PAPER_OPENING_BALANCE_PAISE });
 
     const actions = (await app.deps.repos.audit.list(user.session.user.id))
-      .filter((entry) => entry.actor.type === 'user')
+      .filter((entry) => entry.actor.type === 'user' && entry.action.startsWith('ORDER_'))
       .map((entry) => `${entry.action}:${entry.outcome}`);
     expect(actions).toEqual([
       'ORDER_PLACE:OK',

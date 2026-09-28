@@ -2,6 +2,8 @@ import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { REFRESH_TOKEN_TTL_SEC, type AccessTokenClaims } from '@nthstock/contracts';
 import type { Clock } from '@nthstock/utils';
 import { ApiHttpError } from '../../http/apiError.js';
+import type { AuditRepo } from '../audit/repo.js';
+import type { AuditActor } from '../audit/schema.js';
 import type { UserRecord, UsersRepo } from '../users/repo.js';
 import { signAccessToken, verifyAccessToken, type SignedAccessToken } from './accessToken.js';
 import { deviceLabel } from './deviceLabel.js';
@@ -13,6 +15,8 @@ export type SessionServiceDeps = {
   users: UsersRepo;
   /** HS256 key for access tokens (see `resolveJwtSecret`). */
   secret: Uint8Array;
+  /** LOGIN_SUCCESS, LOGOUT, REFRESH_REUSE_DETECTED and SESSION_REVOKED go here (T-188). */
+  audit: AuditRepo;
   /** Id generator for sessions and devices; default `<prefix>_<uuid>`. */
   newId?: (prefix: 'ses' | 'dev') => string;
 };
@@ -39,8 +43,12 @@ export type AuthContext = {
   device: DeviceRecord;
 };
 
+/** How the user proved who they are; recorded on LOGIN_SUCCESS. */
+export type LoginMethod = 'OTP' | 'PIN';
+
 export type StartSessionInput = {
   user: UserRecord;
+  method: LoginMethod;
   userAgent: string | undefined;
   /** A device already known for this user (trusted-device cookie); a new one is created otherwise. */
   deviceId?: string | null;
@@ -52,7 +60,10 @@ export type SessionService = {
   refresh(refreshToken: string): Promise<IssuedSession>;
   /** Resolves the session behind an access token, or null when it is invalid, expired or revoked. */
   authenticate(accessToken: string, via: AuthContext['via']): Promise<AuthContext | null>;
-  revoke(sessionId: string): Promise<void>;
+  /** Ends the caller's own session (LOGOUT). */
+  logout(context: AuthContext): Promise<void>;
+  /** Revokes a session on someone's behalf (SESSION_REVOKED); a no-op for an unknown session. */
+  revoke(sessionId: string, actor: AuditActor): Promise<void>;
 };
 
 export const hashToken = (token: string) => createHash('sha256').update(token).digest('hex');
@@ -66,12 +77,17 @@ export const sessionEnded = () =>
  * Sessions (T-080): a 15-min access JWT plus a rotating refresh token. The session id is the
  * refresh token family: presenting an already-rotated refresh token revokes the family, so a
  * stolen token stops working for both the thief and the owner.
+ *
+ * Audited (T-188, spec backend-core §8), one entry each and never a token in the detail: a new
+ * session is LOGIN_SUCCESS, logout is LOGOUT, a reused refresh token is REFRESH_REUSE_DETECTED
+ * (written by the system: it caught it) and revoking another session is SESSION_REVOKED.
  */
 export function createSessionService({
   clock,
   repo,
   users,
   secret,
+  audit,
   newId = (prefix) => `${prefix}_${randomUUID().replaceAll('-', '')}`,
 }: SessionServiceDeps): SessionService {
   async function issue(session: SessionRecord, user: UserRecord, device: DeviceRecord) {
@@ -119,7 +135,16 @@ export function createSessionService({
         revokedAt: null,
       };
       await repo.createSession(session);
-      return issue(session, input.user, device);
+      const issued = await issue(session, input.user, device);
+      await audit.append({
+        actor: { type: 'user', userId: input.user.id },
+        userId: input.user.id,
+        action: 'LOGIN_SUCCESS',
+        orderId: null,
+        outcome: 'OK',
+        detail: { method: input.method, sessionId: session.id, deviceId: device.id },
+      });
+      return issued;
     },
 
     async refresh(refreshToken) {
@@ -128,6 +153,15 @@ export function createSessionService({
       if (!token) throw sessionEnded();
       if (token.usedAt) {
         await repo.revokeSession(token.sessionId, now);
+        const family = await repo.getSession(token.sessionId);
+        await audit.append({
+          actor: { type: 'system' },
+          userId: family?.userId ?? null,
+          action: 'REFRESH_REUSE_DETECTED',
+          orderId: null,
+          outcome: 'REFUSED',
+          detail: { sessionId: token.sessionId },
+        });
         throw sessionEnded();
       }
       const session = await repo.getSession(token.sessionId);
@@ -156,6 +190,30 @@ export function createSessionService({
       return { claims, token: accessToken, via, session, user, device };
     },
 
-    revoke: (sessionId) => repo.revokeSession(sessionId, clock.now()),
+    async logout(context) {
+      await repo.revokeSession(context.session.id, clock.now());
+      await audit.append({
+        actor: { type: 'user', userId: context.user.id },
+        userId: context.user.id,
+        action: 'LOGOUT',
+        orderId: null,
+        outcome: 'OK',
+        detail: { sessionId: context.session.id },
+      });
+    },
+
+    async revoke(sessionId, actor) {
+      const session = await repo.getSession(sessionId);
+      if (!session) return;
+      await repo.revokeSession(sessionId, clock.now());
+      await audit.append({
+        actor,
+        userId: session.userId,
+        action: 'SESSION_REVOKED',
+        orderId: null,
+        outcome: 'OK',
+        detail: { sessionId },
+      });
+    },
   };
 }
