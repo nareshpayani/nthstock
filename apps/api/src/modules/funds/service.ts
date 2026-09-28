@@ -25,7 +25,7 @@ export function createFundsService({ orders }: FundsServiceDeps) {
 
     async reset(userId: FundsUserId, request: ResetRequest): Promise<FundsSummary> {
       const funds = orders.reset(userId);
-      await orders.audit([
+      await orders.audit(userId, [
         {
           actor: { type: 'user', userId },
           userId,

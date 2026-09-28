@@ -78,19 +78,22 @@ export function createOrderService({
   const auditedLedger = new Map<string, number>();
 
   /**
-   * Audit writes go out one after another, in the order the desk reported the changes, so the
-   * log's ids follow what happened even though the desk's callbacks are synchronous. `written`
-   * settles once everything queued so far is written (or reported through `onAuditError`).
-   * Until the account store commits entries with the change (T-203), this is the ordering
-   * guarantee.
+   * Each user's audit writes go out one after another, in the order the desk reported the
+   * changes, so the log's ids follow what happened even though the desk's callbacks are
+   * synchronous. Users do not wait for each other. A queue is dropped once it drains. Until the
+   * account store commits entries with the change (T-203), this is the ordering guarantee.
    */
-  let written: Promise<void> = Promise.resolve();
-  function record(entries: readonly NewAuditRecord[]): Promise<void> {
-    const next = written.then(async () => {
+  const queues = new Map<string, Promise<void>>();
+  function record(userId: string, entries: readonly NewAuditRecord[]): Promise<void> {
+    const next = (queues.get(userId) ?? Promise.resolve()).then(async () => {
       await audit.appendMany(entries);
     });
-    written = next.catch((error: unknown) => {
+    const settled = next.catch((error: unknown) => {
       onAuditError(error instanceof Error ? error : new Error(String(error)));
+    });
+    queues.set(userId, settled);
+    void settled.then(() => {
+      if (queues.get(userId) === settled) queues.delete(userId);
     });
     return next;
   }
@@ -114,7 +117,7 @@ export function createOrderService({
     }));
     auditedLedger.set(userId, engine.ledger.size);
     // Nobody waits on a fill's movements; a failure goes to onAuditError.
-    void record(entries).catch(() => undefined);
+    void record(userId, entries).catch(() => undefined);
   }
 
   const desk = new PaperDesk({
@@ -123,7 +126,7 @@ export function createOrderService({
     newId,
     engines: repo,
     onOrderUpdate: (userId, order) => {
-      void record([
+      void record(userId, [
         {
           actor: { type: 'system' },
           userId,
@@ -148,7 +151,7 @@ export function createOrderService({
     const result = await run();
     const order: Order | null = result.order;
     // Answers only once the entry (and every change queued before it) is written.
-    await record([
+    await record(userId, [
       {
         actor: { type: 'user', userId },
         userId,
@@ -218,13 +221,17 @@ export function createOrderService({
     reset: (userId: string): FundsSummary => desk.reset(userId),
 
     /**
-     * Queues entries behind every audit write already queued (the funds reset, T-155, writes its
-     * entry after the cancellations and the RESET movement), and resolves once it is written.
+     * Queues the user's entries behind their audit writes already queued (the funds reset,
+     * T-155, writes its entry after the cancellations and the RESET movement), and resolves once
+     * they are written.
      */
-    audit: (entries: readonly NewAuditRecord[]): Promise<void> => record(entries),
+    audit: (userId: string, entries: readonly NewAuditRecord[]): Promise<void> =>
+      record(userId, entries),
 
-    /** Settles once every audit entry queued so far is written or reported (tests). */
-    auditWritten: (): Promise<void> => written,
+    /** Settles once every audit write queued so far is written or reported (before shutdown). */
+    flushAudit: async (): Promise<void> => {
+      while (queues.size > 0) await Promise.all(queues.values());
+    },
 
     /** Today's positions, marked to the LTP the engines see (read by the portfolio module). */
     positions: (userId: string): Promise<Position[]> => desk.positions(userId),

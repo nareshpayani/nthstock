@@ -147,6 +147,8 @@ export function createDeps(overrides: DepsOverrides = {}): AppDeps {
     dbDriver,
     database,
     dispose: async () => {
+      // Audit entries still queued are written before the pool closes.
+      await orders.flushAudit();
       orders.dispose();
       owned?.dispose();
       await ownedDatabase?.close();

@@ -60,6 +60,47 @@ describe('orders audit writes', () => {
     });
   });
 
+  it("queues each user's writes in order, never behind another user's, and flushes them", async () => {
+    const memory = createMemoryAuditRepo({ clock: manualClock() });
+    let release: () => void = () => undefined;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const gated: AuditRepo = {
+      ...memory,
+      appendMany: async (entries, tx) => {
+        if (entries.some((entry) => entry.userId === 'usr_slow')) await gate;
+        return memory.appendMany(entries, tx);
+      },
+    };
+    const { app } = await start({ repos: { audit: gated } });
+    const entry = (userId: string, orderId: string) => ({
+      actor: { type: 'system' as const },
+      userId,
+      action: 'ORDER_UPDATE' as const,
+      orderId,
+      outcome: 'OK' as const,
+      detail: {},
+    });
+
+    const slowFirst = app.deps.orders.audit('usr_slow', [entry('usr_slow', 's1')]);
+    const slowSecond = app.deps.orders.audit('usr_slow', [entry('usr_slow', 's2')]);
+    await app.deps.orders.audit('usr_fast', [entry('usr_fast', 'f1')]);
+    let flushed = false;
+    const flush = app.deps.orders.flushAudit().then(() => {
+      flushed = true;
+    });
+
+    expect((await memory.list()).map((e) => e.orderId)).toContain('f1');
+    expect(await memory.list('usr_slow')).toEqual([]);
+    expect(flushed).toBe(false);
+
+    release();
+    await Promise.all([slowFirst, slowSecond, flush]);
+    expect((await memory.list('usr_slow')).map((e) => e.orderId)).toEqual(['s1', 's2']);
+    expect(flushed).toBe(true);
+  });
+
   it("fails the request when its own entry cannot be written, and reports the fill's", async () => {
     const memory = createMemoryAuditRepo({ clock: manualClock() });
     const broken: AuditRepo = {
