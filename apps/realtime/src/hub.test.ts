@@ -341,3 +341,50 @@ describe('hub private order channel (T-133)', () => {
     });
   });
 });
+
+describe('hub session revocation (T-195)', () => {
+  it("closes a revoked session's connections with 4401 and leaves the user's other session", () => {
+    const hub = createHub({ timers: manualTimers() });
+    const tab1 = fakeSocket();
+    const tab2 = fakeSocket();
+    const phone = fakeSocket();
+    const anonymous = fakeSocket();
+    hub.open(tab1, { userId: 'usr_a', sessionId: 'ses_laptop' });
+    hub.open(tab2, { userId: 'usr_a', sessionId: 'ses_laptop' });
+    hub.open(phone, { userId: 'usr_a', sessionId: 'ses_phone' });
+    hub.open(anonymous);
+
+    expect(hub.closeSession('ses_laptop')).toBe(2);
+
+    const revoked = { code: WS_CLOSE_CODES.unauthorized, reason: 'Session revoked' };
+    expect(tab1.closedWith).toEqual(revoked);
+    expect(tab2.closedWith).toEqual(revoked);
+    expect(phone.closedWith).toBeNull();
+    expect(anonymous.closedWith).toBeNull();
+    expect(hub.connectionCount()).toBe(2);
+
+    // The closed connections get nothing more; the other session still gets its orders.
+    hub.deliverOrder('usr_a', testOrder('o1'));
+    expect(tab1.json()).toEqual([]);
+    expect(phone.json()).toHaveLength(1);
+    expect(hub.closeSession('ses_laptop')).toBe(0);
+    expect(hub.closeSession('ses_unknown')).toBe(0);
+  });
+
+  it('logs a socket that throws on close and closes the rest', () => {
+    const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn() };
+    const hub = createHub({ timers: manualTimers(), logger });
+    const broken = fakeSocket();
+    broken.close = () => {
+      throw new Error('socket gone');
+    };
+    const fine = fakeSocket();
+    hub.open(broken, { userId: 'usr_a', sessionId: 'ses_a' });
+    hub.open(fine, { userId: 'usr_a', sessionId: 'ses_a' });
+
+    expect(hub.closeSession('ses_a')).toBe(2);
+    expect(fine.closedWith?.code).toBe(WS_CLOSE_CODES.unauthorized);
+    expect(hub.connectionCount()).toBe(0);
+    expect(logger.warn).toHaveBeenCalledWith('close failed', { error: 'Error: socket gone' });
+  });
+});

@@ -20,6 +20,8 @@ export type TokenOptions = {
   issuer?: string;
   /** The user id (`sub`); default `usr_test`. */
   subject?: string;
+  /** The session id (`sid`); default `ses_test`. */
+  sessionId?: string;
 };
 
 /** An access token like apps/api's (`signAccessToken`). */
@@ -28,9 +30,10 @@ export async function signTestToken({
   issuedAt = TEST_NOW,
   issuer = ACCESS_TOKEN_ISSUER,
   subject = 'usr_test',
+  sessionId = 'ses_test',
 }: TokenOptions = {}): Promise<string> {
   const iat = Math.floor(issuedAt / 1000);
-  return new SignJWT({ sid: 'ses_test' })
+  return new SignJWT({ sid: sessionId })
     .setProtectedHeader({ alg: 'HS256', typ: 'JWT' })
     .setSubject(subject)
     .setIssuer(issuer)
@@ -46,8 +49,18 @@ export const accessCookie = (token: string) => `${AUTH_COOKIES.access}=${token}`
 export const testAuthenticator = (now: () => number = () => TEST_NOW) =>
   createJwtCookieAuthenticator({ secret: TEST_SECRET, now });
 
-/** Connects with a valid access-token cookie, as `subject` (default `usr_test`). */
-export async function connectAuthed(url: string, subject?: string): Promise<TestClient> {
-  const token = await signTestToken(subject === undefined ? {} : { subject });
+/**
+ * Connects with a valid access-token cookie, as `subject` (default `usr_test`) in session
+ * `sessionId` (default `ses_test`).
+ */
+export async function connectAuthed(
+  url: string,
+  subject?: string,
+  sessionId?: string,
+): Promise<TestClient> {
+  const token = await signTestToken({
+    ...(subject === undefined ? {} : { subject }),
+    ...(sessionId === undefined ? {} : { sessionId }),
+  });
   return connectTestClient(url, { cookie: accessCookie(token) });
 }

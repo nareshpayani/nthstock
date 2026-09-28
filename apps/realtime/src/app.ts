@@ -5,6 +5,7 @@ import { WebSocketServer, type RawData, type WebSocket } from 'ws';
 import type { WsAuthenticator } from './auth.js';
 import type { QuoteFeed } from './feed.js';
 import type { OrderFeed } from './orderFeed.js';
+import type { SessionRevocationFeed } from './sessionRevocationFeed.js';
 import { createHub, type Connection } from './hub.js';
 import { silentLogger, type Logger } from './logger.js';
 import type { Timers } from './timers.js';
@@ -27,6 +28,11 @@ export type RealtimeServerOptions = {
    * watches a user while they have a connection here and closes the feed on close.
    */
   orderFeed?: OrderFeed;
+  /**
+   * Revoked sessions (T-195): on `auth:sessionRevoked` the server closes that session's sockets
+   * with 4401, and it refuses an upgrade whose session is marked revoked. Closed on close.
+   */
+  revocations?: SessionRevocationFeed;
   /** Flush and heartbeat timers; tests inject manual ones. */
   timers?: Timers;
   /** Clock for idle detection, epoch ms. */
@@ -91,6 +97,11 @@ export function createRealtimeServer(options: RealtimeServerOptions): RealtimeSe
   });
   const detachFeed = options.feed?.onQuotes(hub.ingest);
   const detachOrders = options.orderFeed?.onOrderUpdate(hub.deliverOrder);
+  const revocations = options.revocations;
+  const detachRevocations = revocations?.onRevoked(({ sessionId }) => {
+    const closed = hub.closeSession(sessionId);
+    if (closed > 0) logger.info('closed a revoked session', { connections: closed });
+  });
 
   const testControls = options.testControls;
   const handleTestClock = (request: IncomingMessage, response: ServerResponse) => {
@@ -137,21 +148,31 @@ export function createRealtimeServer(options: RealtimeServerOptions): RealtimeSe
     void options
       .authenticate(request)
       .catch(() => null)
-      .then((claims) => {
+      .then(async (claims) => {
+        const revoked = claims && revocations ? await revocations.isRevoked(claims.sid) : false;
         if (socket.destroyed) return;
         wss.handleUpgrade(request, socket, head, (client) => {
           if (!claims) {
             client.close(WS_CLOSE_CODES.unauthorized, 'Unauthorized');
             return;
           }
-          accept(client, claims.sub);
+          // Checked again here: the revocation event may have arrived during the check.
+          if (revoked || revocations?.revokedHere(claims.sid)) {
+            client.close(WS_CLOSE_CODES.unauthorized, 'Session revoked');
+            return;
+          }
+          accept(client, { userId: claims.sub, sessionId: claims.sid });
         });
       });
   });
 
-  /** A connection of user `userId` (the token's subject): quotes, and that user's orders only. */
-  const accept = (socket: WebSocket, userId: string) => {
-    const connection = hub.open(socket, { userId });
+  /**
+   * A connection of the token's user and session: quotes, and that user's orders only. Closed
+   * with 4401 when the session is revoked.
+   */
+  const accept = (socket: WebSocket, identity: { userId: string; sessionId: string }) => {
+    const { userId } = identity;
+    const connection = hub.open(socket, identity);
     const unwatch = options.orderFeed?.watch(userId);
     socket.on('message', (data, isBinary) => {
       connection.receive(textOf(data, isBinary));
@@ -184,9 +205,11 @@ export function createRealtimeServer(options: RealtimeServerOptions): RealtimeSe
       closing ??= (async () => {
         detachFeed?.();
         detachOrders?.();
+        detachRevocations?.();
         hub.close();
         await options.feed?.close();
         await options.orderFeed?.close();
+        await revocations?.close();
         for (const client of wss.clients) client.terminate();
         wss.close();
         if (http.listening) await new Promise<void>((resolve) => http.close(() => resolve()));

@@ -40,8 +40,8 @@ export type Connection = {
   closed(): void;
 };
 
-/** Who a connection belongs to, from its access token (T-083). */
-export type ConnectionIdentity = { userId: string };
+/** Who a connection belongs to, from its access token (T-083): the user and their session. */
+export type ConnectionIdentity = { userId: string; sessionId?: string };
 
 export type Hub = {
   /** Opens a connection; with an identity it also gets that user's private order updates. */
@@ -53,6 +53,11 @@ export type Hub = {
    * connection of the user it belongs to and to no one else. It is never conflated or dropped.
    */
   deliverOrder(userId: string, order: Order): void;
+  /**
+   * Closes every connection of a revoked session with 4401 (T-195), leaving the user's other
+   * sessions open. Resolves to how many it closed.
+   */
+  closeSession(sessionId: string): number;
   /** Sends every connection's pending quotes now, one frame each. The flush timer calls this. */
   flush(): void;
   /** Pings live connections and closes idle ones. The heartbeat timer calls this. */
@@ -95,6 +100,8 @@ type Session = {
   socket: ClientSocket;
   /** The connection's user, or null for a connection without one (unit tests). */
   userId: string | null;
+  /** The access token's session, or null for a connection without one (unit tests). */
+  sessionId: string | null;
   /** Latest quote per subscribed key since the last flush (last value wins). */
   pending: Map<SubscriptionKey, Quote>;
   /** What this client was last told about each subscribed key's instrument (T-074). */
@@ -129,6 +136,20 @@ export function createHub(options: HubOptions = {}): Hub {
   const dirty = new Set<Session>();
   /** Open sessions per user, for the private order channel. */
   const byUser = new Map<string, Set<Session>>();
+  /** Open sessions per login session, for closing a revoked one. */
+  const bySession = new Map<string, Set<Session>>();
+  const addTo = (index: Map<string, Set<Session>>, key: string | null, session: Session) => {
+    if (key === null) return;
+    const own = index.get(key) ?? new Set<Session>();
+    own.add(session);
+    index.set(key, own);
+  };
+  const removeFrom = (index: Map<string, Set<Session>>, key: string | null, session: Session) => {
+    if (key === null) return;
+    const own = index.get(key);
+    own?.delete(session);
+    if (own?.size === 0) index.delete(key);
+  };
 
   const sendJson = (socket: ClientSocket, message: WsServerMessage) => {
     socket.send(JSON.stringify(message));
@@ -182,16 +203,14 @@ export function createHub(options: HubOptions = {}): Hub {
         registry.removeConnection(connection);
         sessions.delete(connection);
         dirty.delete(session);
-        if (session.userId !== null) {
-          const own = byUser.get(session.userId);
-          own?.delete(session);
-          if (own?.size === 0) byUser.delete(session.userId);
-        }
+        removeFrom(byUser, session.userId, session);
+        removeFrom(bySession, session.sessionId, session);
       },
     };
     const session: Session = {
       socket,
       userId: identity?.userId ?? null,
+      sessionId: identity?.sessionId ?? null,
       pending: new Map(),
       instruments: new Map(),
       lastSeen: openedAt,
@@ -200,11 +219,8 @@ export function createHub(options: HubOptions = {}): Hub {
       connection,
     };
     sessions.set(connection, session);
-    if (session.userId !== null) {
-      const own = byUser.get(session.userId) ?? new Set<Session>();
-      own.add(session);
-      byUser.set(session.userId, own);
-    }
+    addTo(byUser, session.userId, session);
+    addTo(bySession, session.sessionId, session);
     return connection;
   };
 
@@ -216,6 +232,19 @@ export function createHub(options: HubOptions = {}): Hub {
         logger.warn('order update send failed', { error: String(error) });
       }
     }
+  };
+
+  const closeSession = (sessionId: string) => {
+    const revoked = [...(bySession.get(sessionId) ?? [])];
+    for (const session of revoked) {
+      session.connection.closed();
+      try {
+        session.socket.close(WS_CLOSE_CODES.unauthorized, 'Session revoked');
+      } catch (error) {
+        logger.warn('close failed', { error: String(error) });
+      }
+    }
+    return revoked.length;
   };
 
   /** Conflation (T-073): only the latest quote per symbol waits for the next flush. */
@@ -320,6 +349,7 @@ export function createHub(options: HubOptions = {}): Hub {
     open,
     ingest,
     deliverOrder,
+    closeSession,
     flush,
     heartbeat,
     registry,
