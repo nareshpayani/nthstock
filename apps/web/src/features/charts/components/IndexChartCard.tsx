@@ -34,20 +34,19 @@ export function IndexChartCard({ range, onRangeChange }: IndexChartCardProps) {
 
   return (
     <Card
-      title={
-        <span className="flex flex-wrap items-center gap-3">
-          {strings.niftyTitle}
-          {marketOpen ? <LiveBadge /> : null}
-        </span>
-      }
+      // The LIVE badge sits beside the heading, not in it, so the section is named "NIFTY 50".
+      title={strings.niftyTitle}
       aside={
-        <SegmentedControl
-          label={strings.rangeLabel}
-          size="sm"
-          value={range}
-          onValueChange={onRangeChange}
-          options={CHART_RANGES.map((value) => ({ value, label: value }))}
-        />
+        <div className="flex flex-wrap items-center gap-2">
+          {marketOpen ? <LiveBadge /> : null}
+          <SegmentedControl
+            label={strings.rangeLabel}
+            size="sm"
+            value={range}
+            onValueChange={onRangeChange}
+            options={CHART_RANGES.map((value) => ({ value, label: value }))}
+          />
+        </div>
       }
     >
       <div className="mb-4 flex flex-wrap items-baseline gap-3">

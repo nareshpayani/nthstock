@@ -55,14 +55,11 @@ export function StockChartCard({
 
   return (
     <Card
-      title={
-        <span className="flex flex-wrap items-center gap-3">
-          {strings.chart.title}
-          {marketOpen && range === '1D' ? <LiveBadge /> : null}
-        </span>
-      }
+      // The LIVE badge sits beside the heading, not in it, so the section is named "Price chart".
+      title={strings.chart.title}
       aside={
         <div className="flex flex-wrap items-center gap-2">
+          {marketOpen && range === '1D' ? <LiveBadge /> : null}
           <SegmentedControl
             label={strings.chart.rangeLabel}
             size="sm"

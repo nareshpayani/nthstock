@@ -25,7 +25,7 @@ async function startMocks(): Promise<void> {
   if (demo) {
     window.history.replaceState(window.history.state, '', withoutDemoParam(window.location.href));
   }
-  const { startMockWorker } = await import('./mocks/browser');
+  const { startMockWorker, ensureWorkerControl } = await import('./mocks/browser');
   // E2E builds only (T-162): VITE_TEST_CONTROLS is a build-time constant too, so every other
   // build drops this import and has no /v1/__test handler (scripts/checkBuild.mjs checks).
   const testControls =
@@ -33,6 +33,21 @@ async function startMocks(): Promise<void> {
       ? (await import('./mocks/testControls')).createTestControls()
       : undefined;
   await startMockWorker(config, testControls, { demo });
+  // After a hard reload the worker is not in control, so reload once; hold every request until then.
+  let storage: Storage | undefined;
+  try {
+    storage = window.sessionStorage;
+  } catch {
+    storage = undefined;
+  }
+  const control = ensureWorkerControl({
+    serviceWorker: 'serviceWorker' in navigator ? navigator.serviceWorker : undefined,
+    reload: () => {
+      window.location.reload();
+    },
+    storage,
+  });
+  if (control === 'reloading') await new Promise<never>(() => undefined);
 }
 
 function boot() {
