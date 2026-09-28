@@ -1,5 +1,5 @@
 import type { Clock } from '@nthstock/utils';
-import { and, eq, isNull, sql } from 'drizzle-orm';
+import { and, eq, isNull, lte, sql } from 'drizzle-orm';
 import type { Database } from '../../db/client.js';
 import { deviceTokens, devices, pins, refreshTokens, sessions } from '../../db/schema/auth.js';
 import {
@@ -180,6 +180,13 @@ export function createPgSessionStore({ database }: { database: Database }): Sess
         .update(sessions)
         .set({ revokedAt: at, revokedReason: reason })
         .where(and(eq(sessions.id, id), isNull(sessions.revokedAt)));
+    },
+
+    async touchSession(id, at, staleBefore) {
+      await db
+        .update(sessions)
+        .set({ lastSeenAt: at })
+        .where(and(eq(sessions.id, id), lte(sessions.lastSeenAt, staleBefore)));
     },
 
     async putRefreshToken(hash, token) {

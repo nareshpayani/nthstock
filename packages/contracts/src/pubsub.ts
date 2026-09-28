@@ -44,3 +44,35 @@ export const OrderUpdateEvent = z.object({
   order: Order,
 });
 export type OrderUpdateEvent = z.infer<typeof OrderUpdateEvent>;
+
+/**
+ * Session revocation (T-194, spec backend-core §7.2). When apps/api revokes a session (logout,
+ * refresh-token reuse, a revoke by the user) it marks the session in Redis for as long as its
+ * access tokens can live (`ACCESS_TOKEN_TTL_SEC`) and publishes a `SessionRevokedEvent`, so every
+ * API instance refuses the session's access token at once and apps/realtime closes its sockets
+ * (T-195). Postgres (`sessions.revoked_at`) stays the record; Redis only makes it fast.
+ *
+ * Both names take the deployment's key namespace (default `nthstock:`), so tests sharing one Redis
+ * stay apart.
+ */
+export const DEFAULT_REDIS_NAMESPACE = 'nthstock:';
+
+/** The channel carrying every `SessionRevokedEvent`. */
+export const sessionRevokedChannel = (namespace: string = DEFAULT_REDIS_NAMESPACE): string =>
+  `${namespace}auth:sessionRevoked:v1`;
+
+/** The key marking one revoked session; present means refuse its access tokens. */
+export const sessionRevokedKey = (
+  sessionId: string,
+  namespace: string = DEFAULT_REDIS_NAMESPACE,
+): string => `${namespace}sess:revoked:${Id.parse(sessionId)}`;
+
+export const SESSION_REVOKED_EVENT_VERSION = 1;
+
+/** One revoked session, published as JSON on `sessionRevokedChannel()`. No PII: two opaque ids. */
+export const SessionRevokedEvent = z.object({
+  v: z.literal(SESSION_REVOKED_EVENT_VERSION),
+  sessionId: Id,
+  userId: Id,
+});
+export type SessionRevokedEvent = z.infer<typeof SessionRevokedEvent>;

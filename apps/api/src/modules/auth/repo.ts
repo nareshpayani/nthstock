@@ -115,6 +115,11 @@ export interface AuthRepo {
    * revoked keeps its first time and reason.
    */
   revokeSession(id: string, at: Date, reason: SessionRevokedReason): Promise<void>;
+  /**
+   * Sets the session's `lastSeenAt` to `at` only if it is at or before `staleBefore`, in one
+   * conditional write, so instances racing on one session write it once.
+   */
+  touchSession(id: string, at: Date, staleBefore: Date): Promise<void>;
 
   /** `hash` is the SHA-256 of the token in hex. */
   putRefreshToken(hash: string, token: RefreshTokenRecord): Promise<void>;
@@ -157,7 +162,12 @@ export type DeviceStore = Pick<
 
 export type SessionStore = Pick<
   AuthRepo,
-  'createSession' | 'getSession' | 'revokeSession' | 'putRefreshToken' | 'useRefreshToken'
+  | 'createSession'
+  | 'getSession'
+  | 'revokeSession'
+  | 'touchSession'
+  | 'putRefreshToken'
+  | 'useRefreshToken'
 > &
   Resettable;
 
@@ -187,6 +197,7 @@ export function composeAuthRepo(stores: {
     createSession: (session) => sessions.createSession(session),
     getSession: (id) => sessions.getSession(id),
     revokeSession: (id, at, reason) => sessions.revokeSession(id, at, reason),
+    touchSession: (id, at, staleBefore) => sessions.touchSession(id, at, staleBefore),
     putRefreshToken: (hash, token) => sessions.putRefreshToken(hash, token),
     useRefreshToken: (hash, at) => sessions.useRefreshToken(hash, at),
     reset: async () => {
@@ -338,6 +349,11 @@ export function createMemorySessionStore(): SessionStore {
         found.revokedAt = new Date(at);
         found.revokedReason = reason;
       }
+      return Promise.resolve();
+    },
+    touchSession: (id, at, staleBefore) => {
+      const found = sessions.get(id);
+      if (found && found.lastSeenAt <= staleBefore) found.lastSeenAt = new Date(at);
       return Promise.resolve();
     },
     putRefreshToken: (hash, token) => {

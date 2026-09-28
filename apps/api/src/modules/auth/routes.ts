@@ -48,6 +48,7 @@ export const authRoutes =
       users: deps.repos.users,
       secret: deps.jwtSecret,
       audit: deps.repos.audit,
+      revocations: deps.sessionRevocations,
     });
     const authenticate = createAuthenticate(sessions);
     const pins = createPinService({

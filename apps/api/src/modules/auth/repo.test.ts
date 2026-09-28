@@ -186,6 +186,47 @@ describeRepoConformance(
       expect(await repo().getSession('ses_2')).toEqual(session('ses_2'));
     });
 
+    it('touches last seen only when the stored time is stale (T-194)', async () => {
+      await repo().createDevice(device('dev_1'));
+      await repo().createSession(session('ses_1'));
+      const created = session('ses_1').lastSeenAt;
+
+      // Stored 04:30:00 is after staleBefore 04:29:59: no write.
+      await repo().touchSession(
+        'ses_1',
+        at('2026-09-28T04:30:59.000Z'),
+        at('2026-09-28T04:29:59.000Z'),
+      );
+      expect((await repo().getSession('ses_1'))?.lastSeenAt).toEqual(created);
+
+      // At or before staleBefore: written.
+      await repo().touchSession(
+        'ses_1',
+        at('2026-09-28T04:31:00.000Z'),
+        at('2026-09-28T04:30:00.000Z'),
+      );
+      expect((await repo().getSession('ses_1'))?.lastSeenAt).toEqual(
+        at('2026-09-28T04:31:00.000Z'),
+      );
+      await repo().touchSession('ses_missing', at('2026-09-28T05:00:00.000Z'), created);
+    });
+
+    it('writes last seen once when instances race on one session (T-194)', async () => {
+      await repo().createDevice(device('dev_1'));
+      await repo().createSession(session('ses_1'));
+      const staleBefore = at('2026-09-28T04:31:00.000Z');
+
+      await Promise.all(
+        Array.from({ length: 5 }, (_, i) =>
+          repo().touchSession('ses_1', at(`2026-09-28T04:32:0${String(i)}.000Z`), staleBefore),
+        ),
+      );
+
+      // The first write makes the stored time fresh, so the others find nothing to update.
+      const lastSeen = (await repo().getSession('ses_1'))?.lastSeenAt.toISOString() ?? '';
+      expect(lastSeen).toMatch(/^2026-09-28T04:32:0[0-4]\.000Z$/);
+    });
+
     it('hands out copies of sessions', async () => {
       await repo().createDevice(device('dev_1'));
       await repo().createSession(session('ses_1'));

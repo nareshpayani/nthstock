@@ -9,6 +9,11 @@ import { resolveJwtSecret } from './modules/auth/jwtSecret.js';
 import { createArgon2PinHasher, type PinHasher } from './modules/auth/pinHasher.js';
 import { createPgAuthRepo } from './modules/auth/pgRepo.js';
 import { createRedisOtpStore } from './modules/auth/redisOtpStore.js';
+import {
+  createMemorySessionRevocations,
+  createRedisSessionRevocations,
+  type SessionRevocations,
+} from './modules/auth/sessionRevocations.js';
 import { createMemoryAuthRepo, createMemoryOtpStore, type AuthRepo } from './modules/auth/repo.js';
 import {
   createMockSmsProvider,
@@ -59,6 +64,11 @@ export type AppDeps = {
   /** The process's Postgres pool under `DB_DRIVER=postgres`; null on the memory driver. */
   database: Database | null;
   /**
+   * Session revocations shared by every instance (T-194): the Redis cache and
+   * `auth:sessionRevoked` event under `DB_DRIVER=postgres` with Redis, else in process.
+   */
+  sessionRevocations: SessionRevocations;
+  /**
    * Releases what `createDeps` created itself (the orders desk's subscriptions, the adapter's
    * timers, the Postgres pool). Injected parts are left alone.
    */
@@ -94,7 +104,8 @@ export type DepsOverrides = {
   onDatabaseError?: (error: Error) => void;
   /**
    * Redis for short-lived auth state under `DB_DRIVER=postgres` (ADR 0007): OTP challenges and the
-   * resend throttle (T-193). Left out, that state stays in this process. The caller owns the client.
+   * resend throttle (T-193), and the session-revocation cache and event (T-194). Left out, that
+   * state stays in this process. The caller owns the client.
    */
   redis?: Redis;
   /** Namespace of the keys apps/api writes to `redis`; default `nthstock:` (tests use their own). */
@@ -137,6 +148,8 @@ export function createDeps(overrides: DepsOverrides = {}): AppDeps {
         overrides.piiKeys ?? resolvePiiKeys({ encKeys: undefined, hmacKey: undefined, production }),
       )
     : null;
+  const redisState = database && overrides.redis ? overrides.redis : null;
+  const redisPrefix = overrides.redisKeyPrefix ? { prefix: overrides.redisKeyPrefix } : {};
   const repos: Repos = {
     users:
       overrides.repos?.users ??
@@ -149,12 +162,8 @@ export function createDeps(overrides: DepsOverrides = {}): AppDeps {
         ? createPgAuthRepo({
             database,
             clock,
-            otp: overrides.redis
-              ? createRedisOtpStore({
-                  redis: overrides.redis,
-                  pii,
-                  ...(overrides.redisKeyPrefix ? { prefix: overrides.redisKeyPrefix } : {}),
-                })
+            otp: redisState
+              ? createRedisOtpStore({ redis: redisState, pii, ...redisPrefix })
               : createMemoryOtpStore(),
           })
         : createMemoryAuthRepo()),
@@ -186,6 +195,12 @@ export function createDeps(overrides: DepsOverrides = {}): AppDeps {
     orders,
     dbDriver,
     database,
+    sessionRevocations: redisState
+      ? createRedisSessionRevocations({
+          redis: redisState,
+          ...(overrides.redisKeyPrefix ? { namespace: overrides.redisKeyPrefix } : {}),
+        })
+      : createMemorySessionRevocations(),
     dispose: async () => {
       // Audit entries still queued are written before the pool closes.
       await orders.flushAudit();
