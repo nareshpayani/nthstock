@@ -63,7 +63,8 @@ jobs:
               --jq '.[] | select(.headRefName | startswith("claude/fix-main-")) | .headRefName')" ]
           }
           main_is_red() {
-            [ "$(gh run list --repo "$repo" --workflow ci.yml --branch main --event push \
+            # The latest finished run on main: a push, the post-merge dispatch or a scheduled health run.
+            [ "$(gh run list --repo "$repo" --workflow ci.yml --branch main \
               --status completed --limit 1 --json conclusion --jq '.[0].conclusion // ""')" = "failure" ]
           }
           # Prints "ok" when the PR is one agents may fix; flags it needs-human when out of attempts.
@@ -101,7 +102,7 @@ jobs:
 
           if [ "$EVENT" = "workflow_run" ]; then
             [ "$RUN_CONCLUSION" = "failure" ] && [ "$RUN_HEAD_REPO" = "$repo" ] || exit 0
-            if [ "$RUN_EVENT" = "push" ] && [ "$RUN_BRANCH" = "main" ]; then
+            if [ "$RUN_BRANCH" = "main" ] && [[ "$RUN_EVENT" =~ ^(push|schedule|workflow_dispatch)$ ]]; then
               fix_main_pr_open && { echo "A fix-main PR is already open."; exit 0; }
               emit main "" "claude/fix-main-${RUN_SHA:0:7}" "CI is red on main ($RUN_URL)"
               exit 0

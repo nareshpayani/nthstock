@@ -17,7 +17,7 @@ PR opened or updated
 CI red on an owner, agent or Dependabot PR
   └─► Fixer finds the root cause and pushes a fix to the same PR (3 attempts, then `needs-human`)
       └─ Dependabot bump the stack can't take ─► `@dependabot ignore this major version`
-CI red on main
+CI red on main (after a merge, or in a scheduled health run: 09:20 and 12:30 IST on weekdays, 20:00 IST daily)
   └─► Fixer opens a `claude/fix-main-*` PR (never pushes to main) ─► Reviewer ─► checks green ─► auto-merge
 Hourly sweep
   └─► catches red PRs the events missed (Dependabot runs get no secrets; PRs red only because main was red)
