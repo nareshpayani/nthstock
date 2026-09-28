@@ -17,14 +17,17 @@ const settled = (ready: Promise<unknown>): Promise<void> =>
     () => undefined,
   );
 
-/** A fetch that waits for `ready` before every request; the global fetch by default. */
+/**
+ * A fetch that waits for `ready` before every request; the global fetch by default. A function is
+ * called (and awaited) before each request instead, so msw mode can re-check its worker each time.
+ */
 export function gateFetch(
-  ready: Promise<unknown>,
+  ready: Promise<unknown> | (() => Promise<unknown>),
   fetchImpl: FetchLike = (input, init) => globalThis.fetch(input, init),
 ): FetchLike {
-  const open = settled(ready);
+  const open = typeof ready === 'function' ? null : settled(ready);
   return async (input, init) => {
-    await open;
+    await (open ?? settled(Promise.resolve().then(ready as () => Promise<unknown>)));
     return fetchImpl(input, init);
   };
 }

@@ -35,6 +35,14 @@ const originOf = (url: string | null | undefined): string | null => {
   }
 };
 
+/**
+ * Lightweight Charts adds one inline <style> for the TradingView attribution logo its licence asks
+ * for. The policy allows exactly that stylesheet by hash, and no other inline style.
+ * securityHeaders.test.ts recomputes the hash from the installed library, so an upgrade that
+ * changes it fails the test instead of silently blocking the style.
+ */
+export const CHART_ATTRIBUTION_STYLE_HASH = "'sha256-3pRED1tOXas1FXFoPb9TGCjmYe9XQsmO9OV23khV2nY='";
+
 /** The Content-Security-Policy value for the SPA. */
 export function webContentSecurityPolicy({
   apiBaseUrl,
@@ -46,7 +54,7 @@ export function webContentSecurityPolicy({
   return [
     "default-src 'self'",
     "script-src 'self'",
-    "style-src 'self'",
+    `style-src 'self' ${CHART_ATTRIBUTION_STYLE_HASH}`,
     "img-src 'self' data: blob:",
     "font-src 'self'",
     `connect-src ${[...new Set(connect)].join(' ')}`,
