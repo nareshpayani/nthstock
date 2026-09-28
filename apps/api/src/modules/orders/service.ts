@@ -24,7 +24,7 @@ import {
 import type { Clock } from '@nthstock/utils';
 import { ApiHttpError } from '../../http/apiError.js';
 import type { AuditRepo } from '../audit/repo.js';
-import type { AuditAction } from '../audit/schema.js';
+import type { AuditAction, NewAuditRecord } from '../audit/schema.js';
 import type { OrdersRepo } from './repo.js';
 
 export type OrderServiceDeps = {
@@ -33,6 +33,11 @@ export type OrderServiceDeps = {
   market: DeskMarket;
   repo: OrdersRepo;
   audit: AuditRepo;
+  /**
+   * Where an audit write that no request waits for (fills, fund movements) reports a failure;
+   * default: a line on stderr. A request's own entry fails the request instead.
+   */
+  onAuditError?: (error: Error) => void;
   /** Ids for orders and ledger entries; default `pe_<uuid>`. */
   newId?: () => string;
 };
@@ -46,6 +51,14 @@ const orderGone = (): never => {
 };
 
 /**
+ * The place request as the audit log keeps it: the instrument token as `instrument`, because a
+ * detail key containing "token" is refused (spec backend-core §8 deny list).
+ */
+function auditedPlaceRequest({ token, ...rest }: PlaceOrderRequest) {
+  return { ...rest, instrument: token };
+}
+
+/**
  * The orders module (T-131): paper orders on the `PaperDesk` (one engine per user, fed by the
  * adapter's ticks), with every order action and every order state change written to the audit
  * log. A refused action answers with `orderApiError`, the same mapping the MSW mock uses.
@@ -55,32 +68,53 @@ export function createOrderService({
   market,
   repo,
   audit,
+  onAuditError = (error) => {
+    process.stderr.write(`audit write failed: ${error.message}\n`);
+  },
   newId = () => `pe_${randomUUID().replaceAll('-', '')}`,
 }: OrderServiceDeps) {
   const listeners = new Set<OrderUpdateListener>();
   /** How many of each user's ledger entries are in the audit log already. */
   const auditedLedger = new Map<string, number>();
 
+  /**
+   * Audit writes go out one after another, in the order the desk reported the changes, so the
+   * log's ids follow what happened even though the desk's callbacks are synchronous. `written`
+   * settles once everything queued so far is written (or reported through `onAuditError`).
+   * Until the account store commits entries with the change (T-203), this is the ordering
+   * guarantee.
+   */
+  let written: Promise<void> = Promise.resolve();
+  function record(entries: readonly NewAuditRecord[]): Promise<void> {
+    const next = written.then(async () => {
+      await audit.appendMany(entries);
+    });
+    written = next.catch((error: unknown) => {
+      onAuditError(error instanceof Error ? error : new Error(String(error)));
+    });
+    return next;
+  }
+
   /** Writes every funds ledger entry not yet audited: each fund movement gets its own entry. */
   function auditFundMovements(userId: string, engine: PaperEngine): void {
     const from = auditedLedger.get(userId) ?? 0;
     if (engine.ledger.size <= from) return;
-    for (const entry of engine.ledger.entriesFrom(from)) {
-      audit.append({
-        actor: { type: 'system' },
-        userId,
-        action: 'FUNDS_MOVEMENT',
-        orderId: entry.orderId,
-        outcome: 'OK',
-        detail: {
-          entryId: entry.id,
-          type: entry.type,
-          amount: entry.amount,
-          balanceAfter: entry.balanceAfter,
-        },
-      });
-    }
+    const entries = engine.ledger.entriesFrom(from).map((entry): NewAuditRecord => ({
+      actor: { type: 'system' },
+      userId,
+      action: 'FUNDS_MOVEMENT',
+      orderId: entry.orderId,
+      outcome: 'OK',
+      detail: {
+        entryId: entry.id,
+        type: entry.type,
+        amount: entry.amount,
+        balanceAfter: entry.balanceAfter,
+      },
+    }));
     auditedLedger.set(userId, engine.ledger.size);
+    // Nobody waits on a fill's movements; a failure goes to onAuditError.
+    void record(entries).catch(() => undefined);
   }
 
   const desk = new PaperDesk({
@@ -89,14 +123,16 @@ export function createOrderService({
     newId,
     engines: repo,
     onOrderUpdate: (userId, order) => {
-      audit.append({
-        actor: { type: 'system' },
-        userId,
-        action: 'ORDER_UPDATE',
-        orderId: order.id,
-        outcome: 'OK',
-        detail: { status: order.status, filledQty: order.filledQty, reason: order.statusReason },
-      });
+      void record([
+        {
+          actor: { type: 'system' },
+          userId,
+          action: 'ORDER_UPDATE',
+          orderId: order.id,
+          outcome: 'OK',
+          detail: { status: order.status, filledQty: order.filledQty, reason: order.statusReason },
+        },
+      ]).catch(() => undefined);
       for (const listener of [...listeners]) listener(userId, order);
     },
     onChange: auditFundMovements,
@@ -111,18 +147,21 @@ export function createOrderService({
   ): Promise<Order> {
     const result = await run();
     const order: Order | null = result.order;
-    audit.append({
-      actor: { type: 'user', userId },
-      userId,
-      action,
-      orderId: order?.id ?? target.orderId,
-      outcome: result.ok ? 'OK' : 'REFUSED',
-      detail: {
-        request: target.request,
-        ...(order ? { status: order.status } : {}),
-        ...(result.ok ? {} : { reason: result.code }),
+    // Answers only once the entry (and every change queued before it) is written.
+    await record([
+      {
+        actor: { type: 'user', userId },
+        userId,
+        action,
+        orderId: order?.id ?? target.orderId,
+        outcome: result.ok ? 'OK' : 'REFUSED',
+        detail: {
+          request: target.request,
+          ...(order ? { status: order.status } : {}),
+          ...(result.ok ? {} : { reason: result.code }),
+        },
       },
-    });
+    ]);
     if (result.ok) return result.order;
     const error = orderApiError(result);
     throw new ApiHttpError(error.status, error.code, error.message, error.details);
@@ -130,7 +169,9 @@ export function createOrderService({
 
   return {
     place: (userId: string, request: PlaceOrderRequest) =>
-      act(userId, 'ORDER_PLACE', { orderId: null, request }, () => desk.place(userId, request)),
+      act(userId, 'ORDER_PLACE', { orderId: null, request: auditedPlaceRequest(request) }, () =>
+        desk.place(userId, request),
+      ),
 
     modify: (userId: string, id: string, request: ModifyOrderRequest) =>
       act(userId, 'ORDER_MODIFY', { orderId: id, request }, () => desk.modify(userId, id, request)),
@@ -175,6 +216,15 @@ export function createOrderService({
      * `RESET` ledger entry (audited as a fund movement).
      */
     reset: (userId: string): FundsSummary => desk.reset(userId),
+
+    /**
+     * Queues entries behind every audit write already queued (the funds reset, T-155, writes its
+     * entry after the cancellations and the RESET movement), and resolves once it is written.
+     */
+    audit: (entries: readonly NewAuditRecord[]): Promise<void> => record(entries),
+
+    /** Settles once every audit entry queued so far is written or reported (tests). */
+    auditWritten: (): Promise<void> => written,
 
     /** Today's positions, marked to the LTP the engines see (read by the portfolio module). */
     positions: (userId: string): Promise<Position[]> => desk.positions(userId),

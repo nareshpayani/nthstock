@@ -21,7 +21,7 @@ export const fundsRoutes =
         secret: deps.jwtSecret,
       }),
     );
-    const funds = createFundsService({ orders: deps.orders, audit: deps.repos.audit });
+    const funds = createFundsService({ orders: deps.orders });
     const userOf = (request: FastifyRequest) => authContextOf(request).user.id;
     const options = { authenticate };
 

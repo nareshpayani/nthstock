@@ -11,6 +11,7 @@ import {
   type SmsLog,
   type SmsProvider,
 } from './modules/auth/smsProvider.js';
+import { createPgAuditRepo } from './modules/audit/pgRepo.js';
 import { createMemoryAuditRepo, type AuditRepo } from './modules/audit/repo.js';
 import { createMemoryOrdersRepo, type OrdersRepo } from './modules/orders/repo.js';
 import { createOrderService, type OrderService } from './modules/orders/service.js';
@@ -18,8 +19,9 @@ import { createMemoryUsersRepo, type UsersRepo } from './modules/users/repo.js';
 import { createMemoryWatchlistsRepo, type WatchlistsRepo } from './modules/watchlists/repo.js';
 
 /**
- * Every module's storage seam (ADR 0004 §3). In memory for now under both drivers; each module's
- * Postgres repo (`pgRepo.ts`) takes over under `DB_DRIVER=postgres` as it lands (ADR 0007).
+ * Every module's storage seam (ADR 0004 §3). Each module's Postgres repo (`pgRepo.ts`) takes over
+ * under `DB_DRIVER=postgres` as it lands (ADR 0007); so far the audit log (T-187). The rest are
+ * in memory under both drivers.
  */
 export type Repos = {
   users: UsersRepo;
@@ -85,6 +87,8 @@ export type DepsOverrides = {
   database?: Database;
   /** Where the pool reports errors on idle connections; default: nowhere. */
   onDatabaseError?: (error: Error) => void;
+  /** Where a failed background audit write (fills, fund movements) is reported; default stderr. */
+  onAuditError?: (error: Error) => void;
 };
 
 function openDatabase(overrides: DepsOverrides, driver: DbDriver): Database | null {
@@ -116,13 +120,16 @@ export function createDeps(overrides: DepsOverrides = {}): AppDeps {
     auth: overrides.repos?.auth ?? createMemoryAuthRepo(),
     watchlists: overrides.repos?.watchlists ?? createMemoryWatchlistsRepo(),
     orders: overrides.repos?.orders ?? createMemoryOrdersRepo(),
-    audit: overrides.repos?.audit ?? createMemoryAuditRepo({ clock }),
+    audit:
+      overrides.repos?.audit ??
+      (database ? createPgAuditRepo({ database, clock }) : createMemoryAuditRepo({ clock })),
   };
   const orders = createOrderService({
     clock,
     market,
     repo: repos.orders,
     audit: repos.audit,
+    ...(overrides.onAuditError ? { onAuditError: overrides.onAuditError } : {}),
     ...(overrides.newOrderId ? { newId: overrides.newOrderId } : {}),
   });
   return {
