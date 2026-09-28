@@ -1,0 +1,120 @@
+name: 'Agent: Close done issues'
+
+# Closes the story, bug and epic issues whose work is merged, with a comment saying where.
+# Phase 1 left 125 issues open after their work merged: PRs covered several stories ("T-135 to
+# T-140") without "Closes #N", and nothing closed epics. For each merged PR this job:
+#   1. finds its issues: "Closes/Fixes/Resolves #N" in the PR title or body, and every T-number in
+#      the PR title (ranges like "T-135 to T-140" included) matched to issues titled "T-xxx …".
+#      Only the title counts for T-numbers, so a body that mentions "builds on T-120" closes nothing,
+#   2. comments "Done in #PR" on each (once) and closes it as completed,
+#   3. ticks the story in its epic's checklist and closes the epic when every story is closed.
+# Auto-merge merges with GITHUB_TOKEN, which starts no workflows, so agent-automerge.yml dispatches
+# this job with the PR number. A daily sweep re-checks PRs merged in the last 3 days and all epics.
+
+on:
+  pull_request:
+    types: [closed]
+  workflow_dispatch:
+    inputs:
+      pr:
+        description: 'Merged PR number (empty = sweep recent merges and epics)'
+        required: false
+  schedule:
+    - cron: '35 18 * * *'
+
+permissions:
+  issues: write
+  pull-requests: read
+  contents: read
+
+concurrency:
+  group: agent-close-issues
+  cancel-in-progress: false
+
+jobs:
+  close:
+    if: github.event_name != 'pull_request' || (github.event.pull_request.merged && github.event.pull_request.base.ref == 'main')
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - env:
+          GH_TOKEN: ${{ github.token }}
+          PR_INPUT: ${{ github.event.pull_request.number || github.event.inputs.pr }}
+        run: |
+          set -euo pipefail
+          repo="$GITHUB_REPOSITORY"
+          marker='<!-- nthstock-issue-done -->'
+
+          # Issue numbers a merged PR completes: closing keywords plus T-numbers matched to issue titles.
+          issues_for_pr() {
+            local pr="$1" text title tnums
+            text=$(gh pr view "$pr" --repo "$repo" --json title,body --jq '.title + "\n" + (.body // "")')
+            title=$(gh pr view "$pr" --repo "$repo" --json title --jq .title)
+            grep -oiE '(close[sd]?|fix(e[sd])?|resolve[sd]?) +#[0-9]+' <<< "$text" | grep -oE '[0-9]+$' || true
+            tnums=$(grep -oE 'T-[0-9]{3}( *(to|-|–) *T-[0-9]{3})?' <<< "$title" \
+              | awk '{ n = split($0, p, /[^0-9]+/); a = ""; b = "";
+                       for (i = 1; i <= n; i++) if (p[i] != "") { if (a == "") a = p[i]; else b = p[i] }
+                       if (b == "") b = a; for (t = a + 0; t <= b + 0; t++) printf "T-%03d\n", t }' | sort -u)
+            for t in $tnums; do
+              gh issue list --repo "$repo" --state all --search "\"$t\" in:title" --limit 5 \
+                --json number,title --jq ".[] | select(.title | startswith(\"$t \")) | .number"
+            done
+          }
+
+          close_issue() { # issue pr
+            local issue="$1" pr="$2" info state labels commented
+            info=$(gh issue view "$issue" --repo "$repo" --json state,labels,comments 2>/dev/null) || return 0
+            labels=$(jq -r '[.labels[].name] | join(",")' <<< "$info")
+            case ",$labels," in *,epic,*) return 0 ;; esac # epics close below, once all stories are done
+            state=$(jq -r .state <<< "$info")
+            commented=$(jq --arg m "$marker" '[.comments[].body | select(contains($m))] | length' <<< "$info")
+            if [ "$commented" = 0 ]; then
+              gh issue comment "$issue" --repo "$repo" --body "$marker
+          Done in #$pr, merged to \`main\`. Closing as completed."
+            fi
+            if [ "$state" = OPEN ]; then
+              gh issue close "$issue" --repo "$repo" --reason completed
+            fi
+            gh issue edit "$issue" --repo "$repo" --remove-label agent:in-progress --remove-label agent:ready \
+              --remove-label agent:backlog >/dev/null 2>&1 || true
+            echo "#$issue done via #$pr"
+          }
+
+          # Ticks finished stories in each open epic's checklist; closes the epic when all are closed.
+          sweep_epics() {
+            for epic in $(gh issue list --repo "$repo" --label epic --state open --limit 100 --json number --jq '.[].number'); do
+              body=$(gh issue view "$epic" --repo "$repo" --json body --jq .body)
+              stories=$(grep -oE '^- \[[ x]\] #[0-9]+' <<< "$body" | grep -oE '[0-9]+$' || true)
+              [ -n "$stories" ] || continue
+              new="$body"; open=0
+              for s in $stories; do
+                if [ "$(gh issue view "$s" --repo "$repo" --json state --jq .state)" = CLOSED ]; then
+                  new=$(sed "s/^- \[ \] #$s\$/- [x] #$s/" <<< "$new")
+                else
+                  open=$((open + 1))
+                fi
+              done
+              [ "$new" = "$body" ] || gh issue edit "$epic" --repo "$repo" --body "$new" >/dev/null
+              if [ "$open" -eq 0 ]; then
+                gh issue close "$epic" --repo "$repo" --reason completed \
+                  --comment "$marker
+          All $(wc -w <<< "$stories" | tr -d ' ') stories in this epic are closed, so the epic is done."
+                echo "epic #$epic closed"
+              fi
+            done
+          }
+
+          if [ -n "$PR_INPUT" ]; then
+            prs="$PR_INPUT"
+          else
+            since=$(date -u -d '3 days ago' +%Y-%m-%d)
+            prs=$(gh pr list --repo "$repo" --state merged --base main --limit 100 \
+              --search "merged:>=$since" --json number --jq '.[].number')
+          fi
+          for pr in $prs; do
+            [ "$(gh pr view "$pr" --repo "$repo" --json state --jq .state)" = MERGED ] || continue
+            for issue in $(issues_for_pr "$pr" | sort -un); do
+              close_issue "$issue" "$pr"
+            done
+          done
+          sweep_epics

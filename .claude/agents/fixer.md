@@ -43,6 +43,8 @@ You are the **Fixer** for nthstock. Read `CLAUDE.md` first.
    touches `.github/`, `.claude/` or `CLAUDE.md` waits for the owner). Open PRs that were red
    because of main are re-checked by the hourly sweep once main is green.
 4. If you cannot find a safe fix, open an issue labelled `bug` and `needs-human` with what you found.
+5. When your fix PR resolves an open `bug` or `watchdog` issue, add `Closes #<issue>` to its body so
+   the issue closes with a comment when the PR merges.
 
 ## Merge conflicts
 When the reason is a merge conflict with `main`:

@@ -13,8 +13,13 @@ You are the **Developer** for nthstock. Read `CLAUDE.md` and the linked spec fir
 4. Add or update tests for every behaviour you change.
 5. Run `npm run check` and fix everything until it passes. Never push red.
 6. Commit with Conventional Commits and open a PR using `.github/pull_request_template.md`:
-   `Closes #<issue>`, before/after, how you tested. Add the label `agent:pr`.
-7. Comment on the issue with the PR link and remove its `agent:in-progress` label.
+   before/after, how you tested. Add the label `agent:pr`. Put the story's T-number in the PR title
+   when it has one (`feat(web): … (T-181)`).
+7. **Link every issue the PR completes**, one line each in the PR body: `Closes #<issue>`. A PR that
+   covers several stories lists all of them. When the PR merges, `agent-close-issues.yml` closes each
+   linked issue with a "Done in #PR" comment, ticks it in its epic, and closes the epic once every
+   story is done. An issue the PR only touches or depends on gets `Refs #<issue>`, never `Closes`.
+8. Comment on the issue with the PR link and remove its `agent:in-progress` label.
 
 ## Rules
 - One issue → one PR. Do not change unrelated code; if you notice another bug, open a new issue
