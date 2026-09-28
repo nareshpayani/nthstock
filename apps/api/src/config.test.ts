@@ -12,6 +12,7 @@ describe('loadConfig', () => {
       redisUrl: null,
       databaseUrl: null,
       pgPoolMax: 10,
+      dbDriver: 'memory',
       testControls: false,
       demoSeed: false,
     });
@@ -30,6 +31,7 @@ describe('loadConfig', () => {
         REDIS_URL: 'redis://127.0.0.1:6379',
         DATABASE_URL: 'postgres://nthstock_app:pw@127.0.0.1:5432/nthstock',
         PG_POOL_MAX: '20',
+        DB_DRIVER: 'postgres',
       }),
     ).toEqual({
       production: true,
@@ -40,6 +42,7 @@ describe('loadConfig', () => {
       redisUrl: 'redis://127.0.0.1:6379',
       databaseUrl: 'postgres://nthstock_app:pw@127.0.0.1:5432/nthstock',
       pgPoolMax: 20,
+      dbDriver: 'postgres',
       testControls: false,
       demoSeed: false,
     });
@@ -81,6 +84,14 @@ describe('loadConfig', () => {
     expect(() => loadConfig({ DATABASE_URL: 'not a url' })).toThrow(/DATABASE_URL/);
     expect(() => loadConfig({ PG_POOL_MAX: '0' })).toThrow(/PG_POOL_MAX/);
     expect(() => loadConfig({ PG_POOL_MAX: 'many' })).toThrow(/PG_POOL_MAX/);
+  });
+
+  it('picks the storage driver; postgres needs DATABASE_URL (T-182)', () => {
+    expect(loadConfig({ DB_DRIVER: 'memory' }).dbDriver).toBe('memory');
+    expect(() => loadConfig({ DB_DRIVER: 'postgres' })).toThrow(
+      /DB_DRIVER=postgres needs DATABASE_URL/,
+    );
+    expect(() => loadConfig({ DB_DRIVER: 'sqlite' })).toThrow(/DB_DRIVER/);
   });
 
   it('fails fast on a bad value', () => {

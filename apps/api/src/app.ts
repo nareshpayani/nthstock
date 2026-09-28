@@ -7,7 +7,7 @@ import { installErrorHandling } from './http/errorHandler.js';
 import { installSecurityHeaders } from './http/securityHeaders.js';
 import { authRoutes } from './modules/auth/routes.js';
 import { fundsRoutes } from './modules/funds/routes.js';
-import { healthRoutes } from './modules/health/routes.js';
+import { healthRoutes, type ReadinessCheck } from './modules/health/routes.js';
 import { marketRoutes } from './modules/market/routes.js';
 import { orderRoutes } from './modules/orders/routes.js';
 import { portfolioRoutes } from './modules/portfolio/routes.js';
@@ -52,6 +52,11 @@ export type AppOptions = {
    * `ENABLE_TEST_CONTROLS=true`; `setTime` must move `deps.clock`.
    */
   testControls?: TestControls;
+  /**
+   * How `GET /v1/health/ready` checks Redis (T-182), e.g. a PING on the process's client. Left out,
+   * Redis reports `disabled`. Postgres is checked through `deps.database` when there is one.
+   */
+  redisReadiness?: ReadinessCheck;
 };
 
 export const DEFAULT_RATE_LIMIT_PER_MINUTE = 600;
@@ -86,7 +91,7 @@ export function buildApp(options: AppOptions = {}): App {
   });
   installCsrfCheck(app);
   app.addHook('onClose', async () => {
-    deps.dispose();
+    await deps.dispose();
   });
   const publisher = options.tickPublisher;
   if (publisher) {
@@ -132,7 +137,16 @@ export function buildApp(options: AppOptions = {}): App {
       if (sweeper) clearInterval(sweeper);
     });
   }
-  app.register(healthRoutes(deps));
+  const database = deps.database;
+  app.register(
+    healthRoutes({
+      clock: deps.clock,
+      readiness: {
+        postgres: database ? () => database.ping() : null,
+        redis: options.redisReadiness ?? null,
+      },
+    }),
+  );
   app.register(marketRoutes(deps));
   app.register(authRoutes(deps));
   app.register(watchlistRoutes(deps));

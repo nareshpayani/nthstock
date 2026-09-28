@@ -18,7 +18,9 @@ import {
 //
 // api mode (`E2E_MODE=api`, T-164): apps/api and apps/realtime from their dist builds with
 // NODE_ENV=test and ENABLE_TEST_CONTROLS=true, over Redis at E2E_REDIS_URL (default
-// redis://127.0.0.1:6379, the CI service), plus an api-mode web build behind the preview proxy.
+// redis://127.0.0.1:6379, the CI service) and Postgres at E2E_DATABASE_URL (default the migrated
+// `npm run infra:up` database as nthstock_app, like the CI service; T-182), plus an api-mode web
+// build behind the preview proxy. apps/api counts as started once /v1/health/ready answers 200.
 // Only specs tagged @api run, one at a time, since they share one backend clock.
 //
 // perf (`E2E_PERF=1`, T-169 and T-170): the msw-mode build, only the specs tagged @perf (Web Vitals
@@ -36,12 +38,17 @@ const preview = (outDir: string) =>
 /** One key for both backends, made per run: never a committed secret. */
 const jwtSecret = randomBytes(32).toString('base64url');
 const redisUrl = process.env['E2E_REDIS_URL'] || 'redis://127.0.0.1:6379';
+const databaseUrl =
+  process.env['E2E_DATABASE_URL'] ||
+  'postgres://nthstock_app:nthstock_app_dev@127.0.0.1:5432/nthstock';
 const backendEnv = {
   NODE_ENV: 'test',
   ENABLE_TEST_CONTROLS: 'true',
   HOST: '127.0.0.1',
   JWT_SECRET: jwtSecret,
   REDIS_URL: redisUrl,
+  DB_DRIVER: 'postgres',
+  DATABASE_URL: databaseUrl,
 };
 
 const mswServer = {
@@ -55,7 +62,7 @@ const mswServer = {
 const apiServers = [
   {
     command: 'node ../api/dist/server.js',
-    url: `${API_ORIGIN}/v1/health`,
+    url: `${API_ORIGIN}/v1/health/ready`,
     env: { ...backendEnv, PORT: String(E2E_PORTS.api) },
     reuseExistingServer: false,
     timeout: 60_000,

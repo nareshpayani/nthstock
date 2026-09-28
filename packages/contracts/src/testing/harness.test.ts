@@ -309,6 +309,10 @@ describe('fetchBackend: cookies, scopes and time', () => {
 
 // The harness itself: the shared health scenarios against an in-memory backend.
 const fake = fakeBackend((request) =>
-  request.url === '/v1/health' ? { status: 200, body: HEALTH } : { status: 404, body: NOT_FOUND },
+  request.url === '/v1/health'
+    ? { status: 200, body: HEALTH }
+    : request.url === '/v1/health/ready'
+      ? { status: 200, body: { postgres: 'disabled', redis: 'disabled' } }
+      : { status: 404, body: NOT_FOUND },
 );
 runScenarioSuite('a fake backend', [healthScenarios], () => fake.backend);

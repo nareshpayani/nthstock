@@ -48,8 +48,8 @@ describe('route map types', () => {
 const entries = Object.entries(routes) as [RouteName, RouteDef][];
 
 describe('route map', () => {
-  it('has 40 routes', () => {
-    expect(entries).toHaveLength(40);
+  it('has 41 routes', () => {
+    expect(entries).toHaveLength(41);
   });
 
   it('keeps every path under /v1 and every method+path unique', () => {
@@ -89,6 +89,7 @@ describe('route map', () => {
     expect(Object.keys(routes)).toEqual(
       expect.arrayContaining([
         'health',
+        'healthReady',
         'otpRequest',
         'otpVerify',
         'pinSet',
@@ -136,6 +137,16 @@ describe('route map', () => {
         time: '2026-09-25T04:00:00Z',
       }),
     ).toEqual({ status: 'ok', version: '0.0.0', time: '2026-09-25T04:00:00Z' });
+  });
+
+  it('validates a readiness response: up or disabled, never down (T-182)', () => {
+    const ready = routes.healthReady.response;
+    expect(ready.parse({ postgres: 'up', redis: 'disabled' })).toEqual({
+      postgres: 'up',
+      redis: 'disabled',
+    });
+    expect(ready.safeParse({ postgres: 'down', redis: 'up' }).success).toBe(false);
+    expect(ready.safeParse({ postgres: 'up' }).success).toBe(false);
   });
 });
 

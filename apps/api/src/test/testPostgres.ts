@@ -145,7 +145,7 @@ async function createTestDatabase(): Promise<TestPostgres> {
 }
 
 const CACHE = Symbol.for('nthstock.testPostgres');
-type Cache = { [CACHE]?: Promise<TestPostgres> };
+type Cache = { [CACHE]?: Promise<TestPostgres> | undefined };
 
 /**
  * The worker's migrated test database, created on first use and shared by every suite the worker
