@@ -1,4 +1,5 @@
-# Local infrastructure for nthstock (CLAUDE.md D7: Docker Compose locally through Phase 5).
+# Local infrastructure for nthstock (CLAUDE.md D7: Docker Compose locally through Phase 5):
+# Redis 7 and PostgreSQL 16, both bound to loopback.
 # Start: npm run infra:up   (or: docker compose -f infra/docker-compose.yml up -d --wait)
 # Stop:  npm run infra:down
 name: nthstock
@@ -18,3 +19,49 @@ services:
       timeout: 3s
       retries: 15
     restart: unless-stopped
+
+  postgres:
+    # PostgreSQL 16 (CLAUDE.md D6, ADR 0007): the system of record for apps/api.
+    image: postgres:16-alpine
+    environment:
+      # Local superuser for init.sql only; apps/api connects as nthstock_app (DML) and migrates as
+      # nthstock_owner (DDL). Non-secret dev values, like the role passwords in init.sql.
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres_dev
+      POSTGRES_DB: nthstock
+      TZ: UTC
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      # Runs once, when the volume is empty: creates the three roles (infra/postgres/init.sql).
+      - ./postgres/init.sql:/docker-entrypoint-initdb.d/10-roles.sql:ro
+    ports:
+      # Loopback only: dev passwords, never reachable from the LAN.
+      - '127.0.0.1:5432:5432'
+    healthcheck:
+      # The image listens on TCP only after init.sql has run, so healthy means the roles exist.
+      test: ['CMD', 'pg_isready', '-h', '127.0.0.1', '-U', 'nthstock_app', '-d', 'nthstock']
+      interval: 2s
+      timeout: 3s
+      retries: 30
+    restart: unless-stopped
+
+  pgbouncer:
+    # Optional (T-184), only with the `pool` profile: PgBouncer in transaction mode on
+    # 127.0.0.1:6432, for running apps/api or its tests through a pooler like production (Phase 6).
+    #   docker compose -f infra/docker-compose.yml --profile pool up -d --wait
+    # Pinned by digest (v1.25.2-p0). Config and dev userlist from infra/pgbouncer/.
+    image: edoburu/pgbouncer:v1.25.2-p0@sha256:7d7a27d9e90985cab5cf42256f5c13a3120baa4b055b69df37beb272b89b2340
+    profiles: ['pool']
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./pgbouncer/pgbouncer.ini:/etc/pgbouncer/pgbouncer.ini:ro
+      - ./pgbouncer/userlist.txt:/etc/pgbouncer/userlist.txt:ro
+    ports:
+      - '127.0.0.1:6432:6432'
+    restart: unless-stopped
+
+volumes:
+  # Survives `npm run infra:down`; `docker compose -f infra/docker-compose.yml down -v` resets it.
+  postgres-data:

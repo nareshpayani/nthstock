@@ -1,5 +1,7 @@
 import { MockMarketDataAdapter, type MarketDataAdapter } from '@nthstock/marketData';
 import { systemClock, type Clock } from '@nthstock/utils';
+import type { DbDriver } from './config.js';
+import { createDatabase, type Database } from './db/client.js';
 import { createMockCaptchaVerifier, type CaptchaVerifier } from './modules/auth/captcha.js';
 import { resolveJwtSecret } from './modules/auth/jwtSecret.js';
 import { createArgon2PinHasher, type PinHasher } from './modules/auth/pinHasher.js';
@@ -15,7 +17,10 @@ import { createOrderService, type OrderService } from './modules/orders/service.
 import { createMemoryUsersRepo, type UsersRepo } from './modules/users/repo.js';
 import { createMemoryWatchlistsRepo, type WatchlistsRepo } from './modules/watchlists/repo.js';
 
-/** Every module's storage seam. In-memory in the mock phase (ADR 0004 §3). */
+/**
+ * Every module's storage seam (ADR 0004 §3). In memory for now under both drivers; each module's
+ * Postgres repo (`pgRepo.ts`) takes over under `DB_DRIVER=postgres` as it lands (ADR 0007).
+ */
 export type Repos = {
   users: UsersRepo;
   auth: AuthRepo;
@@ -42,11 +47,15 @@ export type AppDeps = {
   pinHasher: PinHasher;
   /** Paper orders and funds for every user, fed by `market` ticks (T-131); one per process. */
   orders: OrderService;
+  /** `DB_DRIVER` (T-182): `memory` for unit tests, `postgres` for `npm run dev:api` and E2E. */
+  dbDriver: DbDriver;
+  /** The process's Postgres pool under `DB_DRIVER=postgres`; null on the memory driver. */
+  database: Database | null;
   /**
    * Releases what `createDeps` created itself (the orders desk's subscriptions, the adapter's
-   * timers). Injected parts are left alone.
+   * timers, the Postgres pool). Injected parts are left alone.
    */
-  dispose(): void;
+  dispose(): Promise<void>;
 };
 
 export type DepsOverrides = {
@@ -66,7 +75,30 @@ export type DepsOverrides = {
   pinHasher?: PinHasher;
   /** Ids for orders and ledger entries (tests); default random. */
   newOrderId?: () => string;
+  /** `DB_DRIVER`; default `memory`. `postgres` needs `databaseUrl` or `database`. */
+  dbDriver?: DbDriver;
+  /** `DATABASE_URL` (the nthstock_app role) for the pool `postgres` opens. */
+  databaseUrl?: string;
+  /** `PG_POOL_MAX` for that pool. */
+  pgPoolMax?: number;
+  /** Use this Postgres connection instead of opening one (tests); the caller closes it. */
+  database?: Database;
+  /** Where the pool reports errors on idle connections; default: nowhere. */
+  onDatabaseError?: (error: Error) => void;
 };
+
+function openDatabase(overrides: DepsOverrides, driver: DbDriver): Database | null {
+  if (driver === 'memory') return null;
+  if (overrides.database) return overrides.database;
+  if (!overrides.databaseUrl) {
+    throw new Error('DB_DRIVER=postgres needs a DATABASE_URL');
+  }
+  return createDatabase({
+    url: overrides.databaseUrl,
+    ...(overrides.pgPoolMax === undefined ? {} : { poolMax: overrides.pgPoolMax }),
+    ...(overrides.onDatabaseError ? { onIdleError: overrides.onDatabaseError } : {}),
+  });
+}
 
 /** Builds a fresh set of dependencies; each app (and each test app) gets its own in-memory state. */
 export function createDeps(overrides: DepsOverrides = {}): AppDeps {
@@ -76,6 +108,9 @@ export function createDeps(overrides: DepsOverrides = {}): AppDeps {
     new MockMarketDataAdapter({ clock, alwaysOpen: overrides.marketAlwaysOpen ?? false });
   const owned = overrides.market ? null : market;
   const production = overrides.production ?? false;
+  const dbDriver = overrides.dbDriver ?? (overrides.database ? 'postgres' : 'memory');
+  const database = openDatabase(overrides, dbDriver);
+  const ownedDatabase = overrides.database ? null : database;
   const repos: Repos = {
     users: overrides.repos?.users ?? createMemoryUsersRepo({ clock }),
     auth: overrides.repos?.auth ?? createMemoryAuthRepo(),
@@ -102,9 +137,12 @@ export function createDeps(overrides: DepsOverrides = {}): AppDeps {
     jwtSecret: overrides.jwtSecret ?? resolveJwtSecret({ value: undefined, production }),
     pinHasher: overrides.pinHasher ?? createArgon2PinHasher(),
     orders,
-    dispose: () => {
+    dbDriver,
+    database,
+    dispose: async () => {
       orders.dispose();
       owned?.dispose();
+      await ownedDatabase?.close();
     },
   };
 }

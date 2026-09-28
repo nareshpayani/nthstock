@@ -7,7 +7,8 @@ export default defineConfig({
       provider: 'v8',
       include: ['src/**/*.ts'],
       // server.ts only reads the environment and listens; everything it calls is tested via buildApp.
-      exclude: ['src/**/*.test.ts', 'src/server.ts'],
+      // The db:* CLIs only read the environment and call tested functions or drizzle-kit.
+      exclude: ['src/**/*.test.ts', 'src/server.ts', 'src/db/*Cli.ts'],
       thresholds: { lines: 80, functions: 80, branches: 80, statements: 80 },
     },
   },

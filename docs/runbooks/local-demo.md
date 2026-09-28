@@ -44,7 +44,7 @@ market clock (orders placed while the market is closed become AMOs).
 
 ## api mode (apps/api, apps/realtime, Redis)
 
-Needs Docker for Redis (`npm run infra:up`, started for you).
+Needs Docker for Redis and Postgres (`npm run infra:up` and `npm run db:migrate`, run for you).
 
 ```bash
 MOCK_MARKET_ALWAYS_OPEN=true npm run seed:demo

@@ -28,6 +28,20 @@ jobs:
     name: Lint, typecheck, test, build
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    # T-181: apps/api's Postgres integration suites run against this service (POSTGRES_TEST_URL,
+    # a superuser: the test helper creates the roles and one database per worker). Never skipped.
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_PASSWORD: postgres_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
@@ -38,7 +52,11 @@ jobs:
       - run: npm run format:check
       - run: npm run lint
       - run: npm run typecheck
+      # A schema file changed without a committed migration fails here (ADR 0007).
+      - run: npm run db:check -w @nthstock/api
       - run: npm run test
+        env:
+          POSTGRES_TEST_URL: postgres://postgres:postgres_ci@127.0.0.1:5432/postgres
       - run: npm run build
 
   storybook:
@@ -158,8 +176,9 @@ jobs:
 
   # T-164: the golden path and the scripted-order scenarios (@api specs) against the real backends:
   # apps/api and apps/realtime from their builds (NODE_ENV=test, ENABLE_TEST_CONTROLS=true, a
-  # per-run JWT key made by playwright.config.ts), Redis as a service container, and an api-mode
-  # web build behind the preview proxy. Runs beside the other jobs, so it adds no time to them.
+  # per-run JWT key made by playwright.config.ts), Redis and Postgres as service containers, and an
+  # api-mode web build behind the preview proxy. Runs beside the other jobs, so it adds no time to
+  # them.
   e2e-api:
     name: Playwright golden path (api mode)
     runs-on: ubuntu-latest
@@ -174,6 +193,20 @@ jobs:
           --health-interval 5s
           --health-timeout 3s
           --health-retries 10
+      # T-181: apps/api's database, set up like `npm run infra:up`: roles from init.sql, then the
+      # migrations as nthstock_owner.
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_PASSWORD: postgres_ci
+          POSTGRES_DB: nthstock
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d nthstock"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
@@ -181,6 +214,16 @@ jobs:
           node-version-file: .nvmrc
           cache: npm
       - run: npm ci
+      - name: Create the database roles
+        run: psql -v ON_ERROR_STOP=1 -f infra/postgres/init.sql
+        env:
+          PGHOST: 127.0.0.1
+          PGUSER: postgres
+          PGPASSWORD: postgres_ci
+          PGDATABASE: nthstock
+      - run: npm run db:migrate -w @nthstock/api
+        env:
+          DATABASE_MIGRATION_URL: postgres://nthstock_owner:nthstock_owner_dev@127.0.0.1:5432/nthstock
       - run: npx turbo run build --filter=@nthstock/web^... --filter=@nthstock/api --filter=@nthstock/realtime
       # T-171: tick-to-screen p95 < 500 ms over this job's Redis, run alone so it measures the pipeline.
       - run: npm run test:latency -w @nthstock/realtime

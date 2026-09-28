@@ -14,3 +14,5 @@ dist-e2e*
 dist-lhci
 lighthouse-report
 .lighthouseci
+# drizzle-kit writes these; reformatting them would churn on every db:generate
+apps/api/drizzle/meta

@@ -67,6 +67,24 @@ export const HealthResponse = z.object({
 });
 export type HealthResponse = z.infer<typeof HealthResponse>;
 
+/**
+ * One backing service in the readiness check (T-182): `disabled` when this process is not
+ * configured to use it (the memory storage driver, no REDIS_URL, or MSW).
+ */
+export const DependencyStatus = z.enum(['up', 'down', 'disabled']);
+export type DependencyStatus = z.infer<typeof DependencyStatus>;
+
+/**
+ * `GET /v1/health/ready` when every configured dependency answers. When one is down the route
+ * answers 503 with the ApiError `SERVICE_UNAVAILABLE`, whose details carry the same keys with
+ * `DependencyStatus` values.
+ */
+export const ReadyResponse = z.object({
+  postgres: DependencyStatus.exclude(['down']),
+  redis: DependencyStatus.exclude(['down']),
+});
+export type ReadyResponse = z.infer<typeof ReadyResponse>;
+
 export type HttpMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
 
 /** `public` routes need no session; `user` routes need a valid access token. */
@@ -91,6 +109,12 @@ export interface RouteDef {
 export const routes = {
   // Health
   health: { method: 'GET', path: '/v1/health', auth: 'public', response: HealthResponse },
+  healthReady: {
+    method: 'GET',
+    path: '/v1/health/ready',
+    auth: 'public',
+    response: ReadyResponse,
+  },
 
   // Auth
   otpRequest: {

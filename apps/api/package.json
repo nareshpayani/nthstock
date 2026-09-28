@@ -10,7 +10,10 @@
     "start": "node dist/server.js",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run --coverage"
+    "test": "vitest run --coverage",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "tsx src/db/migrateCli.ts",
+    "db:check": "tsx src/db/checkCli.ts"
   },
   "dependencies": {
     "@fastify/rate-limit": "11.2.0",
@@ -19,15 +22,19 @@
     "@nthstock/marketData": "0.0.0",
     "@nthstock/paperEngine": "0.0.0",
     "@nthstock/utils": "0.0.0",
+    "drizzle-orm": "0.45.3",
     "fastify": "5.12.5",
     "ioredis": "6.0.0",
     "jose": "6.2.12",
+    "pg": "8.23.0",
     "zod": "4.6.5"
   },
   "devDependencies": {
     "@nthstock/config": "0.0.0",
     "@types/node": "22.20.4",
+    "@types/pg": "8.23.1",
     "@vitest/coverage-v8": "5.0.2",
+    "drizzle-kit": "0.31.11",
     "eslint": "10.11.0",
     "globals": "17.12.0",
     "testcontainers": "12.1.0",

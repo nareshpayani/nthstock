@@ -19,6 +19,8 @@ export function marketHandlers(
       () => ({ status: 'ok', version: MOCK_VERSION, time: new Date().toISOString() }),
       options,
     ),
+    // The mocks use neither Postgres nor Redis, like apps/api on the memory driver without Redis.
+    defineRoute('healthReady', () => ({ postgres: 'disabled', redis: 'disabled' }), options),
     defineRoute('marketIndices', async () => ({ items: await adapter.getIndices() }), options),
     defineRoute('marketLists', async () => ({ items: await adapter.getStockLists() }), options),
     defineRoute(

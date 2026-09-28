@@ -21,7 +21,25 @@ const EnvSchema = z.object({
     .pipe(
       z.url({ protocol: /^rediss?$/, error: 'must be a redis:// or rediss:// URL' }).nullable(),
     ),
+  DATABASE_URL: z
+    .string()
+    .trim()
+    .optional()
+    .transform((value) => (value ? value : null))
+    .pipe(
+      z
+        .url({
+          protocol: /^postgres(ql)?$/,
+          error: 'must be a postgres:// or postgresql:// URL',
+        })
+        .nullable(),
+    ),
+  PG_POOL_MAX: z.coerce.number().int().min(1).max(100).default(10),
+  DB_DRIVER: z.enum(['memory', 'postgres']).default('memory'),
 });
+
+/** Where repos keep their data (ADR 0007): in process, or in Postgres at DATABASE_URL. */
+export type DbDriver = 'memory' | 'postgres';
 
 export type ApiConfig = {
   /** `NODE_ENV=production`: random OTPs, no dev OTP or dev CAPTCHA. */
@@ -34,6 +52,18 @@ export type ApiConfig = {
   jwtSecret: string | undefined;
   /** Redis for publishing ticks to apps/realtime; null (blank) serves REST only. */
   redisUrl: string | null;
+  /**
+   * `DATABASE_URL`, the PostgreSQL connection as the DML-only `nthstock_app` role (ADR 0007);
+   * null when blank. Migrations use `DATABASE_MIGRATION_URL` instead (`npm run db:migrate`).
+   */
+  databaseUrl: string | null;
+  /** `PG_POOL_MAX`: connections in this process's one `pg` Pool (default 10). */
+  pgPoolMax: number;
+  /**
+   * `DB_DRIVER` (T-182): `memory` (default; unit tests) or `postgres` (`npm run dev:api`, E2E),
+   * which needs DATABASE_URL.
+   */
+  dbDriver: DbDriver;
   /**
    * `ENABLE_TEST_CONTROLS=true` with `NODE_ENV=test`: registers the `/v1/__test` clock and price
    * routes for E2E suites (T-162). Off by default; refused in any other NODE_ENV.
@@ -61,6 +91,9 @@ export function loadConfig(env: Readonly<Record<string, string | undefined>>): A
       `Invalid apps/api environment: ENABLE_TEST_CONTROLS needs NODE_ENV=test (got ${parsed.data.NODE_ENV}); the test routes never run in development or production`,
     );
   }
+  if (parsed.data.DB_DRIVER === 'postgres' && !parsed.data.DATABASE_URL) {
+    throw new Error('Invalid apps/api environment: DB_DRIVER=postgres needs DATABASE_URL');
+  }
   if (production && parsed.data.DEMO_SEED) {
     throw new Error('Invalid apps/api environment: DEMO_SEED is for local demos, not production');
   }
@@ -71,6 +104,9 @@ export function loadConfig(env: Readonly<Record<string, string | undefined>>): A
     mockMarketAlwaysOpen: parsed.data.MOCK_MARKET_ALWAYS_OPEN,
     jwtSecret: parsed.data.JWT_SECRET,
     redisUrl: parsed.data.REDIS_URL,
+    databaseUrl: parsed.data.DATABASE_URL,
+    pgPoolMax: parsed.data.PG_POOL_MAX,
+    dbDriver: parsed.data.DB_DRIVER,
     testControls: parsed.data.ENABLE_TEST_CONTROLS,
     demoSeed: parsed.data.DEMO_SEED,
   };

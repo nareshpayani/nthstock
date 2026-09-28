@@ -43,7 +43,14 @@ if (testClock) {
 const app = buildApp({
   logger: true,
   ...(rateLimitRedis ? { rateLimitRedis } : {}),
+  // GET /v1/health/ready pings the same Redis client; Postgres is checked through deps.database.
+  ...(rateLimitRedis ? { redisReadiness: () => rateLimitRedis.ping() } : {}),
   deps: {
+    // DB_DRIVER=postgres (npm run dev:api, E2E; T-182) opens one pool as nthstock_app.
+    dbDriver: config.dbDriver,
+    ...(config.databaseUrl ? { databaseUrl: config.databaseUrl } : {}),
+    pgPoolMax: config.pgPoolMax,
+    onDatabaseError: (error) => process.stderr.write(`postgres pool error: ${error.message}\n`),
     marketAlwaysOpen: config.mockMarketAlwaysOpen,
     production: config.production,
     jwtSecret,

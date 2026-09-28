@@ -30,6 +30,13 @@ describe('MSW market handlers (T-052) through the API client (T-053)', () => {
     await valid('health', client.request('health'));
   });
 
+  it('health ready: no backing services in the mocks (T-182)', async () => {
+    expect(await valid('healthReady', client.request('healthReady'))).toEqual({
+      postgres: 'disabled',
+      redis: 'disabled',
+    });
+  });
+
   it('indices, lists and one list', async () => {
     const indices = await client.request('marketIndices');
     await valid('marketIndices', Promise.resolve(indices));
@@ -87,7 +94,8 @@ describe('MSW market handlers (T-052) through the API client (T-053)', () => {
 
   it('covers every market route', () => {
     const marketRoutes = (Object.keys(routes) as RouteName[]).filter(
-      (name) => routes[name].path.startsWith('/v1/market') || name === 'health',
+      (name) =>
+        routes[name].path.startsWith('/v1/market') || routes[name].path.startsWith('/v1/health'),
     );
     expect([...covered].sort()).toEqual(marketRoutes.sort());
   });

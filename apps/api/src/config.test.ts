@@ -10,10 +10,14 @@ describe('loadConfig', () => {
       mockMarketAlwaysOpen: false,
       jwtSecret: undefined,
       redisUrl: null,
+      databaseUrl: null,
+      pgPoolMax: 10,
+      dbDriver: 'memory',
       testControls: false,
       demoSeed: false,
     });
     expect(loadConfig({ REDIS_URL: ' ' }).redisUrl).toBeNull();
+    expect(loadConfig({ DATABASE_URL: ' ' }).databaseUrl).toBeNull();
   });
 
   it('reads every variable', () => {
@@ -25,6 +29,9 @@ describe('loadConfig', () => {
         HOST: '127.0.0.1',
         MOCK_MARKET_ALWAYS_OPEN: 'true',
         REDIS_URL: 'redis://127.0.0.1:6379',
+        DATABASE_URL: 'postgres://nthstock_app:pw@127.0.0.1:5432/nthstock',
+        PG_POOL_MAX: '20',
+        DB_DRIVER: 'postgres',
       }),
     ).toEqual({
       production: true,
@@ -33,6 +40,9 @@ describe('loadConfig', () => {
       mockMarketAlwaysOpen: true,
       jwtSecret: 'test-only-secret-at-least-32-characters',
       redisUrl: 'redis://127.0.0.1:6379',
+      databaseUrl: 'postgres://nthstock_app:pw@127.0.0.1:5432/nthstock',
+      pgPoolMax: 20,
+      dbDriver: 'postgres',
       testControls: false,
       demoSeed: false,
     });
@@ -61,6 +71,27 @@ describe('loadConfig', () => {
         DEMO_SEED: 'true',
       }),
     ).toThrow(/DEMO_SEED is for local demos/);
+  });
+
+  it('accepts only a postgres:// or postgresql:// DATABASE_URL (T-178)', () => {
+    expect(loadConfig({ DATABASE_URL: 'postgresql://u:p@db:5432/nthstock' }).databaseUrl).toBe(
+      'postgresql://u:p@db:5432/nthstock',
+    );
+    expect(() => loadConfig({ DATABASE_URL: 'mysql://u:p@db:3306/nthstock' })).toThrow(
+      /must be a postgres:\/\/ or postgresql:\/\/ URL[\s\S]*DATABASE_URL/,
+    );
+    expect(() => loadConfig({ DATABASE_URL: 'redis://127.0.0.1:6379' })).toThrow(/DATABASE_URL/);
+    expect(() => loadConfig({ DATABASE_URL: 'not a url' })).toThrow(/DATABASE_URL/);
+    expect(() => loadConfig({ PG_POOL_MAX: '0' })).toThrow(/PG_POOL_MAX/);
+    expect(() => loadConfig({ PG_POOL_MAX: 'many' })).toThrow(/PG_POOL_MAX/);
+  });
+
+  it('picks the storage driver; postgres needs DATABASE_URL (T-182)', () => {
+    expect(loadConfig({ DB_DRIVER: 'memory' }).dbDriver).toBe('memory');
+    expect(() => loadConfig({ DB_DRIVER: 'postgres' })).toThrow(
+      /DB_DRIVER=postgres needs DATABASE_URL/,
+    );
+    expect(() => loadConfig({ DB_DRIVER: 'sqlite' })).toThrow(/DB_DRIVER/);
   });
 
   it('fails fast on a bad value', () => {
