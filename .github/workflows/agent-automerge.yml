@@ -82,6 +82,7 @@ jobs:
             echo "#$num: all $total checks green, squash-merging"
             gh pr merge "$num" --repo "$repo" --squash --delete-branch --match-head-commit "$sha"
             merged=1
+            merged_pr="$num"
             # One merge per run: the other PRs' checks ran against the old main. The conflict
             # resolver and the next run (after their CI, or the hourly sweep) pick them up.
             break
@@ -91,4 +92,6 @@ jobs:
             for wf in ci.yml codeql.yml agent-conflicts.yml agent-labels.yml; do
               gh workflow run "$wf" --repo "$repo" --ref main
             done
+            # Close the story, bug and epic issues this PR completed, with a comment on each.
+            gh workflow run agent-close-issues.yml --repo "$repo" --ref main -f pr="$merged_pr"
           fi
