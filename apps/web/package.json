@@ -53,7 +53,7 @@
     "@tanstack/react-router": "1.170.39",
     "@tanstack/react-virtual": "3.14.13",
     "lightweight-charts": "5.2.1",
-    "msw": "2.15.0",
+    "msw": "3.0.0",
     "react": "19.3.0",
     "react-dom": "19.3.0",
     "react-hook-form": "7.89.0",
