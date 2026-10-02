@@ -106,7 +106,7 @@ jobs:
       # T-100: the frozen 1440 px dashboard screenshot, for the PR (the test also attaches it to
       # the HTML report). Uploaded whether or not the run passed.
       - if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: dashboard-screenshot
           path: apps/web/test-results/**/dashboard-1440.png
@@ -114,14 +114,14 @@ jobs:
           retention-days: 14
       # T-112: stock detail at 1440 and 768 px, for the PR.
       - if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: stock-detail-screenshots
           path: apps/web/test-results/**/stock-detail-*.png
           if-no-files-found: warn
           retention-days: 14
       - if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: playwright-report
           path: apps/web/playwright-report
@@ -148,7 +148,7 @@ jobs:
       - run: npm run e2e:perf
       # The measured vitals, the longest main-thread tasks and the Chrome trace, pass or fail.
       - if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: perf-report
           path: apps/web/playwright-report
@@ -167,7 +167,7 @@ jobs:
           export CHROME_PATH
           npx --yes @lhci/cli@0.15.1 autorun --config=lighthouserc.cjs
       - if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: lighthouse-report
           path: apps/web/lighthouse-report
@@ -235,7 +235,7 @@ jobs:
         env:
           E2E_REDIS_URL: redis://127.0.0.1:6379
       - if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: playwright-report-api
           path: apps/web/playwright-report
