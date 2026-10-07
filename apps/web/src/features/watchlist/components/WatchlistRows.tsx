@@ -168,6 +168,7 @@ export function WatchlistRows({
 
   const height = Math.min(items.length, VISIBLE_ROWS) * ROW_HEIGHT;
   return (
+    // eslint-disable-next-line jsx-a11y-x/no-static-element-interactions -- tracks whether focus is inside the rows; not a control
     <div
       ref={scrollRef}
       className="relative overflow-y-auto overscroll-contain"

@@ -245,6 +245,7 @@ export function SearchBox({ ref, onNavigate, addTo }: SearchBoxProps) {
           }
         />
       </form>
+      {/* eslint-disable-next-line jsx-a11y-x/no-static-element-interactions -- only keeps focus in the combobox input */}
       <div
         hidden={!expanded}
         // Keep focus in the input while the pointer picks an option.

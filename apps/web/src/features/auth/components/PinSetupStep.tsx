@@ -56,6 +56,7 @@ export function PinSetupStep({ onDone }: PinSetupStepProps) {
                 onChange={field.onChange}
                 length={PIN_LENGTH}
                 mask
+                // eslint-disable-next-line jsx-a11y-x/no-autofocus -- single-purpose login step; focus lands on its first input
                 autoFocus
                 label={strings.pinSetup.pinLabel}
               />

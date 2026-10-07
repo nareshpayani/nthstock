@@ -14,6 +14,8 @@ export const baseConfig = tseslint.config(
       '@typescript-eslint/no-explicit-any': 'error',
       '@typescript-eslint/consistent-type-imports': 'error',
       'no-restricted-exports': ['error', { restrictDefaultExports: { direct: true } }],
+      // No stray debug output; console.warn and console.error stay for real failures.
+      'no-console': ['error', { allow: ['warn', 'error'] }],
     },
   },
   {

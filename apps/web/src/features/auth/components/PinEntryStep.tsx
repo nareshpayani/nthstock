@@ -78,6 +78,7 @@ export function PinEntryStep({
             onComplete={(code) => void verify(code)}
             length={PIN_LENGTH}
             mask
+            // eslint-disable-next-line jsx-a11y-x/no-autofocus -- single-purpose login step; focus lands on its first input
             autoFocus
             disabled={verifyPin.isPending}
             label={strings.pinEntry.label}

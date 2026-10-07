@@ -156,6 +156,7 @@ export function VirtualList<T>({
   };
 
   return (
+    // eslint-disable-next-line jsx-a11y-x/interactive-supports-focus -- roving tabindex: the active row takes focus, not the grid
     <div
       ref={scrollRef}
       role="grid"
@@ -185,6 +186,7 @@ export function VirtualList<T>({
         {virtualizer.getVirtualItems().map((row) => {
           const item = items[row.index] as T;
           return (
+            // eslint-disable-next-line jsx-a11y-x/click-events-have-key-events -- keys are handled once on the grid (roving tabindex)
             <div
               key={row.key}
               role="row"
