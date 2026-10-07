@@ -2,13 +2,13 @@ import { MockMarketDataAdapter } from '@nthstock/marketData';
 import { healthScenarios, runScenarioSuite, scenarioGroups } from '@nthstock/contracts/testing';
 import { systemClock } from '@nthstock/utils';
 import { Redis } from 'ioredis';
-import { buildApp } from './app.js';
-import { createDatabase } from './db/client.js';
-import { DEMO_USER } from './modules/users/repo.js';
-import { injectBackend } from './test/injectBackend.js';
-import { describeWithPostgres, useTestPostgres } from './test/testPostgres.js';
-import { describeWithRedis, startTestRedis, uniqueChannel } from './test/testRedis.js';
-import { offsetClock } from './modules/testControls/offsetClock.js';
+import { buildApp } from '../app.js';
+import { createDatabase } from '../db/client.js';
+import { DEMO_USER } from '../modules/users/repo.js';
+import { injectBackend } from './injectBackend.js';
+import { describeWithPostgres, useTestPostgres } from './testPostgres.js';
+import { describeWithRedis, startTestRedis, uniqueChannel } from './testRedis.js';
+import { offsetClock } from '../modules/testControls/offsetClock.js';
 
 // The same scenario files run against the MSW node server in apps/web (ADR 0004).
 runScenarioSuite('apps/api (app.inject)', scenarioGroups, () => {

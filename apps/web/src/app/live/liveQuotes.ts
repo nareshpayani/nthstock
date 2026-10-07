@@ -1,7 +1,7 @@
 import { createQuoteStore, createWsClient } from '@nthstock/apiClient';
 import { gateWsClient } from '@/shared/lib/networkGate';
 import type { OrderUpdateSource } from '@/shared/lib/orderUpdatesContext';
-import { resolveWsUrl, type RuntimeConfig } from './runtimeConfig';
+import { resolveWsUrl, type RuntimeConfig } from '../config/runtimeConfig';
 
 /**
  * The app's live-price pipeline: one WebSocket client (MSW-intercepted in msw mode, apps/realtime

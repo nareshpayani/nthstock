@@ -5,7 +5,7 @@ import {
   type Order,
 } from '@nthstock/contracts';
 import { Redis } from 'ioredis';
-import { silentLogger, type Logger } from './logger.js';
+import { silentLogger, type Logger } from '../logger.js';
 
 export type OrderUpdateListener = (userId: string, order: Order) => void;
 

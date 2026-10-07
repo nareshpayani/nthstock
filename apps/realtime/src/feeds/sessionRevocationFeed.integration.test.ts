@@ -7,10 +7,10 @@ import {
 } from '@nthstock/contracts';
 import { Redis } from 'ioredis';
 import { afterAll, beforeAll, expect, it, vi } from 'vitest';
-import { createRealtimeServer, WS_PATH } from './app.js';
+import { createRealtimeServer, WS_PATH } from '../app.js';
 import { createRedisSessionRevocationFeed } from './sessionRevocationFeed.js';
-import { connectAuthed, testAuthenticator } from './test/auth.js';
-import { describeWithRedis, startTestRedis, type TestRedis } from './test/testRedis.js';
+import { connectAuthed, testAuthenticator } from '../test/auth.js';
+import { describeWithRedis, startTestRedis, type TestRedis } from '../test/testRedis.js';
 
 const REVOKED = { code: WS_CLOSE_CODES.unauthorized, reason: 'Session revoked' };
 

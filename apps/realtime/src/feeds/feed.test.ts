@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { createMemoryQuoteFeed } from './feed.js';
-import { testQuote } from './test/quotes.js';
+import { testQuote } from '../test/quotes.js';
 
 describe('createMemoryQuoteFeed', () => {
   it('emits to listeners until they detach or the feed closes', async () => {

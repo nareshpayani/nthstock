@@ -1,11 +1,11 @@
 import { ACCESS_TOKEN_TTL_SEC, WS_CLOSE_CODES } from '@nthstock/contracts';
 import { afterEach, describe, expect, it } from 'vitest';
-import { createRealtimeServer, WS_PATH, type RealtimeServer } from './app.js';
+import { createRealtimeServer, WS_PATH, type RealtimeServer } from '../app.js';
 import {
   createMemorySessionRevocationFeed,
   type MemorySessionRevocationFeed,
 } from './sessionRevocationFeed.js';
-import { connectAuthed, testAuthenticator } from './test/auth.js';
+import { connectAuthed, testAuthenticator } from '../test/auth.js';
 
 // Closing a revoked session's sockets (T-195), on the in-memory feed. The Redis path is in
 // sessionRevocation.integration.test.ts.

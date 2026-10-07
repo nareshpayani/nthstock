@@ -85,7 +85,7 @@ describe('resolveWsUrl', () => {
 });
 
 describe('.env.example', () => {
-  const text = readFileSync(new URL('../../.env.example', import.meta.url), 'utf8');
+  const text = readFileSync(new URL('../../../.env.example', import.meta.url), 'utf8');
   const entries = text
     .split('\n')
     .filter((line) => /^[A-Z_]+=/.test(line))

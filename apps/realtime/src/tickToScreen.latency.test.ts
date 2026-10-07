@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { WS_PROTOCOL_VERSION, createQuoteFrameDecoder, type Quote } from '@nthstock/contracts';
 import { afterAll, beforeAll, expect, it } from 'vitest';
 import { createRealtimeServer, WS_PATH, type RealtimeServer } from './app.js';
-import { createRedisQuoteFeed } from './feed.js';
+import { createRedisQuoteFeed } from './feeds/feed.js';
 import { connectAuthed, testAuthenticator } from './test/auth.js';
 import { describeWithRedis, startTestRedis, type TestRedis } from './test/testRedis.js';
 import type { TestClient } from './test/wsTestClient.js';

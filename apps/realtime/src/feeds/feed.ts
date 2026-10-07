@@ -1,6 +1,6 @@
 import { TICKS_CHANNEL, TickBatch, type Quote } from '@nthstock/contracts';
 import { Redis } from 'ioredis';
-import { silentLogger, type Logger } from './logger.js';
+import { silentLogger, type Logger } from '../logger.js';
 
 export type QuoteListener = (quotes: readonly Quote[]) => void;
 

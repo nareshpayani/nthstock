@@ -1,8 +1,8 @@
 import { createApiClient, type ApiClient } from '@nthstock/apiClient';
 import type { QueryClient } from '@tanstack/react-query';
 import { createRouter, type RouterHistory } from '@tanstack/react-router';
-import { routeTree } from '../routeTree.gen';
-import { NotFound, RouteError, RoutePending } from './layouts/RouteStates';
+import { routeTree } from '../../routeTree.gen';
+import { NotFound, RouteError, RoutePending } from '../layouts/RouteStates';
 
 /** What every route's loader receives: the query cache and the REST client to prefetch with. */
 export type RouterContext = { queryClient: QueryClient; apiClient: ApiClient };

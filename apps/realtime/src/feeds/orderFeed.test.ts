@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { createMemoryOrderFeed } from './orderFeed.js';
-import { testOrder } from './test/orders.js';
+import { testOrder } from '../test/orders.js';
 
 describe('createMemoryOrderFeed', () => {
   it('delivers only watched users, counting watchers per user', async () => {

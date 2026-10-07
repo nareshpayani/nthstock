@@ -7,11 +7,11 @@ import {
   MAX_BUFFERED_BYTES,
   MAX_UPDATES_PER_SECOND,
 } from './hub.js';
-import { fakeSocket } from './test/fakeSocket.js';
-import { quoteFramesOf } from './test/frames.js';
-import { manualTimers } from './test/manualTimers.js';
-import { testOrder } from './test/orders.js';
-import { testQuote } from './test/quotes.js';
+import { fakeSocket } from '../test/fakeSocket.js';
+import { quoteFramesOf } from '../test/frames.js';
+import { manualTimers } from '../test/manualTimers.js';
+import { testOrder } from '../test/orders.js';
+import { testQuote } from '../test/quotes.js';
 
 const subscribe = (symbols: string[], exchange = 'NSE') =>
   JSON.stringify({ v: WS_PROTOCOL_VERSION, type: 'subscribe', symbols, exchange });

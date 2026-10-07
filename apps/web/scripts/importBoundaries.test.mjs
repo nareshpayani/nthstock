@@ -21,7 +21,7 @@ describe('import boundaries', () => {
     const shared = "import { SearchBox } from '@/features/search';\nexport const x = SearchBox;\n";
     expect(await errorsFor('src/shared/x.ts', shared)).toBe(1);
     const feature =
-      "import { createAppRouter } from '@/app/router';\nexport const x = createAppRouter;\n";
+      "import { createAppRouter } from '@/app/router/router';\nexport const x = createAppRouter;\n";
     expect(await errorsFor('src/features/orders/x.ts', feature)).toBe(1);
   });
 

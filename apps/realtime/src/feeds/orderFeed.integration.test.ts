@@ -6,11 +6,11 @@ import {
 } from '@nthstock/contracts';
 import { Redis } from 'ioredis';
 import { afterAll, beforeAll, expect, it, vi } from 'vitest';
-import { createRealtimeServer, WS_PATH } from './app.js';
+import { createRealtimeServer, WS_PATH } from '../app.js';
 import { createRedisOrderFeed } from './orderFeed.js';
-import { connectAuthed, testAuthenticator } from './test/auth.js';
-import { testOrder } from './test/orders.js';
-import { describeWithRedis, startTestRedis, type TestRedis } from './test/testRedis.js';
+import { connectAuthed, testAuthenticator } from '../test/auth.js';
+import { testOrder } from '../test/orders.js';
+import { describeWithRedis, startTestRedis, type TestRedis } from '../test/testRedis.js';
 
 describeWithRedis('Redis order channel to WebSocket clients (T-133 integration)', () => {
   let redis: TestRedis | undefined;

@@ -6,7 +6,7 @@ import {
   sessionRevokedKey,
 } from '@nthstock/contracts';
 import { Redis } from 'ioredis';
-import { silentLogger, type Logger } from './logger.js';
+import { silentLogger, type Logger } from '../logger.js';
 
 /** Longest an upgrade waits for the revocation check before going ahead. */
 export const REVOCATION_CHECK_TIMEOUT_MS = 250;

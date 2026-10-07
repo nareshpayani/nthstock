@@ -1,6 +1,6 @@
 import { ACCESS_TOKEN_TTL_SEC, WS_CLOSE_CODES, WS_PROTOCOL_VERSION } from '@nthstock/contracts';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { createRealtimeServer, WS_PATH, type RealtimeServer } from './app.js';
+import { createRealtimeServer, WS_PATH, type RealtimeServer } from '../app.js';
 import {
   MIN_JWT_SECRET_LENGTH,
   cookieValue,
@@ -13,8 +13,8 @@ import {
   connectAuthed,
   signTestToken,
   testAuthenticator,
-} from './test/auth.js';
-import { connectTestClient } from './test/wsTestClient.js';
+} from '../test/auth.js';
+import { connectTestClient } from '../test/wsTestClient.js';
 
 let server: RealtimeServer;
 

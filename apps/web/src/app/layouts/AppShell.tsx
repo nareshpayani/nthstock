@@ -5,7 +5,7 @@ import { OrderUpdatesBridge } from '@/features/orders';
 import { useEffect, useRef, type ReactNode } from 'react';
 import { useShortcut } from '@/shared/hooks/useShortcut';
 import { useSearchFocusStore } from '@/shared/lib/searchFocusStore';
-import { useShellStore } from '../shellStore';
+import { useShellStore } from '../store/shellStore';
 import { strings } from '../strings';
 import { Header } from './Header';
 import { LeftRail } from './LeftRail';

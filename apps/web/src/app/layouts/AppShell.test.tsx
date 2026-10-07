@@ -4,7 +4,7 @@ import { createTestQuoteStore, testQuote } from '@/test/quotes';
 import { renderApp } from '@/test/renderApp';
 import { resetSession, signIn, signOut } from '@/test/session';
 import { useSearchFocusStore } from '@/shared/lib/searchFocusStore';
-import { initialShellState, useShellStore } from '../shellStore';
+import { initialShellState, useShellStore } from '../store/shellStore';
 
 afterEach(() => {
   act(() => {

@@ -10,9 +10,9 @@ import {
   type WsInstrument,
   type WsServerMessage,
 } from '@nthstock/contracts';
-import { silentLogger, type Logger } from './logger.js';
-import { systemTimers, type Timers } from './timers.js';
-import { errorMessage, parseClientMessage } from './protocol.js';
+import { silentLogger, type Logger } from '../logger.js';
+import { systemTimers, type Timers } from '../timers.js';
+import { errorMessage, parseClientMessage } from '../protocol.js';
 import {
   createSubscriptionRegistry,
   subscriptionKey,

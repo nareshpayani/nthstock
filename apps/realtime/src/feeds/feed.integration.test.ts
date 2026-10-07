@@ -1,17 +1,17 @@
 import { TICK_BATCH_VERSION, WS_PROTOCOL_VERSION, type Quote } from '@nthstock/contracts';
 import { Redis } from 'ioredis';
 import { afterAll, beforeAll, expect, it, vi } from 'vitest';
-import { createRealtimeServer, WS_PATH } from './app.js';
+import { createRealtimeServer, WS_PATH } from '../app.js';
 import { createRedisQuoteFeed } from './feed.js';
-import { quoteFramesOf } from './test/frames.js';
-import { testQuote } from './test/quotes.js';
+import { quoteFramesOf } from '../test/frames.js';
+import { testQuote } from '../test/quotes.js';
 import {
   describeWithRedis,
   startTestRedis,
   uniqueChannel,
   type TestRedis,
-} from './test/testRedis.js';
-import { connectAuthed, testAuthenticator } from './test/auth.js';
+} from '../test/testRedis.js';
+import { connectAuthed, testAuthenticator } from '../test/auth.js';
 
 describeWithRedis('Redis feed to WebSocket clients (integration)', () => {
   let redis: TestRedis | undefined;

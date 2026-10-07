@@ -1,4 +1,4 @@
-import type { ClientSocket } from '../hub.js';
+import type { ClientSocket } from '../connections/hub.js';
 import type { WsServerMessage } from '@nthstock/contracts';
 
 export type FakeSocket = ClientSocket & {

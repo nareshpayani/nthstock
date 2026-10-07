@@ -5,7 +5,7 @@ import {
   AUTH_COOKIES,
 } from '@nthstock/contracts';
 import { SignJWT } from 'jose';
-import { createJwtCookieAuthenticator } from '../auth.js';
+import { createJwtCookieAuthenticator } from '../connections/auth.js';
 import { connectTestClient, type TestClient } from './wsTestClient.js';
 
 /** A key for tests only; apps/api signs with JWT_SECRET. */
