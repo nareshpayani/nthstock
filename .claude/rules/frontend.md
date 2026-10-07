@@ -45,6 +45,23 @@ Source of truth: [ADR 0005](../../docs/adr/0005-web-ui-architecture.md). This fi
 - Performance: lazy-load charts and heavy routes, TanStack Virtual for lists over 50 rows,
   `React.memo` only on price cells and rows. Budgets: initial JS < 200 KB gzipped, LCP < 2.0 s.
 
+## Hooks and effects
+- Derive values during render; an effect that only sets state from props or other state is a bug.
+- Every subscription, interval, listener, socket and `fetch` in an effect has a cleanup
+  (`AbortController` for fetch). Timers and socket handlers read fresh state through the functional
+  updater or a ref, never a stale closure.
+- Never mutate state in place. List keys are stable ids, never the index, on lists that change.
+- A `react-hooks` lint disable needs a comment saying why it is safe.
+
+## Browser security
+- No `dangerouslySetInnerHTML` or `innerHTML` with non-constant content. URLs from data allow only
+  `https:` or relative paths; `target="_blank"` always has `rel="noopener noreferrer"`.
+- Session tokens, OTPs, PINs and TOTP secrets never go in `localStorage`, `sessionStorage`, stores,
+  query keys or URLs; the session is the httpOnly cookie. Nothing secret in `VITE_*` variables.
+- A failed fetch shows an error or "unavailable" state, never a believable empty value (₹0, no
+  holdings). Keep CSP and the other headers in `app/config/securityHeaders.ts` strict: no inline
+  or eval'd script.
+
 ## Components
 - One component per file, file named after it, named export, props type `<Name>Props`.
 - Accessibility (WCAG 2.2 AA): real buttons and links, labels on inputs, visible focus, keyboard

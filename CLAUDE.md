@@ -96,9 +96,9 @@ Node 22 is required (`.nvmrc`). On the owner's Mac: `export PATH="$(brew --prefi
 ## Claude Code setup (`.claude/`)
 | Path | What it holds |
 |---|---|
-| `agents/` | Planner, Developer, Reviewer, Fixer role definitions (used by GitHub Actions) |
+| `agents/` | Planner, Developer, Reviewer, Fixer roles (used by GitHub Actions), and the report-only specialists the Reviewer calls: `frontend-reviewer`, `security-reviewer`, `silent-failure-hunter`, `test-gap-analyzer` |
 | `rules/` | Detailed standards, loaded when you work in matching paths: `frontend`, `backend`, `packages`, `testing`, `git-and-prs` |
-| `skills/` | Repeatable procedures: `run-checks`, `local-dev`, `new-web-feature`, `new-api-module` |
+| `skills/` | Repeatable procedures: `run-checks`, `local-dev`, `new-web-feature`, `new-api-module`, `browser-qa`, `production-audit` |
 | `hooks/` | Automatic checks (see `hooks/README.md`): format + lint after each edit, typecheck of changed workspaces at the end of a turn, guards against pushing to `main` and editing secrets or generated files |
 | `settings.json` | Hook wiring and shared permissions |
 
