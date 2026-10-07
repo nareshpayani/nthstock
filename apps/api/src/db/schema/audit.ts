@@ -1,10 +1,7 @@
 import { sql } from 'drizzle-orm';
 import { bigserial, check, index, jsonb, pgTable, text, timestamp } from 'drizzle-orm/pg-core';
 import { AUDIT_ACTIONS, AUDIT_OUTCOMES } from '../../modules/audit/schema.js';
-
-/** `'A', 'B'` for a CHECK … IN (…) list. The values are compile-time constants, never input. */
-const sqlList = (values: readonly string[]) =>
-  sql.raw(values.map((value) => `'${value.replaceAll("'", "''")}'`).join(', '));
+import { sqlList } from './columns.js';
 
 /**
  * The append-only audit log (T-185, spec backend-core §4.4 and §8).

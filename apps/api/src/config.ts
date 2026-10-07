@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { resolvePiiKeys, type PiiKeys } from './db/crypto.js';
 
 const Flag = z
   .enum(['true', 'false', '1', '0'])
@@ -36,6 +37,8 @@ const EnvSchema = z.object({
     ),
   PG_POOL_MAX: z.coerce.number().int().min(1).max(100).default(10),
   DB_DRIVER: z.enum(['memory', 'postgres']).default('memory'),
+  PII_ENC_KEYS: z.string().optional(),
+  PII_HMAC_KEY: z.string().optional(),
 });
 
 /** Where repos keep their data (ADR 0007): in process, or in Postgres at DATABASE_URL. */
@@ -61,7 +64,7 @@ export type ApiConfig = {
   pgPoolMax: number;
   /**
    * `DB_DRIVER` (T-182): `memory` (default; unit tests) or `postgres` (`npm run dev:api`, E2E),
-   * which needs DATABASE_URL.
+   * which needs DATABASE_URL and REDIS_URL.
    */
   dbDriver: DbDriver;
   /**
@@ -74,6 +77,12 @@ export type ApiConfig = {
    * the demo user at start-up. Refused in production.
    */
   demoSeed: boolean;
+  /**
+   * `PII_ENC_KEYS` and `PII_HMAC_KEY` (T-189): the column encryption and blind-index keys. Unset
+   * outside production, the throwaway development keys (`devKeys: true`); production refuses to
+   * start without real ones.
+   */
+  pii: { keys: PiiKeys; devKeys: boolean };
 };
 
 /** Reads and validates the environment; throws at startup on a bad value. */
@@ -94,8 +103,29 @@ export function loadConfig(env: Readonly<Record<string, string | undefined>>): A
   if (parsed.data.DB_DRIVER === 'postgres' && !parsed.data.DATABASE_URL) {
     throw new Error('Invalid apps/api environment: DB_DRIVER=postgres needs DATABASE_URL');
   }
+  if (parsed.data.DB_DRIVER === 'postgres' && !parsed.data.REDIS_URL) {
+    // Short-lived auth state (OTP challenges, the session revocation cache) lives in Redis, so
+    // that apps/api holds no state of its own (T-193).
+    throw new Error('Invalid apps/api environment: DB_DRIVER=postgres needs REDIS_URL');
+  }
   if (production && parsed.data.DEMO_SEED) {
     throw new Error('Invalid apps/api environment: DEMO_SEED is for local demos, not production');
+  }
+  let devKeys = false;
+  let piiKeys: PiiKeys;
+  try {
+    piiKeys = resolvePiiKeys({
+      encKeys: parsed.data.PII_ENC_KEYS,
+      hmacKey: parsed.data.PII_HMAC_KEY,
+      production,
+      onDevKeys: () => {
+        devKeys = true;
+      },
+    });
+  } catch (error) {
+    throw new Error(`Invalid apps/api environment: ${(error as Error).message}`, {
+      cause: error,
+    });
   }
   return {
     production,
@@ -109,5 +139,6 @@ export function loadConfig(env: Readonly<Record<string, string | undefined>>): A
     dbDriver: parsed.data.DB_DRIVER,
     testControls: parsed.data.ENABLE_TEST_CONTROLS,
     demoSeed: parsed.data.DEMO_SEED,
+    pii: { keys: piiKeys, devKeys },
   };
 }

@@ -8,6 +8,7 @@ import type { UserRecord, UsersRepo } from '../users/repo.js';
 import { signAccessToken, verifyAccessToken, type SignedAccessToken } from './accessToken.js';
 import { deviceLabel } from './deviceLabel.js';
 import type { AuthRepo, DeviceRecord, SessionRecord } from './repo.js';
+import { createMemorySessionRevocations, type SessionRevocations } from './sessionRevocations.js';
 
 export type SessionServiceDeps = {
   clock: Clock;
@@ -17,9 +18,17 @@ export type SessionServiceDeps = {
   secret: Uint8Array;
   /** LOGIN_SUCCESS, LOGOUT, REFRESH_REUSE_DETECTED and SESSION_REVOKED go here (T-188). */
   audit: AuditRepo;
+  /**
+   * The revocation cache and `auth:sessionRevoked` event (T-194): Redis under `DB_DRIVER=postgres`;
+   * default the in-process one.
+   */
+  revocations?: SessionRevocations;
   /** Id generator for sessions and devices; default `<prefix>_<uuid>`. */
   newId?: (prefix: 'ses' | 'dev') => string;
 };
+
+/** `sessions.last_seen_at` is written at most once per this long per session (T-194). */
+export const LAST_SEEN_WRITE_INTERVAL_MS = 60_000;
 
 /** A freshly issued (or rotated) session with everything the route needs to answer. */
 export type IssuedSession = {
@@ -81,6 +90,9 @@ export const sessionEnded = () =>
  * Audited (T-188, spec backend-core §8), one entry each and never a token in the detail: a new
  * session is LOGIN_SUCCESS, logout is LOGOUT, a reused refresh token is REFRESH_REUSE_DETECTED
  * (written by the system: it caught it) and revoking another session is SESSION_REVOKED.
+ *
+ * Every revocation (logout, reuse, revoke) is recorded on the session row first, then announced
+ * through `revocations` (T-194), which `authenticate` checks before reading the row.
  */
 export function createSessionService({
   clock,
@@ -88,8 +100,15 @@ export function createSessionService({
   users,
   secret,
   audit,
+  revocations = createMemorySessionRevocations(),
   newId = (prefix) => `${prefix}_${randomUUID().replaceAll('-', '')}`,
 }: SessionServiceDeps): SessionService {
+  /** Records activity, but writes only when the stored time is a minute old or more. */
+  async function touch(session: SessionRecord, now: Date) {
+    const staleBefore = new Date(now.getTime() - LAST_SEEN_WRITE_INTERVAL_MS);
+    if (session.lastSeenAt <= staleBefore) await repo.touchSession(session.id, now, staleBefore);
+  }
+
   async function issue(session: SessionRecord, user: UserRecord, device: DeviceRecord) {
     const now = clock.now();
     const refreshToken = newRefreshToken();
@@ -131,8 +150,10 @@ export function createSessionService({
         deviceId: device.id,
         csrfToken: randomBytes(32).toString('base64url'),
         createdAt: now,
+        lastSeenAt: now,
         expiresAt: new Date(now.getTime() + REFRESH_TOKEN_TTL_SEC * 1000),
         revokedAt: null,
+        revokedReason: null,
       };
       await repo.createSession(session);
       const issued = await issue(session, input.user, device);
@@ -152,7 +173,7 @@ export function createSessionService({
       const token = await repo.useRefreshToken(hashToken(refreshToken), now);
       if (!token) throw sessionEnded();
       if (token.usedAt) {
-        await repo.revokeSession(token.sessionId, now);
+        await repo.revokeSession(token.sessionId, now, 'REUSE_DETECTED');
         const family = await repo.getSession(token.sessionId);
         await audit.append({
           actor: { type: 'system' },
@@ -162,6 +183,7 @@ export function createSessionService({
           outcome: 'REFUSED',
           detail: { sessionId: token.sessionId },
         });
+        if (family) await revocations.revoked({ sessionId: family.id, userId: family.userId });
         throw sessionEnded();
       }
       const session = await repo.getSession(token.sessionId);
@@ -173,6 +195,7 @@ export function createSessionService({
         repo.getDevice(session.deviceId),
       ]);
       if (!user || !device) throw sessionEnded();
+      await touch(session, now);
       return issue(session, user, device);
     },
 
@@ -180,6 +203,8 @@ export function createSessionService({
       const now = clock.now();
       const claims = await verifyAccessToken(secret, accessToken, now);
       if (!claims) return null;
+      // The revocation cache first: a revoked session is refused without reading its row.
+      if (await revocations.isRevoked(claims.sid)) return null;
       const session = await repo.getSession(claims.sid);
       if (!session || session.revokedAt || session.userId !== claims.sub) return null;
       const [user, device] = await Promise.all([
@@ -187,11 +212,12 @@ export function createSessionService({
         repo.getDevice(session.deviceId),
       ]);
       if (!user || !device) return null;
+      await touch(session, now);
       return { claims, token: accessToken, via, session, user, device };
     },
 
     async logout(context) {
-      await repo.revokeSession(context.session.id, clock.now());
+      await repo.revokeSession(context.session.id, clock.now(), 'LOGOUT');
       await audit.append({
         actor: { type: 'user', userId: context.user.id },
         userId: context.user.id,
@@ -200,12 +226,13 @@ export function createSessionService({
         outcome: 'OK',
         detail: { sessionId: context.session.id },
       });
+      await revocations.revoked({ sessionId: context.session.id, userId: context.user.id });
     },
 
     async revoke(sessionId, actor) {
       const session = await repo.getSession(sessionId);
       if (!session) return;
-      await repo.revokeSession(sessionId, clock.now());
+      await repo.revokeSession(sessionId, clock.now(), 'USER_REVOKED');
       await audit.append({
         actor,
         userId: session.userId,
@@ -214,6 +241,7 @@ export function createSessionService({
         outcome: 'OK',
         detail: { sessionId },
       });
+      await revocations.revoked({ sessionId, userId: session.userId });
     },
   };
 }
