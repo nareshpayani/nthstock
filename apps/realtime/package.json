@@ -23,14 +23,14 @@
   "devDependencies": {
     "@nthstock/config": "0.0.0",
     "@types/node": "22.20.4",
-    "@types/ws": "8.18.1",
+    "@types/ws": "8.18.2",
     "@vitest/coverage-v8": "5.0.2",
     "eslint": "10.11.0",
     "globals": "17.12.0",
-    "testcontainers": "12.1.0",
+    "testcontainers": "12.2.0",
     "tsx": "4.23.15",
     "typescript": "6.0.3",
-    "typescript-eslint": "8.70.1",
+    "typescript-eslint": "8.71.0",
     "vitest": "5.0.2"
   }
 }
