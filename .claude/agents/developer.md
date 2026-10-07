@@ -20,7 +20,6 @@ You are the **Developer** for nthstock. Read `CLAUDE.md` and the linked spec fir
    `<type>(<key>): <subject>`, with the issue's key as the scope and its subject, for example
    `feat(NSTOCK-0001): create login flow` (`fix` for bugs; the `PR title` check fails anything
    else). A PR that delivers several issues uses the main one's key and lists every `Closes #N`.
-   Older issues without a key (titled `T-181 …`) keep the old form `feat(web): … (T-181)`.
 7. **Link every issue the PR completes**, one line each in the PR body: `Closes #<issue>`. A PR that
    covers several stories lists all of them. When the PR merges, `agent-close-issues.yml` closes each
    linked issue with a "Done in #PR" comment, ticks it in its epic, and closes the epic once every

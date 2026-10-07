@@ -4,7 +4,7 @@ name: 'Agent: Close done issues'
 # Phase 1 left 125 issues open after their work merged: PRs covered several stories ("T-135 to
 # T-140") without "Closes #N", and nothing closed epics. For each merged PR this job:
 #   1. finds its issues: "Closes/Fixes/Resolves #N" in the PR title or body, and every T-number in
-#      the PR title (ranges like "T-135 to T-140" included) matched to issues titled "T-xxx …".
+#      the PR title (ranges like "T-135 to T-140" included), read as NSTOCK keys (T-135 is NSTOCK-0135).
 #      Only the title counts for T-numbers, so a body that mentions "builds on T-120" closes nothing,
 #      and the same goes for NSTOCK keys ("feat(NSTOCK-0001): …" closes the issue "NSTOCK-0001 : …"),
 #   2. comments "Done in #PR" on each (once) and closes it as completed,
@@ -61,12 +61,9 @@ jobs:
             tnums=$(grep -oE 'T-[0-9]{3}( *(to|-|–) *T-[0-9]{3})?' <<< "$title" \
               | awk '{ n = split($0, p, /[^0-9]+/); a = ""; b = "";
                        for (i = 1; i <= n; i++) if (p[i] != "") { if (a == "") a = p[i]; else b = p[i] }
-                       if (b == "") b = a; for (t = a + 0; t <= b + 0; t++) printf "T-%03d\n", t }' | sort -u)
-            for t in $tnums; do
-              gh issue list --repo "$repo" --state all --search "\"$t\" in:title" --limit 5 \
-                --json number,title --jq ".[] | select(.title | startswith(\"$t \")) | .number"
-            done
-            keys=$(grep -oE 'NSTOCK-[0-9]{4,}' <<< "$title" | sort -u || true)
+                       if (b == "") b = a; for (t = a + 0; t <= b + 0; t++) printf "NSTOCK-%04d\n", t }' | sort -u)
+            # Old T-numbers kept their number when issues got NSTOCK keys: T-181 is NSTOCK-0181.
+            keys=$( { grep -oE 'NSTOCK-[0-9]{4,}' <<< "$title" || true; echo "$tnums"; } | grep . | sort -u || true)
             for k in $keys; do
               bash tools/github/issueKey.sh find "$k" || true
             done
