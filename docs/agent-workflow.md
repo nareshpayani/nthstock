@@ -91,7 +91,11 @@ Dependabot rebases its own PRs, but their CI failures go to the Fixer.
 
 ## One-time setup (owner)
 1. Run `claude setup-token` locally and save the token as the repo secret `CLAUDE_CODE_OAUTH_TOKEN`
-   (Settings → Secrets and variables → Actions → New repository secret).
+   (Settings → Secrets and variables → Actions → New repository secret). It needs the Claude Code
+   CLI (`curl -fsSL https://claude.ai/install.sh | bash`, then a new terminal) and a Claude
+   subscription. Press `c` to copy the sign-in link, authorize in the browser, paste the code back
+   into the terminal, and copy the `sk-ant-oat01-…` token it prints. The token lasts a year; repeat
+   this step when it expires. Set 2026-10-07.
 2. Make sure the Claude GitHub App is installed on the repo (it already is).
 3. Actions → "Agent: Sync labels" → Run workflow (creates the labels).
 4. Settings → Branches → add a rule for `main`: require a pull request, block force pushes, and
