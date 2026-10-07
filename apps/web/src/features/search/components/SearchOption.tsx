@@ -38,6 +38,7 @@ export function SearchOption({
   add,
 }: SearchOptionProps) {
   return (
+    // eslint-disable-next-line jsx-a11y-x/click-events-have-key-events, jsx-a11y-x/interactive-supports-focus -- combobox option: focus stays in the input (aria-activedescendant), keys are handled there
     <div
       role="option"
       id={id}

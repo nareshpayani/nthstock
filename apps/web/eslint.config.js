@@ -1,4 +1,5 @@
 import { baseConfig } from '@nthstock/config/eslint';
+import jsxA11y from 'eslint-plugin-jsx-a11y-x';
 import reactHooks from 'eslint-plugin-react-hooks';
 import globals from 'globals';
 import tseslint from 'typescript-eslint';
@@ -54,8 +55,25 @@ export default tseslint.config(
     plugins: { 'react-hooks': reactHooks },
     rules: { ...reactHooks.configs.recommended.rules, ...restrict(deepFeatureImport) },
   },
+  // WCAG 2.2 AA in JSX (CLAUDE.md §6): the strict jsx-a11y set, for every component.
+  {
+    files: ['**/*.tsx'],
+    ...jsxA11y.configs.strict,
+    rules: {
+      ...jsxA11y.configs.strict.rules,
+      // A scrollable region must take focus for keyboard scrolling (axe scrollable-region-focusable).
+      'jsx-a11y-x/no-noninteractive-tabindex': ['error', { roles: ['region', 'tabpanel'] }],
+    },
+  },
+  // Tests render components with props such as autoFocus to check them.
+  { files: ['**/*.test.tsx'], rules: { 'jsx-a11y-x/no-autofocus': 'off' } },
   { files: ['src/features/**/*.{ts,tsx}'], rules: restrict(deepFeatureImport, upwardFromFeatures) },
   { files: ['src/shared/**/*.{ts,tsx}'], rules: restrict(upwardFromShared) },
+  {
+    // The mock worker reports its own state in the browser console during development.
+    files: ['src/mocks/**/*.ts'],
+    rules: { 'no-console': 'off' },
+  },
   {
     // Storybook stories need a default export (CSF).
     files: ['**/*.stories.tsx'],
@@ -64,6 +82,7 @@ export default tseslint.config(
   {
     files: ['scripts/**/*.mjs', 'e2e/**/*.ts', 'playwright.config.ts'],
     languageOptions: { globals: globals.node },
+    rules: { 'no-console': 'off' },
   },
   {
     // Lighthouse CI config (T-169): CommonJS, loaded by @lhci/cli under Node.

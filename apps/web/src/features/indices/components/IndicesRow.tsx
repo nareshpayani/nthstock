@@ -65,6 +65,7 @@ export function IndicesRow() {
           />
         </div>
       ) : indices.data ? (
+        // eslint-disable-next-line jsx-a11y-x/no-noninteractive-element-interactions -- arrow keys scroll the focusable region
         <div
           ref={rowRef}
           role="region"

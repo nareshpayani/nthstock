@@ -65,5 +65,6 @@ Source of truth: [ADR 0005](../../docs/adr/0005-web-ui-architecture.md). This fi
 ## Components
 - One component per file, file named after it, named export, props type `<Name>Props`.
 - Accessibility (WCAG 2.2 AA): real buttons and links, labels on inputs, visible focus, keyboard
-  paths, ▲▼ plus text with every colour signal. axe runs in Storybook and E2E.
+  paths, ▲▼ plus text with every colour signal. Lint runs the strict `jsx-a11y` set (`jsx-a11y-x`,
+  the ESLint 10 build); axe runs in Storybook and E2E. A rule disabled inline says why.
 - Never edit generated files: `src/routeTree.gen.ts`, `public/mockServiceWorker.js`.

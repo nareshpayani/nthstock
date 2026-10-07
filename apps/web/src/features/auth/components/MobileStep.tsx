@@ -76,6 +76,7 @@ export function MobileStep({ purpose, notice, defaultMobile = '', onSent }: Mobi
             inputMode="numeric"
             autoComplete="tel-national"
             // The login page exists to take this number; focusing it on arrival is expected.
+            // eslint-disable-next-line jsx-a11y-x/no-autofocus -- single-purpose login step, see above
             autoFocus
             maxLength={16}
             leading={strings.mobile.prefix}
