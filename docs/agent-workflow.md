@@ -56,13 +56,15 @@ Dependabot rebases its own PRs, but their CI failures go to the Fixer.
   with `tools/github/issueKey.sh create`; `issue-keys.yml` keys issues people open from the templates
   and files each story under the epic it names, as a sub-issue. PR titles are
   `<type>(NSTOCK-0001): <subject>`; `pr-title.yml` fails any other title (Dependabot and PRs opened
-  before 2026-10-08 are exempt). Issues from before 2026-10-08 (`T-xxx …`) keep their titles.
+  before 2026-10-08 are exempt). On 2026-10-07 every older issue was re-keyed: story T-181 is
+  NSTOCK-0181 (T-001 to T-244 keep their number) and epic E1 to E21 are NSTOCK-0245 to NSTOCK-0265,
+  so T-numbers in specs and old PRs still point at the right issue. New keys start at NSTOCK-0266.
 - **Done means closed (owner decision 2026-09-28):** every PR lists the issues it completes as
   `Closes #N`, one per line; the Reviewer blocks a PR that is missing one. When the PR merges,
   `agent-close-issues.yml` comments "Done in #PR" on each linked story or bug, closes it as completed,
   ticks it in its epic's `- [ ] #N` checklist and closes the epic once all its stories (sub-issues
   and checklist lines) are closed. It also matches the NSTOCK key in the PR title
-  (`feat(NSTOCK-0001): …`) and older T-numbers (`T-135 to T-140`) to issue titles. Auto-merge dispatches
+  (`feat(NSTOCK-0001): …`) and older T-numbers (`T-135 to T-140`, read as NSTOCK-0135 to NSTOCK-0140) to issue titles. Auto-merge dispatches
   it after each merge (merges made with the Actions token start no workflows), and a daily sweep
   re-checks the last 3 days of merges and every open epic.
 - **Only the owner or the agents can start agents.** Every workflow checks that the label was added
