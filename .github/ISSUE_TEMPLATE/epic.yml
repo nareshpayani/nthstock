@@ -1,0 +1,39 @@
+name: Epic
+description: A large feature made of several stories
+title: 'NSTOCK-XXXX : '
+labels: [epic]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Leave `NSTOCK-XXXX` in the title: a workflow gives the epic the next key, like
+        `NSTOCK-0001 : create login flow`. Stories you open with this epic's key become its sub-issues.
+  - type: textarea
+    id: goal
+    attributes:
+      label: Goal
+      placeholder: What the user can do when this epic is done, and why it matters.
+    validations:
+      required: true
+  - type: textarea
+    id: scope
+    attributes:
+      label: Scope
+      placeholder: |
+        - In: ...
+        - Out: ...
+    validations:
+      required: true
+  - type: textarea
+    id: done
+    attributes:
+      label: Definition of done
+      placeholder: |
+        - [ ] ...
+    validations:
+      required: true
+  - type: input
+    id: spec
+    attributes:
+      label: Spec
+      placeholder: 'docs/specs/<feature>.md or spec PR #123'

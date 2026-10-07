@@ -1,0 +1,37 @@
+name: 'Issues: NSTOCK keys'
+
+# Gives every new issue the next NSTOCK key ("NSTOCK-0001 : create login flow") and files stories
+# and bugs under the epic named in their "Epic" field as sub-issues (tools/github/issueKey.sh).
+# Agents create keyed issues with the same script; this job covers issues people open from the
+# templates. Runs are serialised so two issues opened together never share a key. Issues created
+# before 2026-10-08 keep their old titles; to key one, run this workflow with its number.
+
+on:
+  issues:
+    types: [opened]
+  workflow_dispatch:
+    inputs:
+      issue:
+        description: 'Issue number to key'
+        required: true
+
+permissions:
+  issues: write
+  contents: read
+
+concurrency:
+  group: issue-keys
+  cancel-in-progress: false
+
+jobs:
+  key:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          sparse-checkout: tools/github
+      - env:
+          GH_TOKEN: ${{ github.token }}
+          ISSUE: ${{ github.event.issue.number || github.event.inputs.issue }}
+        run: bash tools/github/issueKey.sh assign "$ISSUE"

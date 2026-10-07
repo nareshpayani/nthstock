@@ -1,7 +1,19 @@
 name: Bug
 description: Something is broken
+title: 'NSTOCK-XXXX : '
 labels: [bug]
 body:
+  - type: markdown
+    attributes:
+      value: |
+        Leave `NSTOCK-XXXX` in the title: a workflow gives the bug the next key. Name an epic below
+        to file the bug under it.
+  - type: input
+    id: epic
+    attributes:
+      label: Epic
+      description: Optional. The epic this bug belongs to, by key or issue number.
+      placeholder: 'NSTOCK-0001'
   - type: textarea
     id: what
     attributes:

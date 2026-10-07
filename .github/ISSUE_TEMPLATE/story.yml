@@ -1,7 +1,21 @@
 name: Story
-description: A small, shippable piece of a feature
+description: A small, shippable piece of an epic
+title: 'NSTOCK-XXXX : '
 labels: [story]
 body:
+  - type: markdown
+    attributes:
+      value: |
+        Leave `NSTOCK-XXXX` in the title: a workflow gives the story the next key and makes it a
+        sub-issue of the epic below.
+  - type: input
+    id: epic
+    attributes:
+      label: Epic
+      description: The epic's key or issue number.
+      placeholder: 'NSTOCK-0001'
+    validations:
+      required: true
   - type: textarea
     id: story
     attributes:

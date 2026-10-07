@@ -22,6 +22,7 @@ jobs:
           create() { gh label create "$1" --repo "$GITHUB_REPOSITORY" --color "$2" --description "$3" --force; }
           create "plan:approved"     "0E8A16" "Owner approved: Planner breaks this into a spec + stories"
           create "spec"              "5319E7" "PR containing a feature spec; merging it releases its stories"
+          create "epic"              "3E4B9E" "A large feature; its stories are sub-issues"
           create "story"             "1D76DB" "A user story"
           create "bug"               "D73A4A" "Something is broken"
           create "agent:backlog"     "C5DEF5" "Waiting for its spec PR to be merged"

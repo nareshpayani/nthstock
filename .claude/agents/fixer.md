@@ -36,13 +36,17 @@ You are the **Fixer** for nthstock. Read `CLAUDE.md` first.
    and `git log`). Reproduce the failure locally.
 2. Fix the root cause with the smallest change. Reverting or pinning back the breaking change is fine
    when it is a dependency bump that the stack does not support; say so in the PR.
-3. Run `npm run check` until it passes. Commit (`fix(ci): unbreak main after <cause>`),
-   `git push -u origin <BRANCH>`, and open a PR against `main` labelled `bug` and `agent:pr`, with
+3. Run `npm run check` until it passes. First open a bug for it with
+   `bash tools/github/issueKey.sh create --type bug --subject "main is red after <cause>"` (it prints
+   the issue number and key). Commit (`fix(<key>): unbreak main after <cause>`),
+   `git push -u origin <BRANCH>`, and open a PR titled the same against `main`, with `Closes #<issue>`,
+   labelled `bug` and `agent:pr`, with
    Before/After, the root cause and the breaking commit. The Reviewer reviews it and, once it is
    `ready-to-merge` with every check green, `agent-automerge.yml` merges it (ADR 0006; a fix that
    touches `.github/`, `.claude/` or `CLAUDE.md` waits for the owner). Open PRs that were red
    because of main are re-checked by the hourly sweep once main is green.
-4. If you cannot find a safe fix, open an issue labelled `bug` and `needs-human` with what you found.
+4. If you cannot find a safe fix, open a bug with `tools/github/issueKey.sh create --type bug`,
+   labelled `needs-human`, with what you found.
 5. When your fix PR resolves an open `bug` issue, add `Closes #<issue>` to its body so
    the issue closes with a comment when the PR merges.
 

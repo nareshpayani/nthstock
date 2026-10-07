@@ -51,4 +51,4 @@ jobs:
             Act as the Planner. Follow .claude/agents/planner.md exactly.
           claude_args: |
             --max-turns 40
-            --allowedTools "Read,Glob,Grep,Edit,Write,Bash(git:*),Bash(gh issue:*),Bash(gh pr create:*),Bash(gh pr view:*),Bash(gh label list:*)"
+            --allowedTools "Read,Glob,Grep,Edit,Write,Bash(git:*),Bash(gh issue:*),Bash(gh pr create:*),Bash(gh pr view:*),Bash(gh label list:*),Bash(bash tools/github/issueKey.sh:*)"

@@ -1,3 +1,5 @@
+<!-- Title: <type>(NSTOCK-0001): <subject>, e.g. feat(NSTOCK-0001): create login flow -->
+
 ## What changed
 
 Before:

@@ -46,14 +46,23 @@ Dependabot rebases its own PRs, but their CI failures go to the Fixer.
 | Conflict resolver | `.github/workflows/agent-conflicts.yml` | `.claude/agents/fixer.md` (Merge conflicts) |
 | Auto-merge | `.github/workflows/agent-automerge.yml` | — |
 | Issue closer | `.github/workflows/agent-close-issues.yml` | — |
+| Issue keys | `.github/workflows/issue-keys.yml`, `tools/github/issueKey.sh` | — |
+| PR title check | `.github/workflows/pr-title.yml` | — |
 | (glue) | `agent-promote-stories.yml`, `agent-labels.yml` | — |
 
 ## Guardrails
+- **Issue keys and PR titles (owner decision 2026-10-07):** every epic, story and bug is titled
+  `NSTOCK-0001 : create login flow`, from one sequence starting at NSTOCK-0001. Agents create issues
+  with `tools/github/issueKey.sh create`; `issue-keys.yml` keys issues people open from the templates
+  and files each story under the epic it names, as a sub-issue. PR titles are
+  `<type>(NSTOCK-0001): <subject>`; `pr-title.yml` fails any other title (Dependabot and PRs opened
+  before 2026-10-08 are exempt). Issues from before 2026-10-08 (`T-xxx …`) keep their titles.
 - **Done means closed (owner decision 2026-09-28):** every PR lists the issues it completes as
   `Closes #N`, one per line; the Reviewer blocks a PR that is missing one. When the PR merges,
   `agent-close-issues.yml` comments "Done in #PR" on each linked story or bug, closes it as completed,
-  ticks it in its epic's `- [ ] #N` checklist and closes the epic once every story is closed. It also
-  matches T-numbers in the PR title (`T-135 to T-140`) to issues titled `T-xxx`. Auto-merge dispatches
+  ticks it in its epic's `- [ ] #N` checklist and closes the epic once all its stories (sub-issues
+  and checklist lines) are closed. It also matches the NSTOCK key in the PR title
+  (`feat(NSTOCK-0001): …`) and older T-numbers (`T-135 to T-140`) to issue titles. Auto-merge dispatches
   it after each merge (merges made with the Actions token start no workflows), and a daily sweep
   re-checks the last 3 days of merges and every open epic.
 - **Only the owner or the agents can start agents.** Every workflow checks that the label was added

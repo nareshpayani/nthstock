@@ -22,7 +22,7 @@ specs and code comments cite them (`CLAUDE.md §4`).
 | D8 | Design | Same layout and information architecture as the reference, with **nthstock's own light theme** (own palette, typography, logo). Storybook is the design source. |
 | D9 | Repository | **Public**: https://github.com/nareshpayani/nthstock. No secrets, keys or real user data ever committed. |
 | D10 | Platforms | Desktop web first; mobile app later (React Native + Expo), so tokens, API client, contracts and utils live in `packages/*`. |
-| D11 | Tooling | **npm workspaces + Turborepo** (not pnpm). ESLint + Prettier. No git hooks; CI enforces (CI agent runners install a pre-push guard against pushing to `main`). Claude Code hooks in `.claude/hooks/` give agents the same checks while they edit. Conventional Commits, squash merge. |
+| D11 | Tooling | **npm workspaces + Turborepo** (not pnpm). ESLint + Prettier. No git hooks; CI enforces (CI agent runners install a pre-push guard against pushing to `main`). Claude Code hooks in `.claude/hooks/` give agents the same checks while they edit. Conventional Commits scoped by issue key (`feat(NSTOCK-0001): …`, owner decision 2026-10-07), squash merge. |
 
 ## 1. Product vision → [docs/product.md §1](docs/product.md)
 Reference UX: the Paytm Money stocks dashboard, its layout and information architecture only (D8).
@@ -57,7 +57,9 @@ docs/           product, architecture, adr/, specs/, agent-workflow, runbooks/ (
 - Every API and WS message is typed from `packages/contracts`.
 - Web imports go routes → features → shared → packages; a feature is imported only via its `index.ts`.
 - Accessibility WCAG 2.2 AA; colour is never the only up/down signal.
-- Branches `feat|fix|chore|docs/…` off `main`, Conventional Commits, squash merge, every PR green.
+- Branches `feat|fix|chore|docs/…` off `main`, squash merge, every PR green. Issues are titled
+  `NSTOCK-0001 : create login flow` (stories are sub-issues of their epic) and PR titles are
+  `feat(NSTOCK-0001): create login flow` (`.claude/rules/git-and-prs.md`).
 - Quality gate = `npm run check` (format, lint, typecheck, tests, build), plus E2E, budgets and
   security scans in CI.
 
