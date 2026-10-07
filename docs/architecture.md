@@ -124,7 +124,7 @@ nthstock/
 │   ├── config/                   # eslint, tsconfig, prettier, vitest presets
 │   └── utils/                    # INR formatting, market hours, IST dates
 ├── infra/                        # docker-compose, k6, (later) terraform
-├── tools/research/               # reference capture scripts, run locally by the owner
+├── tools/github/                 # issueKey.sh: NSTOCK issue keys for agents and workflows
 ├── docs/                         # see docs/README.md
 ├── .claude/                      # see "Claude Code setup" in CLAUDE.md
 └── .github/                      # workflows, PR template, CODEOWNERS, Dependabot

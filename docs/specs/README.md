@@ -33,4 +33,4 @@ backend and paper engine, and ADR 0005, the web UI architecture).
 
 | Spec | Epics | Tasks | Status |
 |---|---|---|---|
-| [Backend core on PostgreSQL](backend-core.md) ([task list](backend-core-tasks.md)) | E11 to E21 | T-176 to T-244 | Draft, awaiting owner approval |
+| [Backend core on PostgreSQL](backend-core.md) ([task list](backend-core-tasks.md)) | E11 to E21 | T-176 to T-244 | Approved 2026-09-28 (PR #236); E11 to E14 merged |

@@ -8,5 +8,5 @@ export const LoginPage = lazy(() =>
   import('./components/LoginPage').then((module) => ({ default: module.LoginPage })),
 );
 export type { LoginPageProps } from './components/LoginPage';
-export { KycBadge, ProfileMenu } from './components/ProfileMenu';
+export { ProfileMenu } from './components/ProfileMenu';
 export { RequireSession } from './components/RequireSession';
