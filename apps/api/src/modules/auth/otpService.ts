@@ -13,8 +13,8 @@ import {
 } from '@nthstock/contracts';
 import type { Clock } from '@nthstock/utils';
 import { ApiHttpError } from '../../http/apiError.js';
-import type { AuditRepo } from '../audit/repo.js';
-import type { UsersRepo } from '../users/repo.js';
+import type { AuditRepo } from '../audit/index.js';
+import type { UsersRepo } from '../users/index.js';
 import type { CaptchaVerifier } from './captcha.js';
 import type { AuthRepo } from './repo.js';
 import type { SmsProvider } from './smsProvider.js';

@@ -1,10 +1,10 @@
 import { Redis } from 'ioredis';
 import { buildApp } from './app.js';
 import { loadConfig } from './config.js';
-import { resolveJwtSecret } from './modules/auth/jwtSecret.js';
-import { seedDemo } from './modules/demo/seed.js';
-import { DEMO_USER } from './modules/users/repo.js';
-import { offsetClock } from './modules/testControls/offsetClock.js';
+import { resolveJwtSecret } from './modules/auth/index.js';
+import { seedDemo } from './modules/demo/index.js';
+import { offsetClock } from './modules/testControls/index.js';
+import { DEMO_USER } from './modules/users/index.js';
 import { createRedisPublisher } from './ticks/publisher.js';
 
 const config = loadConfig(process.env);

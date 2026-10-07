@@ -1,8 +1,7 @@
 import type { FastifyPluginAsync, FastifyRequest } from 'fastify';
 import type { AppDeps } from '../../deps.js';
 import { registerRoute } from '../../http/registerRoute.js';
-import { authContextOf, createAuthenticate } from '../auth/authenticate.js';
-import { createSessionService } from '../auth/sessionService.js';
+import { authContextOf, createAuthenticate, createSessionService } from '../auth/index.js';
 
 /**
  * Order routes (T-131): place, modify, cancel, get and list by status (the funds routes are in the

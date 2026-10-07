@@ -5,18 +5,18 @@ import { createDeps, type AppDeps, type DepsOverrides } from './deps.js';
 import { installCsrfCheck } from './http/csrf.js';
 import { installErrorHandling } from './http/errorHandler.js';
 import { installSecurityHeaders } from './http/securityHeaders.js';
-import { authRoutes } from './modules/auth/routes.js';
-import { fundsRoutes } from './modules/funds/routes.js';
-import { healthRoutes, type ReadinessCheck } from './modules/health/routes.js';
-import { marketRoutes } from './modules/market/routes.js';
-import { orderRoutes } from './modules/orders/routes.js';
-import { portfolioRoutes } from './modules/portfolio/routes.js';
+import { authRoutes } from './modules/auth/index.js';
+import { fundsRoutes } from './modules/funds/index.js';
+import { healthRoutes, type ReadinessCheck } from './modules/health/index.js';
+import { marketRoutes } from './modules/market/index.js';
 import {
+  orderRoutes,
   startOrderUpdatePublisher,
   type OrderUpdatePublisher,
-} from './modules/orders/updatePublisher.js';
-import { testControlRoutes, type TestControls } from './modules/testControls/routes.js';
-import { watchlistRoutes } from './modules/watchlists/routes.js';
+} from './modules/orders/index.js';
+import { portfolioRoutes } from './modules/portfolio/index.js';
+import { testControlRoutes, type TestControls } from './modules/testControls/index.js';
+import { watchlistRoutes } from './modules/watchlists/index.js';
 import type { Publisher } from './ticks/publisher.js';
 import { startTickPump, type TickPump } from './ticks/tickPump.js';
 
