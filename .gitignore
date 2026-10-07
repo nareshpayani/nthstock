@@ -16,3 +16,7 @@ dist-e2e*/
 dist-lhci/
 lighthouse-report/
 .lighthouseci/
+
+# Claude Code: agent worktrees and personal settings stay local
+.claude/worktrees/
+.claude/settings.local.json
