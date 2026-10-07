@@ -23,8 +23,7 @@ import {
 } from '@nthstock/paperEngine';
 import type { Clock } from '@nthstock/utils';
 import { ApiHttpError } from '../../http/apiError.js';
-import type { AuditRepo } from '../audit/repo.js';
-import type { AuditAction, NewAuditRecord } from '../audit/schema.js';
+import type { AuditAction, AuditRepo, NewAuditRecord } from '../audit/index.js';
 import type { OrdersRepo } from './repo.js';
 
 export type OrderServiceDeps = {

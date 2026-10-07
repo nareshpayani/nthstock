@@ -1,5 +1,5 @@
 import type { HoldingsResponse, PortfolioSummary, PositionsResponse } from '@nthstock/contracts';
-import type { OrderService } from '../orders/service.js';
+import type { OrderService } from '../orders/index.js';
 import type { PortfolioUserId } from './schema.js';
 
 export type PortfolioServiceDeps = {

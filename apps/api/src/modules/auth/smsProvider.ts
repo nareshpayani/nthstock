@@ -1,5 +1,5 @@
 import type { OtpPurpose } from '@nthstock/contracts';
-import { maskMobile } from '../users/service.js';
+import { maskMobile } from '../users/index.js';
 
 /** Sends OTPs by SMS. A mock until launch (requirements BE-07); a real provider plugs in here. */
 export interface SmsProvider {

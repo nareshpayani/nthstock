@@ -18,7 +18,7 @@ import { renderWithProviders } from '@/test/renderWithProviders';
 import { installResizeObserver } from '@/test/resizeObserver';
 import { resetSession } from '@/test/session';
 import { fakeLayout, findStock, loginOnMock } from '@/test/watchlists';
-import { fundsKeys } from '../api/fundsQuery';
+import { fundsKeys } from '@/shared/lib/queryKeys';
 import { FundsPage } from './FundsPage';
 
 /** Monday 28 Sep 2026, 10:00 IST: NSE is open. */

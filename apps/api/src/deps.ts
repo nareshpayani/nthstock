@@ -4,30 +4,37 @@ import { systemClock, type Clock } from '@nthstock/utils';
 import type { DbDriver } from './config.js';
 import { createDatabase, type Database } from './db/client.js';
 import { createPiiCrypto, resolvePiiKeys, type PiiKeys } from './db/crypto.js';
-import { createMockCaptchaVerifier, type CaptchaVerifier } from './modules/auth/captcha.js';
-import { resolveJwtSecret } from './modules/auth/jwtSecret.js';
-import { createArgon2PinHasher, type PinHasher } from './modules/auth/pinHasher.js';
-import { createPgAuthRepo } from './modules/auth/pgRepo.js';
-import { createRedisOtpStore } from './modules/auth/redisOtpStore.js';
+import { createMemoryAuditRepo, createPgAuditRepo, type AuditRepo } from './modules/audit/index.js';
 import {
+  createArgon2PinHasher,
+  createMemoryAuthRepo,
+  createMemoryOtpStore,
   createMemorySessionRevocations,
-  createRedisSessionRevocations,
-  type SessionRevocations,
-} from './modules/auth/sessionRevocations.js';
-import { createMemoryAuthRepo, createMemoryOtpStore, type AuthRepo } from './modules/auth/repo.js';
-import {
+  createMockCaptchaVerifier,
   createMockSmsProvider,
+  createPgAuthRepo,
+  createRedisOtpStore,
+  createRedisSessionRevocations,
+  resolveJwtSecret,
+  type AuthRepo,
+  type CaptchaVerifier,
+  type PinHasher,
+  type SessionRevocations,
   type SmsLog,
   type SmsProvider,
-} from './modules/auth/smsProvider.js';
-import { createPgAuditRepo } from './modules/audit/pgRepo.js';
-import { createMemoryAuditRepo, type AuditRepo } from './modules/audit/repo.js';
-import { createMemoryOrdersRepo, type OrdersRepo } from './modules/orders/repo.js';
-import { createOrderService, type OrderService } from './modules/orders/service.js';
-import { createPgUsersRepo } from './modules/users/pgRepo.js';
-import { createMemoryUsersRepo, type UsersRepo } from './modules/users/repo.js';
-import { createPgWatchlistsRepo } from './modules/watchlists/pgRepo.js';
-import { createMemoryWatchlistsRepo, type WatchlistsRepo } from './modules/watchlists/repo.js';
+} from './modules/auth/index.js';
+import {
+  createMemoryOrdersRepo,
+  createOrderService,
+  type OrderService,
+  type OrdersRepo,
+} from './modules/orders/index.js';
+import { createMemoryUsersRepo, createPgUsersRepo, type UsersRepo } from './modules/users/index.js';
+import {
+  createMemoryWatchlistsRepo,
+  createPgWatchlistsRepo,
+  type WatchlistsRepo,
+} from './modules/watchlists/index.js';
 
 /**
  * Every module's storage seam (ADR 0004 §3). Each module's Postgres repo (`pgRepo.ts`) takes over

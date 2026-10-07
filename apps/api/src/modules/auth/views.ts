@@ -1,5 +1,5 @@
 import type { Device, Session } from '@nthstock/contracts';
-import { toUser } from '../users/service.js';
+import { toUser } from '../users/index.js';
 import type { DeviceRecord } from './repo.js';
 import type { AuthContext, IssuedSession } from './sessionService.js';
 

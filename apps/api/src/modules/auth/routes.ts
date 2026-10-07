@@ -14,7 +14,7 @@ import {
 import { authRateLimit } from './rateLimits.js';
 import { createSessionService, sessionEnded, type IssuedSession } from './sessionService.js';
 import { toCurrentSession, toDevice, toSession } from './views.js';
-import { DuplicateMobileError, type UserRecord, type UsersRepo } from '../users/repo.js';
+import { DuplicateMobileError, type UserRecord, type UsersRepo } from '../users/index.js';
 
 /** The mobile's user, created on first login; a racing sign-up for the same mobile reads theirs. */
 async function findOrCreateUser(users: UsersRepo, mobile: string): Promise<UserRecord> {

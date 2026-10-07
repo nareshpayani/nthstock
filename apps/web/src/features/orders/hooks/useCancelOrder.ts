@@ -1,7 +1,6 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { fundsKeys } from '@/features/funds';
 import { useApiClient } from '@/shared/lib/apiClientContext';
-import { ordersKeys } from '../api/ordersQuery';
+import { fundsKeys, ordersKeys } from '@/shared/lib/queryKeys';
 
 /**
  * `DELETE /v1/orders/:id` (T-145). Settled either way, the order book and funds may have moved

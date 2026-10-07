@@ -1,9 +1,8 @@
 import { isApiError } from '@nthstock/apiClient';
 import type { PlaceOrderRequest } from '@nthstock/contracts';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { fundsKeys } from '@/features/funds';
-import { ordersKeys } from '@/features/orders';
 import { useApiClient } from '@/shared/lib/apiClientContext';
+import { fundsKeys, ordersKeys } from '@/shared/lib/queryKeys';
 
 /**
  * `POST /v1/orders` (T-139). Whenever the server stored an order (placed, or REJECTED with a 422)

@@ -6,8 +6,8 @@ import {
   type DemoInstrument,
 } from '@nthstock/paperEngine';
 import type { AppDeps } from '../../deps.js';
-import { DEMO_USER } from '../users/repo.js';
-import type { WatchlistRecord } from '../watchlists/schema.js';
+import { DEMO_USER } from '../users/index.js';
+import type { WatchlistRecord } from '../watchlists/index.js';
 
 /**
  * The demo seed for api mode (T-174): `npm run seed:demo` starts apps/api with `DEMO_SEED=true`,

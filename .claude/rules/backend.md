@@ -14,6 +14,7 @@ Sources: [ADR 0004](../../docs/adr/0004-mock-backend-and-paper-engine.md),
 ## API module layout (`apps/api/src/modules/<module>/`)
 | File | Holds |
 |---|---|
+| `index.ts` | The module's public API: only what other modules and the wiring (`app.ts`, `deps.ts`, `server.ts`) use |
 | `routes.ts` | Fastify routes registered through `http/registerRoute.ts` with the contract from `packages/contracts` |
 | `service.ts` | Business rules; no Fastify, no SQL |
 | `repo.ts` | The storage interface plus the in-memory implementation |
@@ -22,7 +23,11 @@ Sources: [ADR 0004](../../docs/adr/0004-mock-backend-and-paper-engine.md),
 | `<concern>.ts` | A focused piece when a module grows (auth: `otpService.ts`, `pinService.ts`, …) |
 | `*.test.ts` | Beside the code; `*.integration.test.ts` for Postgres/Redis via Testcontainers |
 
-Not every module needs every file. Cross-module wiring lives in `deps.ts`; HTTP plumbing in `http/`;
+Not every module needs every file, but every module has `index.ts`. Outside a module, import it
+only through `../<module>/index.js` (or `./modules/<module>/index.js`); ESLint
+(`no-restricted-imports` in `apps/api/eslint.config.js`) fails CI otherwise. Tests may import
+internals, and `db/schema/` reads enum constants straight from a module's `repo.ts`/`schema.ts`
+(its `index.ts` loads `pgRepo.ts`, which imports those tables). Cross-module wiring lives in `deps.ts`; HTTP plumbing in `http/`;
 tables in `db/schema/<area>.ts`; migrations in `apps/api/drizzle/NNNN_snake_name.sql` (never edit a
 migration that has merged; add a new one).
 

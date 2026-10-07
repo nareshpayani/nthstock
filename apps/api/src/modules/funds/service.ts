@@ -1,5 +1,5 @@
 import type { CursorQuery, FundsSummary, LedgerPage, ResetRequest } from '@nthstock/contracts';
-import type { OrderService } from '../orders/service.js';
+import type { OrderService } from '../orders/index.js';
 import type { FundsUserId } from './schema.js';
 
 export type FundsServiceDeps = {

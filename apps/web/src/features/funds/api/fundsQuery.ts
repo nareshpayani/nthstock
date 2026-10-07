@@ -1,15 +1,7 @@
 import type { ApiClient } from '@nthstock/apiClient';
 import { infiniteQueryOptions, queryOptions } from '@tanstack/react-query';
 
-/**
- * Query keys for paper funds (ADR 0005). Placing an order, an order update and a reset invalidate
- * `fundsKeys.all` (the summary and the ledger).
- */
-export const fundsKeys = {
-  all: ['funds'] as const,
-  summary: () => ['funds', 'summary'] as const,
-  ledger: () => ['funds', 'ledger'] as const,
-};
+import { fundsKeys } from '@/shared/lib/queryKeys';
 
 /** Ledger entries per page (T-159). */
 export const LEDGER_PAGE_SIZE = 50;

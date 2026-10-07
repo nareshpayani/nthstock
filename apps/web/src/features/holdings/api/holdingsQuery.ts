@@ -1,15 +1,7 @@
 import type { ApiClient } from '@nthstock/apiClient';
 import { queryOptions } from '@tanstack/react-query';
 
-/**
- * Query keys for holdings and the portfolio summary (ADR 0005). Every `orderUpdate` invalidates
- * `holdingsKeys.all`.
- */
-export const holdingsKeys = {
-  all: ['holdings'] as const,
-  list: () => ['holdings', 'list'] as const,
-  summary: () => ['holdings', 'summary'] as const,
-};
+import { holdingsKeys } from '@/shared/lib/queryKeys';
 
 /** `GET /v1/holdings`: delivery holdings, valued at the LTP when they were read. */
 export function holdingsQuery(api: ApiClient) {

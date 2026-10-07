@@ -102,8 +102,9 @@ nthstock/
 │   │       ├── db/               # Postgres client, migrations runner, column crypto
 │   │       │   └── schema/       # Drizzle tables, one file per area
 │   │       ├── http/             # errors, cookies, CSRF, security headers, route registration
-│   │       ├── modules/<module>/ # routes.ts, service.ts, repo.ts (interface + memory),
-│   │       │                     # pgRepo.ts (Postgres), schema.ts, tests beside them
+│   │       ├── modules/<module>/ # index.ts (public API), routes.ts, service.ts, repo.ts
+│   │       │                     # (interface + memory), pgRepo.ts (Postgres), schema.ts, tests
+│   │       │                     # beside them; others import a module only via index.ts
 │   │       ├── ticks/            # mock tick pump and quote publisher
 │   │       └── test/             # injected backend, test Postgres/Redis, cross-module suites
 │   ├── realtime/                 # WebSocket server
