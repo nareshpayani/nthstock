@@ -63,4 +63,4 @@ jobs:
             Act as the Developer. Follow .claude/agents/developer.md exactly.
           claude_args: |
             --max-turns 80
-            --allowedTools "Read,Glob,Grep,Edit,Write,Bash(npm:*),Bash(npx:*),Bash(node:*),Bash(git:*),Bash(gh issue:*),Bash(gh pr create:*),Bash(gh pr view:*),Bash(gh pr edit:*)"
+            --allowedTools "Read,Glob,Grep,Edit,Write,Bash(npm:*),Bash(npx:*),Bash(node:*),Bash(git:*),Bash(gh issue:*),Bash(gh pr create:*),Bash(gh pr view:*),Bash(gh pr edit:*),Bash(bash tools/github/issueKey.sh:*)"

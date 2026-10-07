@@ -1,0 +1,44 @@
+name: PR title
+
+# PR titles are "<type>(NSTOCK-0001): <subject>", naming the issue the PR delivers, e.g.
+# "feat(NSTOCK-0001): create login flow". Squash merge makes the title the commit on main, so the
+# history stays Conventional Commits and every commit points at its issue. The key must belong to
+# an existing issue. Dependabot PRs and PRs opened before 2026-10-08 are exempt.
+
+on:
+  pull_request:
+    types: [opened, edited, reopened, synchronize]
+
+permissions:
+  issues: read
+  contents: read
+
+jobs:
+  title:
+    name: PR title has an NSTOCK key
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          sparse-checkout: tools/github
+      - env:
+          GH_TOKEN: ${{ github.token }}
+          TITLE: ${{ github.event.pull_request.title }}
+          AUTHOR: ${{ github.event.pull_request.user.login }}
+          CREATED: ${{ github.event.pull_request.created_at }}
+        run: |
+          set -euo pipefail
+          if [ "$AUTHOR" = 'dependabot[bot]' ] || [[ "$CREATED" < '2026-10-08' ]]; then
+            echo "Exempt: $AUTHOR, opened $CREATED."; exit 0
+          fi
+          types='feat|fix|docs|chore|refactor|test|perf|build|ci|style|revert'
+          if ! [[ "$TITLE" =~ ^($types)\((NSTOCK-[0-9]{4,})\)!?:\ [^[:space:]] ]]; then
+            echo "::error::PR title must look like 'feat(NSTOCK-0001): create login flow'" \
+              "(type one of ${types//|/, }). Got: $TITLE"
+            exit 1
+          fi
+          key="${BASH_REMATCH[2]}"
+          num=$(bash tools/github/issueKey.sh find "$key") \
+            || { echo "::error::No issue is titled '$key : …'. Use the key of the issue this PR delivers."; exit 1; }
+          echo "$key is issue #$num"

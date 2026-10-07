@@ -6,8 +6,10 @@ name: 'Agent: Close done issues'
 #   1. finds its issues: "Closes/Fixes/Resolves #N" in the PR title or body, and every T-number in
 #      the PR title (ranges like "T-135 to T-140" included) matched to issues titled "T-xxx …".
 #      Only the title counts for T-numbers, so a body that mentions "builds on T-120" closes nothing,
+#      and the same goes for NSTOCK keys ("feat(NSTOCK-0001): …" closes the issue "NSTOCK-0001 : …"),
 #   2. comments "Done in #PR" on each (once) and closes it as completed,
 #   3. ticks the story in its epic's checklist and closes the epic when every story is closed.
+#      An epic's stories are its sub-issues plus any "- [ ] #N" lines in its body.
 # Auto-merge merges with GITHUB_TOKEN, which starts no workflows, so agent-automerge.yml dispatches
 # this job with the PR number. A daily sweep re-checks PRs merged in the last 3 days and all epics.
 
@@ -37,17 +39,22 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
+      - uses: actions/checkout@v7
+        with:
+          sparse-checkout: tools/github
       - env:
           GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
           PR_INPUT: ${{ github.event.pull_request.number || github.event.inputs.pr }}
         run: |
           set -euo pipefail
           repo="$GITHUB_REPOSITORY"
           marker='<!-- nthstock-issue-done -->'
 
-          # Issue numbers a merged PR completes: closing keywords plus T-numbers matched to issue titles.
+          # Issue numbers a merged PR completes: closing keywords plus T-numbers and NSTOCK keys
+          # matched to issue titles.
           issues_for_pr() {
-            local pr="$1" text title tnums
+            local pr="$1" text title tnums keys
             text=$(gh pr view "$pr" --repo "$repo" --json title,body --jq '.title + "\n" + (.body // "")')
             title=$(gh pr view "$pr" --repo "$repo" --json title --jq .title)
             grep -oiE '(close[sd]?|fix(e[sd])?|resolve[sd]?) +#[0-9]+' <<< "$text" | grep -oE '[0-9]+$' || true
@@ -58,6 +65,10 @@ jobs:
             for t in $tnums; do
               gh issue list --repo "$repo" --state all --search "\"$t\" in:title" --limit 5 \
                 --json number,title --jq ".[] | select(.title | startswith(\"$t \")) | .number"
+            done
+            keys=$(grep -oE 'NSTOCK-[0-9]{4,}' <<< "$title" | sort -u || true)
+            for k in $keys; do
+              bash tools/github/issueKey.sh find "$k" || true
             done
           }
 
@@ -84,7 +95,9 @@ jobs:
           sweep_epics() {
             for epic in $(gh issue list --repo "$repo" --label epic --state open --limit 100 --json number --jq '.[].number'); do
               body=$(gh issue view "$epic" --repo "$repo" --json body --jq .body)
-              stories=$(grep -oE '^- \[[ x]\] #[0-9]+' <<< "$body" | grep -oE '[0-9]+$' || true)
+              stories=$( { grep -oE '^- \[[ x]\] #[0-9]+' <<< "$body" | grep -oE '[0-9]+$' || true
+                gh api "repos/$repo/issues/$epic/sub_issues?per_page=100" --jq '.[].number' 2>/dev/null || true
+              } | sort -un)
               [ -n "$stories" ] || continue
               new="$body"; open=0
               for s in $stories; do

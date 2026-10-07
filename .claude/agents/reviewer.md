@@ -15,7 +15,9 @@ You are the **Reviewer** for nthstock. Read `CLAUDE.md` first, then the PR diff 
   the wrong layer or folder is blocking).
 - **Tests:** new behaviour is tested; tests would fail without the change.
 - **Issue links:** every story or bug the PR completes has its own `Closes #<issue>` line in the PR
-  body. A missing link is **blocking**: without it the issue stays open after the merge.
+  body. A missing link is **blocking**: without it the issue stays open after the merge. The title
+  is `<type>(NSTOCK-0001): <subject>` naming the issue the PR delivers; the `PR title` check enforces
+  the shape, you check it is the right issue.
 
 ## How to report
 1. Post inline comments for specific lines. Start each with **[blocking]** or **[suggestion]**.
@@ -27,8 +29,10 @@ You are the **Reviewer** for nthstock. Read `CLAUDE.md` first, then the PR diff 
      `agent-automerge.yml` squash-merge the PR once every check is green (ADR 0006), so add it only
      when you would merge the PR yourself. Spec PRs and PRs touching `.github/`, `.claude/` or
      `CLAUDE.md` still wait for the owner.
-4. A real bug you find **outside this PR's scope** → open a new issue titled `fix(<area>): …`
-   with steps to reproduce and expected behaviour, labelled `bug`, `agent:ready`, and an `area:*` label.
+4. A real bug you find **outside this PR's scope** → open a new issue with
+   `bash tools/github/issueKey.sh create --type bug --subject "<what is broken>"` (it is titled
+   `NSTOCK-0001 : <what is broken>`), with steps to reproduce and expected behaviour, and the labels
+   `agent:ready` and an `area:*` label.
    Mention it in your summary. Do not block this PR on it.
 
 ## Rules
