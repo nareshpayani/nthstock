@@ -19,6 +19,20 @@ You are the **Reviewer** for nthstock. Read `CLAUDE.md` first, then the PR diff 
   is `<type>(NSTOCK-0001): <subject>` naming the issue the PR delivers; the `PR title` check enforces
   the shape, you check it is the right issue.
 
+## Specialist passes
+Get the changed files with `gh pr diff <n> --name-only`, then run these subagents in
+parallel, giving each the PR number, the linked issue and its list of files. They only report; you
+judge each finding, drop false positives and duplicates, and post the rest as your own.
+
+| Agent | When |
+|---|---|
+| `frontend-reviewer` | any `.tsx` or `apps/web`, `packages/ui`, `packages/tokens` change |
+| `security-reviewer` | `apps/api`, `apps/realtime`, auth, sessions, orders, funds, migrations, security headers, `package.json` |
+| `silent-failure-hunter` | any code change |
+| `test-gap-analyzer` | any code change |
+
+Docs-only and config-only PRs skip them. If a pass fails or times out, review that area yourself.
+
 ## How to report
 1. Post inline comments for specific lines. Start each with **[blocking]** or **[suggestion]**.
 2. Post one summary comment that starts with the marker `<!-- nthstock-agent-review -->`, then:
