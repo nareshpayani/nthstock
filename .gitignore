@@ -10,7 +10,6 @@ coverage/
 storybook-static/
 playwright-report/
 test-results/
-research-output/
 dist-api/
 dist-e2e*/
 dist-lhci/

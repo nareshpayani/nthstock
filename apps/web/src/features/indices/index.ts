@@ -1,2 +1,2 @@
-export { IndicesRow, scrollRowByKey } from './components/IndicesRow';
-export { indicesKeys, indicesQuery } from './api/indicesQuery';
+export { IndicesRow } from './components/IndicesRow';
+export { indicesQuery } from './api/indicesQuery';
