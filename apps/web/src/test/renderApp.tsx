@@ -3,7 +3,7 @@ import { createMemoryHistory, RouterProvider } from '@tanstack/react-router';
 import { render } from '@testing-library/react';
 import { AppProviders } from '@/app/providers/AppProviders';
 import { createQueryClient } from '@/app/queryClient';
-import { createAppRouter } from '@/app/router';
+import { createAppRouter } from '@/app/router/router';
 import type { MarketSession } from '@/shared/lib/marketSessionContext';
 import type { OrderUpdateSource } from '@/shared/lib/orderUpdatesContext';
 

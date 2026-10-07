@@ -5,9 +5,9 @@ import { rmSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { loadEnv, type Plugin } from 'vite';
 import { configDefaults, defineConfig } from 'vitest/config';
-import { devProxy } from './src/app/devProxy.ts';
-import { parseRuntimeConfig, type ApiMode } from './src/app/runtimeConfig.ts';
-import { webSecurityHeaders } from './src/app/securityHeaders.ts';
+import { devProxy } from './src/app/config/devProxy.ts';
+import { parseRuntimeConfig, type ApiMode } from './src/app/config/runtimeConfig.ts';
+import { webSecurityHeaders } from './src/app/config/securityHeaders.ts';
 
 /** Adds <link rel="preload"> for every self-hosted woff2 font in the production bundle (T-010). */
 function preloadFonts(): Plugin {

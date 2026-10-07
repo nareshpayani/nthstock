@@ -1,6 +1,6 @@
 /// <reference types="vite/client" />
 
-// Typed VITE_* variables (T-049). Values are validated by src/app/runtimeConfig.ts.
+// Typed VITE_* variables (T-049). Values are validated by src/app/config/runtimeConfig.ts.
 interface ImportMetaEnv {
   readonly VITE_API_MODE?: string;
   readonly VITE_API_BASE_URL?: string;

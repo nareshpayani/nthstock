@@ -6,8 +6,8 @@ import {
 } from '@nthstock/contracts';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createRealtimeServer, WS_PATH, type RealtimeServer } from './app.js';
-import { createMemoryQuoteFeed } from './feed.js';
-import { createMemoryOrderFeed } from './orderFeed.js';
+import { createMemoryQuoteFeed } from './feeds/feed.js';
+import { createMemoryOrderFeed } from './feeds/orderFeed.js';
 import { testOrder } from './test/orders.js';
 import { quoteFramesOf } from './test/frames.js';
 import { manualTimers } from './test/manualTimers.js';

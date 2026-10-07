@@ -2,14 +2,14 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 import type { AddressInfo } from 'node:net';
 import { TEST_CONTROL_PATHS, TestClockRequest, WS_CLOSE_CODES } from '@nthstock/contracts';
 import { WebSocketServer, type RawData, type WebSocket } from 'ws';
-import type { WsAuthenticator } from './auth.js';
-import type { QuoteFeed } from './feed.js';
-import type { OrderFeed } from './orderFeed.js';
-import type { SessionRevocationFeed } from './sessionRevocationFeed.js';
-import { createHub, type Connection } from './hub.js';
+import type { WsAuthenticator } from './connections/auth.js';
+import type { QuoteFeed } from './feeds/feed.js';
+import type { OrderFeed } from './feeds/orderFeed.js';
+import type { SessionRevocationFeed } from './feeds/sessionRevocationFeed.js';
+import { createHub, type Connection } from './connections/hub.js';
 import { silentLogger, type Logger } from './logger.js';
 import type { Timers } from './timers.js';
-import type { SubscriptionRegistry } from './registry.js';
+import type { SubscriptionRegistry } from './connections/registry.js';
 
 /** Path of the WebSocket endpoint; the web app derives `ws(s)://<host>/ws` from the same path. */
 export const WS_PATH = '/ws';

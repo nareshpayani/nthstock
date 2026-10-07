@@ -4,12 +4,12 @@ import { RouterProvider } from '@tanstack/react-router';
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { z } from 'zod';
-import { createLiveQuotes } from './app/liveQuotes';
+import { createLiveQuotes } from './app/live/liveQuotes';
 import { AppProviders } from './app/providers/AppProviders';
 import { createQueryClient } from './app/queryClient';
-import { createAppRouter } from './app/router';
-import { parseRuntimeConfig } from './app/runtimeConfig';
-import { restSnapshot, startVisibilitySync } from './app/visibilitySync';
+import { createAppRouter } from './app/router/router';
+import { parseRuntimeConfig } from './app/config/runtimeConfig';
+import { restSnapshot, startVisibilitySync } from './app/live/visibilitySync';
 import { wantsDemo, withoutDemoParam } from './mocks/demoParam';
 import { createSessionApiClient } from './shared/lib/sessionClient';
 

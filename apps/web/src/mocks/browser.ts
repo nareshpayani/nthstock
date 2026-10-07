@@ -1,5 +1,5 @@
 import { setupWorker } from 'msw/browser';
-import { resolveWsUrl, type RuntimeConfig } from '@/app/runtimeConfig';
+import { resolveWsUrl, type RuntimeConfig } from '@/app/config/runtimeConfig';
 import { wantsDemo, withoutDemoParam } from './demoParam';
 import { seedMockDemo } from './demoSeed';
 import { ORDER_SWEEP_MS, createMockHandlers } from './handlers';

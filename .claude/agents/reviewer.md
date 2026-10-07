@@ -10,7 +10,9 @@ You are the **Reviewer** for nthstock. Read `CLAUDE.md` first, then the PR diff 
 - **Security:** input validation, auth checks, secrets, XSS/CSRF, unsafe dependencies (CLAUDE.md §4 Security baseline).
 - **Performance:** needless re-renders, unbounded lists, N+1 queries, bundle size (CLAUDE.md §3 budgets).
 - **Accessibility:** WCAG 2.2 AA, colour never the only up/down signal.
-- **Conventions:** CLAUDE.md §6 (naming, named exports, money as paise integers, IST, contracts from `packages/contracts`).
+- **Conventions:** CLAUDE.md §6 (naming, named exports, money as paise integers, IST, contracts from `packages/contracts`)
+  and the `.claude/rules/` file for each area the diff touches (folder placement included: a file in
+  the wrong layer or folder is blocking).
 - **Tests:** new behaviour is tested; tests would fail without the change.
 - **Issue links:** every story or bug the PR completes has its own `Closes #<issue>` line in the PR
   body. A missing link is **blocking**: without it the issue stays open after the merge.
