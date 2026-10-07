@@ -1,81 +1,60 @@
 # nthstock
 
-An Indian stock market platform (paper trading) built from scratch with React, TypeScript and Node.js.
+An Indian stock-market investing and paper-trading platform on mock NSE/BSE data: a React SPA, a
+Fastify API and a realtime WebSocket server. Paper trading only; no real money.
 
-Start with [CLAUDE.md](./CLAUDE.md) for scope, architecture and conventions, and
-[docs/requirements-qa.md](./docs/requirements-qa.md) for every requirement decision.
+Start with [CLAUDE.md](./CLAUDE.md) for scope, decisions and conventions, and
+[docs/README.md](./docs/README.md) for the product, architecture, ADRs, specs and runbooks.
 
 ## Getting started
 
-Requires Node 22 (`nvm use`).
+Requires **Node 22** (`nvm use`, see `.nvmrc`). API mode also needs **Docker**.
 
 ```bash
 npm install
-npm run dev        # web on http://localhost:5173, API on http://localhost:4000
-npm run check      # format, lint, typecheck, test, build
-npm run storybook  # design system on http://localhost:6006
-npm run e2e        # Playwright E2E (Chrome), msw mode with the mock market forced open
-npm run e2e:api    # the @api specs against apps/api + apps/realtime (build them first; needs Redis)
-npm run e2e:perf   # the @perf specs: Web Vitals budgets and the 200-symbol render budget
-npm run lhci -w @nthstock/web  # Lighthouse CI budgets on / and /stocks/INFY (see below)
-npm run infra:up   # Redis 7 in Docker Compose on 127.0.0.1:6379 (see infra/README.md)
+npm run dev -w @nthstock/web   # web app on http://localhost:5173, mocked in the browser (no servers)
+npm run dev:api                # web + apps/api + apps/realtime on Postgres and Redis (needs Docker)
+npm run check                  # format, lint, typecheck, test, build (the CI quality gate)
+npm run storybook              # design system on http://localhost:6006
+npm run e2e                    # Playwright E2E (Chrome) in msw mode
 ```
 
-The web app runs in **msw mode** by default: MSW mocks REST and the live-price WebSocket in the
-browser over the mock market (`packages/marketData`). Prices tick only during NSE hours; for a demo
-at any hour, force the mock market open:
+**msw mode** (default): MSW mocks REST and the live-price WebSocket in the browser over the mock
+market (`packages/marketData`). Prices tick only during NSE hours; to force the market open, run
+`VITE_MOCK_MARKET_OPEN=true npm run dev -w @nthstock/web`. Web variables are in
+[`apps/web/.env.example`](./apps/web/.env.example).
 
-```bash
-VITE_MOCK_MARKET_OPEN=true npm run dev -w @nthstock/web
-```
+**api mode** (`npm run dev:api`) runs the real backend and needs **PostgreSQL 16** and **Redis 7**.
+It runs `npm run infra:up` (Docker Compose: Redis on `127.0.0.1:6379` and Postgres on
+`127.0.0.1:5432`), then `npm run db:migrate`, then apps/api (port 4000, `DB_DRIVER=postgres`),
+apps/realtime (port 8081) and the web app with `VITE_API_MODE=api`. Vite proxies `/v1` and `/ws`, so
+everything is same-origin. **PgBouncer** (transaction mode, `127.0.0.1:6432`) is optional, as in
+production: start it with `docker compose -f infra/docker-compose.yml --profile pool up -d --wait`
+and point `DATABASE_URL` at it. `npm run infra:down` stops the containers. Details, roles and
+passwords: [infra/README.md](./infra/README.md).
 
-**api mode** runs the real backend: `npm run dev:api` starts Redis (Docker Compose), `apps/api`,
-`apps/realtime` and the web app with `VITE_API_MODE=api`. The Vite dev server proxies `/v1` to
-apps/api (port 4000) and `/ws` to apps/realtime (port 8081), so REST, cookies and the WebSocket
-are all same-origin; no MSW worker is registered. Outside NSE hours, force the mock market open:
+In dev the OTP is always `123456`. Outside NSE hours use `MOCK_MARKET_ALWAYS_OPEN=true npm run dev:api`.
+For a demo account, open the web app with `?demo=1` (msw mode) or run `npm run seed:demo` (api
+mode); see [docs/runbooks/local-demo.md](./docs/runbooks/local-demo.md).
 
-```bash
-MOCK_MARKET_ALWAYS_OPEN=true npm run dev:api
-```
+## Workspaces
 
-The WebSocket needs a logged-in session: apps/realtime closes a connection without a valid access
-token cookie with code 4401. `npm run dev:api` generates one `JWT_SECRET` for apps/api and
-apps/realtime unless you set it. In dev the OTP is always `123456`, and apps/api prints it.
+| Workspace              | What it is                                                                            |
+| ---------------------- | ------------------------------------------------------------------------------------- |
+| `apps/web`             | Vite + React SPA (ADR 0005), msw or api mode                                          |
+| `apps/api`             | Fastify modular monolith, REST `/v1`, one folder per module in `src/modules/` (below) |
+| `apps/realtime`        | Live-price and order-update WebSocket server (`/ws`, port 8081)                       |
+| `packages/apiClient`   | Typed REST client, live-quote WebSocket client and quote store                        |
+| `packages/config`      | Shared ESLint and TypeScript config                                                   |
+| `packages/contracts`   | Zod schemas for every REST route and WS message                                       |
+| `packages/marketData`  | Market data adapters: seeded symbol master and the mock (GBM) tick feed               |
+| `packages/paperEngine` | Paper-trading rules: orders, fills, funds ledger, P&L                                 |
+| `packages/tokens`      | Design tokens → `tokens.css`, Tailwind v4 theme, self-hosted IBM Plex fonts           |
+| `packages/ui`          | Design system components (Radix, cva, Tailwind) and Storybook                         |
+| `packages/utils`       | INR formatting, IST dates, NSE market hours                                           |
 
-For a ready-made demo account (two watchlists, holdings and a funds ledger), open the app with
-`?demo=1` in msw mode or run `npm run seed:demo` in api mode; both give the same starting state. See
-[`docs/runbooks/local-demo.md`](./docs/runbooks/local-demo.md).
+apps/api modules: `audit`, `auth`, `demo`, `funds`, `health`, `market`, `orders`, `portfolio`,
+`testControls`, `users`, `watchlists`.
 
-All web variables are listed in [`apps/web/.env.example`](./apps/web/.env.example)
-(`VITE_API_MODE=msw|api`, API and WS base URLs, the market-open override). A test page with live
-prices is at `/dev/prices`.
-
-| Workspace            | What it is                                                                  |
-| -------------------- | --------------------------------------------------------------------------- |
-| `apps/web`           | Vite + React SPA                                                            |
-| `apps/api`           | Fastify API (`GET /v1/health`)                                              |
-| `apps/realtime`      | Live-price WebSocket server on `ws` (`/ws`, `GET /health`, port 8081)       |
-| `packages/config`    | Shared ESLint and TypeScript config                                         |
-| `packages/ui`        | Design system components (Radix, cva, Tailwind) and Storybook               |
-| `packages/apiClient` | Typed REST client, live-quote WebSocket client and quote store              |
-| `packages/tokens`    | Design tokens → `tokens.css`, Tailwind v4 theme, self-hosted IBM Plex fonts |
-
-## Performance budgets (T-169)
-
-CI's "Web vitals and render budgets (Chrome)" job runs the `@perf` Playwright specs and then
-**Lighthouse CI** (`apps/web/lighthouserc.cjs`) on `/` (the dashboard) and `/stocks/INFY`: the
-production msw-mode build served by `vite preview` with the strict CSP, desktop preset, 3 runs per
-URL, median checked. Budgets from CLAUDE.md §3: LCP < 2000 ms, CLS < 0.05, TBT < 150 ms (the INP
-proxy), performance and accessibility scores ≥ 0.9. Initial JS < 200 KB gzipped is enforced by
-`scripts/checkBuild.mjs` on every build; Lighthouse only warns on it, because in msw mode it also
-counts the lazy MSW + mock-market chunk. The HTML and JSON reports are the `lighthouse-report`
-artifact of the job.
-
-Lighthouse CI is not a dependency (its dependency tree fails `npm audit`); the script runs a pinned
-`npx --yes @lhci/cli@0.15.1`, downloaded into the npx cache on first use. Build the workspace
-packages once, then point it at a Chrome or Chromium:
-
-```bash
-npx turbo run build --filter=@nthstock/web^...
-CHROME_PATH=/opt/pw-browsers/chromium npm run lhci -w @nthstock/web   # reports in apps/web/lighthouse-report
-```
+Performance budgets (CLAUDE.md §3) are checked by `apps/web/scripts/checkBuild.mjs` on every build
+and by the `@perf` E2E specs and Lighthouse CI (`npm run e2e:perf`, `npm run lhci -w @nthstock/web`).
