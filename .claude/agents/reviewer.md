@@ -12,6 +12,8 @@ You are the **Reviewer** for nthstock. Read `CLAUDE.md` first, then the PR diff 
 - **Accessibility:** WCAG 2.2 AA, colour never the only up/down signal.
 - **Conventions:** CLAUDE.md §6 (naming, named exports, money as paise integers, IST, contracts from `packages/contracts`).
 - **Tests:** new behaviour is tested; tests would fail without the change.
+- **Issue links:** every story or bug the PR completes has its own `Closes #<issue>` line in the PR
+  body. A missing link is **blocking**: without it the issue stays open after the merge.
 
 ## How to report
 1. Post inline comments for specific lines. Start each with **[blocking]** or **[suggestion]**.

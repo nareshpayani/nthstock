@@ -14,6 +14,8 @@ Owner merges the spec PR
   └─► stories move to `agent:ready` ─► Developer ─► PR (`agent:pr`, "Closes #N")
 PR opened or updated
   └─► Reviewer ─┬─ no blocking findings ─► `ready-to-merge` ─► all checks green ─► auto-merge (squash)
+                │                                                     └─► linked issues closed with "Done in #PR";
+                │                                                         epic closed when all its stories are
                 │                           (spec PRs and agent/CI config changes: the owner merges)
                 ├─ blocking findings ─► `agent:fix-needed` ─► Fixer pushes to the same PR ─► Reviewer again
                 └─ bug outside the PR's scope ─► new `bug` issue (`agent:ready`) ─► Developer
@@ -22,9 +24,6 @@ CI red on an owner, agent or Dependabot PR
       └─ Dependabot bump the stack can't take ─► `@dependabot ignore this major version`
 CI red on main (after a merge, or in a scheduled health run: 09:20 and 12:30 IST on weekdays, 20:00 IST daily)
   └─► Fixer opens a `claude/fix-main-*` PR (never pushes to main) ─► Reviewer ─► checks green ─► auto-merge
-Every 2 hours (Watchdog)
-  └─► runs the unit tests and Playwright on main ─┬─ green ─► closes any open `watchdog` issue
-                                                  └─ red ─► one `bug` + `watchdog` issue ─► Developer ─► PR ─► auto-merge
 Hourly sweep
   └─► catches red PRs the events missed (Dependabot runs get no secrets; PRs red only because main was red)
 Push to main makes an open PR conflict
@@ -46,17 +45,22 @@ Dependabot rebases its own PRs, but their CI failures go to the Fixer.
 | Fixer | `.github/workflows/agent-fixer.yml` | `.claude/agents/fixer.md` |
 | Conflict resolver | `.github/workflows/agent-conflicts.yml` | `.claude/agents/fixer.md` (Merge conflicts) |
 | Auto-merge | `.github/workflows/agent-automerge.yml` | — |
-| Watchdog | `.github/workflows/agent-watchdog.yml` | `.claude/agents/developer.md` (via the issue it opens) |
+| Issue closer | `.github/workflows/agent-close-issues.yml` | — |
 | (glue) | `agent-promote-stories.yml`, `agent-labels.yml` | — |
 
 ## Guardrails
+- **Done means closed (owner decision 2026-09-28):** every PR lists the issues it completes as
+  `Closes #N`, one per line; the Reviewer blocks a PR that is missing one. When the PR merges,
+  `agent-close-issues.yml` comments "Done in #PR" on each linked story or bug, closes it as completed,
+  ticks it in its epic's `- [ ] #N` checklist and closes the epic once every story is closed. It also
+  matches T-numbers in the PR title (`T-135 to T-140`) to issues titled `T-xxx`. Auto-merge dispatches
+  it after each merge (merges made with the Actions token start no workflows), and a daily sweep
+  re-checks the last 3 days of merges and every open epic.
 - **Only the owner or the agents can start agents.** Every workflow checks that the label was added
   by the owner (`OWNER_LOGIN`, default `nareshpayani`) or the Claude app (`AGENT_BOT_LOGIN`,
   default `claude[bot]`), and the Reviewer only runs on PRs from this repo by those two authors.
   Strangers opening issues or PRs on this public repo cannot spend usage or inject prompts.
 - **Loop limits:** after 3 CI-fix attempts on a PR it gets `needs-human`; only one fix-main PR is open at a time.
-- **One healer for main:** the Fixer does not open a fix-main PR while a `watchdog` issue is open, and
-  the watchdog does not open an issue while a `claude/fix-main-*` PR is open.
 - **Loop limit:** after 3 agent reviews (`AGENT_MAX_REVIEW_ROUNDS`) a PR gets `needs-human` and agents stop.
 - **Auto-merge (owner decision 2026-09-26, ADR 0006):** `agent-automerge.yml` squash-merges an open PR
   into `main` when the Reviewer has labelled it `ready-to-merge`, it is from the owner or an agent, not
@@ -85,7 +89,7 @@ Dependabot rebases its own PRs, but their CI failures go to the Fixer.
    "Analyze JavaScript/TypeScript". Requiring an approving review would block auto-merge (ADR 0006).
 
 Optional repository variables: `OWNER_LOGIN`, `AGENT_BOT_LOGIN`, `AGENT_MAX_REVIEW_ROUNDS`,
-`AGENT_MAX_CI_FIX_ATTEMPTS` (default 3), `AGENT_AUTOMERGE` (default `true`), `AGENT_WATCHDOG` (default on; `false` stops the 2-hourly check).
+`AGENT_MAX_CI_FIX_ATTEMPTS` (default 3), `AGENT_AUTOMERGE` (default `true`).
 
 ## Everyday use
 - **Plan something:** open an issue describing the phase step or feature, add `plan:approved`.
