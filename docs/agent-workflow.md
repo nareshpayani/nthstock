@@ -42,7 +42,7 @@ Dependabot rebases its own PRs, but their CI failures go to the Fixer.
 | Planner | `.github/workflows/agent-planner.yml` | `.claude/agents/planner.md` |
 | Developer | `.github/workflows/agent-developer.yml` | `.claude/agents/developer.md` |
 | Reviewer | `.github/workflows/agent-reviewer.yml` | `.claude/agents/reviewer.md` |
-| Reviewer specialists (report-only, called by the Reviewer) | `.github/workflows/agent-reviewer.yml` | `.claude/agents/frontend-reviewer.md`, `security-reviewer.md`, `silent-failure-hunter.md`, `test-gap-analyzer.md` |
+| Reviewer specialists (report-only, called by the Reviewer) | `.github/workflows/agent-reviewer.yml` | `.claude/agents/frontend-reviewer.md`, `security-reviewer.md`, `database-reviewer.md`, `silent-failure-hunter.md`, `test-gap-analyzer.md` |
 | Fixer | `.github/workflows/agent-fixer.yml` | `.claude/agents/fixer.md` |
 | Conflict resolver | `.github/workflows/agent-conflicts.yml` | `.claude/agents/fixer.md` (Merge conflicts) |
 | Auto-merge | `.github/workflows/agent-automerge.yml` | — |

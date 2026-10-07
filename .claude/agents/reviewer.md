@@ -27,6 +27,7 @@ judge each finding, drop false positives and duplicates, and post the rest as yo
 | Agent | When |
 |---|---|
 | `frontend-reviewer` | any `.tsx` or `apps/web`, `packages/ui`, `packages/tokens` change |
+| `database-reviewer` | `apps/api/src/db`, `apps/api/drizzle`, any `pgRepo.ts` |
 | `security-reviewer` | `apps/api`, `apps/realtime`, auth, sessions, orders, funds, migrations, security headers, `package.json` |
 | `silent-failure-hunter` | any code change |
 | `test-gap-analyzer` | any code change |

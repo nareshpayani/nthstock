@@ -18,7 +18,7 @@ Read `.claude/rules/backend.md` first.
 3. Database: table in `src/db/schema/<area>.ts`, then `npm run db:generate -w @nthstock/api` (add
    `-- --custom` for hand-written SQL) to add `drizzle/NNNN_<name>.sql`, and `npm run db:check -w
    @nthstock/api`. Apply locally with `npm run db:migrate -w @nthstock/api`. Never edit a merged
-   migration.
+   migration. Anything beyond adding a table follows the `database-migrations` skill.
 4. Audit any login, order or fund movement through `modules/audit`.
 5. MSW parity: implement the same contract in `apps/web/src/mocks/handlers/` so mock mode matches.
 6. Tests: `service`/`routes` tests beside the code, `*.integration.test.ts` for `pgRepo.ts`, and the

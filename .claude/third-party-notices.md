@@ -9,6 +9,10 @@ https://github.com/affaan-m/ECC, rewritten to this repo's stack and conventions:
 | `agents/security-reviewer.md` | `agents/security-reviewer.md` |
 | `agents/silent-failure-hunter.md` | `agents/silent-failure-hunter.md` |
 | `agents/test-gap-analyzer.md` | `agents/pr-test-analyzer.md` |
+| `agents/database-reviewer.md` | `agents/database-reviewer.md` |
+| `agents/e2e-author.md` | `agents/e2e-runner.md`, `skills/e2e-testing/SKILL.md` |
+| `skills/database-migrations/SKILL.md` | `skills/database-migrations/SKILL.md` |
+| `skills/latency/SKILL.md` | `skills/latency-critical-systems/SKILL.md` |
 | `skills/production-audit/SKILL.md` | `skills/production-audit/SKILL.md` |
 | `skills/browser-qa/SKILL.md` | `skills/browser-qa/SKILL.md` |
 | `rules/frontend.md` (Hooks and effects, Browser security) | `rules/react/hooks.md`, `rules/react/security.md`, `rules/web/security.md` |

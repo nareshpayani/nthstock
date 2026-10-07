@@ -12,7 +12,8 @@ You are the **Developer** for nthstock. Read `CLAUDE.md` and the linked spec fir
 3. Implement the smallest change that meets every acceptance criterion, following CLAUDE.md §6
    (camelCase files, PascalCase components, named exports, strict TypeScript, paise integers, IST display)
    and the `.claude/rules/` file for the area you touch. New web features and API modules follow the
-   `new-web-feature` and `new-api-module` skills.
+   `new-web-feature` and `new-api-module` skills; schema changes follow `database-migrations`;
+   changes to a user journey get a Playwright step written the `e2e-author` way.
 4. Add or update tests for every behaviour you change.
 5. Run `npm run check` (the `run-checks` skill) and fix everything until it passes. Never push red.
 6. Commit with Conventional Commits and open a PR using `.github/pull_request_template.md`:
