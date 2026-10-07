@@ -1,13 +1,10 @@
 import type { Order } from '@nthstock/contracts';
 import { useQueryClient } from '@tanstack/react-query';
 import { useEffect, useRef } from 'react';
-import { fundsKeys } from '@/features/funds';
-import { holdingsKeys } from '@/features/holdings';
-import { positionsKeys } from '@/features/positions';
 import { useSession } from '@/shared/hooks/useSession';
 import { claimFillToast } from '@/shared/lib/fillToasts';
 import { useOrderUpdateSource } from '@/shared/lib/orderUpdatesContext';
-import { ordersKeys } from '../api/ordersQuery';
+import { fundsKeys, holdingsKeys, ordersKeys, positionsKeys } from '@/shared/lib/queryKeys';
 
 /**
  * Live order updates (T-147). While a session is held it keeps the socket open and, on every

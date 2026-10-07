@@ -13,6 +13,8 @@ Source of truth: [ADR 0005](../../docs/adr/0005-web-ui-architecture.md). This fi
 - Imports only go down: `routes → features → shared → packages/*`. `app/` wires everything and is
   imported only by `main.tsx`, routes and tests. ESLint (`no-restricted-imports`) fails CI otherwise.
 - A feature is imported only through its `index.ts`; never `@/features/x/components/...` from outside x.
+- Features never import each other in a cycle (`scripts/checkFeatureCycles.mjs` in `lint` fails CI).
+  What two features share goes in `shared/`, e.g. cross-feature query keys in `shared/lib/queryKeys.ts`.
 - Use the `@/` alias for `apps/web/src`; relative imports only inside the same folder tree.
 - `packages/*` never import from `apps/*`. `packages/ui` is presentational: props in, events out.
 
@@ -23,7 +25,7 @@ Source of truth: [ADR 0005](../../docs/adr/0005-web-ui-architecture.md). This fi
 | Route | `routes/` (TanStack file routes; `__root`, `_app`, `$symbol` are router syntax) | lowercase |
 | Feature UI | `features/<feature>/components/` | `WatchlistRow.tsx` |
 | Feature hook | `features/<feature>/hooks/` | `useWatchlists.ts` |
-| Queries, mutations, keys | `features/<feature>/api/` | `watchlistQueries.ts` |
+| Queries, mutations, keys | `features/<feature>/api/` (keys other features invalidate: `shared/lib/queryKeys.ts`) | `watchlistQueries.ts` |
 | Pure logic, types | `features/<feature>/model/` | `sortRows.ts` |
 | Feature UI state | `features/<feature>/store/` (Zustand, only when distant components share it) | `watchlistStore.ts` |
 | UI strings | `features/<feature>/strings.ts`, one object, no inline copy | |

@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "vite build && node scripts/checkBuild.mjs && npm run build:api-check",
     "preview": "vite preview",
-    "lint": "eslint . && node scripts/checkNoHex.mjs src",
+    "lint": "eslint . && node scripts/checkNoHex.mjs src && node scripts/checkFeatureCycles.mjs src",
     "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.e2e.json",
     "test": "vitest run --coverage",
     "e2e": "playwright test",

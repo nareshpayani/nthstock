@@ -2,17 +2,7 @@ import type { ApiClient } from '@nthstock/apiClient';
 import { PAGE_LIMIT_MAX, type Order } from '@nthstock/contracts';
 import { queryOptions } from '@tanstack/react-query';
 
-/**
- * Query keys for the order book (ADR 0005: `[feature, entity, params]`). Placing, modifying or
- * cancelling an order, and every `orderUpdate`, invalidate `ordersKeys.all`, so the book and any
- * open order detail refetch.
- */
-export const ordersKeys = {
-  all: ['orders'] as const,
-  book: () => ['orders', 'book'] as const,
-  detail: (id: string) => ['orders', 'detail', { id }] as const,
-  history: (id: string) => ['orders', 'history', { id }] as const,
-};
+import { ordersKeys } from '@/shared/lib/queryKeys';
 
 /** Pages read at most per book load: 20 × 100 orders is far beyond a paper trading day. */
 const MAX_PAGES = 20;
