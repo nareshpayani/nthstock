@@ -2,9 +2,9 @@ import type { Exchange } from '@nthstock/contracts';
 
 /**
  * Stored shapes of the watchlists module. The request and response schemas live in
- * `packages/contracts` (`watchlist.ts`); these are the rows a Drizzle schema replaces in Phase 3
- * (ADR 0004 §3): one `watchlists` row per list (with its position) and one `watchlist_items` row
- * per stock (with its position).
+ * `packages/contracts` (`watchlist.ts`). In Postgres (`db/schema/watchlists.ts`, T-197) a list is
+ * one `watchlists` row (with its position) and each stock one `watchlist_items` row (with its
+ * position); `PgWatchlistsRepo` maps them to these records.
  */
 
 /** One stock in a list. Symbol, exchange and name are copied from the symbol master on add. */

@@ -75,8 +75,8 @@ Everything in the definition of done of `implementation-tasks.md`, plus:
 
 ## E14: Watchlists on Postgres
 
-- [ ] T-197 [BE] Add the watchlists and watchlist_items tables (positions with deferrable unique constraints, case-insensitive unique name per user) and PgWatchlistsRepo, whose update() runs the change in one transaction after locking the user row. Depends: T-190, T-183. Done when: the watchlists conformance suite passes on both implementations and 20 concurrent adds to a 45-item list stop at 50 (integration test).
-- [ ] T-198 [TEST] Run the watchlist scenario suite against apps/api on Postgres and MSW. Depends: T-197, T-196. Done when: the suite passes unchanged on both backends in CI.
+- [x] T-197 [BE] Add the watchlists and watchlist_items tables (positions with deferrable unique constraints, case-insensitive unique name per user) and PgWatchlistsRepo, whose update() runs the change in one transaction after locking the user row. Depends: T-190, T-183. Done when: the watchlists conformance suite passes on both implementations and 20 concurrent adds to a 45-item list stop at 50 (integration test).
+- [x] T-198 [TEST] Run the watchlist scenario suite against apps/api on Postgres and MSW. Depends: T-197, T-196. Done when: the suite passes unchanged on both backends in CI.
 
 ## E15: Paper accounts on Postgres
 

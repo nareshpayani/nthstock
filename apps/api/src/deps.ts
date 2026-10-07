@@ -26,13 +26,14 @@ import { createMemoryOrdersRepo, type OrdersRepo } from './modules/orders/repo.j
 import { createOrderService, type OrderService } from './modules/orders/service.js';
 import { createPgUsersRepo } from './modules/users/pgRepo.js';
 import { createMemoryUsersRepo, type UsersRepo } from './modules/users/repo.js';
+import { createPgWatchlistsRepo } from './modules/watchlists/pgRepo.js';
 import { createMemoryWatchlistsRepo, type WatchlistsRepo } from './modules/watchlists/repo.js';
 
 /**
  * Every module's storage seam (ADR 0004 §3). Each module's Postgres repo (`pgRepo.ts`) takes over
  * under `DB_DRIVER=postgres` as it lands (ADR 0007); so far the audit log (T-187), users
- * (T-190), and auth devices, PINs and sessions (T-191, T-192), with OTPs in Redis (T-193). The
- * rest are in memory under both drivers.
+ * (T-190), auth devices, PINs and sessions (T-191, T-192), with OTPs in Redis (T-193), and
+ * watchlists (T-198). The rest are in memory under both drivers.
  */
 export type Repos = {
   users: UsersRepo;
@@ -168,7 +169,9 @@ export function createDeps(overrides: DepsOverrides = {}): AppDeps {
               : createMemoryOtpStore(),
           })
         : createMemoryAuthRepo()),
-    watchlists: overrides.repos?.watchlists ?? createMemoryWatchlistsRepo(),
+    watchlists:
+      overrides.repos?.watchlists ??
+      (database ? createPgWatchlistsRepo({ database }) : createMemoryWatchlistsRepo()),
     orders: overrides.repos?.orders ?? createMemoryOrdersRepo(),
     audit:
       overrides.repos?.audit ??
