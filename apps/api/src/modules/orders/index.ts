@@ -6,6 +6,7 @@ export {
   type AccountStore,
   type LoadedAccount,
 } from './accountStore.js';
+export { createPgAccountStore } from './pgRepo.js';
 export { createMemoryAccountStore } from './repo.js';
 export { orderRoutes } from './routes.js';
 export { createOrderService, type OrderService } from './service.js';
