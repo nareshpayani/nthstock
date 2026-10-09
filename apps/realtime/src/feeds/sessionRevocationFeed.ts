@@ -67,7 +67,7 @@ function listenerSet() {
 }
 
 export type RedisSessionRevocationFeed = SessionRevocationFeed & {
-  /** Resolves once the SUBSCRIBE has been acknowledged (tests). */
+  /** Resolves once the SUBSCRIBE is acknowledged and the checking connection is ready (tests). */
   settled(): Promise<void>;
 };
 
@@ -131,6 +131,12 @@ export function createRedisSessionRevocationFeed(options: {
     logger.warn('Redis session revocation subscribe failed', { error: String(error) });
   });
 
+  // The checking connection has no offline queue, so a check sent before it is ready fails open.
+  const commandsReady = new Promise<void>((resolve) => {
+    commands.once('ready', resolve);
+    commands.once('end', resolve);
+  });
+
   return {
     onRevoked: listeners.add,
     revokedHere: recent.has,
@@ -143,7 +149,7 @@ export function createRedisSessionRevocationFeed(options: {
         return false;
       }
     },
-    settled: () => subscribed.then(() => undefined),
+    settled: () => Promise.all([subscribed, commandsReady]).then(() => undefined),
     async close() {
       listeners.clear();
       recent.clear();

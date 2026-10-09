@@ -93,6 +93,7 @@ describeWithRedis('auth:sessionRevoked to WebSocket clients (T-195 integration)'
     const server = createRealtimeServer({ authenticate: testAuthenticator(), revocations });
     const port = await server.listen(0, '127.0.0.1');
     const url = `ws://127.0.0.1:${port}${WS_PATH}`;
+    await revocations.settled();
 
     const old = await connectAuthed(url, 'usr_alice', 'ses_old');
     expect(await old.closed).toEqual(REVOKED);
