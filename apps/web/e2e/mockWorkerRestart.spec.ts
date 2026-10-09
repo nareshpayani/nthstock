@@ -24,6 +24,12 @@ test('data keeps loading after Chrome restarts the mock service worker', async (
   await page.goto('/');
   await expect(page.getByRole('heading', { name: 'Market Indices' })).toBeVisible();
 
+  // The first visit reloads once to hand the page to the worker (workerControl.ts). Stop the worker
+  // only after that, with the first data in, so the restart hits a settled page and not the reload.
+  await page.waitForFunction(() => navigator.serviceWorker.controller !== null);
+  await page.waitForLoadState('networkidle');
+  await expect(page.getByRole('heading', { name: 'Market Indices' })).toBeVisible();
+
   const cdp = await context.newCDPSession(page);
   await cdp.send('ServiceWorker.enable');
   await cdp.send('ServiceWorker.stopAllWorkers');
