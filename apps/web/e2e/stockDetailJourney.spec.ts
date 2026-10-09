@@ -78,6 +78,11 @@ test('depth refreshes without shifting the layout, and pauses in a hidden tab', 
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto('/stocks/INFY');
   await expectDepth(page);
+  // Content above the card (the lazy chart) settles after the first depth paint and shifts the
+  // card with it; only shifts from the depth refreshes themselves are under test.
+  await expect(
+    page.getByRole('figure', { name: 'INFY area chart over 1 day' }).locator('canvas').first(),
+  ).toBeVisible();
 
   const depthRequests: number[] = [];
   page.on('request', (request) => {

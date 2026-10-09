@@ -1,4 +1,4 @@
-import { act, render, screen } from '@testing-library/react';
+import { act, render, screen, waitFor } from '@testing-library/react';
 import { StrictMode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { chartsMock } from '@/test/chartsMock';
@@ -12,6 +12,13 @@ vi.mock('lightweight-charts', () => {
   library.imports += 1;
   return import('@/test/chartsMock');
 });
+
+// The host appears on commit but the chart is created in a passive effect, which React may flush
+// later under load; wait for the chart itself so the test never outlives its ResizeObserver stub.
+async function chartMounted() {
+  await screen.findByTestId('chart-host');
+  await waitFor(() => expect(chartsMock.charts.length).toBeGreaterThan(0));
+}
 
 let resize: ReturnType<typeof installResizeObserver>;
 
@@ -29,7 +36,7 @@ describe('PriceChart (T-094)', () => {
     const candles = makeCandles({ count: 3 });
     render(<PriceChart candles={candles} label="INFY chart" />);
     expect(screen.getByRole('status', { name: 'Loading chart' })).toBeInTheDocument();
-    await screen.findByTestId('chart-host');
+    await chartMounted();
     expect(library.imports).toBe(1);
     expect(chartsMock.charts).toHaveLength(1);
   });
@@ -37,7 +44,7 @@ describe('PriceChart (T-094)', () => {
   it('draws an area series from the candles, coloured by direction', async () => {
     const candles = makeCandles({ count: 3, step: -100 });
     render(<PriceChart candles={candles} label="INFY chart" format="inr" height={200} />);
-    await screen.findByTestId('chart-host');
+    await chartMounted();
     const [chart] = chartsMock.charts;
     const series = chart?.series[0];
     expect(series?.type).toBe('Area');
@@ -55,7 +62,7 @@ describe('PriceChart (T-094)', () => {
 
   it('draws candlesticks when asked', async () => {
     render(<PriceChart candles={makeCandles({ count: 2 })} label="c" type="candle" />);
-    await screen.findByTestId('chart-host');
+    await chartMounted();
     expect(chartsMock.charts[0]?.series[0]?.type).toBe('Candlestick');
     expect(chartsMock.charts[0]?.series[0]?.setData).toHaveBeenCalledWith([
       expect.objectContaining({ open: expect.any(Number) as number }),
@@ -65,7 +72,7 @@ describe('PriceChart (T-094)', () => {
 
   it('follows the container width through a ResizeObserver', async () => {
     render(<PriceChart candles={makeCandles({ count: 2 })} label="c" height={180} />);
-    await screen.findByTestId('chart-host');
+    await chartMounted();
     act(() => resize.resize(640.6));
     expect(chartsMock.charts[0]?.resize).toHaveBeenCalledWith(640, 180);
     act(() => resize.resize(0));
@@ -74,7 +81,7 @@ describe('PriceChart (T-094)', () => {
 
   it('updates the same chart when candles change instead of creating another', async () => {
     const view = render(<PriceChart candles={makeCandles({ count: 2 })} label="c" />);
-    await screen.findByTestId('chart-host');
+    await chartMounted();
     const next = makeCandles({ count: 4 });
     view.rerender(<PriceChart candles={next} label="c" />);
     expect(chartsMock.charts).toHaveLength(1);
@@ -85,7 +92,7 @@ describe('PriceChart (T-094)', () => {
 
   it('removes the chart and disconnects the observer on unmount', async () => {
     const view = render(<PriceChart candles={makeCandles({ count: 2 })} label="c" />);
-    await screen.findByTestId('chart-host');
+    await chartMounted();
     expect(chartsMock.active()).toHaveLength(1);
     expect(resize.observers.size).toBe(1);
     view.unmount();
@@ -108,7 +115,7 @@ describe('PriceChart disposal (T-113)', () => {
   it('replaces the chart when the type changes: one live chart and one observer', async () => {
     const candles = makeCandles({ count: 3 });
     const view = render(<PriceChart candles={candles} label="c" type="area" />);
-    await screen.findByTestId('chart-host');
+    await chartMounted();
     view.rerender(<PriceChart candles={candles} label="c" type="candle" />);
     expect(chartsMock.charts).toHaveLength(2);
     expect(chartsMock.charts[0]?.removed).toBe(true);
@@ -122,7 +129,7 @@ describe('PriceChart disposal (T-113)', () => {
 
   it('disposes the chart when the candles become empty', async () => {
     const view = render(<PriceChart candles={makeCandles({ count: 3 })} label="c" />);
-    await screen.findByTestId('chart-host');
+    await chartMounted();
     view.rerender(<PriceChart candles={[]} label="c" />);
     expect(screen.getByRole('figure', { name: 'c' })).toHaveTextContent(
       'No chart data for this range yet.',
@@ -134,7 +141,7 @@ describe('PriceChart disposal (T-113)', () => {
 
   it('unsubscribes the tooltip crosshair handler on unmount', async () => {
     const view = render(<PriceChart candles={makeCandles({ count: 3 })} label="c" tooltip />);
-    await screen.findByTestId('chart-host');
+    await chartMounted();
     const [chart] = chartsMock.charts;
     expect(chart?.crosshair.size).toBe(1);
     view.unmount();
@@ -149,7 +156,7 @@ describe('PriceChart disposal (T-113)', () => {
         <PriceChart candles={makeCandles({ count: 3 })} label="c" tooltip />
       </StrictMode>,
     );
-    await screen.findByTestId('chart-host');
+    await chartMounted();
     expect(chartsMock.active()).toHaveLength(1);
     expect(resize.observers.size).toBe(1);
     view.unmount();

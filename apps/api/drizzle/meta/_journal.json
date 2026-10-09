@@ -64,6 +64,20 @@
       "when": 1790603584573,
       "tag": "0008_watchlists_deferrable_positions",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1791521820064,
+      "tag": "0009_paper_accounts",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1791521822394,
+      "tag": "0010_ledger_entries_append_only",
+      "breakpoints": true
     }
   ]
 }
