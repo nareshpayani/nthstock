@@ -86,12 +86,14 @@ jobs:
       - name: Flag a review that posted no verdict
         if: always() && steps.rounds.outputs.skip != 'true' && env.HAS_AGENT_TOKEN == 'true'
         # Without a verdict the PR gets neither ready-to-merge nor agent:fix-needed and stalls
-        # silently; needs-human puts it in front of the owner instead.
+        # silently; needs-human puts it in front of the owner instead. No execution log means the
+        # action skipped itself (it does on PRs that change this workflow), which is not a stall.
         env:
           GH_TOKEN: ${{ github.token }}
           PR: ${{ github.event.pull_request.number }}
           SINCE: ${{ steps.started.outputs.at }}
         run: |
+          [ -f "$RUNNER_TEMP/claude-execution-output.json" ] || exit 0
           posted=$(gh api "repos/$GITHUB_REPOSITORY/issues/$PR/comments?since=$SINCE&per_page=100" \
             --jq '[.[] | select(.body | contains("<!-- nthstock-agent-review -->"))] | length')
           [ "$posted" -eq 0 ] || exit 0
