@@ -48,6 +48,7 @@ export {
 } from './orderStateMachine.js';
 export {
   PAPER_ENGINE_SNAPSHOT_VERSION,
+  PAPER_ENGINE_WORKING_SET_VERSION,
   PaperEngine,
   type EngineHolding,
   type EnginePosition,
@@ -56,8 +57,15 @@ export {
   type OrderActionResult,
   type PaperEngineOptions,
   type PaperEngineSnapshot,
+  type PaperEngineSnapshotV1,
+  type PaperEngineWorkingSet,
 } from './paperEngine.js';
-export { FundsLedger, type FundsLedgerOptions, type LedgerResult } from './fundsLedger.js';
+export {
+  FundsLedger,
+  type FundsLedgerOptions,
+  type LedgerCarried,
+  type LedgerResult,
+} from './fundsLedger.js';
 export {
   EMPTY_POSITION,
   applyTrade,

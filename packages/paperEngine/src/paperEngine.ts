@@ -28,7 +28,12 @@ import {
 } from '@nthstock/utils';
 import { assertPaise, assertQty, type EngineContext } from './context.js';
 import { matchFill } from './fillMatcher.js';
-import { FundsLedger, type FundsLedgerOptions, type LedgerResult } from './fundsLedger.js';
+import {
+  FundsLedger,
+  type FundsLedgerOptions,
+  type LedgerCarried,
+  type LedgerResult,
+} from './fundsLedger.js';
 import type { InstrumentSource } from './instruments.js';
 import {
   illegalTransitionReason,
@@ -70,12 +75,13 @@ export type PaperEngineOptions = {
 };
 
 export const PAPER_ENGINE_SNAPSHOT_VERSION = 1;
+export const PAPER_ENGINE_WORKING_SET_VERSION = 2;
 
 /**
  * An engine's whole state as plain JSON-safe data, for keeping it between page loads (MSW keeps
  * it in sessionStorage) or processes. Timestamps are ISO 8601 UTC; money is integer paise.
  */
-export type PaperEngineSnapshot = {
+export type PaperEngineSnapshotV1 = {
   v: typeof PAPER_ENGINE_SNAPSHOT_VERSION;
   /** Session events up to this instant have run. */
   syncedTo: string;
@@ -93,6 +99,29 @@ export type PaperEngineSnapshot = {
    */
   history?: [orderId: string, entries: OrderHistoryEntry[]][];
 };
+
+/**
+ * The working set (v2, T-199): what a store needs to carry an account on without loading its whole
+ * history. Orders are today's (placed or changed since the start of the IST day of `syncedTo`) and
+ * the live ones (AMO, OPEN); positions and holding sales are today's anyway; all holdings; and the
+ * ledger is a carried balance plus today's entries. Older orders stay in the store; the engine
+ * only needs them for idempotent client order ids, which then no longer match.
+ */
+export type PaperEngineWorkingSet = {
+  v: typeof PAPER_ENGINE_WORKING_SET_VERSION;
+  syncedTo: string;
+  orders: Order[];
+  rejectCodes: [orderId: string, code: OrderRejectionCode][];
+  positions: EnginePosition[];
+  holdings: EngineHolding[];
+  holdingSales: HoldingSale[];
+  openingBalance: number;
+  ledger: { carried: LedgerCarried; entries: LedgerEntry[] };
+  history: [orderId: string, entries: OrderHistoryEntry[]][];
+};
+
+/** What an engine restores from: a full v1 snapshot or a v2 working set. */
+export type PaperEngineSnapshot = PaperEngineSnapshotV1 | PaperEngineWorkingSet;
 
 export type OrderActionErrorCode =
   OrderRejectionCode | 'ORDER_NOT_FOUND' | 'ILLEGAL_TRANSITION' | 'NOTHING_TO_CHANGE';
@@ -213,12 +242,7 @@ export class PaperEngine {
       nowIso: () => this.#now().toISOString(),
       nextId: () => this.#ctx.nextId(),
     };
-    this.#funds = new FundsLedger(
-      ledgerCtx,
-      snapshot
-        ? { openingBalance: snapshot.openingBalance, entries: snapshot.ledger }
-        : options.funds,
-    );
+    this.#funds = new FundsLedger(ledgerCtx, snapshot ? ledgerOptions(snapshot) : options.funds);
     for (const [token, lot] of options.holdings ?? []) {
       assertQty(lot.qty, 'Holding quantity');
       this.#holdings.set(token, { ...lot });
@@ -227,7 +251,7 @@ export class PaperEngine {
   }
 
   /** The whole state as plain data; `new PaperEngine({ ..., snapshot })` carries on from it. */
-  snapshot(): PaperEngineSnapshot {
+  snapshot(): PaperEngineSnapshotV1 {
     return {
       v: PAPER_ENGINE_SNAPSHOT_VERSION,
       syncedTo: this.#syncedTo.toISOString(),
@@ -239,6 +263,31 @@ export class PaperEngine {
       openingBalance: this.#funds.openingBalance,
       ledger: [...this.#funds.entries()],
       history: [...this.#history].map(([id, entries]) => [id, entries.map((e) => ({ ...e }))]),
+    };
+  }
+
+  /** The working set (v2); `new PaperEngine({ ..., snapshot })` carries on from it like a full snapshot. */
+  workingSet(): PaperEngineWorkingSet {
+    const syncedTo = this.#syncedTo;
+    const day = toIstParts(syncedTo);
+    const since = fromIst(day.year, day.month, day.day, 0).toISOString();
+    const kept = new Set<string>();
+    for (const order of this.#orders.values()) {
+      if (LIVE_STATUSES.has(order.status) || order.updatedAt >= since) kept.add(order.id);
+    }
+    return {
+      v: PAPER_ENGINE_WORKING_SET_VERSION,
+      syncedTo: syncedTo.toISOString(),
+      orders: [...this.#orders.values()].filter((o) => kept.has(o.id)).map(copy),
+      rejectCodes: [...this.#rejectCodes].filter(([id]) => kept.has(id)),
+      positions: [...this.#positions.values()].map((p) => ({ ...p, book: { ...p.book } })),
+      holdings: this.holdings() as EngineHolding[],
+      holdingSales: this.holdingSales() as HoldingSale[],
+      openingBalance: this.#funds.openingBalance,
+      ledger: this.#funds.workingSet(since),
+      history: [...this.#history]
+        .filter(([id]) => kept.has(id))
+        .map(([id, entries]) => [id, entries.map((e) => ({ ...e }))]),
     };
   }
 
@@ -453,8 +502,13 @@ export class PaperEngine {
 
   /** Loads a snapshot, checking every order against the contract and every amount is paise. */
   #restore(snapshot: PaperEngineSnapshot): void {
-    if (snapshot.v !== PAPER_ENGINE_SNAPSHOT_VERSION) {
-      throw new Error(`Unsupported engine snapshot version ${String(snapshot.v)}`);
+    if (
+      snapshot.v !== PAPER_ENGINE_SNAPSHOT_VERSION &&
+      snapshot.v !== PAPER_ENGINE_WORKING_SET_VERSION
+    ) {
+      throw new Error(
+        `Unsupported engine snapshot version ${String((snapshot as { v: unknown }).v)}`,
+      );
     }
     const syncedTo = new Date(snapshot.syncedTo);
     if (Number.isNaN(syncedTo.getTime())) throw new RangeError('Invalid snapshot syncedTo');
@@ -866,4 +920,16 @@ function latestById(orders: readonly Order[]): readonly Order[] {
 /** The nearest price on the 5-paise tick, at least one tick. */
 function onTick(paise: number): number {
   return Math.max(TICK_SIZE_PAISE, Math.round(paise / TICK_SIZE_PAISE) * TICK_SIZE_PAISE);
+}
+
+/** The ledger part of a snapshot: whole (v1) or a carried balance plus entries (v2). */
+function ledgerOptions(snapshot: PaperEngineSnapshot): FundsLedgerOptions {
+  if (snapshot.v === PAPER_ENGINE_WORKING_SET_VERSION) {
+    return {
+      openingBalance: snapshot.openingBalance,
+      entries: snapshot.ledger.entries,
+      carried: snapshot.ledger.carried,
+    };
+  }
+  return { openingBalance: snapshot.openingBalance, entries: snapshot.ledger };
 }

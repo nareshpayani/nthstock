@@ -14,7 +14,7 @@ import {
   createSequentialIds,
 } from './context.js';
 import { createMapInstrumentSource } from './instruments.js';
-import { PaperEngine, type PaperEngineSnapshot } from './paperEngine.js';
+import { PaperEngine, type PaperEngineSnapshotV1 } from './paperEngine.js';
 
 /**
  * The demo starting state (T-174): one user, two watchlists, some holdings and a funds ledger
@@ -139,7 +139,7 @@ export function demoWatchlists(instruments: Iterable<DemoInstrument>): Watchlist
  * prices, then carried past the close so the buys are holdings. Restore it with
  * `PaperDesk.restore(DEMO_SEED_USER.id, snapshot)`.
  */
-export function buildDemoAccount(instruments: Iterable<DemoInstrument>): PaperEngineSnapshot {
+export function buildDemoAccount(instruments: Iterable<DemoInstrument>): PaperEngineSnapshotV1 {
   const find = lookup(instruments);
   const traded = [...new Set(DEMO_TRADES.map((trade) => trade.symbol))].map(find);
   const first = DEMO_TRADES[0];

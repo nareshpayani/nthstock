@@ -11,6 +11,15 @@ export type LedgerResult =
   | { ok: true; entries: readonly LedgerEntry[] }
   | { ok: false; code: 'INSUFFICIENT_FUNDS'; reason: string };
 
+/**
+ * What a ledger carries in from entries it no longer holds (T-199): the available cash after the
+ * last of them and the cash still blocked per order. Paired with the entries that came after.
+ */
+export type LedgerCarried = {
+  available: number;
+  blocks: readonly (readonly [orderId: string, amount: number])[];
+};
+
 export type FundsLedgerOptions = {
   /** Defaults to ₹10,00,000 (`PAPER_OPENING_BALANCE_PAISE`). */
   openingBalance?: number;
@@ -20,6 +29,11 @@ export type FundsLedgerOptions = {
    * `OPENING_CREDIT` of `openingBalance`, and every `balanceAfter` must add up.
    */
   entries?: readonly LedgerEntry[];
+  /**
+   * With `carried`, `entries` are only the entries after it (a working set, T-199): they need not
+   * start with the opening credit, and `entries()` and `size` cover just those.
+   */
+  carried?: LedgerCarried;
 };
 
 /**
@@ -47,6 +61,8 @@ export class FundsLedger {
   readonly #ctx: Pick<EngineContext, 'nowIso' | 'nextId'>;
   readonly #entries: LedgerEntry[] = [];
   readonly #blocks = new Map<string, number>();
+  /** The balance the held entries start from; empty when they start at the opening credit. */
+  #base: LedgerCarried = { available: 0, blocks: [] };
   #available = 0;
   #blocked = 0;
 
@@ -55,7 +71,9 @@ export class FundsLedger {
     this.openingBalance = options.openingBalance ?? PAPER_OPENING_BALANCE_PAISE;
     assertPaise(this.openingBalance, 'Opening balance');
     if (this.openingBalance < 0) throw new RangeError('Opening balance must not be negative');
-    if (options.entries) this.#replay(options.entries);
+    if (options.carried) this.#carryIn(options.carried);
+    if (options.entries) this.#replay(options.entries, options.carried !== undefined);
+    else if (options.carried) throw new RangeError('A carried balance needs its entries');
     else this.#append('OPENING_CREDIT', this.openingBalance, null, 'Opening paper balance');
   }
 
@@ -178,10 +196,48 @@ export class FundsLedger {
     };
   }
 
+  /**
+   * The ledger as a carried balance plus the entries created at or after `since` (ISO UTC), which
+   * is what a working-set snapshot keeps (T-199). Restoring it gives the same balances and blocks.
+   */
+  workingSet(since: string): { carried: LedgerCarried; entries: LedgerEntry[] } {
+    let available = this.#base.available;
+    const blocks = new Map(this.#base.blocks);
+    let split = 0;
+    for (const entry of this.#entries) {
+      if (entry.createdAt >= since) break;
+      available += entry.amount;
+      if ((entry.type === 'ORDER_BLOCK' || entry.type === 'ORDER_RELEASE') && entry.orderId) {
+        const held = (blocks.get(entry.orderId) ?? 0) - entry.amount;
+        if (held === 0) blocks.delete(entry.orderId);
+        else blocks.set(entry.orderId, held);
+      }
+      split += 1;
+    }
+    return {
+      carried: { available, blocks: [...blocks] },
+      entries: this.#entries.slice(split).map((entry) => ({ ...entry })),
+    };
+  }
+
+  #carryIn(carried: LedgerCarried): void {
+    assertPaise(carried.available, 'Carried balance');
+    let blocked = 0;
+    for (const [orderId, amount] of carried.blocks) {
+      assertPositivePaise(amount, 'Carried block');
+      if (this.#blocks.has(orderId)) throw new RangeError(`Carried block repeats order ${orderId}`);
+      this.#blocks.set(orderId, amount);
+      blocked += amount;
+    }
+    this.#available = carried.available;
+    this.#blocked = blocked;
+    this.#base = { available: carried.available, blocks: carried.blocks.map(([id, n]) => [id, n]) };
+  }
+
   /** Rebuilds balances and per-order blocks from saved entries (see `FundsLedgerOptions.entries`). */
-  #replay(entries: readonly LedgerEntry[]): void {
+  #replay(entries: readonly LedgerEntry[], carried: boolean): void {
     const [first] = entries;
-    if (first?.type !== 'OPENING_CREDIT' || first.amount !== this.openingBalance) {
+    if (!carried && (first?.type !== 'OPENING_CREDIT' || first.amount !== this.openingBalance)) {
       throw new RangeError('A saved ledger must start with its opening credit');
     }
     for (const raw of entries) {
