@@ -24,10 +24,10 @@ import {
   type SmsProvider,
 } from './modules/auth/index.js';
 import {
-  createMemoryOrdersRepo,
+  createMemoryAccountStore,
   createOrderService,
+  type AccountStore,
   type OrderService,
-  type OrdersRepo,
 } from './modules/orders/index.js';
 import { createMemoryUsersRepo, createPgUsersRepo, type UsersRepo } from './modules/users/index.js';
 import {
@@ -46,8 +46,8 @@ export type Repos = {
   users: UsersRepo;
   auth: AuthRepo;
   watchlists: WatchlistsRepo;
-  /** Paper accounts: one engine per user (T-131). */
-  orders: OrdersRepo;
+  /** Paper accounts: the record behind each user's engine (T-202; the orders service uses it from T-204). */
+  accounts: AccountStore;
   /** The append-only audit log. */
   audit: AuditRepo;
 };
@@ -159,6 +159,9 @@ export function createDeps(overrides: DepsOverrides = {}): AppDeps {
     : null;
   const redisState = database && overrides.redis ? overrides.redis : null;
   const redisPrefix = overrides.redisKeyPrefix ? { prefix: overrides.redisKeyPrefix } : {};
+  const audit =
+    overrides.repos?.audit ??
+    (database ? createPgAuditRepo({ database, clock }) : createMemoryAuditRepo({ clock }));
   const repos: Repos = {
     users:
       overrides.repos?.users ??
@@ -179,15 +182,12 @@ export function createDeps(overrides: DepsOverrides = {}): AppDeps {
     watchlists:
       overrides.repos?.watchlists ??
       (database ? createPgWatchlistsRepo({ database }) : createMemoryWatchlistsRepo()),
-    orders: overrides.repos?.orders ?? createMemoryOrdersRepo(),
-    audit:
-      overrides.repos?.audit ??
-      (database ? createPgAuditRepo({ database, clock }) : createMemoryAuditRepo({ clock })),
+    audit,
+    accounts: overrides.repos?.accounts ?? createMemoryAccountStore({ audit }),
   };
   const orders = createOrderService({
     clock,
     market,
-    repo: repos.orders,
     audit: repos.audit,
     ...(overrides.onAuditError ? { onAuditError: overrides.onAuditError } : {}),
     ...(overrides.newOrderId ? { newId: overrides.newOrderId } : {}),

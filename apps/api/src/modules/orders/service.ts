@@ -24,13 +24,11 @@ import {
 import type { Clock } from '@nthstock/utils';
 import { ApiHttpError } from '../../http/apiError.js';
 import type { AuditAction, AuditRepo, NewAuditRecord } from '../audit/index.js';
-import type { OrdersRepo } from './repo.js';
 
 export type OrderServiceDeps = {
   clock: Clock;
   /** The process's market data adapter: symbol master, quotes, stats and ticks. */
   market: DeskMarket;
-  repo: OrdersRepo;
   audit: AuditRepo;
   /**
    * Where an audit write that no request waits for (fills, fund movements) reports a failure;
@@ -65,7 +63,6 @@ function auditedPlaceRequest({ token, ...rest }: PlaceOrderRequest) {
 export function createOrderService({
   clock,
   market,
-  repo,
   audit,
   onAuditError = (error) => {
     process.stderr.write(`audit write failed: ${error.message}\n`);
@@ -123,7 +120,6 @@ export function createOrderService({
     clock,
     market,
     newId,
-    engines: repo,
     onOrderUpdate: (userId, order) => {
       void record(userId, [
         {
