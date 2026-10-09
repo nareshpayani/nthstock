@@ -5,18 +5,25 @@ import {
   createMapInstrumentSource,
   createMapPriceSource,
   createSequentialIds,
+  type PaperEngineOptions,
   type PaperEngineWorkingSet,
 } from '@nthstock/paperEngine';
 import { fromIst } from '@nthstock/utils';
-import { describe, expect, it } from 'vitest';
+import { sql } from 'drizzle-orm';
+import { expect, it } from 'vitest';
+import { createPiiCrypto, devPiiKeys } from '../../db/crypto.js';
 import { describeRepoConformance } from '../../test/conformance.js';
 import { manualClock } from '../../test/manualClock.js';
 import { createMemoryAuditRepo, type AuditRepo, type NewAuditRecord } from '../audit/index.js';
+import { createPgAuditRepo } from '../audit/pgRepo.js';
+import { createPgUsersRepo } from '../users/pgRepo.js';
+import { DEMO_USER } from '../users/repo.js';
 import { AccountConflict, type AccountStore } from './accountStore.js';
+import { createPgAccountStore } from './pgRepo.js';
 import { createMemoryAccountStore } from './repo.js';
 
-// The account store conformance suite (T-202): every implementation of AccountStore passes it.
-// The Postgres store joins in T-203.
+// The account store conformance suite (T-202, T-203): the memory store and the Postgres store
+// behave the same, and on Postgres a stale commit writes nothing and ledger numbers have no gaps.
 
 const INFY = {
   token: 1594,
@@ -29,7 +36,15 @@ const INFY = {
 /** Friday 25 Sep 2026 is a trading day. */
 const at = (day: number, hour: number, minute = 0) => fromIst(2026, 9, day, hour * 60 + minute);
 
-function newEngine(clockAt = at(25, 10), idPrefix = 'e') {
+/**
+ * An engine for one account. Order and ledger ids are unique across users in Postgres (apps/api
+ * uses random ids), so each account in a test gets its own prefix.
+ */
+function newEngine(
+  clockAt = at(25, 10),
+  idPrefix = 'e',
+  carryOn: Pick<PaperEngineOptions, 'snapshot' | 'holdings'> = {},
+) {
   const clock = createManualClock(clockAt);
   const engine = new PaperEngine({
     ctx: createEngineContext({
@@ -38,6 +53,7 @@ function newEngine(clockAt = at(25, 10), idPrefix = 'e') {
       nextId: createSequentialIds(idPrefix),
     }),
     instruments: createMapInstrumentSource([INFY]),
+    ...carryOn,
   });
   return { engine, clock };
 }
@@ -51,6 +67,9 @@ const limitBuy = (price: number) =>
     qty: 10,
     price,
   }) as const;
+
+const USERS = ['usr_a', 'usr_b'] as const;
+const clock = manualClock('2026-09-25T04:30:00.000Z');
 
 const note = (userId: string, orderId: string | null = null): NewAuditRecord => ({
   actor: { type: 'user', userId },
@@ -67,14 +86,23 @@ describeRepoConformance<Fixture>(
   'account store',
   {
     memory: () => {
-      const audit = createMemoryAuditRepo({ clock: manualClock('2026-09-25T04:30:00.000Z') });
+      const audit = createMemoryAuditRepo({ clock });
       return { store: createMemoryAccountStore({ audit }), audit };
     },
+    postgres: async (database) => {
+      // Accounts and ledger entries belong to users (foreign key).
+      const users = createPgUsersRepo({ database, clock, pii: createPiiCrypto(devPiiKeys()) });
+      for (const [index, id] of USERS.entries()) {
+        await users.ensureSeeded({ ...DEMO_USER, id, mobile: `900000030${String(index)}` });
+      }
+      const audit = createPgAuditRepo({ database, clock });
+      return { store: createPgAccountStore({ database, audit }), audit };
+    },
   },
-  ({ repo }) => {
+  ({ driver, repo, database }) => {
     /** Places `count` resting limit orders, committing after each; answers the last working set. */
     async function commitOrders(userId: string, count: number): Promise<PaperEngineWorkingSet> {
-      const { engine } = newEngine();
+      const { engine } = newEngine(at(25, 10), userId);
       let before: PaperEngineWorkingSet | null = null;
       let version = 0;
       for (let i = 0; i < count; i += 1) {
@@ -245,7 +273,7 @@ describeRepoConformance<Fixture>(
     it('lists the accounts with an AMO or OPEN order', async () => {
       const { store } = repo();
       await commitOrders('usr_a', 1);
-      const { engine } = newEngine();
+      const { engine } = newEngine(at(25, 10), 'b');
       const id = engine.place(limitBuy(1_400_00)).order?.id ?? '';
       const open = engine.workingSet();
       await store.commit('usr_b', { before: null, after: open }, 0, []);
@@ -259,7 +287,7 @@ describeRepoConformance<Fixture>(
     it('lists the accounts touched on an IST trade date', async () => {
       const { store } = repo();
       await commitOrders('usr_a', 1);
-      const later = newEngine(at(28, 10));
+      const later = newEngine(at(28, 10), 'later');
       later.engine.place(limitBuy(1_400_00));
       await store.commit('usr_b', { before: null, after: later.engine.workingSet() }, 0, []);
 
@@ -268,14 +296,133 @@ describeRepoConformance<Fixture>(
       expect(await store.accountsTouchedOn('2026-09-26')).toEqual([]);
     });
 
-    describe('reset', () => {
-      it('forgets every account', async () => {
+    it('round-trips positions, holdings, holding sales and the funds ledger', async () => {
+      const { store } = repo();
+      const holding = [[INFY.token, { qty: 20, investedValue: 20 * 1_400_00 }]] as const;
+      const { engine } = newEngine(at(25, 10), 'e', { holdings: holding });
+      const market = { token: INFY.token, type: 'MARKET' } as const;
+      expect(engine.place({ ...market, side: 'BUY', product: 'INTRADAY', qty: 10 }).ok).toBe(true);
+      expect(engine.place({ ...market, side: 'SELL', product: 'DELIVERY', qty: 5 }).ok).toBe(true);
+      // Positions come back in key order; the engine lists them in the order they were opened.
+      const byKey = (set: PaperEngineWorkingSet): PaperEngineWorkingSet => ({
+        ...set,
+        positions: set.positions.toSorted((a, b) => a.product.localeCompare(b.product)),
+      });
+      const first = engine.workingSet();
+      expect(first.positions).toHaveLength(2);
+      expect(first.holdingSales).toHaveLength(1);
+      await store.commit('usr_a', { before: null, after: first }, 0, []);
+      const loadedFirst = await store.load('usr_a');
+      expect(loadedFirst && { ...loadedFirst, workingSet: byKey(loadedFirst.workingSet) }).toEqual({
+        workingSet: byKey(first),
+        version: 1,
+      });
+
+      // Selling the rest drops the holding row; the position and sale rows are replaced.
+      engine.place({ ...market, side: 'SELL', product: 'DELIVERY', qty: 15 });
+      const second = engine.workingSet();
+      expect(second.holdings).toEqual([]);
+      await store.commit('usr_a', { before: first, after: second }, 1, []);
+      const loadedSecond = await store.load('usr_a');
+      expect(loadedSecond?.version).toBe(2);
+      expect(loadedSecond && byKey(loadedSecond.workingSet)).toEqual(byKey(second));
+    });
+
+    it('carries the balance and the blocks of earlier days into the working set', async () => {
+      const { store } = repo();
+      // Friday 20:00 IST: the market is closed, so the order is an AMO with cash blocked.
+      const evening = newEngine(at(25, 20), 'e');
+      evening.engine.place(limitBuy(1_400_00));
+      const first = evening.engine.workingSet();
+      await store.commit('usr_a', { before: null, after: first }, 0, []);
+
+      // Saturday: the AMO is still waiting, and Friday's entries are no longer today's.
+      const saturday = newEngine(at(26, 10), 'f', { snapshot: first });
+      saturday.engine.sync();
+      const second = saturday.engine.workingSet();
+      expect(second.ledger.entries).toEqual([]);
+      expect(second.ledger.carried.blocks).toHaveLength(1);
+      await store.commit('usr_a', { before: first, after: second }, 1, []);
+      expect(await store.load('usr_a')).toEqual({ workingSet: second, version: 2 });
+      // The older entries are still in the ledger.
+      expect((await store.ledgerPage('usr_a'))?.items).toHaveLength(first.ledger.entries.length);
+    });
+
+    if (driver === 'memory') {
+      it('forgets every account on reset', async () => {
         const { store } = repo();
         await commitOrders('usr_a', 1);
         await store.reset();
         expect(await store.load('usr_a')).toBeNull();
         expect(await store.liveAccountIds()).toEqual([]);
       });
-    });
+    }
+
+    if (driver === 'postgres') {
+      it('refuses to reset: the ledger is append-only for the app role', async () => {
+        await expect(repo().store.reset()).rejects.toThrow(/append-only/);
+      });
+
+      it('writes nothing for a stale commit, not even to the tables below the account', async () => {
+        const { store } = repo();
+        const final = await commitOrders('usr_a', 1);
+        const counts = () =>
+          database().db.execute<{ orders: number; events: number; ledger: number }>(sql`
+            select (select count(*)::int from orders) as orders,
+                   (select count(*)::int from order_events) as events,
+                   (select count(*)::int from ledger_entries) as ledger`);
+        const before = (await counts()).rows;
+
+        const { engine } = newEngine(at(25, 10), 'stale', { snapshot: final });
+        engine.place(limitBuy(1_450_00));
+        await expect(
+          store.commit('usr_a', { before: final, after: engine.workingSet() }, 0, [note('usr_a')]),
+        ).rejects.toBeInstanceOf(AccountConflict);
+        expect((await counts()).rows).toEqual(before);
+      });
+
+      it('numbers a user’s ledger entries 1..n with no gaps under concurrent commits', async () => {
+        const { store } = repo();
+        const workers = 12;
+        const first = newEngine(at(25, 10), 'w');
+        const opened = first.engine.workingSet();
+        await store.commit('usr_a', { before: null, after: opened }, 0, []);
+
+        // Each worker reads the account, places an order and commits, rereading after a conflict.
+        const place = async (worker: number) => {
+          for (;;) {
+            const loaded = await store.load('usr_a');
+            if (!loaded) throw new Error('account vanished');
+            const { engine } = newEngine(at(25, 10), `w${String(worker)}-`, {
+              snapshot: loaded.workingSet,
+            });
+            engine.place(limitBuy(1_400_00 + worker * 100));
+            try {
+              return await store.commit(
+                'usr_a',
+                { before: loaded.workingSet, after: engine.workingSet() },
+                loaded.version,
+                [],
+              );
+            } catch (error) {
+              if (!(error instanceof AccountConflict)) throw error;
+            }
+          }
+        };
+        const versions = await Promise.all(Array.from({ length: workers }, (_, i) => place(i)));
+        expect(versions.sort((a, b) => a - b)).toEqual(
+          Array.from({ length: workers }, (_, i) => i + 2),
+        );
+
+        const { rows } = await database().db.execute<{ seq: number }>(
+          sql`select seq::int as seq from ledger_entries where user_id = 'usr_a' order by seq`,
+        );
+        // The opening credit plus one block per order.
+        expect(rows.map((row) => row.seq)).toEqual(
+          Array.from({ length: workers + 1 }, (_, i) => i + 1),
+        );
+        expect((await store.ordersPage('usr_a', { limit: 100 }))?.items).toHaveLength(workers);
+      });
+    }
   },
 );
