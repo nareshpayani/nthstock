@@ -1,10 +1,10 @@
 # CLAUDE.md — nthstock
 
 > Owner: Naresh Payani (@nareshpayani). Every agent reads this file first; it stays short and links
-> the detail. Status (2026-10-07): Phase 1 (T-001 to T-175) done on the mock backend. Phase 2, backend
+> the detail. Status (2026-10-09): Phase 1 (T-001 to T-175) done on the mock backend. Phase 2, backend
 > core on PostgreSQL (`docs/specs/backend-core.md`, T-176 to T-244), is in progress: epics E11 to E14
-> merged, E15 to E21 open. Work is paused until the owner restarts it. Issue keys: T-181 is
-> NSTOCK-0181, epics E1 to E21 are NSTOCK-0245 to NSTOCK-0265.
+> merged, owner restarted work on 2026-10-09 with E15 (orders persistence), E16 to E21 open. Issue
+> keys: T-181 is NSTOCK-0181, epics E1 to E21 are NSTOCK-0245 to NSTOCK-0265.
 
 nthstock is an Indian stock-market investing and paper-trading platform: a React SPA, a Fastify API
 and a realtime WebSocket server, built on mock NSE/BSE data. Section numbers below are stable: ADRs,
