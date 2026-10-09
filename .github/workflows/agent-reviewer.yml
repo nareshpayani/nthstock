@@ -65,6 +65,16 @@ jobs:
             Act as the Reviewer. Follow .claude/agents/reviewer.md exactly.
             Always finish by posting the summary comment, even when a step fails; if a command was
             denied, name it in the summary so the owner can widen the allowed tools.
+            Post comments with a body file: write the text to /tmp/review.md, then run
+            `gh pr comment <n> --body-file /tmp/review.md` (a long inline --body is refused).
           claude_args: |
             --max-turns 40
-            --allowedTools "Read,Glob,Grep,Agent,Task,mcp__github_inline_comment__create_inline_comment,Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*),Bash(gh pr edit:*),Bash(gh issue create:*),Bash(gh issue view:*),Bash(bash tools/github/issueKey.sh:*),Bash(git diff:*),Bash(git log:*),Bash(git show:*),Bash(gh pr checks:*),Bash(gh api repos/*/pulls/*),Bash(gh api repos/*/issues/*),Bash(gh api repos/*/commits/*)"
+            --allowedTools "Read,Glob,Grep,Write,Agent,Task,mcp__github_inline_comment__create_inline_comment,Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*),Bash(gh pr edit:*),Bash(gh issue create:*),Bash(gh issue view:*),Bash(bash tools/github/issueKey.sh:*),Bash(git diff:*),Bash(git log:*),Bash(git show:*),Bash(gh pr checks:*),Bash(gh api repos/*/pulls/*),Bash(gh api repos/*/issues/*),Bash(gh api repos/*/commits/*)"
+      - name: Show denied commands
+        if: always() && steps.rounds.outputs.skip != 'true' && env.HAS_AGENT_TOKEN == 'true'
+        # Only the denied tool calls, so a review that ends without posting can be diagnosed
+        # without publishing the whole transcript in this public repo's logs.
+        run: |
+          out="$RUNNER_TEMP/claude-execution-output.json"
+          [ -f "$out" ] || exit 0
+          jq -r '.[] | select(.type == "result") | .permission_denials[]? | "\(.tool_name): \(.tool_input.command // .tool_input.file_path // "" | tostring | .[0:200])"' "$out" || true
