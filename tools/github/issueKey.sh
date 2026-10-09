@@ -42,7 +42,9 @@ resolve() {
   local ref="$1" num
   case "$ref" in
     "$PREFIX"-*)
-      num=$(all_issues | awk -F'\t' -v k="$ref : " 'index($2, k) == 1 { print $1; exit }')
+      # awk reads to the end: exiting at the first match would SIGPIPE the paginating gh, which
+      # pipefail turns into a failed lookup.
+      num=$(all_issues | awk -F'\t' -v k="$ref : " '!n && index($2, k) == 1 { n = $1 } END { if (n) print n }')
       [ -n "$num" ] || die "no issue is titled $ref"
       echo "$num" ;;
     \#*) echo "${ref#\#}" ;;
