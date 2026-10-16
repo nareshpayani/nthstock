@@ -32,8 +32,8 @@
     "e2e:perf": "npm run e2e:perf -w @nthstock/web"
   },
   "devDependencies": {
-    "prettier": "3.9.9",
-    "turbo": "2.11.5",
+    "prettier": "3.9.10",
+    "turbo": "2.11.7",
     "typescript": "6.0.3"
   }
 }
