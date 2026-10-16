@@ -53,8 +53,9 @@ export const strings = {
     offers: 'Offers',
     loading: 'Loading market depth',
     error: 'Market depth is not available right now.',
-    pickBid: (price: string, qty: string) => `Bid ${price}, ${qty} shares: use as limit price`,
-    pickOffer: (price: string, qty: string) => `Offer ${price}, ${qty} shares: use as limit price`,
+    // The visible text ("price qty") leads the label so the accessible name contains it (WCAG 2.5.3).
+    pickBid: (price: string, qty: string) => `${price} ${qty} shares, bid: use as limit price`,
+    pickOffer: (price: string, qty: string) => `${price} ${qty} shares, offer: use as limit price`,
   },
   modify: {
     locked: 'Side, product and order type stay as placed. Change the quantity or price.',
