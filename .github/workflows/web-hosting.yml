@@ -1,0 +1,63 @@
+name: Web hosting
+
+# Free Firebase Hosting (Spark plan) for the msw-mode web build: the whole app, mock market and
+# paper engine included, runs in the browser, so a static deploy is a working demo (WF-06).
+# - main: once CI is green on main (push or agent-automerge's dispatch), deploys the live site
+#   https://<project>.web.app.
+# - pull requests: a preview channel per PR (expires after 7 days), its URL commented on the PR.
+# Needs the repo variable FIREBASE_PROJECT_ID and the secret FIREBASE_SERVICE_ACCOUNT (see
+# docs/runbooks/web-hosting.md). Until both are set, every job here is skipped, not failed.
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: web-hosting-${{ github.event_name }}-${{ github.event.pull_request.number || 'live' }}
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    name: Deploy to Firebase Hosting
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # Only a green CI run on main, or a PR from this repo (fork PRs get no secrets).
+    if: >-
+      vars.FIREBASE_PROJECT_ID != '' && (
+        (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success') ||
+        (github.event_name == 'pull_request' &&
+          github.event.pull_request.head.repo.full_name == github.repository)
+      )
+    permissions:
+      contents: read
+      checks: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # workflow_run starts on main's latest commit; deploy exactly the commit CI passed.
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      # Reviewers open the demo at any hour, so the mock market ticks outside NSE hours too.
+      - run: npx turbo run build --filter=@nthstock/web
+        env:
+          VITE_API_MODE: msw
+          VITE_MOCK_MARKET_OPEN: 'true'
+      # Third-party and handed the service-account key, so pinned to a commit.
+      - uses: FirebaseExtended/action-hosting-deploy@500ac625ca2dd40cbd15f7659af953801858032a # v0
+        with:
+          repoToken: ${{ secrets.GITHUB_TOKEN }}
+          firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          projectId: ${{ vars.FIREBASE_PROJECT_ID }}
+          channelId: ${{ github.event_name == 'workflow_run' && 'live' || '' }}
+          expires: 7d

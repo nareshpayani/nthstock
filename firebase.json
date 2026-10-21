@@ -1,0 +1,60 @@
+{
+  "hosting": {
+    "public": "apps/web/dist",
+    "ignore": ["firebase.json", "**/.*"],
+    "rewrites": [
+      {
+        "source": "**",
+        "destination": "/index.html"
+      }
+    ],
+    "headers": [
+      {
+        "source": "**",
+        "headers": [
+          {
+            "key": "content-security-policy",
+            "value": "default-src 'self'; script-src 'self'; style-src 'self' 'sha256-3pRED1tOXas1FXFoPb9TGCjmYe9XQsmO9OV23khV2nY='; img-src 'self' data: blob:; font-src 'self'; connect-src 'self'; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
+          },
+          {
+            "key": "x-frame-options",
+            "value": "DENY"
+          },
+          {
+            "key": "x-content-type-options",
+            "value": "nosniff"
+          },
+          {
+            "key": "referrer-policy",
+            "value": "strict-origin-when-cross-origin"
+          },
+          {
+            "key": "cross-origin-opener-policy",
+            "value": "same-origin"
+          },
+          {
+            "key": "permissions-policy",
+            "value": "camera=(), microphone=(), geolocation=(), payment=()"
+          },
+          {
+            "key": "strict-transport-security",
+            "value": "max-age=63072000; includeSubDomains; preload"
+          },
+          {
+            "key": "cache-control",
+            "value": "no-cache"
+          }
+        ]
+      },
+      {
+        "source": "/assets/**",
+        "headers": [
+          {
+            "key": "cache-control",
+            "value": "public, max-age=31536000, immutable"
+          }
+        ]
+      }
+    ]
+  }
+}

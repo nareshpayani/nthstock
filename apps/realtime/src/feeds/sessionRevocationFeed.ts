@@ -67,7 +67,7 @@ function listenerSet() {
 }
 
 export type RedisSessionRevocationFeed = SessionRevocationFeed & {
-  /** Resolves once the SUBSCRIBE has been acknowledged (tests). */
+  /** Resolves once the SUBSCRIBE is acknowledged and the check connection is ready (tests). */
   settled(): Promise<void>;
 };
 
@@ -143,7 +143,15 @@ export function createRedisSessionRevocationFeed(options: {
         return false;
       }
     },
-    settled: () => subscribed.then(() => undefined),
+    settled: async () => {
+      await subscribed;
+      // The check connection does not queue commands while connecting, so wait for it too.
+      if (commands.status === 'ready') return;
+      await new Promise<void>((resolve) => {
+        commands.once('ready', () => resolve());
+        commands.once('end', () => resolve());
+      });
+    },
     async close() {
       listeners.clear();
       recent.clear();
