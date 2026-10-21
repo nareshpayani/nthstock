@@ -14,7 +14,7 @@ export const strings = {
     more: 'More',
     shortcuts: 'Keyboard shortcuts',
     holidays: 'Market holidays',
-    about: 'About paper trading',
+    guide: 'Guide: features and how to trade',
     soon: 'soon',
     statusStrip: 'Market status and indices',
   },
