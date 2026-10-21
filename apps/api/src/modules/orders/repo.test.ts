@@ -422,7 +422,8 @@ describeRepoConformance<Fixture>(
           Array.from({ length: workers + 1 }, (_, i) => i + 1),
         );
         expect((await store.ordersPage('usr_a', { limit: 100 }))?.items).toHaveLength(workers);
-      });
+        // Optimistic retries serialise the 12 workers, so a loaded CI runner needs more than 5 s.
+      }, 30_000);
     }
   },
 );
