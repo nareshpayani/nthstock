@@ -2,9 +2,15 @@ name: Web hosting
 
 # Free Firebase Hosting (Spark plan) for the msw-mode web build: the whole app, mock market and
 # paper engine included, runs in the browser, so a static deploy is a working demo (WF-06).
-# - main: once CI is green on main (push or agent-automerge's dispatch), deploys the live site
-#   https://<project>.web.app.
+# Releases follow docs/runbooks/release.md (ADR 0009):
 # - pull requests: a preview channel per PR (expires after 7 days), its URL commented on the PR.
+# - release candidate: Actions → Web hosting → Run workflow, stage "candidate", deploys a commit on
+#   main to the `release` preview channel for the owner to check.
+# - live: the same, stage "live", deploys a commit on main to https://<project>.web.app, then
+#   smoke-tests the live site. Agents run it only after the owner confirms the preview. Rolling back
+#   is the same with an older commit.
+# Both dispatch stages refuse a commit that is not on main or whose CI is not green.
+# LIVE_DEPLOY=auto (repo variable) brings back the old behaviour: every green CI on main goes live.
 # Needs the repo variable FIREBASE_PROJECT_ID and the secret FIREBASE_SERVICE_ACCOUNT (see
 # docs/runbooks/web-hosting.md). Until both are set, every job here is skipped, not failed.
 
@@ -14,25 +20,37 @@ on:
     types: [completed]
     branches: [main]
   pull_request:
+  workflow_dispatch:
+    inputs:
+      stage:
+        description: 'candidate: the release preview channel; live: the production site'
+        type: choice
+        options: [candidate, live]
+        default: candidate
+      ref:
+        description: Commit SHA (or main) to release. It must be on main with green CI.
+        type: string
+        default: main
 
 permissions:
   contents: read
 
 concurrency:
-  group: web-hosting-${{ github.event_name }}-${{ github.event.pull_request.number || 'live' }}
-  cancel-in-progress: true
+  group: web-hosting-${{ github.event_name }}-${{ github.event.pull_request.number || inputs.stage || 'live' }}
+  # A live deploy is never cancelled halfway; a newer one waits for it.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  deploy:
-    name: Deploy to Firebase Hosting
+  preview:
+    name: Deploy a preview channel
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    # Only a green CI run on main, or a PR from this repo (fork PRs get no secrets).
+    # A PR from this repo (fork PRs get no secrets), or a release candidate.
     if: >-
       vars.FIREBASE_PROJECT_ID != '' && (
-        (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success') ||
         (github.event_name == 'pull_request' &&
-          github.event.pull_request.head.repo.full_name == github.repository)
+          github.event.pull_request.head.repo.full_name == github.repository) ||
+        (github.event_name == 'workflow_dispatch' && inputs.stage == 'candidate')
       )
     permissions:
       contents: read
@@ -41,8 +59,31 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
-          # workflow_run starts on main's latest commit; deploy exactly the commit CI passed.
-          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.ref || github.sha }}
+          fetch-depth: 0
+      # The gate scripts and smoke test come from this workflow's own commit, not the one being
+      # released, so a rollback to a commit from before they existed still runs them.
+      - name: Take the release tools from this workflow's commit
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
+          path: .release-tools
+          sparse-checkout: |
+            tools/github
+            apps/web/e2e/deployed
+            apps/web/e2e/support
+            apps/web/playwright.deployed.config.ts
+          sparse-checkout-cone-mode: false
+      - name: Put the smoke test next to the released app
+        run: |
+          mkdir -p apps/web/e2e
+          cp -r .release-tools/apps/web/e2e/deployed .release-tools/apps/web/e2e/support apps/web/e2e/
+          cp .release-tools/apps/web/playwright.deployed.config.ts apps/web/
+      - name: Check the release commit (on main, CI green)
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash .release-tools/tools/github/checkReleaseCommit.sh
       - uses: actions/setup-node@v7
         with:
           node-version-file: .nvmrc
@@ -54,10 +95,114 @@ jobs:
           VITE_API_MODE: msw
           VITE_MOCK_MARKET_OPEN: 'true'
       # Third-party and handed the service-account key, so pinned to a commit.
+      - id: deploy
+        uses: FirebaseExtended/action-hosting-deploy@500ac625ca2dd40cbd15f7659af953801858032a # v0
+        with:
+          repoToken: ${{ secrets.GITHUB_TOKEN }}
+          firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          projectId: ${{ vars.FIREBASE_PROJECT_ID }}
+          channelId: ${{ github.event_name == 'workflow_dispatch' && 'release' || '' }}
+          expires: 7d
+      - name: Install Chrome for Testing (Chromium)
+        run: npx playwright install --with-deps chromium
+      # Log in with the demo account, place a paper buy and open the guide on the deployed preview.
+      - name: Smoke-test the preview as a reviewer
+        env:
+          E2E_BASE_URL: ${{ steps.deploy.outputs.details_url }}
+        working-directory: apps/web
+        run: npx playwright test -c playwright.deployed.config.ts
+      - name: Summary
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          URL: ${{ steps.deploy.outputs.details_url }}
+          EXPIRES: ${{ steps.deploy.outputs.expire_time }}
+        run: |
+          {
+            echo "### Release candidate"
+            echo "Commit \`$(git rev-parse HEAD)\` is on the release channel: $URL/dashboard?demo=1"
+            echo "Expires $EXPIRES. Demo login 9000000001, OTP 123456."
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "::notice title=Release candidate::$URL/dashboard?demo=1"
+
+  live:
+    name: Deploy the live site
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # A dispatched live release, or (LIVE_DEPLOY=auto only) every green CI run on main.
+    if: >-
+      vars.FIREBASE_PROJECT_ID != '' && (
+        (github.event_name == 'workflow_dispatch' && inputs.stage == 'live') ||
+        (github.event_name == 'workflow_run' && vars.LIVE_DEPLOY == 'auto' &&
+          github.event.workflow_run.conclusion == 'success')
+      )
+    environment:
+      name: production
+      url: https://${{ vars.FIREBASE_PROJECT_ID }}.web.app
+    permissions:
+      contents: read
+      checks: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # workflow_run starts on main's latest commit; deploy exactly the commit CI passed.
+          ref: >-
+            ${{ github.event_name == 'workflow_dispatch' && inputs.ref ||
+            github.event.workflow_run.head_sha || github.sha }}
+          fetch-depth: 0
+      # The gate scripts and smoke test come from this workflow's own commit, not the one being
+      # released, so a rollback to a commit from before they existed still runs them.
+      - name: Take the release tools from this workflow's commit
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
+          path: .release-tools
+          sparse-checkout: |
+            tools/github
+            apps/web/e2e/deployed
+            apps/web/e2e/support
+            apps/web/playwright.deployed.config.ts
+          sparse-checkout-cone-mode: false
+      - name: Put the smoke test next to the released app
+        run: |
+          mkdir -p apps/web/e2e
+          cp -r .release-tools/apps/web/e2e/deployed .release-tools/apps/web/e2e/support apps/web/e2e/
+          cp .release-tools/apps/web/playwright.deployed.config.ts apps/web/
+      - name: Check the release commit (on main, CI green)
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash .release-tools/tools/github/checkReleaseCommit.sh
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - run: npx turbo run build --filter=@nthstock/web
+        env:
+          VITE_API_MODE: msw
+          VITE_MOCK_MARKET_OPEN: 'true'
       - uses: FirebaseExtended/action-hosting-deploy@500ac625ca2dd40cbd15f7659af953801858032a # v0
         with:
           repoToken: ${{ secrets.GITHUB_TOKEN }}
           firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
           projectId: ${{ vars.FIREBASE_PROJECT_ID }}
-          channelId: ${{ github.event_name == 'workflow_run' && 'live' || '' }}
-          expires: 7d
+          channelId: live
+      - name: Check the live site serves this build
+        env:
+          SITE: https://${{ vars.FIREBASE_PROJECT_ID }}.web.app
+        run: bash .release-tools/tools/github/smokeTestSite.sh "$SITE" apps/web/dist/index.html
+      - name: Install Chrome for Testing (Chromium)
+        run: npx playwright install --with-deps chromium
+      - name: Smoke-test the live site as a reviewer
+        env:
+          E2E_BASE_URL: https://${{ vars.FIREBASE_PROJECT_ID }}.web.app
+        working-directory: apps/web
+        run: npx playwright test -c playwright.deployed.config.ts
+      - name: Summary
+        env:
+          SITE: https://${{ vars.FIREBASE_PROJECT_ID }}.web.app
+        run: |
+          {
+            echo "### Live"
+            echo "Commit \`$(git rev-parse HEAD)\` is live at $SITE/dashboard?demo=1 and passed the smoke test."
+          } >> "$GITHUB_STEP_SUMMARY"

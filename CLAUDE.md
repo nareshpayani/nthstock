@@ -77,8 +77,9 @@ Each phase ends with a demo and owner sign-off before the next starts.
    Actions. Green non-spec PRs labelled `ready-to-merge` auto-merge (ADR 0006). The owner merges spec
    PRs and PRs touching `.github/`, `.claude/` or `CLAUDE.md`.
 4. **Done means closed:** a PR lists `Closes #N` for every issue it completes.
-5. **Agents never** push to `main`, deploy, touch real money, commit secrets, or add a paid service or
-   a dependency outside the approved stack without asking.
+5. **Agents never** push to `main`, touch real money, commit secrets, or add a paid service or a
+   dependency outside the approved stack without asking. They deploy to production only through the
+   release flow, after the owner confirms the preview (ADR 0009, `docs/runbooks/release.md`).
 6. **One phase at a time:** no phase starts without owner sign-off in the project chat.
 
 ## 9. Compliance notes → [docs/product.md §9](docs/product.md)
@@ -101,7 +102,7 @@ Node 22 is required (`.nvmrc`). On the owner's Mac: `export PATH="$(brew --prefi
 |---|---|
 | `agents/` | Planner, Developer, Reviewer, Fixer roles (used by GitHub Actions), and the report-only specialists the Reviewer calls: `frontend-reviewer`, `security-reviewer`, `database-reviewer`, `silent-failure-hunter`, `test-gap-analyzer`; plus `e2e-author` for Playwright specs |
 | `rules/` | Detailed standards, loaded when you work in matching paths: `frontend`, `backend`, `packages`, `testing`, `git-and-prs` |
-| `skills/` | Repeatable procedures: `run-checks`, `local-dev`, `new-web-feature`, `new-api-module`, `browser-qa`, `production-audit`, `database-migrations`, `latency` |
+| `skills/` | Repeatable procedures: `run-checks`, `local-dev`, `new-web-feature`, `new-api-module`, `browser-qa`, `production-audit`, `database-migrations`, `latency`, `release` |
 | `hooks/` | Automatic checks (see `hooks/README.md`): format + lint after each edit, typecheck of changed workspaces at the end of a turn, guards against pushing to `main` and editing secrets or generated files |
 | `settings.json` | Hook wiring and shared permissions |
 

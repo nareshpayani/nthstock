@@ -90,7 +90,11 @@ Dependabot rebases its own PRs, but their CI failures go to the Fixer.
   variable `AGENT_AUTOMERGE` to `false`. It merges one PR per run, because the other PRs' checks ran
   against the old `main`. After merging it starts CI, CodeQL, the conflict resolver and the label sync
   on `main`, because merges made with the Actions token don't trigger push workflows.
-- **Agents never merge by hand, never push to `main`, never touch secrets or deploy.** Every agent job
+- **Releases (ADR 0009):** merging does not deploy. When the owner asks for a release, an agent follows
+  `docs/runbooks/release.md` (the `release` skill): PR held with `do-not-merge`, preview link to the
+  owner, and after the owner's OK, merge and the `web-hosting.yml` live dispatch, smoke-tested.
+- **Agents never merge by hand, never push to `main`, never touch secrets, and deploy only through the
+  release flow.** Every agent job
   that can push installs a pre-push hook that refuses `main`, and the Fixer's `gh` access excludes
   `gh pr merge`.
 - **Cost caps:** `--max-turns` per agent, job timeouts, one run per issue/PR at a time.
