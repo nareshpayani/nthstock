@@ -77,3 +77,27 @@ describe('chart attribution style hash', () => {
     expect(webContentSecurityPolicy()).not.toContain('unsafe-inline');
   });
 });
+
+describe('firebase.json (web hosting)', () => {
+  it('sends the same security headers as webSecurityHeaders, with HSTS', () => {
+    const config = JSON.parse(readFileSync(findUp('firebase.json'), 'utf8')) as {
+      hosting: { headers: { source: string; headers: { key: string; value: string }[] }[] };
+    };
+    const all = config.hosting.headers.find((rule) => rule.source === '**');
+    const sent = Object.fromEntries(
+      (all?.headers ?? [])
+        .filter(({ key }) => key !== 'cache-control')
+        .map(({ key, value }) => [key, value]),
+    );
+    expect(sent).toEqual(webSecurityHeaders({ hsts: true }));
+  });
+});
+
+/** Looks for a file from the working directory up to the repo root. */
+function findUp(file: string): string {
+  for (let dir = process.cwd(); ; dir = dirname(dir)) {
+    const candidate = join(dir, file);
+    if (existsSync(candidate)) return candidate;
+    if (dirname(dir) === dir) throw new Error(`${file} not found above ${process.cwd()}`);
+  }
+}
