@@ -35,7 +35,7 @@ concurrency:
 
 jobs:
   close:
-    if: github.event_name != 'pull_request' || (github.event.pull_request.merged && github.event.pull_request.base.ref == 'main')
+    if: github.event_name != 'pull_request' || (github.event.pull_request.merged && (github.event.pull_request.base.ref == 'develop' || github.event.pull_request.base.ref == 'main'))
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -78,7 +78,7 @@ jobs:
             commented=$(jq --arg m "$marker" '[.comments[].body | select(contains($m))] | length' <<< "$info")
             if [ "$commented" = 0 ]; then
               gh issue comment "$issue" --repo "$repo" --body "$marker
-          Done in #$pr, merged to \`main\`. Closing as completed."
+          Done in #$pr. Closing as completed."
             fi
             if [ "$state" = OPEN ]; then
               gh issue close "$issue" --repo "$repo" --reason completed
@@ -118,7 +118,7 @@ jobs:
             prs="$PR_INPUT"
           else
             since=$(date -u -d '3 days ago' +%Y-%m-%d)
-            prs=$(gh pr list --repo "$repo" --state merged --base main --limit 100 \
+            prs=$(gh pr list --repo "$repo" --state merged --base develop --limit 100 \
               --search "merged:>=$since" --json number --jq '.[].number')
           fi
           for pr in $prs; do

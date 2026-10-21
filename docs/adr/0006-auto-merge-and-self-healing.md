@@ -1,6 +1,7 @@
 # 0006. Auto-merge and self-healing CI
 
-- Status: Accepted
+- Status: Accepted; amended by [0010](0010-develop-and-main-branches.md) (all of this now runs on
+  `develop`)
 - Date: 2026-09-28
 - Amends: [0003](0003-agent-team-on-github-actions.md) (the owner no longer merges every PR by hand)
 

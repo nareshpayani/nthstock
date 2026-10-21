@@ -1,11 +1,12 @@
 name: 'Agent: Auto-merge'
 
-# Squash-merges a PR into main once the Reviewer has labelled it ready-to-merge and every check
+# Squash-merges a PR into develop once the Reviewer has labelled it ready-to-merge and every check
 # on its head commit is green. Owner decision 2026-09-26 (ADR 0006): agent PRs no longer wait for
 # a manual merge. Skipped: PRs without ready-to-merge, drafts, forks, Dependabot, spec PRs (the
 # owner still approves specs), PRs that change .github/**, .claude/** or CLAUDE.md (agent and CI
 # config needs the owner), and any PR labelled needs-human, agent:fix-needed or do-not-merge.
-# Add do-not-merge to hold a PR.
+# Add do-not-merge to hold a PR. PRs into main (releases, ADR 0010) are never auto-merged: the
+# owner merges them.
 
 on:
   workflow_run:
@@ -43,7 +44,7 @@ jobs:
           set -euo pipefail
           repo="$GITHUB_REPOSITORY"
           merged=0
-          prs=$(gh pr list --repo "$repo" --base main --state open --limit 50 \
+          prs=$(gh pr list --repo "$repo" --base develop --state open --limit 50 \
             --json number,isDraft,author,labels,headRefOid,headRepositoryOwner,mergeable \
             --jq '.[] | @base64')
           for row in $prs; do
@@ -83,15 +84,15 @@ jobs:
             gh pr merge "$num" --repo "$repo" --squash --delete-branch --match-head-commit "$sha"
             merged=1
             merged_pr="$num"
-            # One merge per run: the other PRs' checks ran against the old main. The conflict
+            # One merge per run: the other PRs' checks ran against the old develop. The conflict
             # resolver and the next run (after their CI, or the hourly sweep) pick them up.
             break
           done
-          # Merges made with GITHUB_TOKEN do not trigger push workflows, so start them on main explicitly.
+          # Merges made with GITHUB_TOKEN do not trigger push workflows, so start them on develop explicitly.
           if [ "$merged" -eq 1 ]; then
             for wf in ci.yml codeql.yml agent-conflicts.yml agent-labels.yml; do
-              gh workflow run "$wf" --repo "$repo" --ref main
+              gh workflow run "$wf" --repo "$repo" --ref develop
             done
             # Close the story, bug and epic issues this PR completed, with a comment on each.
-            gh workflow run agent-close-issues.yml --repo "$repo" --ref main -f pr="$merged_pr"
+            gh workflow run agent-close-issues.yml --repo "$repo" --ref develop -f pr="$merged_pr"
           fi

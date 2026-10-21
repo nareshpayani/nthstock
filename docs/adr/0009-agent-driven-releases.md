@@ -1,6 +1,7 @@
 # 0009. Agent-driven releases with an owner-confirmed preview
 
-- Status: Accepted
+- Status: Accepted; amended by [0010](0010-develop-and-main-branches.md) (releases are PRs from
+  `develop` into `main`)
 - Date: 2026-10-21
 - Amends: [0006](0006-auto-merge-and-self-healing.md) (agents may now deploy, through this flow only)
 
@@ -32,13 +33,6 @@ confirms the preview link before it goes live.
   rollback for speed.
 - Live deploys run in the `production` GitHub environment, which records them and lets the owner add
   a required reviewer later without changing the workflow.
-
-## Amendment (2026-10-21): development and production environments
-
-At the owner's request there are two GitHub environments. **development** is the default: every
-green CI run on `main` deploys to the long-lived Firebase `dev` channel and smoke-tests it, so merged
-work is visible on a shared link without a release. **production** is the live site and is reached
-only through the release flow above. Details: `docs/runbooks/environments.md`.
 
 ## Consequences
 

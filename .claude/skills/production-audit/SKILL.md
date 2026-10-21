@@ -12,7 +12,7 @@ or data to an outside service without the owner's yes.
 ## 1. Establish the surface
 ```sh
 git status --short --branch && git log --oneline -20
-gh run list --branch main --limit 5          # is main green, and since when
+gh run list --branch develop --limit 5       # is develop green, and since when
 ```
 Read the phase in CLAUDE.md, the spec in `docs/specs/` for what is meant to ship, and
 `docs/runbooks/`.
@@ -43,7 +43,7 @@ For a deeper pass on changed code, run the `security-reviewer`, `frontend-review
 
 Cap at 69 if a sensitive route lacks auth, an order or funds write can double-spend or is not
 idempotent, a migration cannot run safely, a secret is exposed, or there is no rollback path.
-Cap at 84 if main is red or the golden path was not run end to end.
+Cap at 84 if develop is red or the golden path was not run end to end.
 
 ## 4. Report
 Lead with one sentence: `Production audit: 74/100, launchable with caveats: <top two risks>.`

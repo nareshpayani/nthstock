@@ -1,12 +1,13 @@
 name: 'Agent: Resolve conflicts'
 
-# When main moves, finds open PRs that no longer merge cleanly and resolves them on the PR branch.
-# main is never modified: the job merges main INTO the PR branch (no rebase, no force-push)
-# and a pre-push hook refuses any push to main.
+# When develop or main moves, finds open PRs that no longer merge cleanly and resolves them on the
+# PR branch. develop and main are never modified: the job merges the PR's base INTO the PR branch
+# (no rebase, no force-push), a pre-push hook refuses any push to either, and release PRs (whose
+# head is develop) are left to the owner.
 
 on:
   push:
-    branches: [main]
+    branches: [develop, main]
   workflow_dispatch:
 
 permissions:
@@ -33,10 +34,10 @@ jobs:
           OWNER: ${{ vars.OWNER_LOGIN || 'nareshpayani' }}
           BOT: ${{ vars.AGENT_BOT_LOGIN || 'claude[bot]' }}
         run: |
-          # GitHub computes mergeability lazily after a push to main; retry while any PR is UNKNOWN.
+          # GitHub computes mergeability lazily after a push; retry while any PR is UNKNOWN.
           for attempt in 1 2 3 4 5 6; do
             prs=$(gh pr list --repo "$GITHUB_REPOSITORY" --state open --limit 100 \
-              --json number,mergeable,headRefName,isCrossRepository,author,labels)
+              --json number,mergeable,headRefName,baseRefName,isCrossRepository,author,labels)
             unknown=$(jq '[.[] | select(.mergeable == "UNKNOWN")] | length' <<< "$prs")
             [ "$unknown" -eq 0 ] && break
             sleep 20
@@ -45,9 +46,10 @@ jobs:
           targets=$(jq -c --arg owner "$OWNER" --arg bot "$BOT" '[.[]
             | select(.mergeable == "CONFLICTING")
             | select(.isCrossRepository | not)
+            | select(.headRefName != "develop" and .headRefName != "main")
             | select(.author.login == $owner or .author.login == $bot or .author.login == "app/claude")
             | select([.labels[].name] | index("needs-human") | not)
-            | {number, branch: .headRefName}]' <<< "$prs")
+            | {number, branch: .headRefName, base: .baseRefName}]' <<< "$prs")
           echo "Conflicting PRs: $targets"
           echo "prs=$targets" >> "$GITHUB_OUTPUT"
 
@@ -66,20 +68,22 @@ jobs:
       GH_TOKEN: ${{ github.token }}
       PR: ${{ matrix.pr.number }}
       BRANCH: ${{ matrix.pr.branch }}
+      BASE: ${{ matrix.pr.base }}
     steps:
       - uses: actions/checkout@v7
         with:
           ref: ${{ matrix.pr.branch }}
           fetch-depth: 0
-      - name: Refuse any push to main
+      - name: Refuse any push to main or develop
         run: |
           cat > .git/hooks/pre-push <<'HOOK'
           #!/bin/sh
           while read -r _local_ref _local_sha remote_ref _remote_sha; do
-            if [ "$remote_ref" = "refs/heads/main" ]; then
-              echo "pre-push: pushing to main is not allowed for agents" >&2
-              exit 1
-            fi
+            case "$remote_ref" in
+              refs/heads/main|refs/heads/develop)
+                echo "pre-push: pushing to main or develop is not allowed for agents" >&2
+                exit 1 ;;
+            esac
           done
           HOOK
           chmod +x .git/hooks/pre-push
@@ -87,13 +91,13 @@ jobs:
         with:
           node-version-file: .nvmrc
           cache: npm
-      - name: Try a clean merge of main
+      - name: Try a clean merge of the base branch
         id: merge
         run: |
           git config user.name "Naresh Payani"
           git config user.email "${{ vars.OWNER_ID || '15100692' }}+${{ vars.OWNER_LOGIN || 'nareshpayani' }}@users.noreply.github.com"
           gh pr edit "$PR" --repo "$GITHUB_REPOSITORY" --add-label agent:conflict
-          if git merge --no-edit origin/main; then
+          if git merge --no-edit "origin/$BASE"; then
             echo "clean=true" >> "$GITHUB_OUTPUT"
           else
             git merge --abort
@@ -124,7 +128,7 @@ jobs:
             REPO: ${{ github.repository }}
             PR NUMBER: ${{ matrix.pr.number }}
             BRANCH: ${{ matrix.pr.branch }}
-            REASON: merge conflict with main
+            REASON: merge conflict with ${{ matrix.pr.base }}
 
             Act as the Fixer and follow the "Merge conflicts" section of .claude/agents/fixer.md exactly.
           claude_args: |

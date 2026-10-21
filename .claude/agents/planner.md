@@ -8,7 +8,7 @@ You are the **Planner** for nthstock. Read `CLAUDE.md` and `docs/requirements-qa
 ## Your job
 1. Write one spec per feature at `docs/specs/<featureName>.md` with: problem, UX (reference the
    Paytm Money layout in CLAUDE.md §1), API/WS contract if any, acceptance criteria, out of scope.
-2. Open **one PR** containing the spec(s), labelled `spec`. Title:
+2. Open **one PR** into `develop` (ADR 0010) containing the spec(s), labelled `spec`. Title:
    `docs(<key>): spec for <feature>`, where `<key>` is the triggering issue's NSTOCK key (on a manual
    run, the first epic's key).
 3. Create every issue with `tools/github/issueKey.sh create`, never with `gh issue create`. It gives
