@@ -3,7 +3,7 @@ name: 'Agent: Fixer'
 # Self-healing CI. Fixes, on the PR's own branch:
 #   - blocking review findings (label `agent:fix-needed`),
 #   - red CI on any owner, agent or Dependabot PR,
-# and when CI goes red on main, opens a `claude/fix-main-*` PR (main itself is never pushed to).
+# and when CI goes red on main, opens an `agent/fix-main-*` PR (main itself is never pushed to).
 # An hourly sweep catches what events miss: Dependabot-triggered runs get no secrets, and a PR
 # that went red because main was broken needs another look once main is green again.
 
@@ -60,7 +60,7 @@ jobs:
           }
           fix_main_pr_open() {
             [ -n "$(gh pr list --repo "$repo" --state open --limit 100 --json headRefName \
-              --jq '.[] | select(.headRefName | startswith("claude/fix-main-")) | .headRefName')" ]
+              --jq '.[] | select(.headRefName | test("^(agent|claude)/fix-main-")) | .headRefName')" ]
           }
           main_is_red() {
             # The latest finished run on main: a push, the post-merge dispatch or a scheduled health run.
@@ -104,7 +104,7 @@ jobs:
             [ "$RUN_CONCLUSION" = "failure" ] && [ "$RUN_HEAD_REPO" = "$repo" ] || exit 0
             if [ "$RUN_BRANCH" = "main" ] && [[ "$RUN_EVENT" =~ ^(push|schedule|workflow_dispatch)$ ]]; then
               fix_main_pr_open && { echo "A fix-main PR is already open."; exit 0; }
-              emit main "" "claude/fix-main-${RUN_SHA:0:7}" "CI is red on main ($RUN_URL)"
+              emit main "" "agent/fix-main-${RUN_SHA:0:7}" "CI is red on main ($RUN_URL)"
               exit 0
             fi
             [ "$RUN_EVENT" = "pull_request" ] || exit 0
@@ -118,7 +118,7 @@ jobs:
 
           # schedule / workflow_dispatch: sweep. main first, then the oldest red PR.
           if main_is_red; then
-            fix_main_pr_open || emit main "" "claude/fix-main-$(git ls-remote "https://github.com/$repo" refs/heads/main | cut -c1-7)" "CI is red on main"
+            fix_main_pr_open || emit main "" "agent/fix-main-$(git ls-remote "https://github.com/$repo" refs/heads/main | cut -c1-7)" "CI is red on main"
             exit 0
           fi
           for row in $(gh pr list --repo "$repo" --state open --limit 100 \
@@ -164,6 +164,9 @@ jobs:
         uses: anthropics/claude-code-action@v1
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          # Commits are authored as the owner, not the app (owner decision 2026-10-21).
+          bot_name: ${{ vars.OWNER_LOGIN || 'nareshpayani' }}
+          bot_id: ${{ vars.OWNER_ID || '15100692' }}
           allowed_bots: ${{ (vars.AGENT_BOT_LOGIN || 'claude[bot]') }}
           prompt: |
             REPO: ${{ github.repository }}

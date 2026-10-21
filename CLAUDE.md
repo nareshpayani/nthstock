@@ -61,6 +61,9 @@ docs/           product, architecture, adr/, specs/, agent-workflow, runbooks/ (
 - Branches `feat|fix|chore|docs/…` off `main`, squash merge, every PR green. Issues are titled
   `NSTOCK-0001 : create login flow` (stories are sub-issues of their epic) and PR titles are
   `feat(NSTOCK-0001): create login flow` (`.claude/rules/git-and-prs.md`).
+- **Attribution (owner decision 2026-10-21):** work is credited to Naresh Payani only. No "Claude" or
+  "Claude Code" name, `Co-Authored-By` trailer or "Generated with" footer in commits, branch
+  names, PR text, comments, reviews, issues or deploy messages (`.claude/rules/git-and-prs.md`).
 - Quality gate = `npm run check` (format, lint, typecheck, tests, build), plus E2E, budgets and
   security scans in CI.
 

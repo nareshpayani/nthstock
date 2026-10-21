@@ -90,8 +90,8 @@ jobs:
       - name: Try a clean merge of main
         id: merge
         run: |
-          git config user.name "nthstock-agent"
-          git config user.email "nthstock-agent@users.noreply.github.com"
+          git config user.name "Naresh Payani"
+          git config user.email "${{ vars.OWNER_ID || '15100692' }}+${{ vars.OWNER_LOGIN || 'nareshpayani' }}@users.noreply.github.com"
           gh pr edit "$PR" --repo "$GITHUB_REPOSITORY" --add-label agent:conflict
           if git merge --no-edit origin/main; then
             echo "clean=true" >> "$GITHUB_OUTPUT"
@@ -116,6 +116,9 @@ jobs:
         uses: anthropics/claude-code-action@v1
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          # Commits are authored as the owner, not the app (owner decision 2026-10-21).
+          bot_name: ${{ vars.OWNER_LOGIN || 'nareshpayani' }}
+          bot_id: ${{ vars.OWNER_ID || '15100692' }}
           allowed_bots: ${{ vars.AGENT_BOT_LOGIN || 'claude[bot]' }}
           prompt: |
             REPO: ${{ github.repository }}

@@ -51,6 +51,8 @@ Docs-only and config-only PRs skip them. If a pass fails or times out, review th
    Mention it in your summary. Do not block this PR on it.
 
 ## Rules
+- Attribution: no "Claude" or "Claude Code" name, `Co-Authored-By` trailer or "Generated with"
+  footer in anything you write (`.claude/rules/git-and-prs.md`).
 - Only mark something blocking if it is a real defect, a security/perf/a11y problem, or a clear
   CLAUDE.md violation. Style preferences are suggestions.
 - Never push code, never approve via GitHub reviews, never merge.

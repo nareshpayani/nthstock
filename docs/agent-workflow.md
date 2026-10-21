@@ -23,7 +23,7 @@ CI red on an owner, agent or Dependabot PR
   └─► Fixer finds the root cause and pushes a fix to the same PR (3 attempts, then `needs-human`)
       └─ Dependabot bump the stack can't take ─► `@dependabot ignore this major version`
 CI red on main (after a merge, or in a scheduled health run: 09:20 and 12:30 IST on weekdays, 20:00 IST daily)
-  └─► Fixer opens a `claude/fix-main-*` PR (never pushes to main) ─► Reviewer ─► checks green ─► auto-merge
+  └─► Fixer opens an `agent/fix-main-*` PR (never pushes to main) ─► Reviewer ─► checks green ─► auto-merge
 Hourly sweep
   └─► catches red PRs the events missed (Dependabot runs get no secrets; PRs red only because main was red)
 Push to main makes an open PR conflict
@@ -72,6 +72,12 @@ Dependabot rebases its own PRs, but their CI failures go to the Fixer.
   by the owner (`OWNER_LOGIN`, default `nareshpayani`) or the Claude app (`AGENT_BOT_LOGIN`,
   default `claude[bot]`), and the Reviewer only runs on PRs from this repo by those two authors.
   Strangers opening issues or PRs on this public repo cannot spend usage or inject prompts.
+- **Attribution (owner decision 2026-10-21):** agent commits are authored as the owner: every
+  `claude-code-action` step sets `bot_name`/`bot_id` to `OWNER_LOGIN`/`OWNER_ID`, the conflict
+  resolver's clean merge uses the same identity, and `.claude/settings.json` turns off the
+  `Co-Authored-By` trailer and PR footer. Agent branches are `agent/issue-*` and `agent/fix-main-*`.
+  GitHub still shows the account that *posts* (the app as `claude[bot]`, the Actions token as
+  `github-actions[bot]`) on comments, labels and the PR author; only a personal token would change that.
 - **Loop limits:** after 3 CI-fix attempts on a PR it gets `needs-human`; only one fix-main PR is open at a time.
 - **Loop limit:** after 3 agent reviews (`AGENT_MAX_REVIEW_ROUNDS`) a PR gets `needs-human` and agents stop.
 - **Auto-merge (owner decision 2026-09-26, ADR 0006):** `agent-automerge.yml` squash-merges an open PR
@@ -104,7 +110,7 @@ Dependabot rebases its own PRs, but their CI failures go to the Fixer.
    "Playwright golden path (api mode)", "Dependency audit", "Secret scan" and
    "Analyze JavaScript/TypeScript". Requiring an approving review would block auto-merge (ADR 0006).
 
-Optional repository variables: `OWNER_LOGIN`, `AGENT_BOT_LOGIN`, `AGENT_MAX_REVIEW_ROUNDS`,
+Optional repository variables: `OWNER_LOGIN`, `OWNER_ID` (default `15100692`, the owner's GitHub user id), `AGENT_BOT_LOGIN`, `AGENT_MAX_REVIEW_ROUNDS`,
 `AGENT_MAX_CI_FIX_ATTEMPTS` (default 3), `AGENT_AUTOMERGE` (default `true`).
 
 ## Everyday use

@@ -19,7 +19,7 @@ You are the **Fixer** for nthstock. Read `CLAUDE.md` first.
 1. Read the failing job logs (`gh run view <id> --log-failed`) and reproduce the failure locally with
    the same command (`npm ci`, `npm run lint`, `npm run test`...). Find the root cause; "flaky" is not one.
 2. If the same check is also red on `main`, the PR is not the cause: merge `origin/main` into the branch
-   once main is fixed (see Merge conflicts), or stop and comment that a `claude/fix-main-*` PR covers it.
+   once main is fixed (see Merge conflicts), or stop and comment that an `agent/fix-main-*` PR covers it.
 3. Otherwise fix it on the PR branch with the smallest correct change and run `npm run check`.
 4. **Dependabot PRs:** if the bump only needs code or config changes, make them on the Dependabot branch.
    If the new version is incompatible with the approved stack (for example a peer-dependency
@@ -66,5 +66,7 @@ When the reason is a merge conflict with `main`:
    the owner has to make.
 
 ## Rules
-- Do not open a new PR (except the `claude/fix-main-*` PR above). Do not widen scope. Suggestions are optional; take only the plainly correct ones.
+- Attribution: no "Claude" or "Claude Code" name, `Co-Authored-By` trailer or "Generated with"
+  footer in anything you write (`.claude/rules/git-and-prs.md`).
+- Do not open a new PR (except the `agent/fix-main-*` PR above). Do not widen scope. Suggestions are optional; take only the plainly correct ones.
 - Never skip, disable or weaken a test to make CI pass. Never merge, never push to `main`.
