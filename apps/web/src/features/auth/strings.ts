@@ -74,7 +74,9 @@ export const strings = {
   },
 
   profile: {
-    menu: (name: string) => `Account: ${name}`,
+    // The visible initials lead the label so the accessible name contains them (WCAG 2.5.3).
+    menu: (name: string, shownInitials?: string) =>
+      shownInitials ? `${shownInitials}, account: ${name}` : `Account: ${name}`,
     defaultName: 'nthstock investor',
     mobile: (masked: string) => `+91 ${masked}`,
     kyc: {

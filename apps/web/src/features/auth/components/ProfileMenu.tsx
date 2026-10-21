@@ -83,7 +83,7 @@ export function ProfileMenu() {
       <DropdownMenuTrigger asChild>
         <button
           type="button"
-          aria-label={strings.profile.menu(name)}
+          aria-label={strings.profile.menu(name, user.name ? initials(user.name) : undefined)}
           className="ml-1 flex size-9 items-center justify-center rounded-pill bg-brand text-label font-semibold text-surface"
         >
           {user.name ? initials(user.name) : <IconUser size={18} />}

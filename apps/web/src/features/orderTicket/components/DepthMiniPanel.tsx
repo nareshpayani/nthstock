@@ -53,7 +53,7 @@ function DepthColumn({ side, levels, onPick }: SideProps) {
                 >
                   <span className={cn(side === 'bid' ? 'text-up' : 'text-down')}>
                     {formatInr(level.price)}
-                  </span>
+                  </span>{' '}
                   <span className="text-ink-muted">{count.format(level.qty)}</span>
                 </button>
               ) : (

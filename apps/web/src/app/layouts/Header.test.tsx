@@ -55,7 +55,7 @@ function renderHeader(user: { name: string } | null, quoteStore?: QuoteStore) {
 describe('Header profile slot', () => {
   it('signed in: shows initials and an account menu', async () => {
     renderHeader({ name: 'Asha Rao' });
-    const account = await screen.findByRole('button', { name: 'Account: Asha Rao' });
+    const account = await screen.findByRole('button', { name: 'AR, account: Asha Rao' });
     expect(account).toHaveTextContent('AR');
     fireEvent.keyDown(account, { key: 'Enter' });
     expect(await screen.findByRole('menuitem', { name: /Log out/ })).toBeInTheDocument();

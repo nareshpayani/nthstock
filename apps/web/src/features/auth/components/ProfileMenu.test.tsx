@@ -40,7 +40,7 @@ describe('profile menu (T-090)', () => {
     await screen.findByRole('heading', { level: 1, name: 'Orders' });
     queryClient.setQueryData(['funds', 'summary', {}], { private: true });
 
-    const menu = await openMenu('Account: Demo Investor');
+    const menu = await openMenu('DI, account: Demo Investor');
     expect(within(menu).getByText('Demo Investor')).toBeInTheDocument();
     expect(within(menu).getByText('+91 ******0001')).toBeInTheDocument();
     expect(within(menu).getByText('KYC verified')).toBeInTheDocument();

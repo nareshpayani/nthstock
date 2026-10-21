@@ -210,7 +210,7 @@ describe('order ticket with the market open', () => {
       if (!bid) throw new Error('INFY has no depth');
       expect(screen.getByRole('radio', { name: 'Market' })).toHaveAttribute('aria-checked', 'true');
       const bidButton = await screen.findByRole('button', {
-        name: new RegExp(`^Bid ${formatInr(bid.price).replace('.', '\\.')},`),
+        name: new RegExp(`^${formatInr(bid.price).replace('.', '\\.')} [\\d,]+ shares, bid`),
       });
       fireEvent.click(bidButton);
       expect(screen.getByRole('radio', { name: 'Limit' })).toHaveAttribute('aria-checked', 'true');
@@ -221,7 +221,7 @@ describe('order ticket with the market open', () => {
       if (!ask) throw new Error('INFY has no offers');
       fireEvent.click(
         screen.getByRole('button', {
-          name: new RegExp(`^Offer ${formatInr(ask.price).replace('.', '\\.')},`),
+          name: new RegExp(`^${formatInr(ask.price).replace('.', '\\.')} [\\d,]+ shares, offer`),
         }),
       );
       expect(priceInput()).toHaveValue((ask.price / 100).toFixed(2));
