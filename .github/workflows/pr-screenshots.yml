@@ -1,0 +1,127 @@
+name: PR screenshots
+
+# Before/after screenshots in every pull request that changes the web UI (NSTOCK-0285,
+# docs/runbooks/pr-screenshots.md). The base branch and the PR are built in msw mode and every
+# screen in apps/web/e2e/screens/screens.ts is captured on both at 1440 and 390 px under a frozen
+# page clock. The screens whose pixels differ go side by side into the "Screenshots" section of the
+# PR body, refreshed on every push; the images live on the ci/pr-screenshots branch.
+# Two jobs, so the PR's code (npm ci, the builds, Playwright) never runs with a write token: capture
+# is read-only, publish runs only tools/github/prScreenshots.mjs (plain Node, no dependencies).
+# Informational: it is not a required check and never blocks a merge.
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+    paths:
+      - apps/web/src/**
+      - apps/web/index.html
+      - apps/web/public/**
+      - apps/web/vite.config.ts
+      - apps/web/e2e/screens/**
+      - packages/ui/src/**
+      - packages/tokens/**
+      - tools/github/prScreenshots.mjs
+      - .github/workflows/pr-screenshots.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pr-screenshots-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  capture:
+    name: Capture before and after
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    # Fork PRs get no write token for the publish job, so they are skipped.
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    env:
+      BASE_SHA: ${{ github.event.pull_request.base.sha }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # The PR's head, not the merge commit: "after" is exactly what the PR shows.
+          ref: ${{ github.event.pull_request.head.sha }}
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - name: Check out the base next to the PR
+        run: |
+          git fetch --quiet --depth 1 origin "$BASE_SHA"
+          git worktree add --quiet --detach "$RUNNER_TEMP/base" "$BASE_SHA"
+      # Market closed (VITE_MOCK_MARKET_OPEN unset), so prices do not tick between the two captures.
+      - name: Build the PR (after)
+        run: |
+          npm ci
+          npx turbo run build --filter=@nthstock/web^...
+          cd apps/web && npx vite build --outDir dist-screens --emptyOutDir --logLevel warn
+        env:
+          VITE_API_MODE: msw
+      - name: Build the base (before)
+        # A base that does not build (or predates a screen) only loses its "before" column.
+        continue-on-error: true
+        working-directory: ${{ runner.temp }}/base
+        run: |
+          npm ci
+          npx turbo run build --filter=@nthstock/web^...
+          cd apps/web && npx vite build --outDir dist-screens --emptyOutDir --logLevel warn
+        env:
+          VITE_API_MODE: msw
+      - name: Install Chrome for Testing (Chromium)
+        run: npx playwright install --with-deps chromium
+      - name: Serve both builds
+        run: |
+          (cd "$RUNNER_TEMP/base/apps/web" && [ -d dist-screens ] && npx vite preview --outDir dist-screens \
+            --host 127.0.0.1 --port 4301 --strictPort >/dev/null 2>&1 &)
+          (cd apps/web && npx vite preview --outDir dist-screens --host 127.0.0.1 --port 4302 \
+            --strictPort >/dev/null 2>&1 &)
+          for _ in $(seq 1 60); do curl -sf http://127.0.0.1:4302/ >/dev/null && break; sleep 1; done
+          curl -sf http://127.0.0.1:4302/ >/dev/null || { echo "The PR build did not start" >&2; exit 1; }
+          for _ in $(seq 1 15); do curl -sf http://127.0.0.1:4301/ >/dev/null && break; sleep 1; done
+          if curl -sf http://127.0.0.1:4301/ >/dev/null; then
+            echo "BEFORE_URL=http://127.0.0.1:4301" >> "$GITHUB_ENV"
+          else
+            echo "::warning title=No before screenshots::The base build is not available."
+          fi
+      - name: Capture the screens
+        working-directory: apps/web
+        env:
+          AFTER_URL: http://127.0.0.1:4302
+          SCREENS_OUT_DIR: ${{ github.workspace }}/screens-out
+        run: npx playwright test -c e2e/screens/playwright.screens.config.ts
+      - uses: actions/upload-artifact@v7
+        with:
+          name: pr-screenshots
+          path: screens-out
+          if-no-files-found: warn
+          retention-days: 14
+
+  publish:
+    name: Put them in the PR
+    needs: capture
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write # the ci/pr-screenshots branch only
+      pull-requests: write # the PR body's Screenshots section
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          sparse-checkout: tools/github
+      - uses: actions/download-artifact@v7
+        with:
+          name: pr-screenshots
+          path: screens-out
+      - name: Update the PR
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          BASE_REF: ${{ github.event.pull_request.base.ref }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: node tools/github/prScreenshots.mjs screens-out

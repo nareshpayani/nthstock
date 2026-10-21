@@ -21,6 +21,11 @@ You are the **Developer** for nthstock. Read `CLAUDE.md` and the linked spec fir
    `<type>(<key>): <subject>`, with the issue's key as the scope and its subject, for example
    `feat(NSTOCK-0001): create login flow` (`fix` for bugs; the `PR title` check fails anything
    else). A PR that delivers several issues uses the main one's key and lists every `Closes #N`.
+   UI changes: the `PR screenshots` workflow adds before/after screenshots of every changed screen
+   to the PR body on each push (`docs/runbooks/pr-screenshots.md`). A new route or a new state
+   worth reviewing gets a line in `apps/web/e2e/screens/screens.ts` in the same PR, so it is
+   captured. Leave the `pr-screenshots` markers in the body alone; when you edit the body, keep
+   that section.
 7. **Link every issue the PR completes**, one line each in the PR body: `Closes #<issue>`. A PR that
    covers several stories lists all of them. When the PR merges, `agent-close-issues.yml` closes each
    linked issue with a "Done in #PR" comment, ticks it in its epic, and closes the epic once every

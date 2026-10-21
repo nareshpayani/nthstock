@@ -16,8 +16,12 @@
 - Never push to `main`, force-push a shared branch, or skip checks (`--no-verify`). A Claude hook
   blocks these.
 - Before opening a PR: `npm run check` passes (see the `run-checks` skill).
-- PR body follows `.github/pull_request_template.md`: before/after, how it was tested, screenshots for
-  UI, and one `Closes #N` line per issue the PR completes (`Refs #N` for issues it only touches).
+- PR body follows `.github/pull_request_template.md`: before/after, how it was tested, and one
+  `Closes #N` line per issue the PR completes (`Refs #N` for issues it only touches).
+- UI screenshots are automatic: on a PR that touches the web UI, the `PR screenshots` workflow adds
+  before/after images of every changed screen (1440 and 390 px) to a "Screenshots" section of the
+  body and refreshes it on each push. Add new routes to `apps/web/e2e/screens/screens.ts`; keep the
+  section when editing the body (`docs/runbooks/pr-screenshots.md`).
 - Spec PRs (`docs/specs/`) and PRs touching `.github/`, `.claude/` or `CLAUDE.md` wait for the owner;
   other green PRs labelled `ready-to-merge` auto-merge (ADR 0006).
 - Never commit secrets, `.env` files or real user data (the repo is public, D9).

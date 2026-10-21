@@ -14,7 +14,7 @@ Closes #
 
 - [ ] `npm run check` passes locally
 - [ ] Tests added or updated
-- [ ] Screenshots attached (UI changes only)
+- [ ] UI changes: new routes are in `apps/web/e2e/screens/screens.ts` (before/after screenshots are added below automatically)
 
 ## Checklist
 
