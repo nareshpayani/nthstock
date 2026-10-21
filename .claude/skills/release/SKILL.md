@@ -33,7 +33,10 @@ rules: `docs/runbooks/release.md` (ADR 0009). Never deploy without that OK, neve
    checks are green. A PR touching `.github/`, `.claude/` or `CLAUDE.md` waits for the owner's merge:
    tell the owner. Never merge by hand.
 9. Wait for **CI** on the merge commit on `main` to finish green. Red: the Fixer opens a fix PR; the
-   release waits for it (and its preview is not needed unless it changes the UI).
+   release waits for it (and its preview is not needed unless it changes the UI). Green CI also
+   deploys the commit to the **development** environment (`docs/runbooks/environments.md`); wait
+   for **Web hosting / Deploy the development environment** to pass too, since it smoke-tests the
+   exact build that will go live.
 
 ## 5. Go live
 10. Dispatch **Web hosting** (`web-hosting.yml`) with `stage=live`, `ref=<merge commit SHA>` (GitHub

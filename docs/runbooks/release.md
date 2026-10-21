@@ -6,6 +6,8 @@ part is to open the preview link and say OK. The agent's procedure is the `relea
 (`.claude/skills/release/SKILL.md`).
 
 Production today is the msw-mode web build on Firebase Hosting (`docs/runbooks/web-hosting.md`).
+It is the `production` GitHub environment; merged work lands first in the `development` environment
+(`docs/runbooks/environments.md`), which every green CI run on `main` updates on its own.
 The API, realtime server and databases are not hosted until the scalability phase.
 
 ## The flow
@@ -20,7 +22,7 @@ The API, realtime server and databases are not hosted until the scalability phas
 | 6 | Agent | Browser QA on the preview (the `browser-qa` skill) when it can reach it, and sends the owner the preview link with what changed and what was checked. | |
 | 7 | **Owner** | Opens the preview, replies OK (or asks for changes: back to 1). | no OK: nothing ships |
 | 8 | Agent | Removes `do-not-merge`. Auto-merge squash-merges once the Reviewer has passed it and every check is green. PRs touching `.github/`, `.claude/` or `CLAUDE.md` are merged by the owner. | Reviewer blocks: the Fixer runs, back to 4 |
-| 9 | CI | CI runs on `main` again with the merged code. | red: the Fixer opens a fix PR; nothing ships |
+| 9 | CI | CI runs on `main` again with the merged code; when green, Web hosting deploys it to the **development** environment and smoke-tests it there. | red: the Fixer opens a fix PR; nothing ships |
 | 10 | Agent | Runs **Actions → Web hosting → Run workflow**, stage `live`, ref = the merge commit. | |
 | 11 | CI | The live job refuses a commit that is not on `main` or has no green CI run, builds, deploys to `live`, checks the site serves the new build with its security headers, and runs the reviewer smoke test against the live site. | any step fails: the agent rolls back (below) |
 | 12 | Agent | Reports to the owner: live link, commit, checks that ran. Closes the thread. | |
@@ -35,7 +37,8 @@ gates, deployed to the `release` preview channel (7 days), and the owner's OK on
   when the release is one PR on top of the current live commit, otherwise a candidate).
 - Agents never deploy from a branch, never skip or weaken a check, never push to `main`, and never
   merge by hand. The live job only accepts commits on `main` with green CI.
-- Merging to `main` does not deploy. The live site changes only through step 10. Setting the repo
+- Merging to `main` deploys only to the development environment. The live site changes only
+  through step 10. Setting the repo
   variable `LIVE_DEPLOY=auto` brings back the old behaviour (every green CI on `main` goes live).
 - The `production` GitHub environment records every live deploy (Settings → Environments). The
   owner can add themselves as a required reviewer there; the live job then also waits for a click in

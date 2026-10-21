@@ -90,7 +90,9 @@ Dependabot rebases its own PRs, but their CI failures go to the Fixer.
   variable `AGENT_AUTOMERGE` to `false`. It merges one PR per run, because the other PRs' checks ran
   against the old `main`. After merging it starts CI, CodeQL, the conflict resolver and the label sync
   on `main`, because merges made with the Actions token don't trigger push workflows.
-- **Releases (ADR 0009):** merging does not deploy. When the owner asks for a release, an agent follows
+- **Environments:** every green CI run on `main` deploys to the **development** environment (the
+  Firebase `dev` channel); **production** is the live site (`docs/runbooks/environments.md`).
+- **Releases (ADR 0009):** merging does not deploy to production. When the owner asks for a release, an agent follows
   `docs/runbooks/release.md` (the `release` skill): PR held with `do-not-merge`, preview link to the
   owner, and after the owner's OK, merge and the `web-hosting.yml` live dispatch, smoke-tested.
 - **Agents never merge by hand, never push to `main`, never touch secrets, and deploy only through the

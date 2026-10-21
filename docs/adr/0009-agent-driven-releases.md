@@ -33,6 +33,13 @@ confirms the preview link before it goes live.
 - Live deploys run in the `production` GitHub environment, which records them and lets the owner add
   a required reviewer later without changing the workflow.
 
+## Amendment (2026-10-21): development and production environments
+
+At the owner's request there are two GitHub environments. **development** is the default: every
+green CI run on `main` deploys to the long-lived Firebase `dev` channel and smoke-tests it, so merged
+work is visible on a shared link without a release. **production** is the live site and is reached
+only through the release flow above. Details: `docs/runbooks/environments.md`.
+
 ## Consequences
 
 - Nothing reaches the live site without the owner having seen a preview of it; merged PRs wait on
