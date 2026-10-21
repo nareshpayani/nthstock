@@ -32,7 +32,7 @@ export const strings = {
       { term: 'OTP', value: '123456' },
       { term: 'Browser', value: 'Chrome, latest version' },
     ],
-    note: 'The mock market stays open at any hour on the demo site. Each browser tab keeps its own state, and opening a page with ?demo=1 resets it.',
+    note: 'Prices keep ticking at any hour on the demo site, but orders follow NSE hours: outside 9:15 AM to 3:30 PM IST on trading days, a buy or sell is placed as an after-market order (AMO) and fills at the next open. Each browser tab keeps its own state, and opening a page with ?demo=1 resets it.',
     cta: 'Go to login',
   },
 
@@ -98,8 +98,8 @@ export const strings = {
       'Open the stock and choose Buy. You can also hover a watchlist row and choose B.',
       'In the order ticket, pick Delivery (keep it) or Intraday (close today), and Market or Limit. For a limit order, enter your price or pick one from market depth.',
       'Enter the quantity. The ticket shows the required amount and your available cash.',
-      'Choose Buy, check the review, then choose Confirm. A market order fills at once and a toast shows the fill price.',
-      'Find it under Orders (Executed), under Positions with live P&L, and under Portfolio after 3:30 PM IST. Funds shows the cash debited.',
+      'Choose Buy, check the review, then choose Confirm. During market hours a market order fills at once and a toast shows the fill price. Outside market hours it is placed as an AMO and fills at 9:15 AM IST on the next trading day.',
+      'Find it under Orders (Executed, or Open while it waits as an AMO), under Positions with live P&L, and under Portfolio after 3:30 PM IST. Funds shows the cash blocked or debited.',
     ],
   },
 
