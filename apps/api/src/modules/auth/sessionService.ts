@@ -185,8 +185,15 @@ export function createSessionService({
         if (family) await revocations.revoked({ sessionId: family.id, userId: family.userId });
         throw sessionEnded();
       }
+      // Revocation as seen when the token was used: of two racing refreshes the loser revokes the
+      // family right after the winner's rotation, which must not fail the winner.
       const session = await repo.getSession(token.sessionId);
-      if (!session || session.revokedAt || session.expiresAt <= now || token.expiresAt <= now) {
+      if (
+        !session ||
+        token.sessionRevokedAt ||
+        session.expiresAt <= now ||
+        token.expiresAt <= now
+      ) {
         throw sessionEnded();
       }
       const [user, device] = await Promise.all([

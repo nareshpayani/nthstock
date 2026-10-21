@@ -202,10 +202,15 @@ export function createPgSessionStore({ database }: { database: Database }): Sess
       // UPDATE … FROM (SELECT … FOR UPDATE) RETURNING the old used_at: the second of two racing
       // calls waits for the first's row lock, then reads the used_at the first one set.
       const before = db
-        .select({ tokenHash: refreshTokens.tokenHash, usedAt: refreshTokens.usedAt })
+        .select({
+          tokenHash: refreshTokens.tokenHash,
+          usedAt: refreshTokens.usedAt,
+          sessionRevokedAt: sessions.revokedAt,
+        })
         .from(refreshTokens)
+        .innerJoin(sessions, eq(sessions.id, refreshTokens.sessionId))
         .where(eq(refreshTokens.tokenHash, tokenHashBytes(hash)))
-        .for('update')
+        .for('update', { of: refreshTokens })
         .as('before');
       const [row] = await db
         .update(refreshTokens)
@@ -216,6 +221,7 @@ export function createPgSessionStore({ database }: { database: Database }): Sess
           sessionId: refreshTokens.sessionId,
           expiresAt: refreshTokens.expiresAt,
           usedAt: before.usedAt,
+          sessionRevokedAt: before.sessionRevokedAt,
         });
       return row ?? null;
     },

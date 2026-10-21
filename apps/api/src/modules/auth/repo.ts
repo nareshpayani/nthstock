@@ -68,6 +68,13 @@ export type RefreshTokenRecord = {
 };
 
 /**
+ * A refresh token as `useRefreshToken` found it, with whether its session was already revoked at
+ * that moment (read in the same step, so a concurrent reuse revoking the family cannot be seen
+ * half-way through a rotation).
+ */
+export type RefreshTokenUse = RefreshTokenRecord & { sessionRevokedAt: Date | null };
+
+/**
  * Storage seam for auth state (ADR 0004 §3, ADR 0007). Callers see one interface; inside it is
  * three stores that live in different places (spec backend-core §5.2):
  *
@@ -127,7 +134,7 @@ export interface AuthRepo {
    * Marks the token used and resolves to it as it was before this call, so exactly one caller sees
    * `usedAt: null`. Null when the token is unknown.
    */
-  useRefreshToken(hash: string, at: Date): Promise<RefreshTokenRecord | null>;
+  useRefreshToken(hash: string, at: Date): Promise<RefreshTokenUse | null>;
 
   /** Tests only: drops all state. Postgres stores refuse (tests truncate as the owner). */
   reset(): Promise<void>;
@@ -363,7 +370,11 @@ export function createMemorySessionStore(): SessionStore {
     useRefreshToken: (hash, at) => {
       const found = refreshTokens.get(hash);
       if (!found) return Promise.resolve(null);
-      const before = copyRefresh(found);
+      const revokedAt = sessions.get(found.sessionId)?.revokedAt;
+      const before = {
+        ...copyRefresh(found),
+        sessionRevokedAt: revokedAt ? new Date(revokedAt) : null,
+      };
       found.usedAt ??= new Date(at);
       return Promise.resolve(before);
     },
