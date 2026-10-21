@@ -247,18 +247,27 @@ describeRepoConformance(
         sessionId: 'ses_1',
         expiresAt,
         usedAt: null,
+        sessionRevokedAt: null,
       });
       expect(await repo().useRefreshToken(hashOf('r1'), at('2026-09-28T06:00:00.000Z'))).toEqual({
         sessionId: 'ses_1',
         expiresAt,
         usedAt: at('2026-09-28T05:00:00.000Z'),
+        sessionRevokedAt: null,
       });
       // The first use's time stays.
       expect(await repo().useRefreshToken(hashOf('r1'), at('2026-09-28T07:00:00.000Z'))).toEqual({
         sessionId: 'ses_1',
         expiresAt,
         usedAt: at('2026-09-28T05:00:00.000Z'),
+        sessionRevokedAt: null,
       });
+      // A revoked session shows on the token's next use.
+      await repo().revokeSession('ses_1', at('2026-09-28T08:00:00.000Z'), 'LOGOUT');
+      expect(
+        (await repo().useRefreshToken(hashOf('r1'), at('2026-09-28T09:00:00.000Z')))
+          ?.sessionRevokedAt,
+      ).toEqual(at('2026-09-28T08:00:00.000Z'));
       expect(await repo().useRefreshToken(hashOf('unknown'), at('2026-09-28T05:00:00.000Z'))).toBe(
         null,
       );
