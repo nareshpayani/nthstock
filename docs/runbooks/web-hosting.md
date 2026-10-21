@@ -4,8 +4,11 @@ The web app in msw mode needs no backend: MSW, the mock market and the paper eng
 browser. So the static build is a full working demo, hosted free on **Firebase Hosting** (Spark
 plan, no card). `.github/workflows/web-hosting.yml` deploys it:
 
-- **Live site**, `https://<project id>.web.app`: after every green CI run on main.
-- **PR previews**: a channel per PR from this repo, its URL commented on the PR, gone after 7 days.
+- **Live site**, `https://<project id>.web.app`: only through a release, after the owner confirms a
+  preview ([release.md](release.md), ADR 0009). Merging to main does not deploy.
+- **PR previews**: a channel per PR from this repo, its URL commented on the PR, gone after 7 days,
+  smoke-tested as a reviewer would use it (`npm run e2e:deployed`).
+- **Release candidates**: the `release` channel, from a dispatch with stage `candidate`.
 
 `firebase.json` sets the SPA rewrite, the same security headers as `vite preview`
 (`securityHeaders.test.ts` keeps them in step), and caching (hashed `/assets` for a year,
@@ -26,8 +29,8 @@ Blaze plan. That waits for the scalability phase (AWS Mumbai).
 
    Then delete the downloaded JSON file.
 
-5. Run **Actions → CI → Run workflow** on main (or merge any PR). When it is green, Web hosting
-   deploys the live site.
+5. Run **Actions → Web hosting → Run workflow** with stage `live` and ref `main` (CI must be green
+   on that commit). Later releases follow [release.md](release.md).
 
 Until both values are set, the Web hosting jobs are skipped, not failed.
 
