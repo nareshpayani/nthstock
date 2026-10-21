@@ -118,8 +118,11 @@ jobs:
             prs="$PR_INPUT"
           else
             since=$(date -u -d '3 days ago' +%Y-%m-%d)
-            prs=$(gh pr list --repo "$repo" --state merged --base develop --limit 100 \
-              --search "merged:>=$since" --json number --jq '.[].number')
+            # PRs merge into develop; release PRs merge into main.
+            prs=$(for base in develop main; do
+              gh pr list --repo "$repo" --state merged --base "$base" --limit 100 \
+                --search "merged:>=$since" --json number --jq '.[].number'
+            done)
           fi
           for pr in $prs; do
             [ "$(gh pr view "$pr" --repo "$repo" --json state --jq .state)" = MERGED ] || continue
