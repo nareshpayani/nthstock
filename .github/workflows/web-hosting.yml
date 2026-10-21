@@ -53,7 +53,8 @@ jobs:
         env:
           VITE_API_MODE: msw
           VITE_MOCK_MARKET_OPEN: 'true'
-      - uses: FirebaseExtended/action-hosting-deploy@v0
+      # Third-party and handed the service-account key, so pinned to a commit.
+      - uses: FirebaseExtended/action-hosting-deploy@500ac625ca2dd40cbd15f7659af953801858032a # v0
         with:
           repoToken: ${{ secrets.GITHUB_TOKEN }}
           firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
