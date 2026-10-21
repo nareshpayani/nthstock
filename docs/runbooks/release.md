@@ -38,8 +38,8 @@ gates, deployed to the `release` preview channel (7 days), and the owner's OK on
 - Agents never deploy from a branch, never skip or weaken a check, never push to `main`, and never
   merge by hand. The live job only accepts commits on `main` with green CI.
 - Merging to `main` deploys only to the development environment. The live site changes only
-  through step 10. Setting the repo
-  variable `LIVE_DEPLOY=auto` brings back the old behaviour (every green CI on `main` goes live).
+  through step 10. Setting the repo variable `LIVE_DEPLOY=auto` brings back the old behaviour
+  (every green CI on `main` goes live).
 - The `production` GitHub environment records every live deploy (Settings → Environments). The
   owner can add themselves as a required reviewer there; the live job then also waits for a click in
   GitHub.

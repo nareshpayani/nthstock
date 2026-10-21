@@ -92,9 +92,10 @@ Dependabot rebases its own PRs, but their CI failures go to the Fixer.
   on `main`, because merges made with the Actions token don't trigger push workflows.
 - **Environments:** every green CI run on `main` deploys to the **development** environment (the
   Firebase `dev` channel); **production** is the live site (`docs/runbooks/environments.md`).
-- **Releases (ADR 0009):** merging does not deploy to production. When the owner asks for a release, an agent follows
-  `docs/runbooks/release.md` (the `release` skill): PR held with `do-not-merge`, preview link to the
-  owner, and after the owner's OK, merge and the `web-hosting.yml` live dispatch, smoke-tested.
+- **Releases (ADR 0009):** merging does not deploy to production. When the owner asks for a
+  release, an agent follows `docs/runbooks/release.md` (the `release` skill): PR held with
+  `do-not-merge`, preview link to the owner, and after the owner's OK, merge and the
+  `web-hosting.yml` live dispatch, smoke-tested.
 - **Agents never merge by hand, never push to `main`, never touch secrets, and deploy only through the
   release flow.** Every agent job
   that can push installs a pre-push hook that refuses `main`, and the Fixer's `gh` access excludes
