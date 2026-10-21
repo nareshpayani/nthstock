@@ -103,6 +103,12 @@ export function LoginPage({ redirect, devOtp = devOtpHint }: LoginPageProps) {
         <Link to="/dashboard" className={buttonVariants({ variant: 'secondary', block: true })}>
           {strings.explore}
         </Link>
+        <Link
+          to="/guide"
+          className="justify-self-center rounded-sm text-label font-medium text-brand hover:underline"
+        >
+          {strings.guide}
+        </Link>
       </div>
     </main>
   );

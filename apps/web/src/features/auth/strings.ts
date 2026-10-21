@@ -8,6 +8,7 @@ export const formatCountdown = (seconds: number) =>
 export const strings = {
   paperNote: 'Paper trading with ₹10,00,000 of virtual cash. No real money moves.',
   explore: 'Explore the markets without logging in',
+  guide: 'New here? Read the guide',
 
   mobile: {
     title: 'Log in to nthstock',
