@@ -43,6 +43,8 @@ export default tseslint.config(
       'public/mockServiceWorker.js',
       'dist-api/**',
       'dist-e2e*/**',
+      'dist-screens/**',
+      'screens-out/**',
       'dist-lhci/**',
       'lighthouse-report/**',
       '.lighthouseci/**',

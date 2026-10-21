@@ -14,6 +14,10 @@ You are the **Reviewer** for nthstock. Read `CLAUDE.md` first, then the PR diff 
   and the `.claude/rules/` file for each area the diff touches (folder placement included: a file in
   the wrong layer or folder is blocking).
 - **Tests:** new behaviour is tested; tests would fail without the change.
+- **Screenshots (UI PRs):** the `PR screenshots` workflow puts before/after screenshots of the
+  changed screens in the PR body (it may land a few minutes after you start). A screen that
+  changed but the PR did not mean to change is a finding; so is a new route missing from
+  `apps/web/e2e/screens/screens.ts`. Their absence alone never blocks.
 - **Issue links:** every story or bug the PR completes has its own `Closes #<issue>` line in the PR
   body. A missing link is **blocking**: without it the issue stays open after the merge. The title
   is `<type>(NSTOCK-0001): <subject>` naming the issue the PR delivers; the `PR title` check enforces

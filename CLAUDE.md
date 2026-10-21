@@ -58,6 +58,8 @@ docs/           product, architecture, adr/, specs/, agent-workflow, runbooks/ (
 - Every API and WS message is typed from `packages/contracts`.
 - Web imports go routes → features → shared → packages; a feature is imported only via its `index.ts`.
 - Accessibility WCAG 2.2 AA; colour is never the only up/down signal.
+- UI PRs get before/after screenshots of every changed screen in the PR body automatically
+  (`pr-screenshots.yml`); a new route goes in `apps/web/e2e/screens/screens.ts`.
 - Branches `feat|fix|chore|docs/…` off `main`, squash merge, every PR green. Issues are titled
   `NSTOCK-0001 : create login flow` (stories are sub-issues of their epic) and PR titles are
   `feat(NSTOCK-0001): create login flow` (`.claude/rules/git-and-prs.md`).
