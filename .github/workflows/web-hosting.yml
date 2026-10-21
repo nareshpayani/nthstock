@@ -61,11 +61,29 @@ jobs:
         with:
           ref: ${{ github.event_name == 'workflow_dispatch' && inputs.ref || github.sha }}
           fetch-depth: 0
+      # The gate scripts and smoke test come from this workflow's own commit, not the one being
+      # released, so a rollback to a commit from before they existed still runs them.
+      - name: Take the release tools from this workflow's commit
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
+          path: .release-tools
+          sparse-checkout: |
+            tools/github
+            apps/web/e2e/deployed
+            apps/web/e2e/support
+            apps/web/playwright.deployed.config.ts
+          sparse-checkout-cone-mode: false
+      - name: Put the smoke test next to the released app
+        run: |
+          mkdir -p apps/web/e2e
+          cp -r .release-tools/apps/web/e2e/deployed .release-tools/apps/web/e2e/support apps/web/e2e/
+          cp .release-tools/apps/web/playwright.deployed.config.ts apps/web/
       - name: Check the release commit (on main, CI green)
         if: github.event_name == 'workflow_dispatch'
         env:
           GH_TOKEN: ${{ github.token }}
-        run: bash tools/github/checkReleaseCommit.sh
+        run: bash .release-tools/tools/github/checkReleaseCommit.sh
       - uses: actions/setup-node@v7
         with:
           node-version-file: .nvmrc
@@ -91,7 +109,8 @@ jobs:
       - name: Smoke-test the preview as a reviewer
         env:
           E2E_BASE_URL: ${{ steps.deploy.outputs.details_url }}
-        run: npm run e2e:deployed -w @nthstock/web
+        working-directory: apps/web
+        run: npx playwright test -c playwright.deployed.config.ts
       - name: Summary
         if: github.event_name == 'workflow_dispatch'
         env:
@@ -130,11 +149,29 @@ jobs:
             ${{ github.event_name == 'workflow_dispatch' && inputs.ref ||
             github.event.workflow_run.head_sha || github.sha }}
           fetch-depth: 0
+      # The gate scripts and smoke test come from this workflow's own commit, not the one being
+      # released, so a rollback to a commit from before they existed still runs them.
+      - name: Take the release tools from this workflow's commit
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
+          path: .release-tools
+          sparse-checkout: |
+            tools/github
+            apps/web/e2e/deployed
+            apps/web/e2e/support
+            apps/web/playwright.deployed.config.ts
+          sparse-checkout-cone-mode: false
+      - name: Put the smoke test next to the released app
+        run: |
+          mkdir -p apps/web/e2e
+          cp -r .release-tools/apps/web/e2e/deployed .release-tools/apps/web/e2e/support apps/web/e2e/
+          cp .release-tools/apps/web/playwright.deployed.config.ts apps/web/
       - name: Check the release commit (on main, CI green)
         if: github.event_name == 'workflow_dispatch'
         env:
           GH_TOKEN: ${{ github.token }}
-        run: bash tools/github/checkReleaseCommit.sh
+        run: bash .release-tools/tools/github/checkReleaseCommit.sh
       - uses: actions/setup-node@v7
         with:
           node-version-file: .nvmrc
@@ -153,13 +190,14 @@ jobs:
       - name: Check the live site serves this build
         env:
           SITE: https://${{ vars.FIREBASE_PROJECT_ID }}.web.app
-        run: bash tools/github/smokeTestSite.sh "$SITE" apps/web/dist/index.html
+        run: bash .release-tools/tools/github/smokeTestSite.sh "$SITE" apps/web/dist/index.html
       - name: Install Chrome for Testing (Chromium)
         run: npx playwright install --with-deps chromium
       - name: Smoke-test the live site as a reviewer
         env:
           E2E_BASE_URL: https://${{ vars.FIREBASE_PROJECT_ID }}.web.app
-        run: npm run e2e:deployed -w @nthstock/web
+        working-directory: apps/web
+        run: npx playwright test -c playwright.deployed.config.ts
       - name: Summary
         env:
           SITE: https://${{ vars.FIREBASE_PROJECT_ID }}.web.app

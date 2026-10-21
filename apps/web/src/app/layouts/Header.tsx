@@ -38,7 +38,9 @@ export function Header({ onOpenMenu, onOpenHelp }: HeaderProps) {
           onClick={onOpenMenu}
           className="lg:hidden"
         />
-        <Link to="/dashboard" aria-label={strings.header.home} className="shrink-0 rounded-md">
+        {/* Named by the logo ("nthstock"). An aria-label here fails axe's label-content-name-mismatch
+            (axe-core 4.14+), which counts the logo's SVG text as visible text. */}
+        <Link to="/dashboard" className="shrink-0 rounded-md">
           <Logo />
         </Link>
         <HeaderTickers
