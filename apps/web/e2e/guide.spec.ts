@@ -9,10 +9,15 @@ test('the guide is public, linked from login and the More menu, and accessible',
 }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto('/login');
-  await page.getByRole('link', { name: 'New here? Read the guide' }).click();
+  await page.getByRole('link', { name: 'Guide: how nthstock works' }).click();
   await expect(page).toHaveURL(/\/guide$/);
   await expect(page.getByRole('heading', { level: 1, name: 'nthstock guide' })).toBeVisible();
   await expect(page).toHaveTitle('Guide · nthstock');
+  // From the guide straight on to logging in.
+  await page.getByRole('link', { name: 'Log in to start' }).click();
+  await expect(page.getByRole('heading', { level: 1, name: 'Log in to nthstock' })).toBeVisible();
+  await page.goBack();
+  await expect(page.getByRole('heading', { level: 1, name: 'nthstock guide' })).toBeVisible();
 
   const toc = page.getByRole('navigation', { name: 'On this page' });
   await toc.getByRole('link', { name: 'How to buy a stock' }).click();

@@ -9,6 +9,7 @@ export const strings = {
   description:
     'A short tour for reviewers: what the app does, how to place a paper trade, and how it is built.',
   tocLabel: 'On this page',
+  headerCta: 'Log in to start',
 
   intro: {
     title: 'What nthstock is',

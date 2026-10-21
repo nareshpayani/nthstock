@@ -59,7 +59,15 @@ export function GuidePage() {
 
   return (
     <div className="mx-auto grid max-w-4xl gap-6">
-      <PageHeader title={strings.title} description={strings.description} />
+      <PageHeader
+        title={strings.title}
+        description={strings.description}
+        actions={
+          <Link to="/login" className={buttonVariants({ variant: 'primary' })}>
+            {strings.headerCta}
+          </Link>
+        }
+      />
 
       <nav aria-label={strings.tocLabel} className="rounded-lg border border-line bg-surface p-4">
         <h2 className="mb-2 text-label font-semibold text-ink-muted uppercase">
