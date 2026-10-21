@@ -43,6 +43,9 @@ jobs:
         uses: anthropics/claude-code-action@v1
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          # Commits are authored as the owner, not the app (owner decision 2026-10-21).
+          bot_name: ${{ vars.OWNER_LOGIN || 'nareshpayani' }}
+          bot_id: ${{ vars.OWNER_ID || '15100692' }}
           prompt: |
             REPO: ${{ github.repository }}
             TRIGGER ISSUE: ${{ github.event.issue.number || 'none (manual run)' }}

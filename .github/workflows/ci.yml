@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
   # Health runs on main, so breakage that only shows at some hours (market open or closed) or
   # without a new commit is caught without anyone reporting it. A red run starts agent-fixer.yml,
-  # which opens a claude/fix-main-* PR. Times are UTC: 09:20 and 12:30 IST on weekdays (NSE open),
+  # which opens an agent/fix-main-* PR. Times are UTC: 09:20 and 12:30 IST on weekdays (NSE open),
   # and 20:00 IST every day (market closed).
   schedule:
     - cron: '50 3 * * 1-5'

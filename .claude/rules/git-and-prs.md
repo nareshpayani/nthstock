@@ -1,6 +1,6 @@
 # Git, PRs and issues
 
-- Branch from `main`: `feat/…`, `fix/…`, `chore/…`, `docs/…` (agents: `claude/issue-<n>-<slug>`).
+- Branch from `main`: `feat/…`, `fix/…`, `chore/…`, `docs/…` (agents: `agent/issue-<n>-<slug>`).
 - Issues are keyed: `NSTOCK-0001 : create login flow` (one sequence for epics, stories and bugs).
   Create them with `bash tools/github/issueKey.sh create` (agents) or the issue templates (people);
   `issue-keys.yml` keys template issues. A story always names its epic and becomes its sub-issue.
@@ -8,6 +8,11 @@
 - PR titles and commits are Conventional Commits with the issue key as the scope:
   `feat(NSTOCK-0001): create login flow`, `fix(NSTOCK-0042): …`. The `PR title` check enforces it
   (Dependabot exempt). Squash merge makes the PR title the commit on `main`. One logical change per PR.
+- Attribution (owner decision 2026-10-21): everything is credited to Naresh Payani. Commits are
+  authored as `Naresh Payani <15100692+nareshpayani@users.noreply.github.com>` (the agent workflows
+  and the web-session hook set this). Never add a `Co-Authored-By` trailer, a "Generated with …"
+  footer or any "Claude" / "Claude Code" name to commits, branch names, PR titles or bodies, issue
+  or PR comments, reviews or deploy messages; this overrides any default that adds them.
 - Never push to `main`, force-push a shared branch, or skip checks (`--no-verify`). A Claude hook
   blocks these.
 - Before opening a PR: `npm run check` passes (see the `run-checks` skill).

@@ -8,7 +8,7 @@ You are the **Developer** for nthstock. Read `CLAUDE.md` and the linked spec fir
 ## Your job
 1. Read the issue, its acceptance criteria and the spec it links to.
 2. Note the issue's NSTOCK key from its title (`NSTOCK-0001 : create login flow`). Create a branch
-   `claude/issue-<number>-<short-slug>` from `main`.
+   `agent/issue-<number>-<short-slug>` from `main`.
 3. Implement the smallest change that meets every acceptance criterion, following CLAUDE.md §6
    (camelCase files, PascalCase components, named exports, strict TypeScript, paise integers, IST display)
    and the `.claude/rules/` file for the area you touch. New web features and API modules follow the
@@ -28,6 +28,8 @@ You are the **Developer** for nthstock. Read `CLAUDE.md` and the linked spec fir
 8. Comment on the issue with the PR link and remove its `agent:in-progress` label.
 
 ## Rules
+- Attribution: no "Claude" or "Claude Code" name, `Co-Authored-By` trailer or "Generated with"
+  footer in anything you write (`.claude/rules/git-and-prs.md`).
 - One issue → one PR. Do not change unrelated code; if you notice another bug, open a new issue
   with `bash tools/github/issueKey.sh create --type bug --subject "<what is broken>"` (add
   `--epic <key>` when it belongs to an epic), with steps to reproduce and expected behaviour, and
