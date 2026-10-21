@@ -14,6 +14,7 @@ import { Route as AppRouteImport } from './routes/_app'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as AppAuthedRouteImport } from './routes/_app/_authed'
 import { Route as AppDashboardRouteImport } from './routes/_app/dashboard'
+import { Route as AppGuideRouteImport } from './routes/_app/guide'
 import { Route as DevPricesRouteImport } from './routes/dev/prices'
 import { Route as AppAuthedFundsRouteImport } from './routes/_app/_authed/funds'
 import { Route as AppAuthedOrdersRouteImport } from './routes/_app/_authed/orders'
@@ -42,6 +43,11 @@ const AppAuthedRoute = AppAuthedRouteImport.update({
 const AppDashboardRoute = AppDashboardRouteImport.update({
   id: '/dashboard',
   path: '/dashboard',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppGuideRoute = AppGuideRouteImport.update({
+  id: '/guide',
+  path: '/guide',
   getParentRoute: () => AppRoute,
 } as any)
 const DevPricesRoute = DevPricesRouteImport.update({
@@ -79,6 +85,7 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
   '/dashboard': typeof AppDashboardRoute
+  '/guide': typeof AppGuideRoute
   '/dev/prices': typeof DevPricesRoute
   '/funds': typeof AppAuthedFundsRoute
   '/orders': typeof AppAuthedOrdersRoute
@@ -90,6 +97,7 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
   '/dashboard': typeof AppDashboardRoute
+  '/guide': typeof AppGuideRoute
   '/dev/prices': typeof DevPricesRoute
   '/funds': typeof AppAuthedFundsRoute
   '/orders': typeof AppAuthedOrdersRoute
@@ -104,6 +112,7 @@ export interface FileRoutesById {
   '/login': typeof LoginRoute
   '/_app/_authed': typeof AppAuthedRouteWithChildren
   '/_app/dashboard': typeof AppDashboardRoute
+  '/_app/guide': typeof AppGuideRoute
   '/dev/prices': typeof DevPricesRoute
   '/_app/_authed/funds': typeof AppAuthedFundsRoute
   '/_app/_authed/orders': typeof AppAuthedOrdersRoute
@@ -117,6 +126,7 @@ export interface FileRouteTypes {
     | '/'
     | '/login'
     | '/dashboard'
+    | '/guide'
     | '/dev/prices'
     | '/funds'
     | '/orders'
@@ -128,6 +138,7 @@ export interface FileRouteTypes {
     | '/'
     | '/login'
     | '/dashboard'
+    | '/guide'
     | '/dev/prices'
     | '/funds'
     | '/orders'
@@ -141,6 +152,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/_app/_authed'
     | '/_app/dashboard'
+    | '/_app/guide'
     | '/dev/prices'
     | '/_app/_authed/funds'
     | '/_app/_authed/orders'
@@ -191,6 +203,13 @@ declare module '@tanstack/react-router' {
       path: '/dashboard'
       fullPath: '/dashboard'
       preLoaderRoute: typeof AppDashboardRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/guide': {
+      id: '/_app/guide'
+      path: '/guide'
+      fullPath: '/guide'
+      preLoaderRoute: typeof AppGuideRouteImport
       parentRoute: typeof AppRoute
     }
     '/dev/prices': {
@@ -259,12 +278,14 @@ const AppAuthedRouteWithChildren = AppAuthedRoute._addFileChildren(
 interface AppRouteChildren {
   AppAuthedRoute: typeof AppAuthedRouteWithChildren
   AppDashboardRoute: typeof AppDashboardRoute
+  AppGuideRoute: typeof AppGuideRoute
   AppStocksSymbolRoute: typeof AppStocksSymbolRoute
 }
 
 const AppRouteChildren: AppRouteChildren = {
   AppAuthedRoute: AppAuthedRouteWithChildren,
   AppDashboardRoute: AppDashboardRoute,
+  AppGuideRoute: AppGuideRoute,
   AppStocksSymbolRoute: AppStocksSymbolRoute,
 }
 

@@ -83,9 +83,8 @@ export function Header({ onOpenMenu, onOpenHelp }: HeaderProps) {
                 {strings.header.holidays}
                 <span className="ml-auto text-label">{strings.header.soon}</span>
               </DropdownMenuItem>
-              <DropdownMenuItem disabled>
-                {strings.header.about}
-                <span className="ml-auto text-label">{strings.header.soon}</span>
+              <DropdownMenuItem asChild>
+                <Link to="/guide">{strings.header.guide}</Link>
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>

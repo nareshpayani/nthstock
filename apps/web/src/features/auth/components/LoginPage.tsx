@@ -1,5 +1,5 @@
 import type { OtpPurpose, Session } from '@nthstock/contracts';
-import { buttonVariants } from '@nthstock/ui';
+import { buttonVariants, IconHelp } from '@nthstock/ui';
 import { Link, useNavigate } from '@tanstack/react-router';
 import { useState } from 'react';
 import { safeRedirect } from '@/shared/lib/safeRedirect';
@@ -100,9 +100,15 @@ export function LoginPage({ redirect, devOtp = devOtpHint }: LoginPageProps) {
       <div className="grid w-full max-w-sm gap-6 rounded-lg border border-line bg-surface p-6">
         {content}
         <p className="text-label text-ink-muted">{strings.paperNote}</p>
-        <Link to="/dashboard" className={buttonVariants({ variant: 'secondary', block: true })}>
-          {strings.explore}
-        </Link>
+        <div className="grid gap-3">
+          {/* Before logging in: what the app does and how to trade, then back here (NSTOCK-0280). */}
+          <Link to="/guide" className={buttonVariants({ variant: 'secondary', block: true })}>
+            <IconHelp size={16} /> {strings.guide}
+          </Link>
+          <Link to="/dashboard" className={buttonVariants({ variant: 'secondary', block: true })}>
+            {strings.explore}
+          </Link>
+        </div>
       </div>
     </main>
   );
