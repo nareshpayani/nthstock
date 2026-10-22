@@ -125,7 +125,11 @@ export type PaperEngineWorkingSet = {
 export type PaperEngineSnapshot = PaperEngineSnapshotV1 | PaperEngineWorkingSet;
 
 export type OrderActionErrorCode =
-  OrderRejectionCode | 'ORDER_NOT_FOUND' | 'ILLEGAL_TRANSITION' | 'NOTHING_TO_CHANGE';
+  | OrderRejectionCode
+  | 'ORDER_NOT_FOUND'
+  | 'ILLEGAL_TRANSITION'
+  | 'NOTHING_TO_CHANGE'
+  | 'NOT_SUPPORTED';
 
 /**
  * The outcome of place, modify or cancel. On failure `reason` is plain language; `order` is the
@@ -307,6 +311,10 @@ export class PaperEngine {
     const existingId =
       clientOrderId === null ? undefined : this.#byClientOrderId.get(clientOrderId);
     if (existingId !== undefined) return this.#result(this.#mustGet(existingId));
+    const unsupported = unsupportedPlaceReason(request);
+    if (unsupported !== null) {
+      return { ok: false, code: 'NOT_SUPPORTED', reason: unsupported, order: null };
+    }
 
     const draft: OrderDraft = {
       token: request.token,
@@ -935,4 +943,16 @@ function ledgerOptions(snapshot: PaperEngineSnapshot): FundsLedgerOptions {
     };
   }
   return { openingBalance: snapshot.openingBalance, entries: snapshot.ledger };
+}
+
+/**
+ * Order fields the contracts accept before the engine acts on them (SPEC-TFC-1, PLAN-TFC-1 T05 and
+ * T06). Refusing them keeps an order from looking protected, or immediate-or-cancel, when it is not.
+ */
+function unsupportedPlaceReason(request: PlaceOrderRequest): string | null {
+  if (request.validity === 'IOC') return 'Immediate-or-cancel orders are not available yet.';
+  if (request.attachedTrailingStop !== undefined) {
+    return 'A trailing stop cannot be attached to an order yet.';
+  }
+  return null;
 }
