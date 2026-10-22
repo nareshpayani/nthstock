@@ -14,6 +14,8 @@ export type ReviewStepProps = {
   value: number | null;
   /** The AMO date while the market is closed. */
   amoDate: string | null;
+  /** A trailing stop attached to the entry (T14): restated in one sentence before Confirm. */
+  attached?: { sentence: string; replaces: boolean } | undefined;
   /** `modify` (T-145): the heading and Confirm speak of changing an open order. */
   mode?: 'place' | 'modify';
   placing: boolean;
@@ -32,6 +34,7 @@ export function ReviewStep({
   ltp,
   value,
   amoDate,
+  attached,
   mode = 'place',
   placing,
   onEdit,
@@ -77,6 +80,16 @@ export function ReviewStep({
           </div>
         ))}
       </dl>
+      {attached ? (
+        <div className="grid gap-1 rounded-md border border-line p-3" data-testid="review-attached">
+          <p className="text-label font-semibold text-ink">{strings.trailing.attachedTerm}</p>
+          <p className="text-body text-ink">{attached.sentence}</p>
+          {attached.replaces ? (
+            <p className="text-body text-ink">{strings.trailing.attachedReplaces}</p>
+          ) : null}
+          <p className="text-label text-ink-muted">{strings.trailing.noMargin}</p>
+        </div>
+      ) : null}
       {amoDate ? (
         <p className="rounded-md bg-marigold-soft p-3 text-body text-ink">
           {strings.amo.reviewNote(amoDate)}

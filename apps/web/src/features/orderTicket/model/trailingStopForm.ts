@@ -1,5 +1,7 @@
 import {
   PlaceTrailingStopRequest,
+  type OrderSide,
+  type TrailingStopParams,
   TRAILING_STOP_MESSAGES,
   type Position,
   type PositionDirection,
@@ -171,4 +173,87 @@ export function toPlaceTrailingStopRequest(
     product: values.product,
     ...paramsOf(values, trail),
   });
+}
+
+/**
+ * The position an entry with an attached trailing stop protects (T14, SPEC-TFC-1 §6.4, §7): a buy
+ * opens or adds to a long; an Intraday sell opens or adds to a short. A Delivery sell only sells
+ * holdings, so it has nothing to attach a stop to.
+ */
+export function attachedDirection(side: OrderSide, product: ProductType): PositionDirection | null {
+  if (side === 'BUY') return 'LONG';
+  return product === 'INTRADAY' ? 'SHORT' : null;
+}
+
+/**
+ * The §6.6 rules for a stop attached to an entry, checked against the price the entry is expected
+ * to fill at (the limit price, or the LTP for a market order). The stop trails from the real fill,
+ * so the engine checks again then.
+ */
+export function checkAttached(
+  values: TrailingFormValues,
+  context: { direction: PositionDirection; refPrice: number | null },
+): TrailingCheck {
+  const trail = trailOf(values);
+  if (trail === null || values.value === 0) {
+    return { ok: false, field: 'value', message: TRAILING_STOP_MESSAGES.trailNotPositive };
+  }
+  if (values.exitOrderType === 'LIMIT' && values.exitLimitOffset === null) {
+    return {
+      ok: false,
+      field: 'exitLimitOffset',
+      message: TRAILING_STOP_MESSAGES.limitOffsetRequired,
+    };
+  }
+  if (context.refPrice === null) return { ok: true };
+  const check = validateTrailingStop({
+    params: paramsOf(values, trail),
+    direction: context.direction,
+    ltp: context.refPrice,
+    hasPosition: true,
+  });
+  if (check.ok) return { ok: true };
+  return {
+    ok: false,
+    field: check.field === 'exitLimitOffset' ? 'exitLimitOffset' : 'value',
+    message: check.message,
+  };
+}
+
+/**
+ * The live preview for an attached stop (T14): the stop starts from the entry's fill, so it is
+ * stated for the expected fill price. "If the entry fills at ₹1,500.00: initial stop ₹1,477.50,
+ * trails 1.5% below the high".
+ */
+export function attachedPreviewText(
+  values: TrailingFormValues,
+  refPrice: number | null,
+  direction: PositionDirection,
+): string | null {
+  const preview = previewText(values, refPrice, direction);
+  if (preview === null || refPrice === null) return null;
+  return `${strings.trailing.ifFillsAt(formatInr(refPrice))} ${preview.charAt(0).toLowerCase()}${preview.slice(1)}`;
+}
+
+/** The review step's line for an attached stop (§7): what it will do once the entry fills. */
+export function attachedReviewSentence(
+  values: TrailingFormValues,
+  direction: PositionDirection,
+): string {
+  const trail = trailOf(values);
+  const exit =
+    values.exitOrderType === 'MARKET'
+      ? strings.trailing.exitMarket
+      : strings.trailing.exitLimit(formatInr(values.exitLimitOffset ?? 0));
+  return strings.trailing.attachedSentence(
+    trail ? trailText(trail) : '',
+    direction === 'LONG' ? strings.trailing.fallsFromHigh : strings.trailing.risesFromLow,
+    exit,
+  );
+}
+
+/** The `attachedTrailingStop` of `POST /v1/orders` for checked values (null while unchecked). */
+export function toAttachedParams(values: TrailingFormValues): TrailingStopParams | null {
+  const trail = trailOf(values);
+  return trail === null ? null : paramsOf(values, trail);
 }
