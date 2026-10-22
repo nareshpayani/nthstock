@@ -38,7 +38,8 @@ jobs:
         with:
           ref: develop
           fetch-depth: 0
-          token: ${{ secrets.PROMOTE_TOKEN || github.token }}
+          # Only the push step gets credentials (PROMOTE_TOKEN, below).
+          persist-credentials: false
       - name: Check develop is fully tested (CI green on this commit)
         run: bash tools/github/checkReleaseCommit.sh develop
       - name: Check the development site was deployed and smoke-tested on this commit
@@ -54,6 +55,8 @@ jobs:
           echo "Development deployed and smoke-tested $sha."
       - name: Move production to develop
         id: move
+        env:
+          PUSH_TOKEN: ${{ secrets.PROMOTE_TOKEN || github.token }}
         run: |
           sha=$(git rev-parse HEAD)
           if ! git fetch --quiet origin production; then
@@ -74,7 +77,7 @@ jobs:
             git config user.name 'Naresh Payani'
             git config user.email '15100692+nareshpayani@users.noreply.github.com'
             git checkout --quiet -B production "$prod"
-            git merge --no-ff --no-edit -m "chore(NSTOCK-0289): promote develop ${sha:0:7} to production" "$sha"
+            git merge --no-ff --no-edit -m "chore(release): promote develop ${sha:0:7} to production" "$sha"
             if ! git diff --quiet "$sha" HEAD; then
               echo "::error title=Production differs::The merged tree is not develop's. Check what production has that develop doesn't."
               exit 1
@@ -84,7 +87,11 @@ jobs:
             echo "::error title=Production has its own commits::production has commits develop doesn't: $(git rev-list --no-merges --oneline "$sha..$prod" | head -5 | tr '\n' ';'). Get them onto develop first."
             exit 1
           fi
-          git push origin "$target:refs/heads/production"
+          if [ "$HAS_PROMOTE_TOKEN" != true ] && ! git diff --quiet "$prod" "$target" -- .github/workflows; then
+            echo "::error title=PROMOTE_TOKEN missing::This release changes .github/workflows, which GITHUB_TOKEN cannot push. Add the PROMOTE_TOKEN secret (docs/runbooks/environments.md) and promote again."
+            exit 1
+          fi
+          git push "https://x-access-token:${PUSH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" "$target:refs/heads/production"
           echo "moved=true" >> "$GITHUB_OUTPUT"
           echo "target=$target" >> "$GITHUB_OUTPUT"
           echo "previous=$prod" >> "$GITHUB_OUTPUT"
