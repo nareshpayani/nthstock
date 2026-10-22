@@ -16,7 +16,8 @@ export type SegmentedControlProps<T extends string> = {
   onValueChange: (value: T) => void;
   /** Accessible name of the group, e.g. "Order side". */
   label: string;
-  size?: 'sm' | 'md';
+  /** `touch` is the phone size (SPEC-TFC-1 §9.4): segments at least 44 × 44 px. */
+  size?: 'sm' | 'md' | 'touch';
   disabled?: boolean;
   className?: string;
 };
@@ -26,6 +27,12 @@ const selectedTone = {
     'data-[state=checked]:bg-surface data-[state=checked]:text-ink data-[state=checked]:shadow-raised',
   up: 'data-[state=checked]:bg-up data-[state=checked]:text-surface',
   down: 'data-[state=checked]:bg-down data-[state=checked]:text-surface',
+} as const;
+
+const SIZES = {
+  sm: 'h-7 px-3 text-label',
+  md: 'h-8 px-4 text-body',
+  touch: 'h-11 min-w-11 px-3 text-body',
 } as const;
 
 /**
@@ -64,7 +71,7 @@ export function SegmentedControl<T extends string>({
           {...(option.disabled ? { disabled: true } : {})}
           className={cn(
             'rounded-[6px] font-medium text-ink-muted transition-colors duration-(--nth-duration-flash) hover:text-ink disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:text-ink-muted',
-            size === 'sm' ? 'h-7 px-3 text-label' : 'h-8 px-4 text-body',
+            SIZES[size],
             selectedTone[option.tone ?? 'brand'],
           )}
         >

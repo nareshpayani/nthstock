@@ -97,4 +97,33 @@ export const strings = {
     sellLabel: (symbol: string) => `Sell ${symbol}`,
     paperNote: 'Paper trading: virtual cash only.',
   },
+  /** The phone layout (T12, SPEC-TFC-1 §9.4). */
+  phone: {
+    tabsLabel: 'Stock details',
+    tabs: { overview: 'Overview', depth: 'Depth', orders: 'Orders' },
+    tradeBar: (symbol: string) => `Trade ${symbol}`,
+    strip: {
+      label: (symbol: string) => `Your ${symbol} position`,
+      qty: (netQty: number) => (netQty > 0 ? `+${String(netQty)}` : String(netQty)),
+      at: (price: string) => `@ ${price}`,
+      trailing: (stop: string) => `Trailing SL ${stop}`,
+    },
+    orders: {
+      label: (symbol: string) => `Today's ${symbol} orders`,
+      empty: (symbol: string) => `No ${symbol} orders today.`,
+      unavailable: 'Your orders are on the Orders page.',
+      all: 'All orders',
+      row: (side: string, filled: number, qty: number, type: string) =>
+        `${side} ${String(filled)} / ${String(qty)} · ${type}`,
+      sides: { BUY: 'Buy', SELL: 'Sell' },
+      types: { MARKET: 'Market', LIMIT: 'Limit' },
+      statuses: {
+        AMO: 'AMO',
+        OPEN: 'Open',
+        EXECUTED: 'Executed',
+        CANCELLED: 'Cancelled',
+        REJECTED: 'Rejected',
+      },
+    },
+  },
 } as const;
