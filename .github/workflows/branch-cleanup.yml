@@ -1,0 +1,79 @@
+name: 'Delete merged branches'
+
+# Deletes a pull request's head branch once the PR is merged (owner request 2026-10-22,
+# NSTOCK-0330), for story, bug, epic and agent branches alike. The repository setting
+# "Automatically delete head branches" does the same for merges made by people; this workflow also
+# covers merges made by agent-automerge.yml with GITHUB_TOKEN, which start no workflows, through an
+# hourly sweep of recently merged PRs.
+#
+# A branch is deleted only when all of these hold:
+#   - it is in this repository (never a fork) and is not develop or production,
+#   - its PR is merged, and no open PR uses it as its head,
+#   - its tip is still the commit that was merged, so a branch reused for new work is kept.
+
+on:
+  pull_request:
+    types: [closed]
+  workflow_dispatch:
+    inputs:
+      pr:
+        description: 'Merged PR number (empty = sweep the last 100 closed PRs)'
+        required: false
+  schedule:
+    - cron: '17 * * * *'
+
+permissions:
+  contents: write
+  pull-requests: read
+
+concurrency:
+  group: branch-cleanup
+  cancel-in-progress: false
+
+jobs:
+  cleanup:
+    if: github.event_name != 'pull_request' || github.event.pull_request.merged
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Delete merged head branches
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number || inputs.pr }}
+        run: |
+          set -euo pipefail
+          keep='^(develop|production|main|gh-pages)$'
+
+          open_heads=$(gh api --paginate "repos/$REPO/pulls?state=open&per_page=100" \
+            --jq '.[] | select(.head.repo.full_name == "'"$REPO"'") | .head.ref' | sort -u)
+
+          # "<number> <head ref> <head sha>" for each merged PR in scope.
+          if [ -n "${PR:-}" ]; then
+            merged=$(gh api "repos/$REPO/pulls/$PR" --jq \
+              'select(.merged_at != null and .head.repo.full_name == "'"$REPO"'") | "\(.number) \(.head.ref) \(.head.sha)"')
+          else
+            merged=$(gh api "repos/$REPO/pulls?state=closed&sort=updated&direction=desc&per_page=100" --jq \
+              '.[] | select(.merged_at != null and .head.repo.full_name == "'"$REPO"'") | "\(.number) \(.head.ref) \(.head.sha)"')
+          fi
+
+          deleted=0
+          while read -r number ref sha; do
+            [ -n "${ref:-}" ] || continue
+            if [[ "$ref" =~ $keep ]]; then continue; fi
+            if grep -qxF "$ref" <<< "$open_heads"; then
+              echo "keep $ref: an open PR uses it"; continue
+            fi
+            tip=$(gh api "repos/$REPO/git/ref/heads/$ref" --jq .object.sha 2>/dev/null || true)
+            [ -n "$tip" ] || continue # already deleted
+            if [ "$tip" != "$sha" ]; then
+              echo "keep $ref: it has commits after #$number was merged"; continue
+            fi
+            # Several merged PRs can share a reused branch; delete it once.
+            if gh api -X DELETE "repos/$REPO/git/refs/heads/$ref" >/dev/null 2>&1; then
+              echo "deleted $ref (merged in #$number)"; deleted=$((deleted + 1))
+            else
+              echo "::warning::could not delete $ref (merged in #$number)"
+            fi
+          done <<< "$merged"
+          echo "Deleted $deleted branch(es)." >> "$GITHUB_STEP_SUMMARY"

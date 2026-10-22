@@ -55,6 +55,7 @@ Dependabot rebases its own PRs, but their CI failures go to the Fixer.
 | Conflict resolver | `.github/workflows/agent-conflicts.yml` | `.claude/agents/fixer.md` (Merge conflicts) |
 | Auto-merge | `.github/workflows/agent-automerge.yml` | — |
 | Issue closer | `.github/workflows/agent-close-issues.yml` | — |
+| Branch cleanup (deletes a PR's head branch once it is merged; hourly sweep for auto-merges) | `.github/workflows/branch-cleanup.yml` | — |
 | Issue keys | `.github/workflows/issue-keys.yml`, `tools/github/issueKey.sh` | — |
 | PR title check | `.github/workflows/pr-title.yml` | — |
 | (glue) | `agent-promote-stories.yml`, `agent-labels.yml` | — |
