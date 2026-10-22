@@ -1,13 +1,23 @@
 import type { Exchange, Instrument, Order } from '@nthstock/contracts';
-import { Button, Field, IconAlert, IconClock, NumberInput, SegmentedControl } from '@nthstock/ui';
+import {
+  Button,
+  Field,
+  IconAlert,
+  IconClock,
+  NumberInput,
+  SegmentedControl,
+  Switch,
+} from '@nthstock/ui';
 import { formatInr } from '@nthstock/utils';
-import { useEffect, useRef, type FormEventHandler } from 'react';
+import { useEffect, useRef, type FormEventHandler, type ReactNode } from 'react';
 import { Controller, useWatch, type UseFormReturn } from 'react-hook-form';
 import type { TicketError } from '../model/orderError';
 import type { TicketFormValues } from '../model/ticketForm';
+import type { TrailingFormValues } from '../model/trailingStopForm';
 import { strings } from '../strings';
 import { DepthMiniPanel } from './DepthMiniPanel';
 import { OrderEstimate } from './OrderEstimate';
+import { TrailingParamsFields } from './TrailingParamsFields';
 
 export type TicketFormProps = {
   form: UseFormReturn<TicketFormValues>;
@@ -28,7 +38,64 @@ export type TicketFormProps = {
    * `available` is false where the backend has no trailing stops yet (api mode).
    */
   trailing?: { available: boolean; onSelect: () => void } | undefined;
+  /** "Add trailing stop" on a new Market or Limit entry (T14), shown above the estimate. */
+  attach?: ReactNode;
 };
+
+export type AttachProps = {
+  /** Unavailable where the backend has no trailing stops; `notForSale` on a Delivery sell. */
+  status: 'available' | 'unavailable' | 'notForSale';
+  enabled: boolean;
+  onToggle: (on: boolean) => void;
+  values: TrailingFormValues;
+  onChange: (patch: Partial<TrailingFormValues>, typed?: boolean) => void;
+  errorFor: (field: 'value' | 'exitLimitOffset') => string | undefined;
+  preview: string | null;
+  /** The entry adds to a position that already has a trailing stop, which this one replaces. */
+  replaces: boolean;
+};
+
+/** The "Add trailing stop" switch and, when on, the stop's parameters (T14, SPEC-TFC-1 §7). */
+export function AttachSection({ attach }: { attach: AttachProps }) {
+  const offered = attach.status === 'available';
+  const hint =
+    attach.status === 'unavailable'
+      ? strings.trailing.attachUnavailable
+      : attach.status === 'notForSale'
+        ? strings.trailing.attachNotForSale
+        : strings.trailing.attachHint;
+  return (
+    <fieldset
+      className="grid gap-3 rounded-md border border-line p-3"
+      data-testid="attach-trailing"
+    >
+      <legend className="sr-only">{strings.trailing.attach}</legend>
+      <div className="grid gap-1">
+        <Switch
+          label={strings.trailing.attach}
+          checked={offered && attach.enabled}
+          onCheckedChange={attach.onToggle}
+          disabled={!offered}
+          className="min-h-11"
+        />
+        <p className="text-label text-ink-muted">{hint}</p>
+      </div>
+      {offered && attach.enabled ? (
+        <>
+          <TrailingParamsFields
+            values={attach.values}
+            onChange={attach.onChange}
+            errorFor={attach.errorFor}
+            preview={attach.preview}
+          />
+          {attach.replaces ? (
+            <p className="text-body text-ink">{strings.trailing.attachedReplaces}</p>
+          ) : null}
+        </>
+      ) : null}
+    </fieldset>
+  );
+}
 
 /** The order type value that switches the ticket to the trailing-stop form (T13). */
 export const TRAILING_SL = 'TRAILING_SL';
@@ -68,6 +135,7 @@ export function TicketForm({
   error,
   onSubmit,
   trailing,
+  attach,
 }: TicketFormProps) {
   const { control, formState, setValue, trigger } = form;
   const [side, type] = useWatch({ control, name: ['side', 'type'] });
@@ -237,6 +305,8 @@ export function TicketForm({
       {locked && type === 'MARKET' ? null : (
         <DepthMiniPanel instrument={instrument} live={marketOpen} onPick={pickPrice} />
       )}
+
+      {locked ? null : attach}
 
       <OrderEstimate
         symbol={instrument.symbol}
