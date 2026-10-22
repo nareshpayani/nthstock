@@ -118,9 +118,11 @@ describe('order validity', () => {
 });
 
 describe('Order and OrdersQuery', () => {
-  it('allows a null price for MARKET and rejects off-tick fills', () => {
+  it('allows a null price for MARKET and an off-tick average of several fills', () => {
     expect(Order.safeParse({ ...orderFixture, type: 'MARKET', price: null }).success).toBe(true);
-    expect(Order.safeParse({ ...orderFixture, avgFillPrice: 152_341 }).success).toBe(false);
+    expect(Order.safeParse({ ...orderFixture, avgFillPrice: 152_341 }).success).toBe(true);
+    expect(Order.safeParse({ ...orderFixture, avgFillPrice: 0 }).success).toBe(false);
+    expect(Order.safeParse({ ...orderFixture, avgFillPrice: 152_341.5 }).success).toBe(false);
   });
 
   it('filters by status and coerces the limit', () => {

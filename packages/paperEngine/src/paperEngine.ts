@@ -76,6 +76,11 @@ export type PaperEngineOptions = {
   /** Called with a copy of the order every time one is stored or changes (orderUpdate frames). */
   onOrderUpdate?: (order: Order) => void;
   /**
+   * The most shares a LIMIT order in `token` may fill per tick, or null for no cap (SPEC-TFC-1
+   * TFC-10). The demo Simulator sets it to split large fills; MARKET orders always fill in full.
+   */
+  fillCap?: (token: InstrumentToken) => number | null;
+  /**
    * Carry on from a saved state (`snapshot()` of an earlier engine) instead of a fresh account.
    * `funds` and `holdings` must then be left out: the snapshot has both.
    */
@@ -184,6 +189,13 @@ const CANCELLED_BY_RESET = 'Cancelled when you reset your paper balance.';
 const CANCELLED_AT_SQUARE_OFF = 'Cancelled at the 3:20 PM IST intraday square-off.';
 const CANCELLED_AT_CLOSE = 'Cancelled at market close, 3:30 PM IST. Day orders do not carry over.';
 const SQUARED_OFF = 'Squared off automatically at 3:20 PM IST.';
+const IOC_NEEDS_OPEN_MARKET =
+  'Immediate-or-cancel orders can be placed only while the market is open.';
+
+/** "Immediate or cancel: 7 of 10 shares did not fill and were cancelled." */
+function iocCancelReason(unfilled: number, qty: number): string {
+  return `Immediate or cancel: ${String(unfilled)} of ${String(qty)} shares did not fill and were cancelled.`;
+}
 
 /**
  * The paper-trading engine (ADR 0004): one user's orders, positions, holdings and funds.
@@ -192,7 +204,12 @@ const SQUARED_OFF = 'Squared off automatically at 3:20 PM IST.';
  * instruments only from the injected source, so it runs unchanged in MSW and in apps/api.
  *
  * - `place()` validates (T-127) and stores the order as REJECTED, AMO (market closed) or OPEN,
- *   blocks cash for a BUY, and matches it at once when the market is open.
+ *   blocks cash for a BUY, and matches it at once when the market is open. An IOC order then
+ *   cancels whatever did not fill.
+ * - Fills (SPEC-TFC-1 §10.3): a LIMIT order may fill in parts under a per-tick cap and stays OPEN
+ *   until the last share fills; `avgFillPrice` is the volume-weighted average, and each part
+ *   releases its share of the blocked cash. A marketable limit fills at the better of its limit
+ *   and the LTP when it arrives.
  * - `modify()` and `cancel()` follow the order state machine (T-128).
  * - `sync()` brings the engine up to the clock, then matches OPEN orders against current prices.
  *   Call it on every tick. Session events run on IST trading days only (market hours and
@@ -206,6 +223,9 @@ export class PaperEngine {
   readonly #holidays: HolidayTable;
   readonly #marketHours: MarketHours;
   readonly #onOrderUpdate: ((order: Order) => void) | undefined;
+  readonly #fillCap: (token: InstrumentToken) => number | null;
+  /** The tick each capped order last filled on, so it fills at most once per tick. */
+  readonly #cappedFillTick = new Map<string, number>();
   readonly #funds: FundsLedger;
   readonly #orders = new Map<string, StoredOrder>();
   readonly #byClientOrderId = new Map<string, string>();
@@ -247,6 +267,7 @@ export class PaperEngine {
     this.#holidays = options.holidays ?? nseHolidays2026;
     this.#marketHours = options.marketHours ?? 'nse';
     this.#onOrderUpdate = options.onOrderUpdate;
+    this.#fillCap = options.fillCap ?? (() => null);
     this.#syncedTo = this.#ctx.now();
     const { snapshot } = options;
     if (snapshot && (options.funds || options.holdings)) {
@@ -348,7 +369,11 @@ export class PaperEngine {
     }
     if (!instrument) throw new Error('unreachable: validation accepts only known instruments');
 
-    const status: OrderStatus = !checked.ok ? 'REJECTED' : this.#marketOpen() ? 'OPEN' : 'AMO';
+    const marketOpen = this.#marketOpen();
+    if (request.validity === 'IOC' && checked.ok && !marketOpen) {
+      return { ok: false, code: 'NOT_SUPPORTED', reason: IOC_NEEDS_OPEN_MARKET, order: null };
+    }
+    const status: OrderStatus = !checked.ok ? 'REJECTED' : marketOpen ? 'OPEN' : 'AMO';
     const order = this.#newOrder(draft, instrument, status, clientOrderId, request.validity);
     order.statusReason = checked.ok ? null : checked.reason;
     this.#orders.set(order.id, order);
@@ -359,13 +384,17 @@ export class PaperEngine {
     }
     this.#record(order, 'PLACED', { note: order.statusReason });
     this.#emit(order);
-    if (order.status === 'OPEN') this.#match(order);
+    if (order.status === 'OPEN') this.#match(order, true);
+    if (order.status === 'OPEN' && order.validity === 'IOC') {
+      this.#cancel(order, iocCancelReason(order.qty - order.filledQty, order.qty));
+    }
     return this.#result(order);
   }
 
   /**
    * Changes qty, type or price of an AMO or OPEN order. The changed order is validated again
-   * (with the cash it already has blocked); on failure the order stays as it was.
+   * (with the cash it already has blocked) for the shares still to fill; on failure the order stays
+   * as it was. A partly filled order's new quantity must exceed what has filled.
    */
   modify(id: string, request: ModifyOrderRequest): OrderActionResult {
     this.sync();
@@ -383,12 +412,21 @@ export class PaperEngine {
     }
 
     const type = request.type ?? order.type;
+    const qty = request.qty ?? order.qty;
+    if (order.filledQty > 0 && qty <= order.filledQty) {
+      return {
+        ok: false,
+        code: 'INVALID_QTY',
+        reason: `${String(order.filledQty)} shares have already filled. Enter a quantity above ${String(order.filledQty)}.`,
+        order: copy(order),
+      };
+    }
     const draft: OrderDraft = {
       token: order.token,
       side: order.side,
       type,
       product: order.product,
-      qty: request.qty ?? order.qty,
+      qty: qty - order.filledQty,
       price: request.price ?? (type === 'MARKET' ? null : order.price),
     };
     const checked = validateOrder(draft, {
@@ -407,12 +445,12 @@ export class PaperEngine {
     this.#reblock(order.id, checked.blockAmount);
     order.status = transitionOrder(order.status, 'MODIFY');
     order.type = draft.type;
-    order.qty = draft.qty;
+    order.qty = qty;
     order.price = draft.price;
     order.updatedAt = this.#now().toISOString();
     this.#record(order, 'MODIFIED');
     this.#emit(order);
-    if (order.status === 'OPEN') this.#match(order);
+    if (order.status === 'OPEN') this.#match(order, true);
     return this.#result(order);
   }
 
@@ -449,6 +487,7 @@ export class PaperEngine {
     this.#holdingSales.clear();
     this.#rejectCodes.clear();
     this.#history.clear();
+    this.#cappedFillTick.clear();
     return cancelled;
   }
 
@@ -634,7 +673,7 @@ export class PaperEngine {
       order.status = transitionOrder(order.status, 'RELEASE');
       this.#record(order, 'RELEASED');
       this.#emit(order);
-      this.#match(order);
+      this.#match(order, true);
     }
   }
   /**
@@ -735,6 +774,7 @@ export class PaperEngine {
 
   #cancel(order: StoredOrder, reason: string): void {
     this.#funds.release(order.id);
+    this.#cappedFillTick.delete(order.id);
     order.status = transitionOrder(order.status, 'CANCEL');
     order.statusReason = reason;
     order.updatedAt = this.#now().toISOString();
@@ -749,19 +789,40 @@ export class PaperEngine {
     else if (amount < held) this.#mustLedger(this.#funds.release(orderId, held - amount));
   }
 
-  #match(order: StoredOrder): void {
+  /**
+   * Matches an OPEN order against its LTP. `onArrival` is true when the order has just been
+   * placed, modified or released, so a marketable limit fills at the better price. A capped LIMIT
+   * order fills at most once per tick of its instrument.
+   */
+  #match(order: StoredOrder, onArrival = false): void {
     const ltp = this.#ctx.ltp(order.token);
     if (ltp === null) return;
-    const fill = matchFill(order, ltp);
-    if (fill) this.#execute(order, fill.qty, fill.price);
+    const cap = order.type === 'LIMIT' ? this.#fillCap(order.token) : null;
+    const tick = cap === null ? null : this.#ctx.tick(order.token);
+    if (tick !== null && this.#cappedFillTick.get(order.id) === tick) return;
+    const fill = matchFill(order, ltp, { maxQty: cap, onArrival });
+    if (!fill) return;
+    if (tick !== null) this.#cappedFillTick.set(order.id, tick);
+    this.#execute(order, fill.qty, fill.price);
   }
 
-  /** Settles a fill of the whole remaining quantity and books it into positions and holdings. */
+  /**
+   * Settles a fill of `qty` shares and books it into positions and holdings. A BUY releases the
+   * block in proportion to the shares filled, and all of what is left on the last fill. The order
+   * stays OPEN until its last share fills.
+   */
   #execute(order: StoredOrder, qty: number, price: number, squareOff = false): void {
     const value = qty * price;
+    const remaining = order.qty - order.filledQty;
+    const last = qty === remaining;
     if (order.side === 'SELL') this.#mustLedger(this.#funds.settleSell(order.id, value));
     else if (squareOff) this.#mustLedger(this.#funds.settleForcedBuy(order.id, value));
-    else this.#mustLedger(this.#funds.settleBuy(order.id, value));
+    else {
+      const release = last
+        ? undefined
+        : mulDivRound(this.#funds.blockedFor(order.id), qty, remaining);
+      this.#mustLedger(this.#funds.settleBuy(order.id, value, release));
+    }
 
     const trade = { side: order.side, qty, price };
     if (order.product === 'DELIVERY' && order.side === 'SELL') {
@@ -774,12 +835,26 @@ export class PaperEngine {
       position.book = applyTrade(position.book, trade);
     }
 
-    order.status = transitionOrder(order.status, 'FILL');
+    order.status = transitionOrder(order.status, last ? 'FILL' : 'PARTIAL_FILL');
+    // Averaged from the exact value of every fill, so rounding never accumulates.
+    order.avgFillPrice = mulDivRound(this.#filledValue(order.id) + value, 1, order.filledQty + qty);
     order.filledQty += qty;
-    order.avgFillPrice = price;
     order.updatedAt = this.#now().toISOString();
-    this.#record(order, 'EXECUTED', { fillPrice: price });
+    if (last) this.#cappedFillTick.delete(order.id);
+    this.#record(order, last ? 'EXECUTED' : 'PARTIALLY_EXECUTED', {
+      fillPrice: price,
+      fillQty: qty,
+    });
     this.#emit(order);
+  }
+
+  /** The value of the order's fills so far, from its history. */
+  #filledValue(orderId: string): number {
+    let total = 0;
+    for (const entry of this.#history.get(orderId) ?? []) {
+      if (entry.fillPrice !== null) total += entry.fillPrice * (entry.fillQty ?? 0);
+    }
+    return total;
   }
 
   #sellFromHoldings(token: InstrumentToken, qty: number, price: number): void {
@@ -837,11 +912,7 @@ export class PaperEngine {
   }
 
   /** Appends one change to the order's history, with the order's terms after it. */
-  #record(
-    order: StoredOrder,
-    event: OrderHistoryEvent,
-    extra: { fillPrice?: number; note?: string | null } = {},
-  ): void {
+  #record(order: StoredOrder, event: OrderHistoryEvent, extra: HistoryExtra = {}): void {
     const entries = this.#history.get(order.id) ?? [];
     // PLACED reuses placedAt: reading the clock again can land a millisecond later.
     const at = event === 'PLACED' ? order.placedAt : this.#now().toISOString();
@@ -884,11 +955,13 @@ function copy(order: StoredOrder): Order {
   return { ...order };
 }
 
+type HistoryExtra = { fillPrice?: number; fillQty?: number; note?: string | null };
+
 function historyEntry(
   order: Order,
   event: OrderHistoryEvent,
   at: string,
-  extra: { fillPrice?: number; note?: string | null } = {},
+  extra: HistoryExtra = {},
 ): OrderHistoryEntry {
   return {
     event,
@@ -898,6 +971,7 @@ function historyEntry(
     type: order.type,
     price: order.price,
     fillPrice: extra.fillPrice ?? null,
+    ...(extra.fillQty === undefined ? {} : { fillQty: extra.fillQty }),
     note: extra.note ?? null,
   };
 }
@@ -959,11 +1033,10 @@ function ledgerOptions(snapshot: PaperEngineSnapshot): FundsLedgerOptions {
 }
 
 /**
- * Order fields the contracts accept before the engine acts on them (SPEC-TFC-1, PLAN-TFC-1 T05 and
- * T06). Refusing them keeps an order from looking protected, or immediate-or-cancel, when it is not.
+ * Order fields the contracts accept before the engine acts on them (SPEC-TFC-1, PLAN-TFC-1 T06).
+ * Refusing them keeps an order from looking protected when it is not.
  */
 function unsupportedPlaceReason(request: PlaceOrderRequest): string | null {
-  if (request.validity === 'IOC') return 'Immediate-or-cancel orders are not available yet.';
   if (request.attachedTrailingStop !== undefined) {
     return 'A trailing stop cannot be attached to an order yet.';
   }

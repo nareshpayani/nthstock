@@ -90,6 +90,8 @@ type CachedClose = { prevClose: number | null; day: string };
  *   for one instrument (scripted ticks in tests and scenarios).
  * - Ticks: every tick syncs only the engines with a live (AMO or OPEN) order in a ticked
  *   instrument, so a limit order fills on the tick that crosses it and `onOrderUpdate` fires.
+ *   `setFillCap` splits LIMIT fills in an instrument over several ticks (the demo Simulator's
+ *   "Split large fills", SPEC-TFC-1 TFC-10).
  * - Session events (9:15 AMO release, 15:20 square-off, 15:30 close) run on the next sync of an
  *   engine: every read syncs first, and `sweep()` (a timer in the backend) syncs every engine.
  * - Instruments: names and today's circuit band, from the adapter's instrument list and stats,
@@ -101,6 +103,9 @@ export class PaperDesk {
   readonly #holidays: HolidayTable;
   readonly #ticks = new Map<InstrumentToken, number>();
   readonly #pins = new Map<InstrumentToken, number>();
+  /** Ticks seen per instrument, from the feed and from pinned prices. */
+  readonly #tickSeq = new Map<InstrumentToken, number>();
+  readonly #fillCaps = new Map<InstrumentToken, number>();
   readonly #instruments = new Map<InstrumentToken, CachedInstrument>();
   readonly #subscriptions = new Map<InstrumentToken, () => void>();
   readonly #prevCloses = new Map<InstrumentToken, CachedClose>();
@@ -119,6 +124,7 @@ export class PaperDesk {
     this.#holidays = options.holidays ?? nseHolidays2026;
     this.#prices = {
       getLtp: (token) => this.#pins.get(token) ?? this.#ticks.get(token) ?? null,
+      tickSeq: (token) => this.#tickSeq.get(token) ?? 0,
     };
     this.#instrumentSource = {
       getInstrument: (token) => this.#instruments.get(token)?.info ?? null,
@@ -321,6 +327,7 @@ export class PaperDesk {
     for (const quote of quotes) {
       if (quote.ltp <= 0) continue;
       this.#ticks.set(quote.token, quote.ltp);
+      this.#countTick(quote.token);
       for (const userId of this.#liveUsers.get(quote.token) ?? []) users.add(userId);
     }
     for (const userId of users) this.#syncUser(userId);
@@ -335,11 +342,34 @@ export class PaperDesk {
       throw new RangeError(`A pinned price must be positive paise, got ${String(ltp)}`);
     }
     this.#pins.set(token, ltp);
+    this.#countTick(token);
     for (const userId of [...(this.#liveUsers.get(token) ?? [])]) this.#syncUser(userId);
   }
 
   unpinPrice(token: InstrumentToken): void {
     this.#pins.delete(token);
+  }
+
+  /**
+   * Caps how many shares of a LIMIT order in `token` fill per tick, for every user; `null` lifts
+   * the cap. The demo Simulator uses it to show partial fills (SPEC-TFC-1 TFC-10).
+   */
+  setFillCap(token: InstrumentToken, maxQty: number | null): void {
+    if (maxQty === null) {
+      this.#fillCaps.delete(token);
+      return;
+    }
+    if (!Number.isSafeInteger(maxQty) || maxQty < 1) {
+      throw new RangeError(
+        `A fill cap must be a whole number of at least 1, got ${String(maxQty)}`,
+      );
+    }
+    this.#fillCaps.set(token, maxQty);
+  }
+
+  /** The per-tick fill cap for `token`, or null when fills are whole. */
+  fillCap(token: InstrumentToken): number | null {
+    return this.#fillCaps.get(token) ?? null;
   }
 
   /**
@@ -382,6 +412,10 @@ export class PaperDesk {
     }
   }
 
+  #countTick(token: InstrumentToken): void {
+    this.#tickSeq.set(token, (this.#tickSeq.get(token) ?? 0) + 1);
+  }
+
   #syncUser(userId: string): void {
     const engine = this.#engines.get(userId);
     if (!engine) return;
@@ -405,6 +439,7 @@ export class PaperDesk {
       ctx: createEngineContext({ clock, prices: this.#prices, nextId: newId }),
       instruments: this.#instrumentSource,
       holidays: this.#holidays,
+      fillCap: (token) => this.fillCap(token),
       ...(this.#options.marketHours ? { marketHours: this.#options.marketHours } : {}),
       ...(onOrderUpdate ? { onOrderUpdate: (order: Order) => onOrderUpdate(userId, order) } : {}),
       ...(snapshot ? { snapshot } : {}),

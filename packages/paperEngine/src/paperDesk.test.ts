@@ -169,6 +169,30 @@ describe('PaperDesk', () => {
     expect(() => desk.pinPrice(INFY.token, 0)).toThrow(RangeError);
   });
 
+  it('splits LIMIT fills over ticks under a fill cap, for every user (T05)', async () => {
+    const { desk, market } = setup();
+    desk.setFillCap(INFY.token, 4);
+    expect(desk.fillCap(INFY.token)).toBe(4);
+    expect(desk.fillCap(TCS.token)).toBeNull();
+    const placed = await desk.place('u1', limitBuy(1_500_00, 10));
+    if (!placed.ok) throw new Error('place failed');
+    expect(placed.order).toMatchObject({ status: 'OPEN', filledQty: 4 });
+    // A read on the same tick fills nothing more.
+    expect(desk.getOrder('u1', placed.order.id)?.filledQty).toBe(4);
+
+    market.tick('INFY', 1_500_00);
+    expect(desk.getOrder('u1', placed.order.id)?.filledQty).toBe(8);
+    desk.pinPrice(INFY.token, 1_495_00);
+    expect(desk.getOrder('u1', placed.order.id)).toMatchObject({
+      status: 'EXECUTED',
+      filledQty: 10,
+    });
+
+    desk.setFillCap(INFY.token, null);
+    expect(desk.fillCap(INFY.token)).toBeNull();
+    expect(() => desk.setFillCap(INFY.token, 0)).toThrow(RangeError);
+  });
+
   it('modify and cancel go to the owner engine; another user gets ORDER_NOT_FOUND', async () => {
     const { desk } = setup();
     const placed = await desk.place('u1', limitBuy(1_400_00));
