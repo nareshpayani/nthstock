@@ -130,9 +130,9 @@ describe('order lines (T16, SPEC-TFC-1 §8.1, §8.3)', () => {
         ?.priceLines.map((line) => line.options.price)
         .sort(),
     ).toEqual([150_000, 155_000]);
-    expect(
-      screen.getByRole('button', { name: /^Buy limit, 10 shares at ₹1,500\.00\. Drag/ }),
-    ).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Buy 10 @ ₹1,500.00' })).toHaveAccessibleDescription(
+      /^Buy limit, 10 shares at ₹1,500\.00\. Drag/,
+    );
   });
 
   it('a drag shows the price under the finger to every surface and sends one modify on release', async () => {
@@ -291,8 +291,8 @@ describe('position chip (T18, SPEC-TFC-1 §8.1, §8.4)', () => {
         },
       ],
     );
-    const chip = await screen.findByRole('button', { name: /^Long 10 shares at ₹1,500\.00/ });
-    expect(chip).toHaveTextContent('+10 @ ₹1,500.00 · +₹120.00');
+    const chip = await screen.findByRole('button', { name: '+10 @ ₹1,500.00 · +₹120.00' });
+    expect(chip).toHaveAccessibleDescription(/^Long 10 shares at ₹1,500\.00/);
     expect(chip.dataset.tone).toBe('position');
     pointer(chip, 'pointerdown', 200);
     pointer(chip, 'pointerup', 200);
