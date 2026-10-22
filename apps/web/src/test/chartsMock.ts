@@ -4,12 +4,23 @@ import { vi } from 'vitest';
  * A stand-in for `lightweight-charts` in jsdom (no canvas). Use it with
  * `vi.mock('lightweight-charts', () => import('@/test/chartsMock'))` and inspect `chartsMock`.
  */
+type FakePriceLine = { options: Record<string, unknown>; applyOptions: (o: object) => void };
+type FakePrimitive = { attached?: (param: unknown) => void; updateAllViews?: () => void };
 type FakeSeries = {
   type: 'Area' | 'Candlestick';
   setData: ReturnType<typeof vi.fn>;
   update: ReturnType<typeof vi.fn>;
   applyOptions: ReturnType<typeof vi.fn>;
   seriesType: () => 'Area' | 'Candlestick';
+  /** Price lines currently drawn. */
+  priceLines: FakePriceLine[];
+  primitives: FakePrimitive[];
+  createPriceLine: (options: Record<string, unknown>) => FakePriceLine;
+  removePriceLine: (line: FakePriceLine) => void;
+  attachPrimitive: (primitive: FakePrimitive) => void;
+  detachPrimitive: (primitive: FakePrimitive) => void;
+  priceToCoordinate: (price: number) => number | null;
+  coordinateToPrice: (y: number) => number | null;
 };
 type FakeChart = {
   options: unknown;
@@ -22,10 +33,26 @@ type FakeChart = {
   crosshair: Set<(param: unknown) => void>;
 };
 
+/**
+ * The fake price scale: `top` paise sits at y = 0 and each px is `paisePerPx` lower, over a pane
+ * `height` px tall with a `axisWidth` px price axis. Change it and call `repaint()` to stand in
+ * for a pan, pinch or autoscale.
+ */
+const DEFAULT_SCALE = { top: 160_000, paisePerPx: 50, height: 300, axisWidth: 64 };
+
 export const chartsMock = {
   charts: [] as FakeChart[],
+  scale: { ...DEFAULT_SCALE },
   reset() {
     this.charts.length = 0;
+    this.scale = { ...DEFAULT_SCALE };
+  },
+  /** Repaints the latest live chart, as the library does on a tick, pan or autoscale. */
+  repaint() {
+    const chart = this.active().at(-1);
+    for (const series of chart?.series ?? []) {
+      for (const primitive of series.primitives) primitive.updateAllViews?.();
+    }
   },
   /** Charts created and not yet removed. */
   active(): FakeChart[] {
@@ -73,6 +100,28 @@ export function createChart(_host: HTMLElement, options: unknown) {
         update: vi.fn(),
         applyOptions: vi.fn(),
         seriesType: () => definition.type,
+        priceLines: [],
+        primitives: [],
+        createPriceLine: (options) => {
+          const line: FakePriceLine = {
+            options: { ...options },
+            applyOptions: (next) => Object.assign(line.options, next),
+          };
+          series.priceLines.push(line);
+          return line;
+        },
+        removePriceLine: (line) => {
+          series.priceLines = series.priceLines.filter((drawn) => drawn !== line);
+        },
+        attachPrimitive: (primitive) => {
+          series.primitives.push(primitive);
+          primitive.attached?.({ requestUpdate: () => chartsMock.repaint() });
+        },
+        detachPrimitive: (primitive) => {
+          series.primitives = series.primitives.filter((attached) => attached !== primitive);
+        },
+        priceToCoordinate: (price) => (chartsMock.scale.top - price) / chartsMock.scale.paisePerPx,
+        coordinateToPrice: (y) => chartsMock.scale.top - y * chartsMock.scale.paisePerPx,
       };
       chart.series.push(series);
       return series;
@@ -83,5 +132,7 @@ export function createChart(_host: HTMLElement, options: unknown) {
     unsubscribeCrosshairMove: (handler: (param: unknown) => void) =>
       chart.crosshair.delete(handler),
     timeScale: () => ({ fitContent: chart.fitContent }),
+    paneSize: () => ({ height: chartsMock.scale.height, width: 600 }),
+    priceScale: () => ({ width: () => chartsMock.scale.axisWidth }),
   };
 }

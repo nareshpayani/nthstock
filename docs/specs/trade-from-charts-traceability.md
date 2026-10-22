@@ -37,7 +37,7 @@ test passes, then **Met**. Where the specification interprets a requirement, the
 
 | ID | Requirement | Spec | Tasks | Proving test | Status |
 |---|---|---|---|---|---|
-| REQ-TFC-01 | A working limit order is a line on the price axis; buy and sell visually distinct | §8.1 | T15, T16 | E2E asserts labels and styles | Planned |
+| REQ-TFC-01 | A working limit order is a line on the price axis; buy and sell visually distinct | §8.1 | T15, T16 | E2E asserts labels and styles | In progress: price lines with labelled handles by kind, edge pinning and collision layout (`ChartOverlay.test.tsx`, `overlayLayout.test.ts`); ghost line on the real chart (`chartOverlay.spec.ts`); order lines in T16 |
 | REQ-TFC-02 | Dragging the line modifies the price live; an affordance cancels it | §8.3, §9.3 | T16 | E2E drag and two-tap cancel | Interpretation (TFC-21): the price follows the finger on every surface in real time and the engine receives one modify on release, so the order cannot fill at a price the user only passed through |
 | REQ-TFC-03 | Place a buy or sell from the chart with a chosen, justified gesture | §8.2, §9 | T17 | US-01 E2E | Planned |
 | REQ-TFC-04 | Executed position shown at the average price with live P&L | §8.1, §8.4 | T18 | E2E asserts P&L follows the price | Planned |
@@ -73,7 +73,7 @@ test passes, then **Met**. Where the specification interprets a requirement, the
 |---|---|---|---|---|---|
 | REQ-MOB-01 | Gesture conflicts resolved explicitly and explained | §9 | T20 | Touch E2E for every gesture row | Planned |
 | REQ-MOB-02 | Tapping a position is reliable and never places an order | §9.1 | T18, T20 | E2E: tap opens the sheet; pan on the chip pans | Planned |
-| REQ-MOB-03 | No dropped frames under live ticks; scrolling and dragging stay smooth | §10.5, §12 | T07, T15, T25 | Performance scenario | Planned |
+| REQ-MOB-03 | No dropped frames under live ticks; scrolling and dragging stay smooth | §10.5, §12 | T07, T15, T25 | Performance scenario | In progress: handles move on chart repaint with no React render (`ChartOverlay.test.tsx` render count); scenario in T25 |
 | REQ-MOB-04 | Thumb reach; targets of at least 44 px; ticket, TSLO options and scalper as bottom sheets | §9.4 | T12 | Layout E2E assertions | In progress: at 360, 390 and 414 px every control on the instrument page is at least 44 px, Sell and Buy sit in the lower 40%, and the ticket is a bottom sheet (`e2e/phoneLayout.spec.ts`, T12); the trailing-stop and scalper sheets follow in T18 and T21 |
 | REQ-MOB-05 | Works on 360 to 414 px phones; reviewed on a real phone | §4.3, §12 | T04, T26, T29 | WebKit and Chromium mobile E2E; device check | Planned |
 | REQ-MOB-06 | A deliberate phone layout, not a shrunk desktop; desktop stays good | §9.4 | T12 | Screenshots at 360, 390, 414 and 1440 px | Met: phone layout (chart, Overview, Depth and Orders tabs, position strip, sticky bar) with no sideways scroll at 360, 390 and 414 px (`e2e/phoneLayout.spec.ts`); desktop layout checks at 1440 and 768 px unchanged (`e2e/stockDetailJourney.spec.ts`); PR screenshots at 390 and 1440 px |

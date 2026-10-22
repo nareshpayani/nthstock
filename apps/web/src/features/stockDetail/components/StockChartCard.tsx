@@ -1,8 +1,11 @@
 import type { Candle, CandleRange, Instrument } from '@nthstock/contracts';
 import { ErrorState, SegmentedControl, Skeleton, cn } from '@nthstock/ui';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
+import { useState } from 'react';
+import { ChartTrading } from '@/features/chartTrading';
 import {
   CHART_RANGES,
+  type ChartHandle,
   LiveBadge,
   PriceChart,
   candlesQuery,
@@ -26,6 +29,8 @@ export type StockChartCardProps = {
   height?: number;
   /** `touch` on phones: 44 px range and type segments in a row that scrolls sideways (T12). */
   controls?: 'sm' | 'touch';
+  /** Trade from the chart: pan and pinch, and the trading overlay (T15). Equities only. */
+  trading?: boolean;
 };
 
 export const CHART_HEIGHT = 320;
@@ -45,7 +50,9 @@ export function StockChartCard({
   onChartTypeChange,
   height = CHART_HEIGHT,
   controls = 'sm',
+  trading = false,
 }: StockChartCardProps) {
+  const [chart, setChart] = useState<ChartHandle | null>(null);
   const api = useApiClient();
   const marketOpen = useMarketOpen();
   const { symbol, exchange } = instrument;
@@ -111,6 +118,11 @@ export function StockChartCard({
             intraday={isIntraday(range)}
             height={height}
             tooltip
+            interactive={trading}
+            onReady={trading ? setChart : undefined}
+            overlay={
+              trading && chart ? <ChartTrading handle={chart} instrument={instrument} /> : null
+            }
             className={candles.isPlaceholderData ? 'opacity-60' : undefined}
           />
         ) : (

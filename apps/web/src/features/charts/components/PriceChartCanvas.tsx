@@ -10,11 +10,17 @@ import {
   type MouseEventParams,
   type Time,
 } from 'lightweight-charts';
-import { useEffect, useRef, useState } from 'react';
+import { cn } from '@nthstock/ui';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { toAreaData, toCandleData } from '../model/chartData';
 import { trailingChanges } from '../model/liveCandles';
 import type { ChartDirection, ChartValueFormat } from '../model/chartFormat';
-import { areaSeriesOptions, candleSeriesOptions, chartOptions } from '../model/chartTheme';
+import {
+  TRADING_INTERACTION,
+  areaSeriesOptions,
+  candleSeriesOptions,
+  chartOptions,
+} from '../model/chartTheme';
 import { tooltipContent, type HoveredItem } from '../model/chartTooltip';
 import { ChartTooltip, type ChartTooltipState } from './ChartTooltip';
 
@@ -27,9 +33,19 @@ export type PriceChartCanvasProps = {
   height: number;
   /** Show the crosshair tooltip (IST time and ₹ values of the hovered bar). */
   tooltip?: boolean;
+  /** Pan and pinch for a chart you trade from (SPEC-TFC-1 §10.5); the default chart is static. */
+  interactive?: boolean;
+  /**
+   * The chart and its series once created, for an overlay that draws on it (T15); null when they
+   * are removed. Called again whenever the chart is rebuilt (a new type, range or height).
+   */
+  onReady?: ((handle: ChartHandle | null) => void) | undefined;
 };
 
 type AnySeries = ISeriesApi<'Area'> | ISeriesApi<'Candlestick'>;
+
+/** What an overlay needs to draw on the chart: the chart, its one series, and the host element. */
+export type ChartHandle = { chart: IChartApi; series: AnySeries; host: HTMLElement };
 
 /**
  * The Lightweight Charts canvas (T-094). Loaded only through PriceChart's lazy import, so the
@@ -44,18 +60,32 @@ export function PriceChartCanvas({
   intraday,
   height,
   tooltip = false,
+  interactive = false,
+  onReady,
 }: PriceChartCanvasProps) {
   const hostRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const seriesRef = useRef<AnySeries | null>(null);
   const drawnRef = useRef<{ series: AnySeries; candles: readonly Candle[] } | null>(null);
   const [hover, setHover] = useState<ChartTooltipState | null>(null);
+  // Kept in a ref so a new callback identity never rebuilds the chart.
+  const onReadyRef = useRef(onReady);
+  useLayoutEffect(() => {
+    onReadyRef.current = onReady;
+  });
 
   useEffect(() => {
     const host = hostRef.current;
     if (!host) return undefined;
+    const base = chartOptions({ format, intraday });
     const chart = createChart(host, {
-      ...chartOptions({ format, intraday }),
+      ...base,
+      ...(interactive
+        ? {
+            ...TRADING_INTERACTION,
+            rightPriceScale: { ...base.rightPriceScale, ...TRADING_INTERACTION.rightPriceScale },
+          }
+        : {}),
       width: Math.floor(host.clientWidth),
       height,
     });
@@ -81,8 +111,10 @@ export function PriceChartCanvas({
       );
     };
     if (tooltip) chart.subscribeCrosshairMove(onCrosshairMove);
+    onReadyRef.current?.({ chart, series, host });
 
     return () => {
+      onReadyRef.current?.(null);
       if (tooltip) chart.unsubscribeCrosshairMove(onCrosshairMove);
       setHover(null);
       observer.disconnect();
@@ -90,7 +122,7 @@ export function PriceChartCanvas({
       chartRef.current = null;
       seriesRef.current = null;
     };
-  }, [type, format, intraday, height, tooltip]);
+  }, [type, format, intraday, height, tooltip, interactive]);
 
   useEffect(() => {
     const series = seriesRef.current;
@@ -116,15 +148,19 @@ export function PriceChartCanvas({
       (series as ISeriesApi<'Area'>).setData(toAreaData(candles));
     }
     chartRef.current?.timeScale().fitContent();
-  }, [candles, type, format, intraday, height, tooltip]);
+  }, [candles, type, format, intraday, height, tooltip, interactive]);
 
   useEffect(() => {
     const series = seriesRef.current;
     if (series?.seriesType() === 'Area') series.applyOptions(areaSeriesOptions(direction, format));
   }, [direction, format, type, intraday, height]);
 
+  // `isolate` keeps the library's z-indexed canvases below an overlay drawn after the chart.
   return (
-    <div className="relative w-full" style={{ height }}>
+    <div
+      className={cn('relative isolate w-full', interactive && 'overscroll-contain')}
+      style={{ height }}
+    >
       <div ref={hostRef} className="w-full" style={{ height }} data-testid="chart-host" />
       {hover ? <ChartTooltip {...hover} /> : null}
     </div>
