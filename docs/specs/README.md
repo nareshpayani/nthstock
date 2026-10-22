@@ -34,3 +34,9 @@ backend and paper engine, and ADR 0005, the web UI architecture).
 | Spec | Epics | Tasks | Status |
 |---|---|---|---|
 | [Backend core on PostgreSQL](backend-core.md) ([task list](backend-core-tasks.md)) | E11 to E21 | T-176 to T-244 | Approved 2026-09-28 (PR #236); E11 to E14 merged |
+
+## Phase 3 in chat numbering: Trade from Charts
+
+| Spec | Epics | Tasks | Status |
+|---|---|---|---|
+| [Trade from Charts, TSLO and Scalper](trade-from-charts.md) ([task list](trade-from-charts-tasks.md)) | TFC-A to TFC-G | TFC-01 to TFC-29 | Draft, 2026-10-22; Phase 2 paused |
