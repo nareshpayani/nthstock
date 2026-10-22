@@ -106,6 +106,10 @@ instrument, in tick order. For a **long** position (a short mirrors every compar
 A TSLO attached to an entry starts `ARMED` once the first fill lands, with the fill price as its
 first tick. A standalone TSLO starts from the LTP when it is placed.
 
+`packages/paperEngine` also exports `previewTrailingStop(params, ltp, side)`, the same arithmetic
+without state. The ticket and the chart call it to show the initial stop before anything is placed;
+once placed, every stop on screen comes from the engine.
+
 ### 4.4 Quantity and auto-cancel
 
 - `qty` always equals the position's current open quantity in the protected direction, recomputed
@@ -128,7 +132,8 @@ Rejected with a plain-language message, in the engine (authoritative) and in the
 - activation price on the wrong side of the market is allowed (it activates at once) but the
   preview says so;
 - no open position (standalone) or a position in the other direction;
-- limit offset negative or ≥ the stop.
+- limit offset negative, or so large that the exit limit (`stop − offset` for a long, `stop + offset`
+  for a short) would fall below one tick (₹0.05).
 
 ### 4.6 Backgrounded app
 
@@ -136,7 +141,9 @@ Mobile browsers freeze timers in a background tab, and in mock mode the "exchang
 Resume therefore works like a server that never stopped:
 
 - The mock market notices the gap (timer drift above 2 tick intervals) and emits the missed ticks
-  as one catch-up batch before the next live tick, capped at 30 minutes of session time. The
+  as one catch-up batch before the next live tick, capped at 30 minutes of session time (up to
+  7,200 ticks per instrument at 250 ms). The engine steps through every one; the quote store and the
+  chart get only the coalesced result (last price, plus high and low into the current candle). The
   engine steps every TSLO through them in order, so the extreme, the stop and any trigger are
   exactly what continuous running would have produced.
 - Engine state, including each TSLO's `extreme` and `stop`, is in the existing localStorage

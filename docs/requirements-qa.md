@@ -145,5 +145,5 @@ default for every other question ("go ahead with your decisions").
 | TFC-16 | Phones? | iPhone Safari and Android Chrome (exception to D4) | As recommended. | Default accepted |
 | TFC-17 | Who records the video? | Owner, from a shot list | As recommended. | Default accepted |
 | TFC-18 | Reviewer URL and login? | Production plus one-tap Try demo | As recommended. | Default accepted |
-| TFC-19 | Who builds? | Claude in the project thread, Reviewer agent on each PR | As recommended. | Default accepted |
+| TFC-19 | Who builds? | The AI developer in the project thread, Reviewer agent on each PR | As recommended. | Default accepted |
 | TFC-20 | Default chart view? | 1D, last 60 minutes | As recommended. | Default accepted |
