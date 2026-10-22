@@ -95,8 +95,12 @@ export function Dialog({
 }
 
 export type SheetProps = DialogProps & {
-  /** Which edge the panel slides from. Right for the order ticket, left for the nav drawer. */
-  side?: 'right' | 'left';
+  /**
+   * Which edge the panel slides from. Right for the order ticket on wide screens, left for the nav
+   * drawer, bottom for phone sheets (SPEC-TFC-1 §9.4): full width, up to 90% of the screen height,
+   * with the safe-area inset below its last action so it clears the iPhone home indicator.
+   */
+  side?: 'right' | 'left' | 'bottom';
   /**
    * Where focus goes on close when the sheet has no `trigger` (opened from a store, e.g. the order
    * ticket): usually the button that asked for it. Ignored when the element is gone.
@@ -118,6 +122,13 @@ function focusReturn(returnFocus: SheetProps['returnFocus']) {
     target.focus();
   };
 }
+
+const SHEET_SIDE: Record<NonNullable<SheetProps['side']>, string> = {
+  right: 'inset-y-0 right-0 w-[min(420px,calc(100vw-48px))] data-[state=open]:animate-sheet-in',
+  left: 'inset-y-0 left-0 w-[min(420px,calc(100vw-48px))] data-[state=open]:animate-drawer-in',
+  bottom:
+    'inset-x-0 bottom-0 max-h-[90dvh] rounded-t-lg pb-[env(safe-area-inset-bottom)] data-[state=open]:animate-sheet-up',
+};
 
 /** Slide-over panel (order ticket, mobile drawer) with the same focus and Esc behaviour. */
 export function Sheet({
@@ -146,14 +157,19 @@ export function Sheet({
           onOpenAutoFocus={focusInitial(initialFocus)}
           onCloseAutoFocus={focusReturn(returnFocus)}
           onEscapeKeyDown={keepEscapeForOpenPopup}
+          data-side={side}
           className={cn(
-            'fixed inset-y-0 z-(--nth-z-overlay) flex w-[min(420px,calc(100vw-48px))] flex-col bg-surface shadow-overlay outline-none',
-            side === 'right'
-              ? 'right-0 data-[state=open]:animate-sheet-in'
-              : 'left-0 data-[state=open]:animate-drawer-in',
+            'fixed z-(--nth-z-overlay) flex flex-col bg-surface shadow-overlay outline-none',
+            SHEET_SIDE[side],
             className,
           )}
         >
+          {side === 'bottom' ? (
+            <div
+              aria-hidden="true"
+              className="mx-auto mt-2 h-1 w-10 shrink-0 rounded-full bg-line"
+            />
+          ) : null}
           <div className="flex items-start justify-between gap-4 border-b border-line p-4">
             <div className="grid gap-1">
               <DialogPrimitive.Title className="text-lg font-semibold text-ink">

@@ -35,13 +35,15 @@ export function gateFetch(
 type Pending = { symbol: string; exchange: Exchange | undefined; release: (() => void) | null };
 
 /**
- * The WebSocket client, with `subscribe` and `connect` held until `ready` settles. Subscriptions
+ * The WebSocket client, with `subscribe`, `connect` and `focus` held until `ready` settles. Subscriptions
  * made meanwhile are replayed in order (one released first is dropped), and the socket opens only
- * then, after MSW has patched `WebSocket`. Every other method goes straight through.
+ * then, after MSW has patched `WebSocket`; the last `focus` is sent then too. Every other method
+ * goes straight through.
  */
 export function gateWsClient(client: WsClient, ready: Promise<unknown>): WsClient {
   let open = false;
   let wantsConnect = false;
+  let wantsFocus: { symbol: string | null; exchange: Exchange | undefined } | null = null;
   const pending = new Set<Pending>();
 
   void settled(ready).then(() => {
@@ -51,6 +53,7 @@ export function gateWsClient(client: WsClient, ready: Promise<unknown>): WsClien
     }
     pending.clear();
     if (wantsConnect) client.connect();
+    if (wantsFocus) client.focus(wantsFocus.symbol, wantsFocus.exchange);
   });
 
   return {
@@ -70,6 +73,10 @@ export function gateWsClient(client: WsClient, ready: Promise<unknown>): WsClien
     connect() {
       if (open) client.connect();
       else wantsConnect = true;
+    },
+    focus(symbol, exchange) {
+      if (open) client.focus(symbol, exchange);
+      else wantsFocus = { symbol, exchange };
     },
   };
 }

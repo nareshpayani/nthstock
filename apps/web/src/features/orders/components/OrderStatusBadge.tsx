@@ -10,8 +10,17 @@ const statusTone: Record<OrderStatus, string> = {
   REJECTED: 'bg-down-soft text-down',
 };
 
-/** The order's status as a word on a tint: the word carries the meaning, not the colour. */
-export function OrderStatusBadge({ status }: { status: OrderStatus }) {
+/**
+ * The order's status as a word on a tint: the word carries the meaning, not the colour. An open
+ * order with some quantity filled reads "Partly filled" (SPEC-TFC-1 §10.3).
+ */
+export function OrderStatusBadge({
+  status,
+  partial = false,
+}: {
+  status: OrderStatus;
+  partial?: boolean;
+}) {
   return (
     <span
       className={cn(
@@ -19,7 +28,7 @@ export function OrderStatusBadge({ status }: { status: OrderStatus }) {
         statusTone[status],
       )}
     >
-      {strings.statuses[status]}
+      {partial && status === 'OPEN' ? strings.partlyFilled : strings.statuses[status]}
     </span>
   );
 }

@@ -30,6 +30,10 @@ export function groupOrders(orders: readonly Order[]): OrderBook {
 export const isLive = (order: Pick<Order, 'status'>) =>
   order.status === 'AMO' || order.status === 'OPEN';
 
+/** An open order with part of its quantity filled: "3 / 10 filled" (SPEC-TFC-1 §10.3). */
+export const isPartlyFilled = (order: Pick<Order, 'status' | 'filledQty' | 'qty'>) =>
+  order.status === 'OPEN' && order.filledQty > 0 && order.filledQty < order.qty;
+
 /**
  * When the order was placed, in IST: "10:00:05 am" today, "25 Sept 2026, 08:00:00 pm" on an
  * earlier day (an AMO placed last evening).
