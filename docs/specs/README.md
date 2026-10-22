@@ -39,4 +39,4 @@ backend and paper engine, and ADR 0005, the web UI architecture).
 
 | Spec | Epics | Tasks | Status |
 |---|---|---|---|
-| [Trade from Charts, TSLO and Scalper](trade-from-charts.md) ([task list](trade-from-charts-tasks.md)) | TFC-A to TFC-G | TFC-01 to TFC-29 | Draft, 2026-10-22; Phase 2 paused |
+| [Trade from Charts, TSLO and Scalper](trade-from-charts.md) ([task list](trade-from-charts-tasks.md)) | TFC-A to TFC-G | TFC-T01 to TFC-T29 | Draft, 2026-10-22; Phase 2 paused |

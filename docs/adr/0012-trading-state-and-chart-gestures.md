@@ -1,6 +1,6 @@
 # 0012. One trading state for every surface, and the chart gesture model
 
-- Status: Proposed
+- Status: Accepted (with the spec, 2026-10-22)
 - Date: 2026-10-22
 - Spec: [`docs/specs/trade-from-charts.md`](../specs/trade-from-charts.md) §4 to §6
 - Builds on: [0004](0004-mock-backend-and-paper-engine.md) (paper engine), [0005](0005-web-ui-architecture.md) (web UI)

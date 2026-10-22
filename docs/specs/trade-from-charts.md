@@ -4,7 +4,7 @@
 - Phase: "Phase 3: Trade from Charts" in the project chat's numbering. Phase 2 (backend core, E15 to
   E21) is paused until this ships; none of it is needed here (everything runs in mock mode).
 - Deadline: submission on 2026-10-25.
-- Tasks: [`trade-from-charts-tasks.md`](trade-from-charts-tasks.md) (epics TFC-A to TFC-G)
+- Tasks: [`trade-from-charts-tasks.md`](trade-from-charts-tasks.md) (epics TFC-A to TFC-G, tasks TFC-T01 to TFC-T29)
 - Inputs: the client brief (a take-home from Paytm Money, kept outside the repo), CLAUDE.md §0 and §6,
   `docs/requirements-qa.md` Round 9 (TFC-01 to TFC-20), ADR 0004 (mock backend and paper engine),
   ADR 0005 (web UI architecture), and the current `packages/paperEngine`, `packages/contracts`,
