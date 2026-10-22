@@ -38,6 +38,12 @@ on:
 permissions:
   contents: read
 
+env:
+  # firebase-tools 15.34.1 (2026-10-21) asks Service Usage whether Hosting is enabled, which the
+  # deploy service account may not do, and every deploy failed with a 403. Pinned to the last
+  # version that deployed; Dependabot does not see this, so move it up by hand after checking.
+  FIREBASE_TOOLS_VERSION: 15.34.0
+
 concurrency:
   # One group per PR and per environment; a green CI run and a dispatch for the same environment
   # share one. A red CI run (every job skipped) gets its own group, so it never replaces a pending
@@ -81,6 +87,7 @@ jobs:
           repoToken: ${{ secrets.GITHUB_TOKEN }}
           firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
           projectId: ${{ vars.FIREBASE_PROJECT_ID }}
+          firebaseToolsVersion: ${{ env.FIREBASE_TOOLS_VERSION }}
           expires: 7d
       - name: Install Chrome for Testing (Chromium)
         run: npx playwright install --with-deps chromium
@@ -160,6 +167,7 @@ jobs:
           repoToken: ${{ secrets.GITHUB_TOKEN }}
           firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
           projectId: ${{ vars.FIREBASE_PROJECT_ID }}
+          firebaseToolsVersion: ${{ env.FIREBASE_TOOLS_VERSION }}
           channelId: dev
           expires: 30d
       - name: Check the development site serves this build
@@ -251,6 +259,7 @@ jobs:
           repoToken: ${{ secrets.GITHUB_TOKEN }}
           firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
           projectId: ${{ vars.FIREBASE_PROJECT_ID }}
+          firebaseToolsVersion: ${{ env.FIREBASE_TOOLS_VERSION }}
           channelId: live
       - name: Check the live site serves this build
         env:
