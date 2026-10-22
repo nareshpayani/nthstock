@@ -360,6 +360,10 @@ export function createOrdersMock(
     pinPrice: (token: InstrumentToken, ltp: number) => {
       desk.pinPrice(token, ltp);
     },
+    /** Caps LIMIT fills per tick in one instrument (the demo Simulator's split fills); null lifts it. */
+    setFillCap: (token: InstrumentToken, maxQty: number | null) => {
+      desk.setFillCap(token, maxQty);
+    },
     /** Syncs every account now (what the sweep timer does). */
     sweep: () => desk.sweep(),
     dispose() {
