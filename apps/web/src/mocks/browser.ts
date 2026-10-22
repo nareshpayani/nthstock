@@ -67,7 +67,11 @@ export async function startMockWorker(
     auth: { ...now, ...(storage ? { storage } : {}) },
     ...(listStorage ? { watchlists: { storage: listStorage } } : {}),
     // Paper orders too (T-132); the sweep pushes 9:15 AMO release and end of day.
-    orders: { sweepMs: ORDER_SWEEP_MS, ...(listStorage ? { storage: listStorage } : {}) },
+    orders: {
+      sweepMs: ORDER_SWEEP_MS,
+      marketHours: config.mockMarketOpen ? 'alwaysOpen' : 'nse',
+      ...(listStorage ? { storage: listStorage } : {}),
+    },
   });
   const worker = setupWorker(
     ...(testControls ? testControls.handlers({ orders, adapter }) : []),
