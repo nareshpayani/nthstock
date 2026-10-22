@@ -104,3 +104,21 @@ export {
   type DemoTrade,
   type DemoWatchlistDef,
 } from './demoSeed.js';
+export {
+  armedState,
+  ceilToTick,
+  floorToTick,
+  modifyTrailingStop,
+  previewTrailingStop,
+  stepTrailingStop,
+  stopFromWatermark,
+  trailPaise,
+  validateStopPrice,
+  validateTrailingStop,
+  type TrailingStopCheck,
+  type TrailingStopCheckInput,
+  type TrailingStopModify,
+  type TrailingStopPreview,
+  type TrailingStopState,
+  type TrailingStopStep,
+} from './trailingStop.js';
