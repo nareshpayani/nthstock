@@ -88,6 +88,11 @@ export type WsClient = {
    */
   connect(): void;
   onMessage(listener: (message: WsServerMessage) => void): () => void;
+  /**
+   * Sends `focus` (ADR 0012): the socket switches to `accountDelta` frames, with the depth of this
+   * instrument. Remembered and sent again after a reconnect; opens the socket if needed.
+   */
+  focus(symbol: string | null, exchange?: Exchange): void;
   onStatus(listener: (status: WsStatus) => void): () => void;
   status(): WsStatus;
   /** Number of symbols currently wanted (for diagnostics and tests). */
@@ -130,6 +135,8 @@ export function createWsClient(options: WsClientOptions): WsClient {
   let awaitingPong: number | null = null;
   let syncQueued = false;
   let disposed = false;
+  /** The last `focus`, resent on every (re)connect; null until the first. */
+  let focused: { symbol: string | null; exchange: Exchange } | null = null;
 
   const setStatus = (next: WsStatus) => {
     if (next === status) return;
@@ -216,7 +223,7 @@ export function createWsClient(options: WsClientOptions): WsClient {
     const message = parsed.data;
     if (message.type === 'pong' && message.id === awaitingPong) awaitingPong = null;
     if (message.type === 'instruments') decoder.learn(message.instruments);
-    if (message.type === 'quotes') emitQuotes(message.quotes);
+    if (message.type === 'quotes' || message.type === 'accountDelta') emitQuotes(message.quotes);
     for (const listener of [...messageListeners]) listener(message);
   };
 
@@ -280,6 +287,7 @@ export function createWsClient(options: WsClientOptions): WsClient {
       sent.clear();
       setStatus('open');
       startHeartbeat();
+      if (focused) send({ v: WS_PROTOCOL_VERSION, type: 'focus', ...focused });
       sync();
     };
     next.onmessage = (event) => {
@@ -321,6 +329,14 @@ export function createWsClient(options: WsClientOptions): WsClient {
     onMessage(listener) {
       messageListeners.add(listener);
       return () => messageListeners.delete(listener);
+    },
+    focus(symbol, exchange = 'NSE') {
+      focused = { symbol, exchange };
+      if (socket?.readyState === OPEN && status === 'open') {
+        send({ v: WS_PROTOCOL_VERSION, type: 'focus', symbol, exchange });
+      } else if (!disposed && !socket && reconnectTimer === null) {
+        connect();
+      }
     },
     onStatus(listener) {
       statusListeners.add(listener);

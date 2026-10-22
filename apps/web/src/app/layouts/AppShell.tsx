@@ -2,6 +2,7 @@ import { Sheet } from '@nthstock/ui';
 import { Link } from '@tanstack/react-router';
 import { OrderTicketHost } from '@/features/orderTicket';
 import { OrderUpdatesBridge } from '@/features/orders';
+import { TradingIntentTimeouts } from '../live/TradingIntentTimeouts';
 import { useEffect, useRef, type ReactNode } from 'react';
 import { useShortcut } from '@/shared/hooks/useShortcut';
 import { useSearchFocusStore } from '@/shared/lib/searchFocusStore';
@@ -104,6 +105,7 @@ export function AppShell({ children }: AppShellProps) {
       <ShortcutHelpDialog open={helpOpen} onOpenChange={setHelpOpen} />
       <OrderTicketHost />
       <OrderUpdatesBridge />
+      <TradingIntentTimeouts />
     </div>
   );
 }
