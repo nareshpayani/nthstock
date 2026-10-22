@@ -88,6 +88,10 @@ export async function startMockWorker(
     }.`,
   );
   if (testControls) console.info('[MSW] Test controls on (VITE_TEST_CONTROLS): E2E build only.');
+  // Trailing-stop steps are saved at most every 2 s; a hidden tab may be closed, so save now.
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') orders.flush();
+  });
   // Chrome stops idle service workers; this re-registers the tab with a restarted one.
   const keeper = startWorkerKeeper();
   return { worker, adapter, orders, ensureActive: keeper.ensureActive };

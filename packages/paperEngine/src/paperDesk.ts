@@ -1,4 +1,5 @@
 import type {
+  AccountState,
   Exchange,
   Holding,
   Instrument,
@@ -22,7 +23,14 @@ import type {
   TrailingStopStatus,
 } from '@nthstock/contracts';
 import { PAGE_LIMIT_DEFAULT } from '@nthstock/contracts';
-import { istDateKey, nseHolidays2026, type Clock, type HolidayTable } from '@nthstock/utils';
+import {
+  fromIst,
+  istDateKey,
+  nseHolidays2026,
+  toIstParts,
+  type Clock,
+  type HolidayTable,
+} from '@nthstock/utils';
 import { createEngineContext, type PriceSource } from './context.js';
 import type { InstrumentInfo, InstrumentSource } from './instruments.js';
 import type { MarketHours } from './orderValidation.js';
@@ -95,6 +103,13 @@ type CachedInstrument = { info: InstrumentInfo | null; day: string };
 type CachedClose = { prevClose: number | null; day: string };
 
 /**
+ * A tick at most this old runs the engines at its own timestamp: the catch-up replay after a
+ * paused tab (SPEC-TFC-1 §6.7), so session events fall between the right ticks. Older ticks (a
+ * fixed test quote) run at the clock's time.
+ */
+const REPLAY_WINDOW_MS = 30 * 60_000;
+
+/**
  * The paper-trading desk: one `PaperEngine` per user, all fed by one market (ADR 0004). Both mock
  * backends run it (apps/api's orders module and the MSW order handlers), so they behave alike.
  *
@@ -134,6 +149,10 @@ export class PaperDesk {
   readonly #instrumentSource: InstrumentSource;
   #symbolMaster: Promise<Map<InstrumentToken, Instrument>> | null = null;
   #disposed = false;
+  /** While a batch of ticks is ingested, the instant they happened; the engines' "now". */
+  #tickAt: Date | null = null;
+  /** What the engines read as now: the tick being ingested, else the clock. */
+  readonly #engineClock: Clock = { now: () => this.#tickAt ?? this.#options.clock.now() };
 
   constructor(options: PaperDeskOptions) {
     this.#options = options;
@@ -259,6 +278,38 @@ export class PaperDesk {
     });
   }
 
+  /**
+   * The account's trading state at one `seq` (ADR 0012): today's and the working orders, today's
+   * positions and trailing stops, and the funds. The trading store loads it on start and after a
+   * gap in `accountDelta` frames.
+   */
+  async accountState(userId: string): Promise<AccountState> {
+    const { seq, orders, trailingStops, funds } = this.#change(userId, (engine) => {
+      engine.sync();
+      const day = toIstParts(this.#options.clock.now());
+      const since = fromIst(day.year, day.month, day.day, 0).toISOString();
+      const today = (record: { updatedAt: string }) => record.updatedAt >= since;
+      return {
+        seq: engine.seq,
+        orders: engine.orders().filter((order) => LIVE.has(order.status) || today(order)),
+        trailingStops: engine
+          .trailingStops()
+          .filter(
+            (stop) => STEPPED.has(stop.status) || stop.status === 'PENDING_ENTRY' || today(stop),
+          ),
+        funds: engine.fundsSummary(),
+      };
+    });
+    const positions = await this.positions(userId);
+    return {
+      seq,
+      orders: [...orders].reverse(),
+      positions,
+      trailingStops: [...trailingStops].reverse(),
+      funds,
+    };
+  }
+
   /** Today's trailing stops, newest first (SPEC-TFC-1 §10.6). */
   trailingStops(userId: string): TrailingStop[] {
     const all = this.#change(userId, (engine) => {
@@ -380,17 +431,42 @@ export class PaperDesk {
 
   // ---- Feed ----------------------------------------------------------------------------------
 
-  /** A batch of ticks: updates prices, then syncs the engines with live orders in them. */
+  /**
+   * A batch of ticks: updates prices, then syncs the engines with live orders or stops in them.
+   * A recent tick (a replayed one after a paused tab included) runs the engines at its own
+   * timestamp, so a 15:20 square-off lands between the ticks either side of it (SPEC-TFC-1 §6.7).
+   */
   ingest(quotes: readonly Quote[]): void {
     if (this.#disposed) return;
     const users = new Set<string>();
+    let at = Number.NEGATIVE_INFINITY;
     for (const quote of quotes) {
       if (quote.ltp <= 0) continue;
       this.#ticks.set(quote.token, quote.ltp);
       this.#countTick(quote.token);
+      at = Math.max(at, Date.parse(quote.ts));
       for (const userId of this.#liveUsers.get(quote.token) ?? []) users.add(userId);
     }
-    for (const userId of users) this.#syncUser(userId);
+    const now = this.#options.clock.now().getTime();
+    this.#tickAt = at <= now && now - at <= REPLAY_WINDOW_MS ? new Date(at) : null;
+    try {
+      for (const userId of users) this.#syncUser(userId);
+    } finally {
+      this.#tickAt = null;
+    }
+  }
+
+  /**
+   * Symbols with a live order or an active trailing stop, for any user: the instruments the mock
+   * market replays tick by tick after a paused tab (SPEC-TFC-1 §6.7).
+   */
+  activeSymbols(): string[] {
+    const symbols: string[] = [];
+    for (const token of this.#liveUsers.keys()) {
+      const symbol = this.#instruments.get(token)?.info?.symbol;
+      if (symbol !== undefined) symbols.push(symbol);
+    }
+    return symbols;
   }
 
   /**
@@ -494,9 +570,9 @@ export class PaperDesk {
   }
 
   #newEngine(userId: string, snapshot?: PaperEngineSnapshot): PaperEngine {
-    const { clock, newId, onOrderUpdate, onTrailingStopUpdate, trailingStops } = this.#options;
+    const { newId, onOrderUpdate, onTrailingStopUpdate, trailingStops } = this.#options;
     return new PaperEngine({
-      ctx: createEngineContext({ clock, prices: this.#prices, nextId: newId }),
+      ctx: createEngineContext({ clock: this.#engineClock, prices: this.#prices, nextId: newId }),
       instruments: this.#instrumentSource,
       holidays: this.#holidays,
       fillCap: (token) => this.fillCap(token),

@@ -443,6 +443,7 @@ export const wsClientFixtures: WsClientMessage[] = [
   { v: 1, type: 'subscribe', symbols: ['INFY', 'TCS'], exchange: 'NSE' },
   { v: 1, type: 'unsubscribe', symbols: ['TCS'], exchange: 'NSE' },
   { v: 1, type: 'ping', id: 7 },
+  { v: 1, type: 'focus', symbol: 'INFY', exchange: 'NSE' },
 ];
 
 export const wsServerFixtures: WsServerMessage[] = [

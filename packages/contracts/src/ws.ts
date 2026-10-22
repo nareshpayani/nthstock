@@ -60,8 +60,27 @@ export const WsPing = z.object({
 });
 export type WsPing = z.infer<typeof WsPing>;
 
+/**
+ * Switches the connection to `accountDelta` frames (ADR 0012) and names the instrument the user
+ * is looking at: each frame then carries its depth, and the mock market ticks it every 250 ms
+ * (SPEC-TFC-1 TFC-11). Send it again when the instrument changes; `symbol: null` keeps the frames
+ * without depth. A connection that never sends it keeps `quotes` and `orderUpdate` messages.
+ */
+export const WsFocus = z.object({
+  v,
+  type: z.literal('focus'),
+  symbol: TradingSymbol.nullable(),
+  exchange: Exchange.default('NSE'),
+});
+export type WsFocus = z.infer<typeof WsFocus>;
+
 /** Messages the client sends. */
-export const WsClientMessage = z.discriminatedUnion('type', [WsSubscribe, WsUnsubscribe, WsPing]);
+export const WsClientMessage = z.discriminatedUnion('type', [
+  WsSubscribe,
+  WsUnsubscribe,
+  WsPing,
+  WsFocus,
+]);
 export type WsClientMessage = z.infer<typeof WsClientMessage>;
 
 /**
