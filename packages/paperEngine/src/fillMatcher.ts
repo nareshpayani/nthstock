@@ -17,17 +17,35 @@ export type Fill = {
   price: number;
 };
 
+export type MatchOptions = {
+  /**
+   * The most shares a LIMIT order may fill on this tick (SPEC-TFC-1 TFC-10); the rest waits for
+   * later ticks. MARKET orders always fill in full. Defaults to no cap.
+   */
+  maxQty?: number | null;
+  /**
+   * True when the order has just arrived (placed, modified or released at the open) rather than
+   * resting on the book. A marketable limit then fills at the better of its limit and the LTP, as
+   * an exchange fills it against the best opposite price (SPEC-TFC-1 §10.3).
+   */
+  onArrival?: boolean;
+};
+
 /**
  * Pure fill matcher (ADR 0004). Given an order and the current LTP in paise, returns the fill or
  * `null` when the order does not fill at this price.
  *
  * - MARKET fills the whole remaining quantity at the LTP.
- * - LIMIT BUY fills the whole remaining quantity at the limit when LTP ≤ limit.
- * - LIMIT SELL fills the whole remaining quantity at the limit when LTP ≥ limit.
+ * - LIMIT BUY fills when LTP ≤ limit, LIMIT SELL when LTP ≥ limit: at the limit while resting, at
+ *   the better of limit and LTP on arrival. The fill is the remaining quantity, up to `maxQty`.
  *
  * An order with nothing left to fill never fills again.
  */
-export function matchFill(order: MatchableOrder, ltp: number): Fill | null {
+export function matchFill(
+  order: MatchableOrder,
+  ltp: number,
+  options: MatchOptions = {},
+): Fill | null {
   assertPositivePaise(ltp, 'LTP');
   assertQty(order.qty, 'Order quantity');
   const filledQty = order.filledQty ?? 0;
@@ -45,7 +63,13 @@ export function matchFill(order: MatchableOrder, ltp: number): Fill | null {
   if (order.price === null) throw new RangeError('A limit order needs a price');
   assertPositivePaise(order.price, 'Limit price');
   const crosses = order.side === 'BUY' ? ltp <= order.price : ltp >= order.price;
-  return crosses ? { qty: remaining, price: order.price } : null;
+  if (!crosses) return null;
+  const { maxQty = null, onArrival = false } = options;
+  if (maxQty !== null) assertQty(maxQty, 'Fill cap');
+  return {
+    qty: maxQty === null ? remaining : Math.min(remaining, maxQty),
+    price: onArrival ? ltp : order.price,
+  };
 }
 
 /** The result of running an order along a scripted price path. */

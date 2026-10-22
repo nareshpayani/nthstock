@@ -86,6 +86,23 @@ describe('FundsLedger (T-066)', () => {
     expect(ledger.available).toBe(10_00_000_00 - 995_00);
   });
 
+  it('settles a partial BUY fill: releases its share of the block, keeps the rest (T05)', () => {
+    const ledger = newLedger();
+    ledger.block('o1', 1_000_00); // 10 × ₹100 limit
+    expect(ledger.settleBuy('o1', 300_00, 300_00)).toMatchObject({
+      ok: true,
+      entries: [
+        { type: 'ORDER_RELEASE', amount: 300_00 },
+        { type: 'TRADE_DEBIT', amount: -300_00 },
+      ],
+    });
+    expect(ledger.blockedFor('o1')).toBe(700_00);
+    expect(ledger.settleBuy('o1', 700_00)).toMatchObject({ ok: true });
+    expect(ledger.blocked).toBe(0);
+    expect(ledger.available).toBe(10_00_000_00 - 1_000_00);
+    expect(() => ledger.settleBuy('o2', 1_00, 1)).toThrow(RangeError);
+  });
+
   it('settles a BUY fill with no block (MARKET placed and filled at once)', () => {
     const ledger = newLedger();
     expect(ledger.settleBuy('o1', 500_00)).toMatchObject({

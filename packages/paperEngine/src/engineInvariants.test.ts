@@ -6,10 +6,16 @@ import { INFY, TCS, createHarness, ist, seeded } from './testHarness.js';
 const TOKENS = [INFY, TCS];
 const SEED_HOLDINGS = { [INFY.token]: 20, [TCS.token]: 5 } as Record<number, number>;
 
-describe('PaperEngine randomised multi-day runs (T-127 to T-130)', () => {
-  it.each([1, 7, 42, 2026, 90210])(
-    'keeps its invariants for seed %i',
-    (seed) => {
+// Each seed runs whole fills and, under a per-tick cap of 3, partial fills (SPEC-TFC-1 §10.3).
+const RUNS = [1, 7, 42, 2026, 90210].flatMap((seed) => [
+  [seed, null],
+  [seed, 3],
+]) as [number, number | null][];
+
+describe('PaperEngine randomised multi-day runs (T-127 to T-130, T05)', () => {
+  it.each(RUNS)(
+    'keeps its invariants for seed %i with fill cap %s',
+    (seed, cap) => {
       const rand = seeded(seed);
       const int = (min: number, max: number) => min + Math.floor(rand() * (max - min + 1));
       const pick = <T>(items: readonly T[]): T => items[int(0, items.length - 1)] as T;
@@ -20,6 +26,7 @@ describe('PaperEngine randomised multi-day runs (T-127 to T-130)', () => {
           [INFY.token, { qty: 20, investedValue: 28_000_00 }],
           [TCS.token, { qty: 5, investedValue: 18_000_00 }],
         ],
+        fillCap: () => cap,
       });
 
       for (let step = 0; step < 400; step += 1) {
@@ -37,6 +44,7 @@ describe('PaperEngine randomised multi-day runs (T-127 to T-130)', () => {
             product: pick<ProductType>(['DELIVERY', 'INTRADAY']),
             qty: int(1, 20),
             ...(type === 'LIMIT' ? { price: ltp + offsetTicks * 5 } : {}),
+            ...(rand() < 0.2 ? { validity: 'IOC' as const } : {}),
           });
         } else if (op === 4 && live.length > 0) {
           const target = pick(live);
@@ -72,6 +80,23 @@ describe('PaperEngine randomised multi-day runs (T-127 to T-130)', () => {
         for (const o of orders) {
           if (o.status !== 'AMO' && o.status !== 'OPEN')
             expect(engine.ledger.blockedFor(o.id)).toBe(0);
+        }
+
+        // Fills: never more than the order, IOC never rests, a partly filled LIMIT BUY holds cash
+        // for exactly what is left, and the average is the volume-weighted one from the history.
+        for (const o of orders) {
+          expect(o.filledQty).toBeLessThanOrEqual(o.qty);
+          if (o.validity === 'IOC') expect(o.status === 'OPEN' || o.status === 'AMO').toBe(false);
+          if (o.status === 'OPEN' && o.side === 'BUY' && o.type === 'LIMIT' && o.price !== null) {
+            expect(engine.ledger.blockedFor(o.id)).toBe((o.qty - o.filledQty) * (o.price ?? 0));
+          }
+          if (cap === null && o.status === 'OPEN') expect(o.filledQty).toBe(0);
+          const fills = (engine.orderHistory(o.id) ?? []).filter((e) => e.fillPrice !== null);
+          const qty = fills.reduce((t, e) => t + (e.fillQty ?? 0), 0);
+          const value = fills.reduce((t, e) => t + (e.fillPrice ?? 0) * (e.fillQty ?? 0), 0);
+          expect(qty).toBe(o.filledQty);
+          if (qty > 0) expect(Math.abs((o.avgFillPrice ?? 0) * qty - value)).toBeLessThan(qty);
+          else expect(o.avgFillPrice).toBeNull();
         }
 
         // Status follows the clock: AMOs only while closed, OPEN only while open.

@@ -6,6 +6,7 @@ import {
   Id,
   InstrumentToken,
   IsoUtc,
+  Paise,
   Seq,
   TickPrice,
   TradingSymbol,
@@ -110,7 +111,11 @@ export const Order = z.object({
   /** Limit price; null for MARKET. */
   price: TickPrice.nullable(),
   filledQty: Count,
-  avgFillPrice: TickPrice.nullable(),
+  /**
+   * Volume-weighted average of the fills so far, rounded to the paisa. Off the tick once fills at
+   * different prices are averaged (SPEC-TFC-1 §10.3).
+   */
+  avgFillPrice: Paise.positive().nullable(),
   status: OrderStatus,
   /** Plain-language reason when REJECTED. */
   statusReason: z.string().max(200).nullable(),

@@ -4,7 +4,8 @@ import type { OrderStatus } from '@nthstock/contracts';
  * What can happen to an order after it is stored.
  *
  * - `RELEASE`: an AMO goes to the exchange at the next session's 9:15 IST.
- * - `FILL`: the fill matcher fills the whole remaining quantity.
+ * - `PARTIAL_FILL`: some of the remaining quantity fills; the order stays OPEN (SPEC-TFC-1 §10.3).
+ * - `FILL`: the rest of the quantity fills.
  * - `MODIFY`: qty, type or price change; the status stays the same.
  * - `CANCEL`: by the user, or by the engine at the 15:20 square-off (intraday) or 15:30 close.
  * - `REJECT`: an AMO fails validation again when it is released (price, cash or holdings moved).
@@ -12,10 +13,11 @@ import type { OrderStatus } from '@nthstock/contracts';
  * A new order that fails validation is stored straight as REJECTED; that is its initial status,
  * not a transition.
  */
-export type OrderEvent = 'RELEASE' | 'FILL' | 'MODIFY' | 'CANCEL' | 'REJECT';
+export type OrderEvent = 'RELEASE' | 'PARTIAL_FILL' | 'FILL' | 'MODIFY' | 'CANCEL' | 'REJECT';
 
 export const ORDER_EVENTS: readonly OrderEvent[] = [
   'RELEASE',
+  'PARTIAL_FILL',
   'FILL',
   'MODIFY',
   'CANCEL',
@@ -27,7 +29,7 @@ export const ORDER_TRANSITIONS: Readonly<
   Record<OrderStatus, Readonly<Partial<Record<OrderEvent, OrderStatus>>>>
 > = {
   AMO: { RELEASE: 'OPEN', MODIFY: 'AMO', CANCEL: 'CANCELLED', REJECT: 'REJECTED' },
-  OPEN: { FILL: 'EXECUTED', MODIFY: 'OPEN', CANCEL: 'CANCELLED' },
+  OPEN: { PARTIAL_FILL: 'OPEN', FILL: 'EXECUTED', MODIFY: 'OPEN', CANCEL: 'CANCELLED' },
   EXECUTED: {},
   CANCELLED: {},
   REJECTED: {},
@@ -56,6 +58,7 @@ const STATUS_WORDS: Record<OrderStatus, string> = {
 
 const EVENT_WORDS: Record<OrderEvent, string> = {
   RELEASE: 'sent to the exchange',
+  PARTIAL_FILL: 'partly filled',
   FILL: 'filled',
   MODIFY: 'modified',
   CANCEL: 'cancelled',

@@ -8,6 +8,12 @@ import type { Clock } from '@nthstock/utils';
  */
 export interface PriceSource {
   getLtp(token: InstrumentToken): number | null;
+  /**
+   * Counts the ticks of `token`: a number that changes on every new price, even a repeat of the
+   * last one. The engine fills a capped order once per tick by it (SPEC-TFC-1 TFC-10). Sources
+   * without it make every match a tick.
+   */
+  tickSeq?(token: InstrumentToken): number;
 }
 
 /** Issues opaque ids (orders, ledger entries). Injected so runs are reproducible. */
@@ -31,6 +37,8 @@ export type EngineContext = {
   nowIso(): IsoUtc;
   /** LTP in paise, or `null` when unknown. Throws if the source returns anything but a positive integer. */
   ltp(token: InstrumentToken): number | null;
+  /** The source's tick count for `token`, or `null` when the source does not count ticks. */
+  tick(token: InstrumentToken): number | null;
   nextId(): string;
 };
 
@@ -45,6 +53,7 @@ export function createEngineContext(deps: EngineDeps): EngineContext {
       assertPositivePaise(price, `LTP for token ${String(token)}`);
       return price;
     },
+    tick: (token) => deps.prices.tickSeq?.(token) ?? null,
     nextId,
   };
 }
@@ -58,7 +67,10 @@ export function createSequentialIds(prefix = 'pe'): IdGenerator {
   };
 }
 
-/** A price source backed by a mutable map, for tests, scripted price paths and simple wiring. */
+/**
+ * A price source backed by a mutable map, for tests, scripted price paths and simple wiring. Every
+ * `set` is a tick.
+ */
 export type MapPriceSource = PriceSource & {
   set(token: InstrumentToken, ltp: number): void;
   delete(token: InstrumentToken): void;
@@ -68,13 +80,16 @@ export function createMapPriceSource(
   initial: Iterable<readonly [InstrumentToken, number]> = [],
 ): MapPriceSource {
   const prices = new Map<InstrumentToken, number>();
+  const ticks = new Map<InstrumentToken, number>();
   const set = (token: InstrumentToken, ltp: number) => {
     assertPositivePaise(ltp, `LTP for token ${String(token)}`);
     prices.set(token, ltp);
+    ticks.set(token, (ticks.get(token) ?? 0) + 1);
   };
   for (const [token, ltp] of initial) set(token, ltp);
   return {
     getLtp: (token) => prices.get(token) ?? null,
+    tickSeq: (token) => ticks.get(token) ?? 0,
     set,
     delete: (token) => {
       prices.delete(token);
