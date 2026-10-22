@@ -29,8 +29,9 @@ import {
   type HolidayTable,
 } from '@nthstock/utils';
 import type { MarketDataAdapter, QuoteListener, Unsubscribe } from './adapter.js';
-import { RANGE_YEARS, generateCandles, latestSessionOpen } from './candles.js';
+import { CANDLE_SPECS, RANGE_YEARS, generateCandles, latestSessionOpen } from './candles.js';
 import { generateDepth } from './depth.js';
+import { MinuteBars, mergeMinuteBars } from './minuteBars.js';
 import { aggregateValue, computeIndexLevel } from './indexLevels.js';
 import {
   MOVERS_LIMIT_DEFAULT,
@@ -93,8 +94,17 @@ export type MockMarketDataAdapterOptions = {
   alwaysOpen?: boolean;
   /** Milliseconds between ticks while someone is subscribed. Default 1,000. */
   tickIntervalMs?: number;
+  /** Milliseconds between ticks of the focused instrument (SPEC-TFC-1 TFC-11). Default 250. */
+  focusIntervalMs?: number;
+  /** The longest gap replayed tick by tick (SPEC-TFC-1 §6.7). Default 30 minutes. */
+  replayLimitMs?: number;
   scheduler?: Scheduler;
 };
+
+/** Ticks a `nudge` spreads its move over. */
+export const NUDGE_TICKS = 4;
+const DEFAULT_FOCUS_INTERVAL_MS = 250;
+const DEFAULT_REPLAY_LIMIT_MS = 30 * 60_000;
 
 /** Volatility used for index candles (constituents are diversified). */
 const INDEX_VOLATILITY = 0.15;
@@ -118,10 +128,26 @@ type Entry = EquityEntry | IndexEntry;
 
 type Subscription = { symbols: ReadonlySet<string>; listener: QuoteListener };
 
+/** A nudge still being applied: the per-tick factor and the ticks left. */
+type Nudge = { factor: number; left: number };
+
+/** Quotes stepped in one `advance`, by tick time (epoch ms), then by symbol. */
+type TickEvents = Map<number, Map<string, Quote>>;
+
 /**
  * The mock market: seeded symbol master, GBM ticks, index levels, candles, depth, curated lists,
  * movers and search, all in memory and isomorphic. Ticks run only while NSE is open (per the
  * injected clock and holiday table) unless `alwaysOpen` is set, and only while someone is subscribed.
+ *
+ * The simulated feed (SPEC-TFC-1 §6.7, TFC-11, PLAN-TFC-1 T07):
+ * - Every instrument has its own seeded random stream, so one can advance without the others.
+ * - The focused instrument (`focus`) ticks every 250 ms, the rest every second.
+ * - When the timer fires more than two intervals late (a phone paused the tab), the instruments in
+ *   `setReplaySymbols` (working orders, active stops) replay every missed tick, in order and with
+ *   its timestamp, up to 30 minutes; every other instrument, and a longer gap, moves in one exact
+ *   step.
+ * - Ticks build 1-minute bars that replace the generated ones in the 1D candles.
+ * - `nudge` and `gap` move one instrument's real feed for the demo Simulator, so every screen agrees.
  */
 export class MockMarketDataAdapter implements MarketDataAdapter {
   readonly master: SymbolMaster;
@@ -130,8 +156,11 @@ export class MockMarketDataAdapter implements MarketDataAdapter {
   private readonly holidays: HolidayTable;
   private readonly alwaysOpen: boolean;
   private readonly tickIntervalMs: number;
+  private readonly focusIntervalMs: number;
+  private readonly replayLimitMs: number;
   private readonly scheduler: Scheduler;
-  private readonly rng: Rng;
+  /** Each instrument's own random stream for this session, created on its first tick. */
+  private readonly rngs = new Map<string, Rng>();
   private readonly entries = new Map<string, Entry>();
   private readonly equityEntries: EquityEntry[] = [];
   private readonly indexEntries: IndexEntry[] = [];
@@ -140,8 +169,18 @@ export class MockMarketDataAdapter implements MarketDataAdapter {
   /** Indices each equity is a constituent of, in index-definition order. */
   private readonly membership = new Map<string, IndexRef[]>();
   private readonly subscriptions = new Set<Subscription>();
+  private readonly bars = new Map<string, MinuteBars>();
+  private readonly nudges = new Map<string, Nudge>();
+  private readonly replaySymbols = new Set<string>();
+  private focused: string | null = null;
+  /** When each lane last ticked (epoch ms). */
+  private lastSlowAt: number;
+  private lastFastAt: number;
+  /** Fast-lane ticks since the slow lane last ran, so a clock that stands still still ticks it. */
+  private fastSinceSlow = 0;
   private sessionKey: string;
   private timer: unknown = null;
+  private timerMs = 0;
   private disposed = false;
 
   constructor(options: MockMarketDataAdapterOptions = {}) {
@@ -153,13 +192,16 @@ export class MockMarketDataAdapter implements MarketDataAdapter {
     this.holidays = options.holidays ?? nseHolidays2026;
     this.alwaysOpen = options.alwaysOpen ?? false;
     this.tickIntervalMs = options.tickIntervalMs ?? 1000;
+    this.focusIntervalMs = options.focusIntervalMs ?? DEFAULT_FOCUS_INTERVAL_MS;
+    this.replayLimitMs = options.replayLimitMs ?? DEFAULT_REPLAY_LIMIT_MS;
     this.scheduler = options.scheduler ?? globalScheduler;
 
     const now = this.clock.now();
+    this.lastSlowAt = now.getTime();
+    this.lastFastAt = now.getTime();
     const open = this.isOpen();
     // The session the starting prices belong to: today when ticking, else the last one that ran.
     this.sessionKey = open ? istDateKey(now) : istDateKey(latestSessionOpen(now, this.holidays));
-    this.rng = mulberry32(hashSeed(this.seed, 'ticks', this.sessionKey));
     const elapsed = open ? this.elapsedFraction(now) : 1;
 
     for (const master of this.master.equities) {
@@ -410,42 +452,258 @@ export class MockMarketDataAdapter implements MarketDataAdapter {
 
   /**
    * Advances every instrument one tick and notifies subscribers. Does nothing (and returns false)
-   * while the market is closed. The timer calls this; tests and MSW handlers may call it directly.
+   * while the market is closed. Tests and MSW handlers call it directly; the timer runs `advance`.
    */
   tick(): boolean {
+    if (!this.prepareTick()) return false;
+    const now = this.clock.now().getTime();
+    const wanted = this.wantedSymbols();
+    const events: TickEvents = new Map();
+    for (const entry of this.equityEntries) {
+      this.step(entry, this.tickIntervalMs, now, 1, wanted, events);
+    }
+    this.lastSlowAt = Math.max(this.lastSlowAt, now);
+    this.lastFastAt = Math.max(this.lastFastAt, now);
+    this.finishTick(now, wanted, events);
+    return true;
+  }
+
+  /**
+   * One timer beat, by the clock (SPEC-TFC-1 §6.7): the focused instrument's lane every beat, the
+   * other instruments once a second. A lane that is more than two intervals late catches up:
+   * instruments in `setReplaySymbols` replay each missed tick with its own timestamp (up to the
+   * replay limit), the rest move in one exact step. Subscribers get the ticks in time order.
+   * Returns false while the market is closed.
+   */
+  advance(): boolean {
+    if (!this.prepareTick()) return false;
+    const now = this.clock.now().getTime();
+    const wanted = this.wantedSymbols();
+    const events: TickEvents = new Map();
+    const focused = this.focused === null ? undefined : this.entries.get(this.focused);
+
+    let slowDue = true;
+    if (focused?.kind === 'equity') {
+      this.runLane([focused], this.focusIntervalMs, this.lastFastAt, now, wanted, events);
+      this.lastFastAt = now;
+      this.fastSinceSlow += 1;
+      slowDue =
+        now - this.lastSlowAt >= this.tickIntervalMs ||
+        this.fastSinceSlow * this.focusIntervalMs >= this.tickIntervalMs;
+    }
+    if (slowDue) {
+      const rest = this.equityEntries.filter((entry) => entry !== focused);
+      this.runLane(rest, this.tickIntervalMs, this.lastSlowAt, now, wanted, events);
+      this.lastSlowAt = now;
+      this.fastSinceSlow = 0;
+    }
+    this.finishTick(now, wanted, events);
+    return true;
+  }
+
+  /**
+   * Ticks `symbol` every 250 ms instead of every second (SPEC-TFC-1 TFC-11): the instrument on the
+   * user's screen. `null` puts every instrument back on the one-second lane.
+   */
+  focus(symbol: string | null): void {
+    const entry = symbol === null ? undefined : this.entries.get(symbol);
+    const next = entry?.kind === 'equity' ? entry.master.instrument.symbol : null;
+    if (next === this.focused) return;
+    this.focused = next;
+    this.lastFastAt = this.clock.now().getTime();
+    this.fastSinceSlow = 0;
+    this.restartTimer();
+  }
+
+  /** The focused instrument, or null. */
+  focusedSymbol(): string | null {
+    return this.focused;
+  }
+
+  /**
+   * The instruments whose missed ticks are replayed one by one after a late timer: those with a
+   * working order or an active trailing stop (SPEC-TFC-1 §6.7). Replaces the previous set.
+   */
+  setReplaySymbols(symbols: Iterable<string>): void {
+    this.replaySymbols.clear();
+    for (const symbol of symbols) {
+      if (this.entries.get(symbol)?.kind === 'equity') this.replaySymbols.add(symbol);
+    }
+  }
+
+  /**
+   * Moves `symbol` by `ratio` (0.01 is +1%) over its next `NUDGE_TICKS` ticks, on top of its random
+   * walk: the demo Simulator's Rally and Pull back. False for an unknown symbol or an index.
+   */
+  nudge(symbol: string, ratio: number): boolean {
+    const entry = this.entries.get(symbol);
+    if (entry?.kind !== 'equity') return false;
+    assertRatio(ratio);
+    this.nudges.set(symbol, { factor: Math.pow(1 + ratio, 1 / NUDGE_TICKS), left: NUDGE_TICKS });
+    return true;
+  }
+
+  /**
+   * Moves `symbol` by `ratio` (−0.03 is −3%) at once, as one tick that subscribers receive now:
+   * the demo Simulator's Gap. Held inside the circuit band. Returns the new quote, or null for an
+   * unknown symbol, an index, or a closed market.
+   */
+  gap(symbol: string, ratio: number): Quote | null {
+    const entry = this.entries.get(symbol);
+    if (entry?.kind !== 'equity') return null;
+    assertRatio(ratio);
+    if (!this.prepareTick()) return null;
+    const now = this.clock.now().getTime();
+    movePrice(entry.state, 1 + ratio);
+    this.bars.get(symbol)?.record(now, entry.state.ltp);
+    const events: TickEvents = new Map([[now, new Map([[symbol, this.quoteOf(entry, now)]])]]);
+    this.finishTick(now, this.wantedSymbols(), events);
+    return this.quoteOf(entry, now);
+  }
+
+  /** False while closed or disposed; otherwise rolls into a new session when the day changed. */
+  private prepareTick(): boolean {
     if (this.disposed || !this.isOpen()) return false;
     const key = istDateKey(this.clock.now());
     if (key !== this.sessionKey) this.rollSession(key);
-
-    const dtYears = tickYears(this.tickIntervalMs);
-    const ticksPerSession = (SESSION_MINUTES * 60_000) / this.tickIntervalMs;
-    for (const entry of this.equityEntries) {
-      applyTick(entry.state, {
-        params: entry.gbm,
-        dtYears,
-        rng: this.rng,
-        volumePerTick: (entry.master.sharesOutstanding * DAILY_TURNOVER) / ticksPerSession,
-      });
-    }
-    for (const entry of this.indexEntries) this.refreshIndex(entry);
-
-    for (const { symbols, listener } of [...this.subscriptions]) {
-      if (symbols.size === 0) continue;
-      const quotes: Quote[] = [];
-      for (const symbol of symbols) {
-        const entry = this.entries.get(symbol);
-        if (entry) quotes.push(this.quoteOf(entry));
-      }
-      listener(quotes);
-    }
     return true;
+  }
+
+  /**
+   * Ticks `lane` from `last` to `now` at `intervalMs`: one tick when the timer is up to two
+   * intervals late, and past that each missed tick for the replay set, one exact step for the rest.
+   */
+  private runLane(
+    lane: readonly EquityEntry[],
+    intervalMs: number,
+    last: number,
+    now: number,
+    wanted: ReadonlySet<string>,
+    events: TickEvents,
+  ): void {
+    const elapsed = now - last;
+    const missed = elapsed > 2 * intervalMs ? Math.floor(elapsed / intervalMs) : 1;
+    for (const entry of lane) {
+      const replay =
+        this.replaySymbols.has(entry.master.instrument.symbol) &&
+        missed * intervalMs <= this.replayLimitMs;
+      if (missed === 1) {
+        this.step(entry, intervalMs, now, 1, wanted, events);
+      } else if (replay) {
+        for (let k = 1; k <= missed; k += 1) {
+          this.step(entry, intervalMs, last + k * intervalMs, 1, wanted, events);
+        }
+      } else {
+        this.step(entry, intervalMs, now, missed, wanted, events);
+      }
+    }
+  }
+
+  /**
+   * Advances one instrument by `ticks` intervals as one GBM step at time `at` (one step of n
+   * intervals has exactly the distribution of n steps), applies any nudge, builds its minute bar,
+   * and keeps the quote for subscribers.
+   */
+  private step(
+    entry: EquityEntry,
+    intervalMs: number,
+    at: number,
+    ticks: number,
+    wanted: ReadonlySet<string>,
+    events: TickEvents,
+  ): void {
+    const { symbol } = entry.master.instrument;
+    const nudge = this.nudges.get(symbol);
+    if (nudge) {
+      const applied = Math.min(nudge.left, ticks);
+      movePrice(entry.state, Math.pow(nudge.factor, applied));
+      nudge.left -= applied;
+      if (nudge.left === 0) this.nudges.delete(symbol);
+    }
+    const volumeBefore = entry.state.volume;
+    const ticksPerSession = (SESSION_MINUTES * 60_000) / intervalMs;
+    applyTick(entry.state, {
+      params: entry.gbm,
+      dtYears: tickYears(intervalMs * ticks),
+      rng: this.rngOf(symbol),
+      volumePerTick: (ticks * (entry.master.sharesOutstanding * DAILY_TURNOVER)) / ticksPerSession,
+    });
+    if (!wanted.has(symbol) && !this.replaySymbols.has(symbol)) return;
+    this.barsOf(symbol).record(at, entry.state.ltp, entry.state.volume - volumeBefore);
+    if (!wanted.has(symbol)) return;
+    let batch = events.get(at);
+    if (!batch) {
+      batch = new Map();
+      events.set(at, batch);
+    }
+    batch.set(symbol, this.quoteOf(entry, at));
+  }
+
+  /** Refreshes the indices, then sends each subscriber its quotes, one batch per tick time. */
+  private finishTick(now: number, wanted: ReadonlySet<string>, events: TickEvents): void {
+    if (events.size === 0 && wanted.size === 0) return;
+    for (const entry of this.indexEntries) {
+      this.refreshIndex(entry);
+      const { symbol } = entry.master.instrument;
+      if (!wanted.has(symbol)) continue;
+      this.barsOf(symbol).record(now, entry.state.ltp);
+      let batch = events.get(now);
+      if (!batch) {
+        batch = new Map();
+        events.set(now, batch);
+      }
+      batch.set(symbol, this.quoteOf(entry, now));
+    }
+    const times = [...events.keys()].sort((a, b) => a - b);
+    for (const at of times) {
+      const batch = events.get(at) as Map<string, Quote>;
+      for (const { symbols, listener } of [...this.subscriptions]) {
+        const quotes: Quote[] = [];
+        for (const symbol of symbols) {
+          const quote = batch.get(symbol);
+          if (quote) quotes.push(quote);
+        }
+        if (quotes.length > 0) listener(quotes);
+      }
+    }
+  }
+
+  /** Every symbol some subscriber listens to. */
+  private wantedSymbols(): Set<string> {
+    const wanted = new Set<string>();
+    for (const { symbols } of this.subscriptions) for (const symbol of symbols) wanted.add(symbol);
+    return wanted;
+  }
+
+  private rngOf(symbol: string): Rng {
+    let rng = this.rngs.get(symbol);
+    if (!rng) {
+      rng = mulberry32(hashSeed(this.seed, 'ticks', this.sessionKey, symbol));
+      this.rngs.set(symbol, rng);
+    }
+    return rng;
+  }
+
+  private barsOf(symbol: string): MinuteBars {
+    let bars = this.bars.get(symbol);
+    if (!bars) {
+      bars = new MinuteBars();
+      this.bars.set(symbol, bars);
+    }
+    return bars;
   }
 
   private startTimer(): void {
     if (this.timer !== null || this.disposed) return;
+    // Idle time is not a gap to replay: ticks resume from now.
+    const now = this.clock.now().getTime();
+    this.lastSlowAt = now;
+    this.lastFastAt = now;
+    this.fastSinceSlow = 0;
+    this.timerMs = this.focused === null ? this.tickIntervalMs : this.focusIntervalMs;
     this.timer = this.scheduler.setInterval(() => {
-      this.tick();
-    }, this.tickIntervalMs);
+      this.advance();
+    }, this.timerMs);
   }
 
   private stopTimer(): void {
@@ -454,8 +712,27 @@ export class MockMarketDataAdapter implements MarketDataAdapter {
     this.timer = null;
   }
 
+  /** Moves a running timer to the beat the focus needs, keeping each lane's last tick. */
+  private restartTimer(): void {
+    if (this.timer === null) return;
+    const wantMs = this.focused === null ? this.tickIntervalMs : this.focusIntervalMs;
+    if (wantMs === this.timerMs) return;
+    this.scheduler.clearInterval(this.timer);
+    this.timerMs = wantMs;
+    this.timer = this.scheduler.setInterval(() => {
+      this.advance();
+    }, wantMs);
+  }
+
   private rollSession(key: string): void {
     this.sessionKey = key;
+    this.rngs.clear();
+    this.bars.clear();
+    this.nudges.clear();
+    // A new session ticks from now; the closed hours in between are not replayed.
+    const now = this.clock.now().getTime();
+    this.lastSlowAt = now;
+    this.lastFastAt = now;
     for (const entry of this.equityEntries) rollSession(entry.state);
     for (const entry of this.indexEntries) {
       rollSession(entry.state);
@@ -527,7 +804,7 @@ export class MockMarketDataAdapter implements MarketDataAdapter {
     return entry;
   }
 
-  private quoteOf(entry: Entry): Quote {
+  private quoteOf(entry: Entry, at?: number): Quote {
     const { instrument } = entry.master;
     const { state } = entry;
     return {
@@ -542,7 +819,7 @@ export class MockMarketDataAdapter implements MarketDataAdapter {
       low: state.low,
       prevClose: state.prevClose,
       volume: state.volume,
-      ts: this.nowIso(),
+      ts: at === undefined ? this.nowIso() : new Date(at).toISOString(),
     };
   }
 
@@ -568,7 +845,31 @@ export class MockMarketDataAdapter implements MarketDataAdapter {
     }));
   }
 
+  /**
+   * Candles for a range. The 1D range ends with the bars built from live ticks; the generated
+   * part runs up to the first of them and ends at its open, so the series is continuous.
+   */
   private candlesOf(entry: Entry, range: CandleRange) {
+    const built = range === '1D' ? this.bars.get(entry.master.instrument.symbol) : undefined;
+    const first = built?.firstMinute() ?? null;
+    if (!built || first === null) return this.generatedCandlesOf(entry, range);
+    const builtBars = built.bars();
+    const sessionOpen = latestSessionOpen(this.clock.now(), this.holidays).getTime();
+    const before =
+      first > sessionOpen
+        ? this.generatedCandlesOf(entry, range, {
+            now: () => new Date(first - 1),
+            endPrice: (builtBars[0] as { o: number }).o,
+          }).candles
+        : [];
+    return { interval: CANDLE_SPECS['1D'].interval, candles: mergeMinuteBars(before, builtBars) };
+  }
+
+  private generatedCandlesOf(
+    entry: Entry,
+    range: CandleRange,
+    until?: { now: () => Date; endPrice: number },
+  ) {
     const { symbol } = entry.master.instrument;
     const { state } = entry;
     const isIndex = entry.kind === 'index';
@@ -592,8 +893,8 @@ export class MockMarketDataAdapter implements MarketDataAdapter {
     }
     return generateCandles({
       range,
-      clock: this.clock,
-      endPrice: state.ltp,
+      clock: until ? { now: until.now } : this.clock,
+      endPrice: until ? until.endPrice : state.ltp,
       startPrice,
       volatility,
       seed,
@@ -606,4 +907,19 @@ export class MockMarketDataAdapter implements MarketDataAdapter {
   private nowIso(): string {
     return this.clock.now().toISOString();
   }
+}
+
+function assertRatio(ratio: number): void {
+  if (!Number.isFinite(ratio) || ratio <= -1) {
+    throw new RangeError(`A price move must be a finite ratio above -1, got ${String(ratio)}`);
+  }
+}
+
+/** Multiplies the model price by `factor`, inside the circuit band, and updates LTP, high and low. */
+function movePrice(state: PriceState, factor: number): void {
+  const band = circuitBand(state.prevClose);
+  state.raw = clamp(state.raw * factor, band.lower, band.upper);
+  state.ltp = clamp(roundToTick(state.raw), band.lower, band.upper);
+  if (state.ltp > state.high) state.high = state.ltp;
+  if (state.ltp < state.low) state.low = state.ltp;
 }
