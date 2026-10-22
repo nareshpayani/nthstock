@@ -1,5 +1,6 @@
 /** The kinds of line the trading overlay draws (SPEC-TFC-1 §8.1). */
-export type OverlayTone = 'buy' | 'sell' | 'ghost' | 'position' | 'trailing' | 'pending';
+export type OverlayTone =
+  'buy' | 'sell' | 'ghost' | 'position' | 'trailing' | 'activation' | 'pending';
 
 /** A button beside a line's handle: × to cancel an order (§8.3), Buy and Sell on the ghost (§8.2). */
 export type LineAction = {
@@ -35,6 +36,7 @@ export const TONE_PRIORITY: Record<OverlayTone, number> = {
   sell: 1,
   ghost: 1,
   trailing: 2,
+  activation: 2,
   position: 3,
 };
 
