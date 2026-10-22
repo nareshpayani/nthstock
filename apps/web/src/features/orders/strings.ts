@@ -110,6 +110,7 @@ export const strings = {
     PLACED: 'Placed',
     MODIFIED: 'Modified',
     RELEASED: 'Sent to the exchange',
+    PARTIALLY_EXECUTED: 'Partly executed',
     EXECUTED: 'Executed',
     CANCELLED: 'Cancelled',
     REJECTED: 'Rejected',

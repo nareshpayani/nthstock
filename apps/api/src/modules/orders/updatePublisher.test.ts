@@ -19,6 +19,7 @@ const order: Order = {
   avgFillPrice: 150_000,
   status: 'EXECUTED',
   statusReason: null,
+  validity: 'DAY',
   placedAt: '2026-09-28T04:30:00.000Z',
   updatedAt: '2026-09-28T04:30:00.000Z',
 };

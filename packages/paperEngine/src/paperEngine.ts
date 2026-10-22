@@ -11,6 +11,7 @@ import {
   type OrderHistoryEntry,
   type OrderHistoryEvent,
   type OrderStatus,
+  type OrderValidity,
   type PlaceOrderRequest,
   type ProductType,
   type TradingSymbol,
@@ -330,7 +331,7 @@ export class PaperEngine {
     if (!instrument) throw new Error('unreachable: validation accepts only known instruments');
 
     const status: OrderStatus = !checked.ok ? 'REJECTED' : this.#marketOpen() ? 'OPEN' : 'AMO';
-    const order = this.#newOrder(draft, instrument, status, clientOrderId);
+    const order = this.#newOrder(draft, instrument, status, clientOrderId, request.validity);
     order.statusReason = checked.ok ? null : checked.reason;
     this.#orders.set(order.id, order);
     if (!checked.ok) this.#rejectCodes.set(order.id, checked.code);
@@ -677,6 +678,7 @@ export class PaperEngine {
     names: { symbol: TradingSymbol; exchange: Exchange },
     status: OrderStatus,
     clientOrderId: string | null,
+    validity: OrderValidity = 'DAY',
   ): StoredOrder {
     const now = this.#now().toISOString();
     return {
@@ -694,6 +696,7 @@ export class PaperEngine {
       avgFillPrice: null,
       status,
       statusReason: null,
+      validity,
       placedAt: now,
       updatedAt: now,
     };

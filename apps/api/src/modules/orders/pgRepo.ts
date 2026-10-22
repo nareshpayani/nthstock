@@ -86,6 +86,8 @@ const toOrder = (row: OrderRow): Order => ({
   avgFillPrice: row.avgFillPrice,
   status: row.status as OrderStatus,
   statusReason: row.statusReason,
+  // apps/api places DAY orders only until it adopts IOC with the engine's partial fills.
+  validity: 'DAY',
   placedAt: row.placedAt.toISOString(),
   updatedAt: row.updatedAt.toISOString(),
 });

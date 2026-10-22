@@ -9,9 +9,11 @@ import {
 import {
   ModifyOrderRequest,
   Order,
+  OrderHistoryEvent,
   OrderHistoryResponse,
   OrderStatus,
   OrderType,
+  OrderValidity,
   OrdersPage,
   OrdersQuery,
   PlaceOrderRequest,
@@ -39,6 +41,8 @@ describe('order enums', () => {
     expect(OrderType.options).toEqual(['MARKET', 'LIMIT']);
     expect(ProductType.options).toEqual(['DELIVERY', 'INTRADAY']);
     expect(OrderStatus.options).toEqual(['AMO', 'OPEN', 'EXECUTED', 'CANCELLED', 'REJECTED']);
+    expect(OrderValidity.options).toEqual(['DAY', 'IOC']);
+    expect(OrderHistoryEvent.options).toContain('PARTIALLY_EXECUTED');
   });
 });
 
@@ -93,6 +97,23 @@ describe('ModifyOrderRequest', () => {
   it('validates qty and tick', () => {
     expect(ModifyOrderRequest.safeParse({ qty: 0 }).success).toBe(false);
     expect(ModifyOrderRequest.safeParse({ price: 101 }).success).toBe(false);
+  });
+});
+
+describe('order validity', () => {
+  it('is optional on a place request, which the engine reads as DAY', () => {
+    expect(PlaceOrderRequest.parse(placeLimitFixture).validity).toBeUndefined();
+    expect(PlaceOrderRequest.parse({ ...placeLimitFixture, validity: 'IOC' }).validity).toBe('IOC');
+    expect(PlaceOrderRequest.safeParse({ ...placeLimitFixture, validity: 'GTC' }).success).toBe(
+      false,
+    );
+  });
+
+  it('defaults to DAY on an order saved before validity existed', () => {
+    const saved: Record<string, unknown> = { ...orderFixture };
+    delete saved.validity;
+    delete saved.seq;
+    expect(Order.parse(saved)).toEqual({ ...saved, validity: 'DAY' });
   });
 });
 

@@ -288,6 +288,8 @@ export const orderFixture: Order = {
   avgFillPrice: 152_340,
   status: 'EXECUTED',
   statusReason: null,
+  validity: 'DAY',
+  seq: 12,
   placedAt: TS,
   updatedAt: TS,
 };
