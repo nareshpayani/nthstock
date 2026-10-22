@@ -1,4 +1,4 @@
-import type { ApiClient, QuoteStore } from '@nthstock/apiClient';
+import type { ApiClient, QuoteStore, TradingStore } from '@nthstock/apiClient';
 import {
   createMemoryHistory,
   createRootRoute,
@@ -20,6 +20,7 @@ export type RenderWithProvidersOptions = {
   quoteStore?: QuoteStore;
   marketSession?: MarketSession;
   orderUpdates?: OrderUpdateSource;
+  tradingStore?: TradingStore;
 };
 
 /**
@@ -53,6 +54,7 @@ export function renderWithProviders(ui: ReactNode, options: RenderWithProvidersO
       {...(options.quoteStore ? { quoteStore: options.quoteStore } : {})}
       {...(options.marketSession ? { marketSession: options.marketSession } : {})}
       {...(options.orderUpdates ? { orderUpdates: options.orderUpdates } : {})}
+      {...(options.tradingStore ? { tradingStore: options.tradingStore } : {})}
     >
       {/* The test router is not the app's registered router type. */}
       <RouterProvider router={router as never} />

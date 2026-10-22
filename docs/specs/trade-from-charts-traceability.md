@@ -50,11 +50,11 @@ test passes, then **Met**. Where the specification interprets a requirement, the
 
 | ID | Requirement | Spec | Tasks | Proving test | Status |
 |---|---|---|---|---|---|
-| REQ-TKT-01 | TSLO is a first-class order type beside Market and Limit | §7 | T01, T13 | Ticket component test | Planned |
-| REQ-TKT-02 | Available as an attached exit on an entry and as a standalone exit on a position | §7 | T13, T14 | Component and mock-backed tests | Planned |
-| REQ-TKT-03 | Full parameters and a live preview of the initial stop | §6.1, §7 | T13, T14 | Preview tests for each case | Planned |
-| REQ-TKT-04 | Rejects invalid trails; shows margin and charges consistent with the ticket; behaviour unmistakable before confirming | §6.6, §7 | T13, T14 | Component tests; review-step wording test | Planned |
-| REQ-TKT-05 | Consistent with Delivery and Intraday, quantity and cash-check patterns | §7 | T13, T14 | Component tests | Planned |
+| REQ-TKT-01 | TSLO is a first-class order type beside Market and Limit | §7 | T01, T13 | Ticket component test | Met: `TrailingStopTicket.test.tsx` |
+| REQ-TKT-02 | Available as an attached exit on an entry and as a standalone exit on a position | §7 | T13, T14 | Component and mock-backed tests | In progress: standalone exit placed into the store (`TrailingStopTicket.test.tsx`); attached in T14 |
+| REQ-TKT-03 | Full parameters and a live preview of the initial stop | §6.1, §7 | T13, T14 | Preview tests for each case | In progress: rupee, percent, activation, immediate activation and short previews (`trailingStopForm.test.ts`); entry preview in T14 |
+| REQ-TKT-04 | Rejects invalid trails; shows margin and charges consistent with the ticket; behaviour unmistakable before confirming | §6.6, §7 | T13, T14 | Component tests; review-step wording test | In progress: every §6.6 message, margin and charges, review sentence (`trailingStopForm.test.ts`, `TrailingStopTicket.test.tsx`); attached entry in T14 |
+| REQ-TKT-05 | Consistent with Delivery and Intraday, quantity and cash-check patterns | §7 | T13, T14 | Component tests | In progress: product choice and fixed quantity (`TrailingStopTicket.test.tsx`); entry cash check in T14 |
 
 ## Scalper
 
