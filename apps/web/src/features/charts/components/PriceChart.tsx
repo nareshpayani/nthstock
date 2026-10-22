@@ -1,10 +1,11 @@
 import type { Candle } from '@nthstock/contracts';
 import { Skeleton, cn } from '@nthstock/ui';
 import { formatIstDate } from '@nthstock/utils';
-import { lazy, Suspense } from 'react';
+import { lazy, Suspense, type ReactNode } from 'react';
 import { seriesDirection } from '../model/chartData';
 import { formatChartValue, type ChartDirection, type ChartValueFormat } from '../model/chartFormat';
 import { strings } from '../strings';
+import type { ChartHandle } from './PriceChartCanvas';
 
 // The charts library loads on first use, in its own chunk (checked by scripts/checkBuild.mjs).
 const PriceChartCanvas = lazy(() =>
@@ -26,6 +27,12 @@ export type PriceChartProps = {
   height?: number;
   /** Show a crosshair tooltip with the hovered bar's IST time and values (T-107). */
   tooltip?: boolean;
+  /** Pan and pinch, for a chart you trade from (T15). */
+  interactive?: boolean;
+  /** Receives the chart and series once drawn, and null when removed (T15). */
+  onReady?: ((handle: ChartHandle | null) => void) | undefined;
+  /** Drawn over the canvas, e.g. the trading overlay (T15). */
+  overlay?: ReactNode;
   className?: string | undefined;
 };
 
@@ -42,6 +49,9 @@ export function PriceChart({
   intraday = false,
   height = 240,
   tooltip = false,
+  interactive = false,
+  onReady,
+  overlay,
   className,
 }: PriceChartProps) {
   const first = candles[0];
@@ -65,8 +75,11 @@ export function PriceChart({
               intraday={intraday}
               height={height}
               tooltip={tooltip}
+              interactive={interactive}
+              onReady={onReady}
             />
           </Suspense>
+          {overlay}
           <figcaption className="sr-only">
             {strings.chartSummary(
               formatChartValue(first.o, format),

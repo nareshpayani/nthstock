@@ -79,6 +79,7 @@ export function PhoneStockDetail({
           onChartTypeChange={(chart) => onSearchChange({ chart })}
           height={height > 0 ? phoneChartHeight(height) : CHART_HEIGHT}
           controls="touch"
+          trading
         />,
       )}
       <Tabs value={tab} onValueChange={(next) => setTab(next as PhoneTab)} className="grid gap-0">

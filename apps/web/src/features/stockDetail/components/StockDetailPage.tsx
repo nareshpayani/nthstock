@@ -102,6 +102,7 @@ export function StockDetailPage({
               chartType={search.chart ?? DEFAULT_CHART_TYPE}
               onRangeChange={(range) => onSearchChange({ range })}
               onChartTypeChange={(chart) => onSearchChange({ chart })}
+              trading={equity}
             />
           </div>
         </Section>

@@ -1,4 +1,5 @@
 export { PriceChart } from './components/PriceChart';
+export type { ChartHandle } from './components/PriceChartCanvas';
 export { IndexChartCard } from './components/IndexChartCard';
 export { LiveBadge } from './components/LiveBadge';
 export { candlesQuery } from './api/candlesQuery';
