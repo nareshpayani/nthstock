@@ -17,9 +17,9 @@ case "$rel" in
   package-lock.json | */package-lock.json) deny "is written by npm; change package.json and run npm install." ;;
   apps/api/drizzle/meta/*) deny "is written by drizzle-kit (npm run db:generate -w @nthstock/api)." ;;
   apps/api/drizzle/*.sql)
-    # A migration already on develop or main has run somewhere; add a new one instead of rewriting it.
+    # A migration already on develop or production has run somewhere; add a new one instead of rewriting it.
     if git -C "$ROOT" cat-file -e "origin/develop:$rel" 2>/dev/null \
-      || git -C "$ROOT" cat-file -e "origin/main:$rel" 2>/dev/null; then
+      || git -C "$ROOT" cat-file -e "origin/production:$rel" 2>/dev/null; then
       deny "is a merged migration; add a new NNNN_*.sql migration instead."
     fi ;;
 esac

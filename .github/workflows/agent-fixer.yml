@@ -4,7 +4,7 @@ name: 'Agent: Fixer'
 #   - blocking review findings (label `agent:fix-needed`),
 #   - red CI on any owner, agent or Dependabot PR,
 # and when CI goes red on develop (where PRs merge, ADR 0010), opens an `agent/fix-develop-*` PR
-# (develop and main are never pushed to).
+# (develop and production are never pushed to).
 # An hourly sweep catches what events miss: Dependabot-triggered runs get no secrets, and a PR
 # that went red because develop was broken needs another look once develop is green again.
 
@@ -61,7 +61,7 @@ jobs:
           }
           fix_develop_pr_open() {
             [ -n "$(gh pr list --repo "$repo" --state open --limit 100 --json headRefName \
-              --jq '.[] | select(.headRefName | test("^(agent|claude)/fix-(develop|main)-")) | .headRefName')" ]
+              --jq '.[] | select(.headRefName | test("^(agent|claude)/fix-develop-")) | .headRefName')" ]
           }
           develop_is_red() {
             # The latest finished run on develop: a push, the post-merge dispatch or a scheduled health run.
@@ -113,8 +113,8 @@ jobs:
             develop_is_red && { echo "develop is red; the fix-develop PR handles this."; exit 0; }
             pr=$(gh pr list --repo "$repo" --head "$RUN_BRANCH" --state open --json number --jq '.[0].number // ""')
             [ -n "$pr" ] || exit 0
-            # A release PR's head is develop itself, which agents never push to.
-            [ "$RUN_BRANCH" != "develop" ] || exit 0
+            # A PR whose head is develop or production is never fixed on its branch: agents never push there.
+            case "$RUN_BRANCH" in develop|production) exit 0 ;; esac
             [ "$(eligible "$pr")" = "ok" ] && emit pr "$pr" "$RUN_BRANCH" "failing CI ($RUN_URL)"
             exit 0
           fi
@@ -152,9 +152,9 @@ jobs:
         with:
           ref: ${{ needs.resolve-target.outputs.mode == 'develop' && 'develop' || needs.resolve-target.outputs.branch }}
           fetch-depth: 0
-      - name: Block pushes to main and develop
+      - name: Block pushes to production and develop
         run: |
-          printf '#!/bin/sh\nwhile read -r _ _ ref _; do case "$ref" in refs/heads/main|refs/heads/develop) echo "Pushing to main or develop is not allowed." >&2; exit 1 ;; esac; done\nexit 0\n' > .git/hooks/pre-push
+          printf '#!/bin/sh\nwhile read -r _ _ ref _; do case "$ref" in refs/heads/production|refs/heads/main|refs/heads/develop) echo "Pushing to production or develop is not allowed." >&2; exit 1 ;; esac; done\nexit 0\n' > .git/hooks/pre-push
           chmod +x .git/hooks/pre-push
       - uses: actions/setup-node@v7
         with:

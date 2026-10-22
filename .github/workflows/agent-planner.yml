@@ -33,9 +33,9 @@ jobs:
       HAS_AGENT_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN != '' }}
     steps:
       - uses: actions/checkout@v7
-      - name: Block pushes to main and develop
+      - name: Block pushes to production and develop
         run: |
-          printf '#!/bin/sh\nwhile read -r _ _ ref _; do case "$ref" in refs/heads/main|refs/heads/develop) echo "Pushing to main or develop is not allowed." >&2; exit 1 ;; esac; done\nexit 0\n' > .git/hooks/pre-push
+          printf '#!/bin/sh\nwhile read -r _ _ ref _; do case "$ref" in refs/heads/production|refs/heads/main|refs/heads/develop) echo "Pushing to production or develop is not allowed." >&2; exit 1 ;; esac; done\nexit 0\n' > .git/hooks/pre-push
           chmod +x .git/hooks/pre-push
       - if: env.HAS_AGENT_TOKEN != 'true'
         run: echo "::notice::CLAUDE_CODE_OAUTH_TOKEN is not set; agent skipped. See docs/agent-workflow.md."

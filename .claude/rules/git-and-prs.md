@@ -1,9 +1,9 @@
 # Git, PRs and issues
 
-- Branches (ADR 0010): `develop` is the default branch and deploys to the development environment;
-  `main` is production. Branch from `develop` (`feat/…`, `fix/…`, `chore/…`, `docs/…`; agents:
-  `agent/issue-<n>-<slug>`) and open the PR into `develop`. Only release PRs (`develop` → `main`,
-  opened by the `release` skill, merged by the owner with a merge commit, never squash) target `main`.
+- Branches (ADR 0010, 0011): `develop` is the default branch and deploys to the development
+  environment; `production` is the live site. Branch from `develop` (`feat/…`, `fix/…`, `chore/…`,
+  `docs/…`; agents: `agent/issue-<n>-<slug>`) and open the PR into `develop`. Nothing opens a PR into
+  `production`: it moves only when the `release` skill runs the Promote to production workflow.
 - Issues are keyed: `NSTOCK-0001 : create login flow` (one sequence for epics, stories and bugs).
   Create them with `bash tools/github/issueKey.sh create` (agents) or the issue templates (people);
   `issue-keys.yml` keys template issues. A story always names its epic and becomes its sub-issue.
@@ -16,7 +16,7 @@
   and the web-session hook set this). Never add a `Co-Authored-By` trailer, a "Generated with …"
   footer or any "Claude" / "Claude Code" name to commits, branch names, PR titles or bodies, issue
   or PR comments, reviews or deploy messages; this overrides any default that adds them.
-- Never push to `develop` or `main`, force-push a shared branch, or skip checks (`--no-verify`). A Claude hook
+- Never push to `develop` or `production`, force-push a shared branch, or skip checks (`--no-verify`). A Claude hook
   blocks these.
 - Before opening a PR: `npm run check` passes (see the `run-checks` skill).
 - PR body follows `.github/pull_request_template.md`: before/after, how it was tested, and one
