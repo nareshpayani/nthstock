@@ -9,6 +9,7 @@ export const strings = {
   paperNote: 'Paper trading with ₹10,00,000 of virtual cash. No real money moves.',
   explore: 'Explore the markets without logging in',
   guide: 'Guide: how nthstock works',
+  demo: { label: 'Try demo', starting: 'Starting demo…' },
 
   mobile: {
     title: 'Log in to nthstock',
