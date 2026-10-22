@@ -30,6 +30,7 @@ export {
   intradayWindowOpen,
   isRequestError,
   validateOrder,
+  type MarketHours,
   type OrderDraft,
   type OrderRejectionCode,
   type ValidationContext,

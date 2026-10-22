@@ -45,6 +45,7 @@ import {
 import {
   isRequestError,
   validateOrder,
+  type MarketHours,
   type OrderDraft,
   type OrderRejectionCode,
 } from './orderValidation.js';
@@ -62,6 +63,12 @@ export type PaperEngineOptions = {
   instruments: InstrumentSource;
   /** Defaults to the NSE 2026 table. */
   holidays?: HolidayTable;
+  /**
+   * `nse` (default) or `alwaysOpen`. Always open accepts Intraday orders and fills orders at any
+   * hour instead of holding them as AMOs; the session schedule (9:15 release, 15:20 square-off,
+   * close) still runs on trading days.
+   */
+  marketHours?: MarketHours;
   /** Opening balance and the like for the funds ledger. */
   funds?: FundsLedgerOptions;
   /** Delivery holdings carried in from earlier days (seeded demo users, tests). */
@@ -197,6 +204,7 @@ export class PaperEngine {
   readonly #ctx: EngineContext;
   readonly #instruments: InstrumentSource;
   readonly #holidays: HolidayTable;
+  readonly #marketHours: MarketHours;
   readonly #onOrderUpdate: ((order: Order) => void) | undefined;
   readonly #funds: FundsLedger;
   readonly #orders = new Map<string, StoredOrder>();
@@ -237,6 +245,7 @@ export class PaperEngine {
     this.#ctx = options.ctx;
     this.#instruments = options.instruments;
     this.#holidays = options.holidays ?? nseHolidays2026;
+    this.#marketHours = options.marketHours ?? 'nse';
     this.#onOrderUpdate = options.onOrderUpdate;
     this.#syncedTo = this.#ctx.now();
     const { snapshot } = options;
@@ -328,6 +337,7 @@ export class PaperEngine {
     const checked = validateOrder(draft, {
       now: this.#now(),
       holidays: this.#holidays,
+      marketHours: this.#marketHours,
       instrument,
       ltp: this.#ctx.ltp(draft.token),
       availableCash: this.#funds.available,
@@ -384,6 +394,7 @@ export class PaperEngine {
     const checked = validateOrder(draft, {
       now: this.#now(),
       holidays: this.#holidays,
+      marketHours: this.#marketHours,
       instrument: this.#instruments.getInstrument(order.token),
       ltp: this.#ctx.ltp(order.token),
       availableCash: this.#funds.available + this.#funds.blockedFor(order.id),
@@ -603,6 +614,7 @@ export class PaperEngine {
       const checked = validateOrder(order, {
         now: this.#now(),
         holidays: this.#holidays,
+        marketHours: this.#marketHours,
         instrument: this.#instruments.getInstrument(order.token),
         ltp: this.#ctx.ltp(order.token),
         availableCash: this.#funds.available + this.#funds.blockedFor(order.id),
@@ -678,6 +690,7 @@ export class PaperEngine {
   }
 
   #marketOpen(): boolean {
+    if (this.#marketHours === 'alwaysOpen') return true;
     return getMarketStatus({ now: () => this.#now() }, this.#holidays).state === 'open';
   }
 

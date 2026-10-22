@@ -67,7 +67,13 @@ export async function startMockWorker(
     auth: { ...now, ...(storage ? { storage } : {}) },
     ...(listStorage ? { watchlists: { storage: listStorage } } : {}),
     // Paper orders too (T-132); the sweep pushes 9:15 AMO release and end of day.
-    orders: { sweepMs: ORDER_SWEEP_MS, ...(listStorage ? { storage: listStorage } : {}) },
+    orders: {
+      sweepMs: ORDER_SWEEP_MS,
+      // The demo trades at any hour (SPEC-TFC-1 §10.3). E2E builds set the clock themselves and
+      // test AMOs at night, so with test controls the engine keeps NSE hours.
+      marketHours: config.mockMarketOpen && !testControls ? 'alwaysOpen' : 'nse',
+      ...(listStorage ? { storage: listStorage } : {}),
+    },
   });
   const worker = setupWorker(
     ...(testControls ? testControls.handlers({ orders, adapter }) : []),
