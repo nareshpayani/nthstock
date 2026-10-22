@@ -140,14 +140,20 @@ describe('catch-up replay (§6.7)', () => {
   });
 
   it('replays 30 minutes of one instrument in under 100 ms', () => {
-    const { adapter, clock, scheduler, batches } = setup();
-    adapter.setReplaySymbols([A]);
-    clock.advance(30 * 60_000);
-    const started = Date.now();
-    scheduler.fire();
-    const took = Date.now() - started;
-    expect(batches.flat().filter((quote) => quote.symbol === A)).toHaveLength(1_800);
-    expect(took).toBeLessThan(100);
+    // A unit benchmark (SPEC-TFC-1 §15): the best of three fresh replays after a warm-up, so the
+    // figure is the replay's own cost, not JIT warm-up or a busy CI runner.
+    const replay = (): number => {
+      const { adapter, clock, scheduler, batches } = setup();
+      adapter.setReplaySymbols([A]);
+      clock.advance(30 * 60_000);
+      const started = Date.now();
+      scheduler.fire();
+      const took = Date.now() - started;
+      expect(batches.flat().filter((quote) => quote.symbol === A)).toHaveLength(1_800);
+      return took;
+    };
+    replay();
+    expect(Math.min(replay(), replay(), replay())).toBeLessThan(100);
   });
 
   it('replays the focused instrument at its 250 ms beat', () => {
