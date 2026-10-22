@@ -2,6 +2,7 @@ import { cn } from '@nthstock/ui';
 import type { IPriceLine } from 'lightweight-charts';
 import {
   useEffect,
+  useId,
   useLayoutEffect,
   useRef,
   type KeyboardEvent,
@@ -88,6 +89,7 @@ export function ChartOverlay({
   onAction,
 }: ChartOverlayProps) {
   const ordered = byPriority(lines);
+  const describedBy = useId();
   const elementsRef = useRef<Elements>({
     rows: new Map(),
     handles: new Map(),
@@ -314,6 +316,9 @@ export function ChartOverlay({
       >
         {ordered.map((line) => (
           <div key={line.id}>
+            <span id={`${describedBy}-${line.id}`} hidden>
+              {line.description}
+            </span>
             <span
               ref={refFor('leaders', line.id)}
               aria-hidden="true"
@@ -327,7 +332,9 @@ export function ChartOverlay({
               <button
                 ref={refFor('handles', line.id)}
                 type="button"
-                aria-label={line.description}
+                // The name is the visible label (WCAG 2.5.3); what the keys do is the description.
+                aria-label={line.label}
+                aria-describedby={`${describedBy}-${line.id}`}
                 data-testid="chart-handle"
                 data-line={line.id}
                 data-tone={line.tone}

@@ -54,8 +54,9 @@ describe('chart overlay (T15, SPEC-TFC-1 §10.5)', () => {
       />,
     );
     expect(screen.getByRole('group', { name: 'Chart orders for INFY' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Buy limit at 150000' })).toHaveTextContent(
-      'Buy @ 150000',
+    // The name is the visible label (WCAG 2.5.3); the long text is the description.
+    expect(screen.getByRole('button', { name: 'Buy @ 150000' })).toHaveAccessibleDescription(
+      'Buy limit at 150000',
     );
     expect(series()?.priceLines.map((l) => l.options.price)).toEqual([150_000, 145_000]);
     expect(handleY('o1')).toBe(200);
