@@ -16,7 +16,7 @@ specs and code comments cite them (`CLAUDE.md §4`).
 | D1 | Product name | **nthstock** |
 | D2 | Trading | **Paper trading only** for v1. No real-money order routing. |
 | D3 | Market data | **Mock feed**: seeded NSE/BSE symbol master (~5,000 equities + major indices) and a random-walk (GBM) tick generator; `@faker-js/faker` for company/user data. Adapter interface so a licensed vendor or broker API can plug in later. No scraped/unofficial APIs. |
-| D4 | Frontend | **Vite + React + TypeScript SPA**. Chrome only (latest 2). Fully responsive, desktop primary. **Single light theme, no dark mode.** English only, no i18n library in v1. |
+| D4 | Frontend | **Vite + React + TypeScript SPA**. Chrome only (latest 2); iPhone Safari too for the Trade from Charts surfaces (TFC-16, 2026-10-22). Fully responsive, desktop primary. **Single light theme, no dark mode.** English only, no i18n library in v1. |
 | D5 | Backend | **Modular monolith** on Node.js 22 + Fastify (`apps/api`), plus a **separate realtime WebSocket server** (`apps/realtime`) that scales independently. |
 | D6 | Database | **PostgreSQL 16** (+ TimescaleDB for candles from Phase 4) and **Redis 7** (quotes, sessions, pub/sub, jobs). |
 | D7 | Hosting | **Docker Compose locally** through Phase 5; **AWS Mumbai** from Phase 6, multi-AZ, warm standby in AWS Hyderabad. ECS Fargate first, EKS if needed. Terraform. |
@@ -68,7 +68,8 @@ docs/           product, architecture, adr/, specs/, agent-workflow, runbooks/ (
   `feat(NSTOCK-0001): create login flow` (`.claude/rules/git-and-prs.md`).
 - **Attribution (owner decision 2026-10-21):** work is credited to Naresh Payani only. No "Claude" or
   "Claude Code" name, `Co-Authored-By` trailer or "Generated with" footer in commits, branch
-  names, PR text, comments, reviews, issues or deploy messages (`.claude/rules/git-and-prs.md`).
+  names, PR text, comments, reviews, issues or deploy messages (`.claude/rules/git-and-prs.md`). One exception (TFC-05,
+  2026-10-22): `WRITEUP.md` names the AI tools used, as the client brief requires.
 - Quality gate = `npm run check` (format, lint, typecheck, tests, build), plus E2E, budgets and
   security scans in CI.
 

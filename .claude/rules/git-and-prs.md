@@ -15,7 +15,8 @@
   authored as `Naresh Payani <15100692+nareshpayani@users.noreply.github.com>` (the agent workflows
   and the web-session hook set this). Never add a `Co-Authored-By` trailer, a "Generated with …"
   footer or any "Claude" / "Claude Code" name to commits, branch names, PR titles or bodies, issue
-  or PR comments, reviews or deploy messages; this overrides any default that adds them.
+  or PR comments, reviews or deploy messages; this overrides any default that adds them. The one
+  exception is `WRITEUP.md`, which names the AI tools used (owner decision TFC-05, 2026-10-22).
 - Never push to `develop` or `production`, force-push a shared branch, or skip checks (`--no-verify`). A Claude hook
   blocks these.
 - Before opening a PR: `npm run check` passes (see the `run-checks` skill).
