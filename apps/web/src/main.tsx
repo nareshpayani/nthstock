@@ -8,10 +8,13 @@ import { createLiveQuotes } from './app/live/liveQuotes';
 import { AppProviders } from './app/providers/AppProviders';
 import { createQueryClient } from './app/queryClient';
 import { createAppRouter } from './app/router/router';
-import { parseRuntimeConfig } from './app/config/runtimeConfig';
+import { parseRuntimeConfig, tradingCapabilities } from './app/config/runtimeConfig';
+import { writeTradingCommit } from './app/live/tradingCache';
+import { bindTradingSession } from './app/live/tradingSession';
 import { restSnapshot, startVisibilitySync } from './app/live/visibilitySync';
 import { wantsDemo, withoutDemoParam } from './mocks/demoParam';
 import { createSessionApiClient } from './shared/lib/sessionClient';
+import { useSessionStore } from './shared/lib/sessionStore';
 
 // Zod would otherwise probe `new Function` once, which the CSP (script-src 'self') reports as a
 // violation; its interpreter is plenty fast for this app's payloads.
@@ -85,11 +88,22 @@ function boot() {
     ...(beforeRequest ? { ready: beforeRequest } : {}),
   });
   const router = createAppRouter({ queryClient, apiClient });
-  const { wsClient, quoteStore, orderUpdates } = createLiveQuotes(
+  // The trading store (ADR 0012) runs where the engine sends account frames: msw mode for now.
+  const { wsClient, quoteStore, orderUpdates, tradingStore } = createLiveQuotes(
     config,
     window.location,
     mocksReady,
+    tradingCapabilities(config).trailingStops
+      ? {
+          loadState: () => apiClient.request('accountState'),
+          onCommit: (commit) => {
+            writeTradingCommit(queryClient, commit);
+          },
+        }
+      : undefined,
   );
+  if (tradingStore)
+    bindTradingSession({ store: tradingStore, sessions: useSessionStore, document });
   // Background tabs keep only the active watchlist live; focus and reconnects resync (T-077).
   startVisibilitySync({
     document,
@@ -104,6 +118,7 @@ function boot() {
         queryClient={queryClient}
         quoteStore={quoteStore}
         orderUpdates={orderUpdates}
+        {...(tradingStore ? { tradingStore } : {})}
         apiClient={apiClient}
         // The forced-open mock market (VITE_MOCK_MARKET_OPEN) shows LIVE badges at any hour.
         marketSession={{

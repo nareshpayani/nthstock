@@ -44,7 +44,7 @@ test passes, then **Met**. Where the specification interprets a requirement, the
 | REQ-TFC-05 | A TSLO can be attached inline when placing from the chart | §8.2 | T14, T17 | US-02 E2E | Planned |
 | REQ-TFC-06 | Tapping the position opens TSLO set, modify and cancel | §8.4, §9.1 | T18, T19 | E2E set, update, cancel from the chip | Planned |
 | REQ-TFC-07 | Simplified on-chart TSLO: trail and unit with defaults; the line ratchets visibly and can be dragged to change the trail | §6.5, §8.4 | T18, T19 | US-04 E2E | Planned |
-| REQ-TFC-08 | Order lines, position line, TSLO line, depth and ticket never disagree | §10.1 | T08, T10, T11 | Consistency E2E sampling every surface per frame | In progress: one `accountDelta` frame carries the tick, depth and fill (`mocks/handlers/trailingStops.test.ts`); store and E2E in T10, T11 |
+| REQ-TFC-08 | Order lines, position line, TSLO line, depth and ticket never disagree | §10.1 | T08, T10, T11 | Consistency E2E sampling every surface per frame | In progress: one `accountDelta` frame carries the tick, depth and fill (`mocks/handlers/trailingStops.test.ts`); the trading store commits a fill to orders, positions, funds and price together with no disagreeing commit (`mocks/handlers/tradingStore.test.ts`); surfaces and E2E in T11 |
 
 ## Order ticket
 

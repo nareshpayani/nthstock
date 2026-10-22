@@ -1,4 +1,4 @@
-import type { ApiClient, QuoteStore } from '@nthstock/apiClient';
+import type { ApiClient, QuoteStore, TradingStore } from '@nthstock/apiClient';
 import { ToastProvider, TooltipProvider } from '@nthstock/ui';
 import { QueryClientProvider, type QueryClient } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
@@ -6,6 +6,7 @@ import { ApiClientContext } from '@/shared/lib/apiClientContext';
 import { MarketSessionContext, type MarketSession } from '@/shared/lib/marketSessionContext';
 import { OrderUpdatesContext, type OrderUpdateSource } from '@/shared/lib/orderUpdatesContext';
 import { QuoteStoreContext } from '@/shared/lib/quoteStoreContext';
+import { TradingStoreContext } from '@/shared/lib/tradingStoreContext';
 
 export type AppProvidersProps = {
   queryClient: QueryClient;
@@ -17,11 +18,13 @@ export type AppProvidersProps = {
   marketSession?: MarketSession;
   /** The signed-in user's order updates (T-147). Without one, none arrive (tests, Storybook). */
   orderUpdates?: OrderUpdateSource;
+  /** The signed-in user's trading state (ADR 0012). Without one, an idle empty store. */
+  tradingStore?: TradingStore;
   children: ReactNode;
 };
 
 /**
- * App-wide providers: server state, REST client, live quotes, order updates, market session,
+ * App-wide providers: server state, REST client, live quotes, order updates, trading state, market session,
  * tooltips and toasts. The router sits inside.
  */
 export function AppProviders({
@@ -30,6 +33,7 @@ export function AppProviders({
   apiClient,
   marketSession,
   orderUpdates,
+  tradingStore,
   children,
 }: AppProvidersProps) {
   let content = (
@@ -47,6 +51,11 @@ export function AppProviders({
   if (orderUpdates) {
     content = (
       <OrderUpdatesContext.Provider value={orderUpdates}>{content}</OrderUpdatesContext.Provider>
+    );
+  }
+  if (tradingStore) {
+    content = (
+      <TradingStoreContext.Provider value={tradingStore}>{content}</TradingStoreContext.Provider>
     );
   }
   if (apiClient) {

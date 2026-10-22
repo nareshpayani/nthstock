@@ -34,3 +34,18 @@ export {
   type QuoteStoreOptions,
   type TickDirection,
 } from './quoteStore.js';
+export {
+  INTENT_TIMEOUT_MS,
+  createTradingStore,
+  tradingSourceOf,
+  type IntentHandle,
+  type IntentKind,
+  type NewIntent,
+  type PendingIntent,
+  type TradingCommit,
+  type TradingSource,
+  type TradingState,
+  type TradingStatus,
+  type TradingStore,
+  type TradingStoreOptions,
+} from './tradingStore.js';

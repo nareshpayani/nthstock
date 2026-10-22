@@ -284,3 +284,45 @@ describe('default WebSocket', () => {
     vi.unstubAllGlobals();
   });
 });
+
+describe('ws client account frames (T10, ADR 0012)', () => {
+  it('sends focus on open and again after a reconnect, and opens the socket for it', async () => {
+    const client = makeClient();
+    client.focus(null);
+    expect(FakeWebSocket.instances).toHaveLength(1);
+    const first = FakeWebSocket.last();
+    first.open();
+    expect(first.sent).toEqual([{ v: 1, type: 'focus', symbol: null, exchange: 'NSE' }]);
+    client.focus('INFY');
+    expect(first.sent.at(-1)).toEqual({ v: 1, type: 'focus', symbol: 'INFY', exchange: 'NSE' });
+
+    first.drop();
+    vi.advanceTimersByTime(1_000);
+    const second = FakeWebSocket.last();
+    expect(second).not.toBe(first);
+    second.open();
+    await flushMicrotasks();
+    expect(second.sent).toEqual([{ v: 1, type: 'focus', symbol: 'INFY', exchange: 'NSE' }]);
+  });
+
+  it('hands a frame’s quotes to quote listeners before message listeners see the frame', () => {
+    const client = makeClient();
+    const seen: string[] = [];
+    client.onQuotes((quotes) => seen.push(`quotes:${String(quotes.length)}`));
+    client.onMessage((message) => seen.push(message.type));
+    client.connect();
+    const socket = FakeWebSocket.last();
+    socket.open();
+    socket.receive({
+      v: 1,
+      type: 'accountDelta',
+      seq: 3,
+      at: '2026-09-25T04:00:00.000Z',
+      quotes: [quote('INFY', 150_100)],
+      orders: [],
+      positions: [],
+      trailingStops: [],
+    });
+    expect(seen).toEqual(['quotes:1', 'accountDelta']);
+  });
+});
