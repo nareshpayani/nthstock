@@ -53,7 +53,7 @@ function fakeMarket() {
     listener: (q: readonly Quote[]) => void;
   }>();
   const calls = { stats: 0, quotes: 0, subscribes: 0 };
-  const quoteOf = (symbol: string): Quote => ({
+  const quoteOf = (symbol: string, ts = '2026-09-25T04:30:00.000Z'): Quote => ({
     token: tokens.get(symbol) ?? 0,
     symbol,
     exchange: 'NSE',
@@ -65,10 +65,11 @@ function fakeMarket() {
     low: 0,
     prevClose: prevCloses.get(symbol) ?? 0,
     volume: 0,
-    ts: '2026-09-25T04:30:00.000Z',
+    ts,
   });
   const market: DeskMarket & {
-    tick(symbol: string, ltp: number): void;
+    /** `at` stamps the tick (a replayed one); default the fixed 10:00 IST quote time. */
+    tick(symbol: string, ltp: number, at?: Date): void;
     calls: typeof calls;
     subscribers(): number;
   } = {
@@ -92,10 +93,10 @@ function fakeMarket() {
       listeners.add(entry);
       return () => listeners.delete(entry);
     },
-    tick(symbol, ltp) {
+    tick(symbol, ltp, at) {
       ltps.set(symbol, ltp);
       for (const { symbols, listener } of listeners) {
-        if (symbols.includes(symbol)) listener([quoteOf(symbol)]);
+        if (symbols.includes(symbol)) listener([quoteOf(symbol, at?.toISOString())]);
       }
     },
     calls,
@@ -381,6 +382,31 @@ describe('PaperDesk trailing stops (SPEC-TFC-1 §6, T06)', () => {
     expect(second.market.calls.subscribes).toBe(1);
     second.market.tick('INFY', 1_480_00);
     expect(second.desk.trailingStops('u1')[0]?.status).toBe('EXECUTED');
+  });
+
+  it('runs a replayed tick at its own time: a 15:19 trigger exits before the 15:20 square-off', async () => {
+    const { desk, clock, market } = stopSetup();
+    clock.set(ist(25, 15, 0));
+    await desk.place('u1', { ...marketBuy(), product: 'INTRADAY' });
+    const placed = await desk.placeTrailingStop('u1', { ...stopRequest, product: 'INTRADAY' });
+    if (!placed.ok) throw new Error(placed.reason);
+
+    // The tab slept through 15:20; the market replays the 15:19 tick that crossed the stop.
+    clock.set(ist(25, 15, 25));
+    market.tick('INFY', 1_485_00, ist(25, 15, 19));
+    const [stop] = desk.trailingStops('u1');
+    expect(stop?.status).toBe('EXECUTED');
+    const exit = desk.getOrder('u1', stop?.exitOrderId ?? '');
+    expect(exit?.statusReason).toContain('Trailing stop exit');
+
+    // A tick older than the replay window runs at the desk's time instead: the square-off wins.
+    const late = stopSetup();
+    late.clock.set(ist(25, 15, 0));
+    await late.desk.place('u1', { ...marketBuy(), product: 'INTRADAY' });
+    await late.desk.placeTrailingStop('u1', { ...stopRequest, product: 'INTRADAY' });
+    late.clock.set(ist(25, 15, 55));
+    late.market.tick('INFY', 1_485_00, ist(25, 15, 19));
+    expect(late.desk.trailingStops('u1')[0]?.status).toBe('CANCELLED');
   });
 
   it('refuses trailing stops when turned off (apps/api)', async () => {

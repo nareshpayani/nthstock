@@ -52,6 +52,7 @@ import { CursorQuery, IsoUtc, OkResponse } from './primitives.js';
 import {
   ModifyTrailingStopRequest,
   PlaceTrailingStopRequest,
+  PositionKey,
   TrailingStop,
   TrailingStopIdParams,
   TrailingStopsResponse,
@@ -390,6 +391,17 @@ export const routes = {
   },
 
   // Portfolio and funds
+  /**
+   * Closes a position in one step (SPEC-TFC-1 §6.4): cancels its trailing stop and working orders
+   * and sends a reduce-only market exit, which the response is. Flatten, Reverse and Exit use it.
+   */
+  positionClose: {
+    method: 'POST',
+    path: '/v1/positions/close',
+    auth: 'user',
+    body: PositionKey,
+    response: Order,
+  },
   positionsList: {
     method: 'GET',
     path: '/v1/positions',

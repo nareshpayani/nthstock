@@ -44,7 +44,12 @@ export function createMockHandlers({
       quoteStreamHandler(adapter, {
         ...stream,
         url: wsUrl,
-        orders: { onOrderUpdate: ordersMock.onOrderUpdate, activeUserId: authMock.activeUserId },
+        orders: {
+          onOrderUpdate: ordersMock.onOrderUpdate,
+          onTrailingStopUpdate: ordersMock.onTrailingStopUpdate,
+          accountState: ordersMock.accountState,
+          activeUserId: authMock.activeUserId,
+        },
       }),
     ],
     orders: ordersMock,
@@ -74,6 +79,7 @@ export {
 export {
   ORDER_SWEEP_MS,
   ORDERS_MOCK_STORAGE_KEY,
+  ORDERS_SAVE_THROTTLE_MS,
   READABLE_SAVED_VERSIONS,
   createOrdersMock,
   type OrdersMock,
