@@ -48,6 +48,7 @@ export {
   type OrderEvent,
 } from './orderStateMachine.js';
 export {
+  PAPER_ENGINE_LEGACY_SNAPSHOT_VERSION,
   PAPER_ENGINE_SNAPSHOT_VERSION,
   PAPER_ENGINE_WORKING_SET_VERSION,
   PaperEngine,
@@ -59,7 +60,11 @@ export {
   type PaperEngineOptions,
   type PaperEngineSnapshot,
   type PaperEngineSnapshotV1,
+  type PaperEngineSnapshotV3,
   type PaperEngineWorkingSet,
+  type TrailingStopActionErrorCode,
+  type TrailingStopActionResult,
+  type TrailingStopCheckCode,
 } from './paperEngine.js';
 export {
   FundsLedger,
@@ -91,7 +96,12 @@ export {
   type OrdersPageQuery,
   type PaperDeskOptions,
 } from './paperDesk.js';
-export { orderApiError, type OrderApiError } from './orderErrors.js';
+export {
+  orderApiError,
+  trailingStopApiError,
+  type OrderApiError,
+  type TrailingStopApiError,
+} from './orderErrors.js';
 export {
   DEMO_SEEDED_AT,
   DEMO_SEED_USER,

@@ -13,7 +13,16 @@ import {
   type PaperEngineSnapshotV1,
   type PaperEngineWorkingSet,
 } from './paperEngine.js';
-import { INFY, TCS, createHarness, ist, marketOrder, order, seeded } from './testHarness.js';
+import {
+  INFY,
+  TCS,
+  createHarness,
+  ist,
+  legacySnapshot,
+  marketOrder,
+  order,
+  seeded,
+} from './testHarness.js';
 
 type Harness = ReturnType<typeof createHarness>;
 
@@ -40,6 +49,16 @@ function restoreFrom(harness: Harness, snapshot: PaperEngineSnapshot): Harness {
 }
 
 /** What a user can see of an account: funds, positions, holdings and today's sales. */
+/**
+ * Drops `seq` from every order in a result: the working set is apps/api's store format and keeps
+ * no `seq`, so the two engines number their changes from different starting points.
+ */
+function withoutSeq(value: unknown): unknown {
+  return JSON.parse(JSON.stringify(value), (key, field: unknown) =>
+    key === 'seq' ? undefined : field,
+  ) as unknown;
+}
+
 function view(engine: PaperEngine) {
   return {
     funds: engine.fundsSummary(),
@@ -47,7 +66,7 @@ function view(engine: PaperEngine) {
     positions: engine.positions(),
     holdings: engine.holdings(),
     holdingSales: engine.holdingSales(),
-    live: engine.orders().filter((o) => o.status === 'AMO' || o.status === 'OPEN'),
+    live: withoutSeq(engine.orders().filter((o) => o.status === 'AMO' || o.status === 'OPEN')),
   };
 }
 
@@ -146,7 +165,7 @@ describe('engine working set (v2, T-199)', () => {
         for (const action of randomActions(rand, 25)) {
           const a = perform(fromFull, fromFull.engine, action);
           const b = perform(fromWorking, fromWorking.engine, action);
-          expect(b).toEqual(a);
+          expect(withoutSeq(b)).toEqual(withoutSeq(a));
           expect(view(fromWorking.engine)).toEqual(view(fromFull.engine));
         }
         // A working set taken from a restored engine is the same as the full one would give.
@@ -192,7 +211,7 @@ describe('engine working set (v2, T-199)', () => {
   it('v1 snapshots still load, and a reset restored from a working set matches', () => {
     const harness = createHarness({ at: ist(25, 10, 0) });
     harness.engine.place(marketOrder({ qty: 10 }));
-    const v1: PaperEngineSnapshotV1 = harness.engine.snapshot();
+    const v1: PaperEngineSnapshotV1 = legacySnapshot(harness.engine);
     expect(v1.v).toBe(1);
     expect(restoreFrom(harness, v1).engine.fundsSummary()).toEqual(harness.engine.fundsSummary());
 

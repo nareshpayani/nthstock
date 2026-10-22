@@ -120,6 +120,9 @@ export function createOrderService({
     clock,
     market,
     newId,
+    // The account store keeps no trailing stops yet; the routes answer 501 until it does
+    // (SPEC-TFC-1 §10.6).
+    trailingStops: false,
     onOrderUpdate: (userId, order) => {
       void record(userId, [
         {

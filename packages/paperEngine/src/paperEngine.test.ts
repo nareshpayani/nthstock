@@ -91,8 +91,8 @@ describe('PaperEngine.place (T-127, T-128)', () => {
     expect(updates).toEqual([]);
   });
 
-  it('refuses attached trailing stops until the engine honours them', () => {
-    const { engine, updates } = createHarness();
+  it('refuses attached trailing stops when the engine has trailing stops turned off', () => {
+    const { engine, updates } = createHarness({ trailingStops: false });
     expect(
       engine.place(
         order({
@@ -104,7 +104,12 @@ describe('PaperEngine.place (T-127, T-128)', () => {
           },
         }),
       ),
-    ).toMatchObject({ ok: false, code: 'NOT_SUPPORTED', order: null });
+    ).toMatchObject({
+      ok: false,
+      code: 'NOT_SUPPORTED',
+      reason: 'Trailing stops are not available in this mode.',
+      order: null,
+    });
     expect(engine.place(order({ validity: 'DAY' }))).toMatchObject({
       ok: true,
       order: { validity: 'DAY' },

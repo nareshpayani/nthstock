@@ -1,5 +1,5 @@
 /** Shared fixtures for the engine tests. Not part of the build. */
-import { Order, type PlaceOrderRequest } from '@nthstock/contracts';
+import { Order, TrailingStop, type PlaceOrderRequest } from '@nthstock/contracts';
 import { fromIst } from '@nthstock/utils';
 import {
   createEngineContext,
@@ -13,7 +13,12 @@ import {
   type InstrumentInfo,
   type MapInstrumentSource,
 } from './instruments.js';
-import { PaperEngine, type PaperEngineOptions } from './paperEngine.js';
+import {
+  PAPER_ENGINE_LEGACY_SNAPSHOT_VERSION,
+  PaperEngine,
+  type PaperEngineOptions,
+  type PaperEngineSnapshotV1,
+} from './paperEngine.js';
 
 export const INFY: InstrumentInfo = {
   token: 1594,
@@ -40,6 +45,7 @@ export type Harness = {
   prices: MapPriceSource;
   instruments: MapInstrumentSource;
   updates: Order[];
+  stopUpdates: TrailingStop[];
 };
 
 export function createHarness(
@@ -53,6 +59,7 @@ export function createHarness(
   ]);
   const instruments = createMapInstrumentSource([INFY, TCS]);
   const updates: Order[] = [];
+  const stopUpdates: TrailingStop[] = [];
   const engine = new PaperEngine({
     ctx: createEngineContext({ clock, prices }),
     instruments,
@@ -60,9 +67,12 @@ export function createHarness(
       // Every update must be a valid contract Order (it becomes an orderUpdate frame).
       updates.push(Order.parse(order));
     },
+    onTrailingStopUpdate: (stop) => {
+      stopUpdates.push(TrailingStop.parse(stop));
+    },
     ...rest,
   });
-  return { engine, clock, prices, instruments, updates };
+  return { engine, clock, prices, instruments, updates, stopUpdates };
 }
 
 export const order = (overrides: Partial<PlaceOrderRequest> = {}): PlaceOrderRequest => ({
@@ -93,5 +103,20 @@ export function seeded(seed: number): () => number {
     t = Math.imul(t ^ (t >>> 15), t | 1);
     t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
     return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+/** The engine's state as a version 1 snapshot, as saved before trailing stops and `seq`. */
+export function legacySnapshot(engine: PaperEngine): PaperEngineSnapshotV1 {
+  const { seq, trailingStops, exitOrderIds, trailingStopRequestIds, orders, ...rest } =
+    engine.snapshot();
+  void [seq, trailingStops, exitOrderIds, trailingStopRequestIds];
+  return {
+    ...rest,
+    v: PAPER_ENGINE_LEGACY_SNAPSHOT_VERSION,
+    orders: orders.map(({ seq: orderSeq, ...order }) => {
+      void orderSeq;
+      return order;
+    }),
   };
 }

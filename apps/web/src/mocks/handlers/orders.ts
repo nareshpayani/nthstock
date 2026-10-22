@@ -1,6 +1,7 @@
 import type { InstrumentToken, Order, RouteName } from '@nthstock/contracts';
 import type { MarketDataAdapter } from '@nthstock/marketData';
 import {
+  PAPER_ENGINE_LEGACY_SNAPSHOT_VERSION,
   PAPER_ENGINE_SNAPSHOT_VERSION,
   PaperDesk,
   orderApiError,
@@ -51,9 +52,18 @@ export type OrdersMockOptions = {
 };
 
 type Saved = {
-  v: typeof PAPER_ENGINE_SNAPSHOT_VERSION;
+  v: number;
   users: Record<string, PaperEngineSnapshot>;
 };
+
+/**
+ * Saved accounts this build reads: its own, and those saved before trailing stops, which the
+ * engine migrates on restore (SPEC-TFC-1 §10.3), so the demo state survives the release.
+ */
+export const READABLE_SAVED_VERSIONS: readonly number[] = [
+  PAPER_ENGINE_SNAPSHOT_VERSION,
+  PAPER_ENGINE_LEGACY_SNAPSHOT_VERSION,
+];
 
 export type OrderUpdateListener = (userId: string, order: Order) => void;
 
@@ -69,7 +79,7 @@ function load(storage: OrdersMockOptions['storage']): Record<string, PaperEngine
     if (
       parsed &&
       typeof parsed === 'object' &&
-      (parsed as Partial<Saved>).v === PAPER_ENGINE_SNAPSHOT_VERSION &&
+      READABLE_SAVED_VERSIONS.includes((parsed as Partial<Saved>).v ?? -1) &&
       typeof (parsed as Partial<Saved>).users === 'object'
     ) {
       // The mock wrote it itself; PaperEngine checks each snapshot again on restore.
