@@ -7,6 +7,9 @@ export default defineConfig({
     environment: 'jsdom',
     setupFiles: ['./src/test/setup.ts'],
     css: false,
+    // As in apps/web: a busy CI runner has taken over 5 s for the first Radix overlay test of a
+    // file. findBy and waitFor keep their own timeouts, so a real hang still reports its error.
+    testTimeout: 15_000,
     coverage: {
       provider: 'v8',
       include: ['src/**/*.{ts,tsx}'],
