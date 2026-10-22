@@ -13,8 +13,16 @@ import {
   type OrderStatus,
   type OrderValidity,
   type PlaceOrderRequest,
+  type ModifyTrailingStopRequest,
+  type PlaceTrailingStopRequest,
+  type PositionDirection,
   type ProductType,
   type TradingSymbol,
+  type TrailingStop,
+  type TrailingStopParams,
+  type TrailingStopStatus,
+  TrailingStop as TrailingStopSchema,
+  TRAILING_STOP_MESSAGES,
 } from '@nthstock/contracts';
 import {
   INTRADAY_SQUARE_OFF,
@@ -25,6 +33,7 @@ import {
   isTradingDay,
   nseHolidays2026,
   toIstParts,
+  formatInr,
   type HolidayTable,
 } from '@nthstock/utils';
 import { assertPaise, assertQty, type EngineContext } from './context.js';
@@ -48,6 +57,7 @@ import {
   type MarketHours,
   type OrderDraft,
   type OrderRejectionCode,
+  type ValidationResult,
 } from './orderValidation.js';
 import {
   EMPTY_POSITION,
@@ -57,6 +67,14 @@ import {
   type HoldingLot,
   type PositionBook,
 } from './positionMath.js';
+import {
+  modifyTrailingStop as applyStopModify,
+  stepTrailingStop,
+  validateStopPrice,
+  validateTrailingStop,
+  type TrailingStopCheck,
+  type TrailingStopState,
+} from './trailingStop.js';
 
 export type PaperEngineOptions = {
   ctx: EngineContext;
@@ -75,6 +93,13 @@ export type PaperEngineOptions = {
   holdings?: Iterable<readonly [InstrumentToken, HoldingLot]>;
   /** Called with a copy of the order every time one is stored or changes (orderUpdate frames). */
   onOrderUpdate?: (order: Order) => void;
+  /** Called with a copy of the trailing stop every time one is stored or changes. */
+  onTrailingStopUpdate?: (stop: TrailingStop) => void;
+  /**
+   * False refuses trailing stops, standalone and attached, as `NOT_SUPPORTED` (apps/api, whose
+   * store does not keep them yet). Default true.
+   */
+  trailingStops?: boolean;
   /**
    * The most shares a LIMIT order in `token` may fill per tick, or null for no cap (SPEC-TFC-1
    * TFC-10). The demo Simulator sets it to split large fills; MARKET orders always fill in full.
@@ -87,7 +112,12 @@ export type PaperEngineOptions = {
   snapshot?: PaperEngineSnapshot;
 };
 
-export const PAPER_ENGINE_SNAPSHOT_VERSION = 1;
+/**
+ * The full snapshot's version. Version 1 had no trailing stops and no `seq`; it still restores
+ * (SPEC-TFC-1 §10.3). Version 2 is the working set, so trailing stops arrived as version 3.
+ */
+export const PAPER_ENGINE_SNAPSHOT_VERSION = 3;
+export const PAPER_ENGINE_LEGACY_SNAPSHOT_VERSION = 1;
 export const PAPER_ENGINE_WORKING_SET_VERSION = 2;
 
 /**
@@ -95,7 +125,7 @@ export const PAPER_ENGINE_WORKING_SET_VERSION = 2;
  * it in sessionStorage) or processes. Timestamps are ISO 8601 UTC; money is integer paise.
  */
 export type PaperEngineSnapshotV1 = {
-  v: typeof PAPER_ENGINE_SNAPSHOT_VERSION;
+  v: typeof PAPER_ENGINE_LEGACY_SNAPSHOT_VERSION;
   /** Session events up to this instant have run. */
   syncedTo: string;
   orders: Order[];
@@ -111,6 +141,21 @@ export type PaperEngineSnapshotV1 = {
    * kept have none; restoring one rebuilds a short history from each order's own fields.
    */
   history?: [orderId: string, entries: OrderHistoryEntry[]][];
+};
+
+/**
+ * The full snapshot (v3): version 1 plus trailing stops and the engine `seq` (SPEC-TFC-1 §10.3).
+ */
+export type PaperEngineSnapshotV3 = Omit<PaperEngineSnapshotV1, 'v' | 'history'> & {
+  v: typeof PAPER_ENGINE_SNAPSHOT_VERSION;
+  history: [orderId: string, entries: OrderHistoryEntry[]][];
+  /** The engine sequence number of the last change. */
+  seq: number;
+  trailingStops: TrailingStop[];
+  /** Orders the engine placed to close a position (trailing-stop exits, `closePosition`). */
+  exitOrderIds: string[];
+  /** Idempotency keys of placed trailing stops. */
+  trailingStopRequestIds: [clientRequestId: string, trailingStopId: string][];
 };
 
 /**
@@ -133,15 +178,46 @@ export type PaperEngineWorkingSet = {
   history: [orderId: string, entries: OrderHistoryEntry[]][];
 };
 
-/** What an engine restores from: a full v1 snapshot or a v2 working set. */
-export type PaperEngineSnapshot = PaperEngineSnapshotV1 | PaperEngineWorkingSet;
+/**
+ * What an engine restores from: a full snapshot (v3, or a v1 saved before trailing stops) or a v2
+ * working set. The working set is apps/api's store format: it has no trailing stops and no `seq`
+ * until apps/api adopts them (ADR 0012).
+ */
+export type PaperEngineSnapshot =
+  PaperEngineSnapshotV1 | PaperEngineSnapshotV3 | PaperEngineWorkingSet;
 
 export type OrderActionErrorCode =
   | OrderRejectionCode
+  | TrailingStopCheckCode
   | 'ORDER_NOT_FOUND'
   | 'ILLEGAL_TRANSITION'
   | 'NOTHING_TO_CHANGE'
   | 'NOT_SUPPORTED';
+
+/** A trailing stop's parameters failed a SPEC-TFC-1 §6.6 rule; the reason is its message. */
+export type TrailingStopCheckCode =
+  'NO_POSITION' | 'INVALID_TRAIL' | 'INVALID_STOP_PRICE' | 'INVALID_LIMIT_OFFSET';
+
+export type TrailingStopActionErrorCode =
+  | TrailingStopCheckCode
+  | 'TRAILING_STOP_NOT_FOUND'
+  | 'ILLEGAL_TRANSITION'
+  | 'NOTHING_TO_CHANGE'
+  | 'NO_PRICE'
+  | 'NOT_SUPPORTED';
+
+/**
+ * The outcome of placing, modifying or cancelling a trailing stop. On failure `reason` is plain
+ * language and `trailingStop` the unchanged stop, or null when there is none.
+ */
+export type TrailingStopActionResult =
+  | { ok: true; trailingStop: TrailingStop }
+  | {
+      ok: false;
+      code: TrailingStopActionErrorCode;
+      reason: string;
+      trailingStop: TrailingStop | null;
+    };
 
 /**
  * The outcome of place, modify or cancel. On failure `reason` is plain language; `order` is the
@@ -181,6 +257,7 @@ export type HoldingSale = {
 
 /** Orders are kept mutable inside the engine; callers only ever get copies. */
 type StoredOrder = Order;
+type StoredStop = TrailingStop;
 
 const LIVE_STATUSES: ReadonlySet<OrderStatus> = new Set(['AMO', 'OPEN']);
 
@@ -191,6 +268,56 @@ const CANCELLED_AT_CLOSE = 'Cancelled at market close, 3:30 PM IST. Day orders d
 const SQUARED_OFF = 'Squared off automatically at 3:20 PM IST.';
 const IOC_NEEDS_OPEN_MARKET =
   'Immediate-or-cancel orders can be placed only while the market is open.';
+
+/** Trailing stops that still act: the attached ones waiting for their entry, and the live ones. */
+const ACTIVE_STOP_STATUSES: ReadonlySet<TrailingStopStatus> = new Set([
+  'PENDING_ENTRY',
+  'ARMED',
+  'TRAILING',
+  'TRIGGERED',
+]);
+/** Trailing stops that protect an open position. */
+const PROTECTING_STOP_STATUSES: ReadonlySet<TrailingStopStatus> = new Set([
+  'ARMED',
+  'TRAILING',
+  'TRIGGERED',
+]);
+/** Trailing stops the user may still change (SPEC-TFC-1 §6.5). */
+const MODIFIABLE_STOP_STATUSES: ReadonlySet<TrailingStopStatus> = new Set([
+  'PENDING_ENTRY',
+  'ARMED',
+  'TRAILING',
+]);
+
+// Trailing-stop reasons (SPEC-TFC-1 §6.4). The spec's words, so every surface shows the same.
+const STOP_POSITION_CLOSED = 'Position closed';
+const STOP_EXPIRED = 'Expired at close';
+const STOP_REPLACED = 'Replaced by a new trailing stop';
+const STOP_ENTRY_CANCELLED = 'Entry order cancelled before it filled';
+const STOP_ENTRY_REJECTED = 'Entry order rejected';
+const STOP_NOTHING_TO_PROTECT = 'The entry order did not open a position to protect';
+const TRAILING_STOPS_UNAVAILABLE = 'Trailing stops are not available in this mode.';
+const EXIT_CANCELLED_WITH_STOP = 'Cancelled with its trailing stop.';
+const EXIT_NOT_NEEDED = 'Reduce-only exit: the position is already closed.';
+const CANCELLED_FOR_CLOSE = 'Cancelled when you closed the position.';
+const SELL_UNCOVERED = 'Cancelled: an exit already sold the shares this order would sell.';
+const CLOSE_EXIT = 'Exit to close the position.';
+const NO_POSITION_TO_CLOSE = 'There is no open position to close.';
+
+/** "Trailing stop exit: the price reached the stop at ₹1,480.00." */
+function stopExitReason(stopPrice: number): string {
+  return `Trailing stop exit: the price reached the stop at ${formatInr(stopPrice)}.`;
+}
+
+const STOP_STATUS_WORDS: Record<TrailingStopStatus, string> = {
+  PENDING_ENTRY: 'waiting for its entry',
+  ARMED: 'armed',
+  TRAILING: 'trailing',
+  TRIGGERED: 'triggered',
+  EXECUTED: 'exited',
+  CANCELLED: 'cancelled',
+  REJECTED: 'rejected',
+};
 
 /** "Immediate or cancel: 7 of 10 shares did not fill and were cancelled." */
 function iocCancelReason(unfilled: number, qty: number): string {
@@ -216,6 +343,13 @@ function iocCancelReason(unfilled: number, qty: number): string {
  *   holidays from `@nthstock/utils`): at 9:15 AMOs are released (T-129); at 15:20
  *   intraday is squared off and at 15:30 open orders are cancelled and delivery buys move to
  *   holdings (T-130).
+ * - Trailing stops (SPEC-TFC-1 §6): one per position, placed on an open position or attached to
+ *   an entry order. Each sync steps them after matching orders; a trigger places one reduce-only
+ *   exit. After every fill a stop follows its position: it protects the open quantity, and is
+ *   cancelled when the position closes or flips by any other means. `closePosition` closes a
+ *   position in one step. Stops expire at the 15:20 square-off (Intraday) and the close (Delivery).
+ * - `seq` rises by one with every order or trailing-stop change, and each changed record carries
+ *   it (ADR 0012).
  */
 export class PaperEngine {
   readonly #ctx: EngineContext;
@@ -223,6 +357,8 @@ export class PaperEngine {
   readonly #holidays: HolidayTable;
   readonly #marketHours: MarketHours;
   readonly #onOrderUpdate: ((order: Order) => void) | undefined;
+  readonly #onTrailingStopUpdate: ((stop: TrailingStop) => void) | undefined;
+  readonly #trailingStopsEnabled: boolean;
   readonly #fillCap: (token: InstrumentToken) => number | null;
   /** The tick each capped order last filled on, so it fills at most once per tick. */
   readonly #cappedFillTick = new Map<string, number>();
@@ -235,6 +371,18 @@ export class PaperEngine {
   readonly #rejectCodes = new Map<string, OrderRejectionCode>();
   readonly #history = new Map<string, OrderHistoryEntry[]>();
   readonly #collectors = new Set<Order[]>();
+  readonly #stops = new Map<string, StoredStop>();
+  readonly #stopByRequestId = new Map<string, string>();
+  /** The PENDING_ENTRY stop attached to each entry order, by order id. */
+  readonly #stopByEntry = new Map<string, string>();
+  /**
+   * Orders the engine placed to close a position: trailing-stop exits and `closePosition`. They
+   * are reduce-only (a fill never takes the position past flat), and a buy-back settles like the
+   * square-off, so it is never refused for cash.
+   */
+  readonly #exits = new Set<string>();
+  /** The sequence number of the last change (ADR 0012). */
+  #seq = 0;
   /** Scheduled session events up to this instant have run. */
   #syncedTo: Date;
   /** While a scheduled event runs, the instant it was due; the engine's "now" for that event. */
@@ -267,6 +415,8 @@ export class PaperEngine {
     this.#holidays = options.holidays ?? nseHolidays2026;
     this.#marketHours = options.marketHours ?? 'nse';
     this.#onOrderUpdate = options.onOrderUpdate;
+    this.#onTrailingStopUpdate = options.onTrailingStopUpdate;
+    this.#trailingStopsEnabled = options.trailingStops ?? true;
     this.#fillCap = options.fillCap ?? (() => null);
     this.#syncedTo = this.#ctx.now();
     const { snapshot } = options;
@@ -286,9 +436,10 @@ export class PaperEngine {
   }
 
   /** The whole state as plain data; `new PaperEngine({ ..., snapshot })` carries on from it. */
-  snapshot(): PaperEngineSnapshotV1 {
+  snapshot(): PaperEngineSnapshotV3 {
     return {
       v: PAPER_ENGINE_SNAPSHOT_VERSION,
+      seq: this.#seq,
       syncedTo: this.#syncedTo.toISOString(),
       orders: [...this.#orders.values()].map(copy),
       rejectCodes: [...this.#rejectCodes],
@@ -298,10 +449,17 @@ export class PaperEngine {
       openingBalance: this.#funds.openingBalance,
       ledger: [...this.#funds.entries()],
       history: [...this.#history].map(([id, entries]) => [id, entries.map((e) => ({ ...e }))]),
+      trailingStops: [...this.#stops.values()].map(copyStop),
+      exitOrderIds: [...this.#exits],
+      trailingStopRequestIds: [...this.#stopByRequestId],
     };
   }
 
-  /** The working set (v2); `new PaperEngine({ ..., snapshot })` carries on from it like a full snapshot. */
+  /**
+   * The working set (v2); `new PaperEngine({ ..., snapshot })` carries on from it like a full
+   * snapshot. It is apps/api's store format, which keeps no trailing stops and no `seq` yet, so
+   * orders leave `seq` out.
+   */
   workingSet(): PaperEngineWorkingSet {
     const syncedTo = this.#syncedTo;
     const day = toIstParts(syncedTo);
@@ -313,7 +471,7 @@ export class PaperEngine {
     return {
       v: PAPER_ENGINE_WORKING_SET_VERSION,
       syncedTo: syncedTo.toISOString(),
-      orders: [...this.#orders.values()].filter((o) => kept.has(o.id)).map(copy),
+      orders: [...this.#orders.values()].filter((o) => kept.has(o.id)).map(withoutSeq),
       rejectCodes: [...this.#rejectCodes].filter(([id]) => kept.has(id)),
       positions: [...this.#positions.values()].map((p) => ({ ...p, book: { ...p.book } })),
       holdings: this.holdings() as EngineHolding[],
@@ -331,6 +489,11 @@ export class PaperEngine {
     return this.#funds;
   }
 
+  /** The sequence number of the last order or trailing-stop change (ADR 0012). */
+  get seq(): number {
+    return this.#seq;
+  }
+
   /**
    * Places an order. Validation failures that still describe a real order (cash, holdings,
    * circuit, market hours) store it as REJECTED; malformed requests store nothing.
@@ -341,9 +504,9 @@ export class PaperEngine {
     const existingId =
       clientOrderId === null ? undefined : this.#byClientOrderId.get(clientOrderId);
     if (existingId !== undefined) return this.#result(this.#mustGet(existingId));
-    const unsupported = unsupportedPlaceReason(request);
-    if (unsupported !== null) {
-      return { ok: false, code: 'NOT_SUPPORTED', reason: unsupported, order: null };
+    const attached = request.attachedTrailingStop;
+    if (attached && !this.#trailingStopsEnabled) {
+      return { ok: false, code: 'NOT_SUPPORTED', reason: TRAILING_STOPS_UNAVAILABLE, order: null };
     }
 
     const draft: OrderDraft = {
@@ -373,6 +536,20 @@ export class PaperEngine {
     if (request.validity === 'IOC' && checked.ok && !marketOpen) {
       return { ok: false, code: 'NOT_SUPPORTED', reason: IOC_NEEDS_OPEN_MARKET, order: null };
     }
+    const direction: PositionDirection = draft.side === 'BUY' ? 'LONG' : 'SHORT';
+    if (attached && checked.ok) {
+      // Judged against the price the entry should fill near: the LTP, or the limit without one.
+      const reference = this.#ctx.ltp(draft.token) ?? draft.price ?? 0;
+      const check = validateTrailingStop({
+        params: attached,
+        direction,
+        ltp: reference,
+        hasPosition: true,
+      });
+      if (!check.ok) {
+        return { ok: false, code: checkCode(check), reason: check.message, order: null };
+      }
+    }
     const status: OrderStatus = !checked.ok ? 'REJECTED' : marketOpen ? 'OPEN' : 'AMO';
     const order = this.#newOrder(draft, instrument, status, clientOrderId, request.validity);
     order.statusReason = checked.ok ? null : checked.reason;
@@ -384,6 +561,7 @@ export class PaperEngine {
     }
     this.#record(order, 'PLACED', { note: order.statusReason });
     this.#emit(order);
+    if (attached && checked.ok) this.#attachStop(order, attached, direction);
     if (order.status === 'OPEN') this.#match(order, true);
     if (order.status === 'OPEN' && order.validity === 'IOC') {
       this.#cancel(order, iocCancelReason(order.qty - order.filledQty, order.qty));
@@ -466,6 +644,198 @@ export class PaperEngine {
   }
 
   /**
+   * Protects an open position with a trailing stop (SPEC-TFC-1 §6). The stop starts from the LTP:
+   * it trails at once, or waits for its activation price. It replaces the position's active stop.
+   */
+  placeTrailingStop(request: PlaceTrailingStopRequest): TrailingStopActionResult {
+    this.sync();
+    if (!this.#trailingStopsEnabled)
+      return stopRefusal('NOT_SUPPORTED', TRAILING_STOPS_UNAVAILABLE);
+    const requestId = request.clientRequestId ?? null;
+    const existingId = requestId === null ? undefined : this.#stopByRequestId.get(requestId);
+    const existing = existingId === undefined ? undefined : this.#stops.get(existingId);
+    if (existing) return { ok: true, trailingStop: copyStop(existing) };
+
+    const position = this.#positions.get(positionKey(request.token, request.product));
+    const netQty = position?.book.netQty ?? 0;
+    const direction: PositionDirection = netQty < 0 ? 'SHORT' : 'LONG';
+    const params = paramsOf(request);
+    const ltp = this.#ctx.ltp(request.token);
+    if (!position || netQty === 0 || ltp === null) {
+      if (!position || netQty === 0) {
+        return stopRefusal('NO_POSITION', TRAILING_STOP_MESSAGES.noPosition);
+      }
+      return stopRefusal('NO_PRICE', noPriceReason(position.symbol));
+    }
+    const check = validateTrailingStop({ params, direction, ltp, hasPosition: true });
+    if (!check.ok) return stopRefusal(checkCode(check), check.message);
+
+    for (const other of this.#protectingStops(request.token, request.product)) {
+      this.#cancelStop(other, STOP_REPLACED);
+    }
+    const stop = this.#newStop(position, request.product, direction, params, null);
+    stop.status = 'ARMED';
+    stop.protectedQty = Math.abs(netQty);
+    this.#stops.set(stop.id, stop);
+    if (requestId !== null) this.#stopByRequestId.set(requestId, stop.id);
+    // A standalone stop starts from the LTP when it is placed (§6.3).
+    applyStep(stop, stepTrailingStop(stopState(stop), ltp).state);
+    this.#emitStop(stop);
+    return { ok: true, trailingStop: copyStop(stop) };
+  }
+
+  /**
+   * Changes an active trailing stop (SPEC-TFC-1 §6.5): a new trail, or a dragged stop price that
+   * becomes a trail from the watermark now, plus the activation price and exit. The new stop is
+   * the ratchet baseline, so a trail can widen. A triggered or finished stop cannot change.
+   */
+  modifyTrailingStop(id: string, request: ModifyTrailingStopRequest): TrailingStopActionResult {
+    this.sync();
+    const stop = this.#stops.get(id);
+    if (!stop) return stopNotFound();
+    if (!MODIFIABLE_STOP_STATUSES.has(stop.status)) {
+      return stopRefusal(
+        'ILLEGAL_TRANSITION',
+        `This trailing stop is ${STOP_STATUS_WORDS[stop.status]} and can no longer be changed.`,
+        stop,
+      );
+    }
+    if (Object.values(request).every((value) => value === undefined)) {
+      return stopRefusal('NOTHING_TO_CHANGE', 'Nothing to change.', stop);
+    }
+    const ltp = this.#ctx.ltp(stop.token);
+    if (ltp === null) return stopRefusal('NO_PRICE', noPriceReason(stop.symbol), stop);
+
+    const exitOrderType = request.exitOrderType ?? stop.exitOrderType;
+    const exitLimitOffset =
+      request.exitLimitOffset !== undefined
+        ? request.exitLimitOffset
+        : exitOrderType === 'MARKET'
+          ? null
+          : stop.exitLimitOffset;
+    if ((exitOrderType === 'LIMIT') !== (exitLimitOffset !== null)) {
+      return stopRefusal(
+        'INVALID_LIMIT_OFFSET',
+        exitOrderType === 'LIMIT'
+          ? TRAILING_STOP_MESSAGES.limitOffsetRequired
+          : TRAILING_STOP_MESSAGES.limitOffsetOnMarketExit,
+        stop,
+      );
+    }
+    const activationPrice =
+      request.activationPrice !== undefined ? request.activationPrice : stop.activationPrice;
+
+    let state: TrailingStopState = { ...stopState(stop), activationPrice };
+    if (request.stopPrice !== undefined) {
+      const dragged = validateStopPrice(request.stopPrice, ltp, stop.direction);
+      if (!dragged.ok) return stopRefusal(checkCode(dragged), dragged.message, stop);
+      if (state.watermarkPrice === null && state.activationPrice === null) {
+        return stopRefusal(
+          'INVALID_STOP_PRICE',
+          'Set a trail instead: this trailing stop has no price to measure a stop from yet.',
+          stop,
+        );
+      }
+      state = applyStopModify(state, { stopPrice: request.stopPrice });
+    } else if (request.trail !== undefined) {
+      state = applyStopModify(state, { trail: request.trail });
+    }
+    const params: TrailingStopParams = {
+      trail: state.trail,
+      activationPrice,
+      exitOrderType,
+      exitLimitOffset,
+    };
+    const check = validateTrailingStop({
+      params,
+      direction: stop.direction,
+      ltp,
+      hasPosition: true,
+    });
+    if (!check.ok) return stopRefusal(checkCode(check), check.message, stop);
+    if (state.status === 'TRAILING' && state.stopPrice !== null) {
+      // A tighter trail measured from a watermark the price has fallen from could cross it.
+      const live = validateStopPrice(state.stopPrice, ltp, stop.direction);
+      if (!live.ok) return stopRefusal(checkCode(live), live.message, stop);
+    }
+
+    stop.trail = state.trail;
+    stop.activationPrice = activationPrice;
+    stop.exitOrderType = exitOrderType;
+    stop.exitLimitOffset = exitLimitOffset;
+    stop.watermarkPrice = state.watermarkPrice;
+    stop.stopPrice = state.stopPrice;
+    this.#touchStop(stop);
+    this.#emitStop(stop);
+    return { ok: true, trailingStop: copyStop(stop) };
+  }
+
+  /**
+   * Cancels a trailing stop that is still active. A triggered stop with a working limit exit is
+   * cancelled with its exit (SPEC-TFC-1 §6.4); the position stays open.
+   */
+  cancelTrailingStop(id: string): TrailingStopActionResult {
+    this.sync();
+    const stop = this.#stops.get(id);
+    if (!stop) return stopNotFound();
+    if (!ACTIVE_STOP_STATUSES.has(stop.status)) {
+      return stopRefusal(
+        'ILLEGAL_TRANSITION',
+        `This trailing stop is ${STOP_STATUS_WORDS[stop.status]} and cannot be cancelled.`,
+        stop,
+      );
+    }
+    this.#cancelStop(stop, CANCELLED_BY_USER);
+    return { ok: true, trailingStop: copyStop(stop) };
+  }
+
+  /**
+   * Closes a position in one step (SPEC-TFC-1 §6.4): cancels its trailing stop and that stop's
+   * exit, cancels the working orders in the instrument and product, and sends a reduce-only
+   * MARKET exit for the open quantity. Flatten, Reverse and the ticket's Exit use it. Answers with
+   * the exit order.
+   */
+  closePosition(token: InstrumentToken, product: ProductType): OrderActionResult {
+    this.sync();
+    const position = this.#positions.get(positionKey(token, product));
+    const netQty = position?.book.netQty ?? 0;
+    if (!position || netQty === 0) {
+      return { ok: false, code: 'NO_POSITION', reason: NO_POSITION_TO_CLOSE, order: null };
+    }
+    for (const stop of this.#protectingStops(token, product)) {
+      this.#cancelStop(stop, STOP_POSITION_CLOSED);
+    }
+    for (const order of this.#orders.values()) {
+      if (order.token === token && order.product === product && LIVE_STATUSES.has(order.status)) {
+        this.#cancel(order, CANCELLED_FOR_CLOSE);
+      }
+    }
+    const draft: OrderDraft = {
+      token,
+      side: netQty > 0 ? 'SELL' : 'BUY',
+      type: 'MARKET',
+      product,
+      qty: Math.abs(netQty),
+      price: null,
+    };
+    const exit = this.#placeExit(draft, position, CLOSE_EXIT);
+    if (exit.status === 'OPEN') this.#match(exit, true);
+    return this.#result(exit);
+  }
+
+  getTrailingStop(id: string): TrailingStop | null {
+    const stop = this.#stops.get(id);
+    return stop ? copyStop(stop) : null;
+  }
+
+  /** Trailing stops in the order they were placed, optionally only one status. */
+  trailingStops(status?: TrailingStopStatus): readonly TrailingStop[] {
+    return [...this.#stops.values()]
+      .filter((stop) => status === undefined || stop.status === status)
+      .map(copyStop);
+  }
+
+  /**
    * Resets the paper account (T-155): cancels every AMO and OPEN order (each goes out as an order
    * update and releases its block), writes a `RESET` ledger entry that brings available cash back
    * to the opening balance, and clears orders, positions and holdings. The ledger keeps its
@@ -473,6 +843,9 @@ export class PaperEngine {
    */
   reset(): readonly Order[] {
     this.sync();
+    for (const stop of this.#stops.values()) {
+      if (ACTIVE_STOP_STATUSES.has(stop.status)) this.#cancelStop(stop, CANCELLED_BY_RESET);
+    }
     const cancelled: Order[] = [];
     for (const order of this.#orders.values()) {
       if (!LIVE_STATUSES.has(order.status)) continue;
@@ -488,12 +861,17 @@ export class PaperEngine {
     this.#rejectCodes.clear();
     this.#history.clear();
     this.#cappedFillTick.clear();
+    this.#stops.clear();
+    this.#stopByRequestId.clear();
+    this.#stopByEntry.clear();
+    this.#exits.clear();
     return cancelled;
   }
 
   /**
-   * Brings the engine up to the clock, then matches every OPEN order against its current LTP.
-   * Returns the orders that changed (each once, latest state), in the order they changed.
+   * Brings the engine up to the clock, matches every OPEN order against its current LTP, then
+   * steps every armed and trailing stop (SPEC-TFC-1 §10.2). Returns the orders that changed (each
+   * once, latest state), in the order they changed.
    */
   sync(): readonly Order[] {
     const changed: Order[] = [];
@@ -502,6 +880,11 @@ export class PaperEngine {
       this.#runSchedule(this.#ctx.now());
       for (const order of this.#orders.values()) {
         if (order.status === 'OPEN') this.#match(order);
+      }
+      for (const stop of this.#stops.values()) {
+        if (stop.status !== 'ARMED' && stop.status !== 'TRAILING') continue;
+        const ltp = this.#ctx.ltp(stop.token);
+        if (ltp !== null) this.#stepStop(stop, ltp);
       }
     } finally {
       this.#collectors.delete(changed);
@@ -563,6 +946,7 @@ export class PaperEngine {
   #restore(snapshot: PaperEngineSnapshot): void {
     if (
       snapshot.v !== PAPER_ENGINE_SNAPSHOT_VERSION &&
+      snapshot.v !== PAPER_ENGINE_LEGACY_SNAPSHOT_VERSION &&
       snapshot.v !== PAPER_ENGINE_WORKING_SET_VERSION
     ) {
       throw new Error(
@@ -606,6 +990,26 @@ export class PaperEngine {
       assertPaise(sale.realisedPnl, 'Sale P&L');
       this.#holdingSales.set(sale.token, { ...sale });
     }
+    // Version 1 and the working set predate trailing stops: they restore with none (§10.3).
+    if (snapshot.v === PAPER_ENGINE_SNAPSHOT_VERSION) {
+      for (const raw of snapshot.trailingStops) {
+        const stop = TrailingStopSchema.parse(raw);
+        this.#stops.set(stop.id, stop);
+        if (stop.status === 'PENDING_ENTRY' && stop.entryOrderId !== null) {
+          this.#stopByEntry.set(stop.entryOrderId, stop.id);
+        }
+      }
+      for (const id of snapshot.exitOrderIds) if (this.#orders.has(id)) this.#exits.add(id);
+      for (const [requestId, stopId] of snapshot.trailingStopRequestIds) {
+        if (this.#stops.has(stopId)) this.#stopByRequestId.set(requestId, stopId);
+      }
+    }
+    // `seq` never goes back: at least the newest change any record carries.
+    let seq = snapshot.v === PAPER_ENGINE_SNAPSHOT_VERSION ? snapshot.seq : 0;
+    for (const order of this.#orders.values()) seq = Math.max(seq, order.seq ?? 0);
+    for (const stop of this.#stops.values()) seq = Math.max(seq, stop.seq);
+    if (!Number.isSafeInteger(seq) || seq < 0) throw new RangeError('Invalid snapshot seq');
+    this.#seq = seq;
   }
 
   /**
@@ -650,14 +1054,17 @@ export class PaperEngine {
   #releaseAmos(): void {
     for (const order of this.#orders.values()) {
       if (order.status !== 'AMO') continue;
+      const exit = this.#exits.has(order.id);
       const checked = validateOrder(order, {
         now: this.#now(),
         holidays: this.#holidays,
         marketHours: this.#marketHours,
         instrument: this.#instruments.getInstrument(order.token),
         ltp: this.#ctx.ltp(order.token),
-        availableCash: this.#funds.available + this.#funds.blockedFor(order.id),
-        sellableQty: this.#sellableQty(order.token, order.id),
+        availableCash: exit
+          ? Number.MAX_SAFE_INTEGER
+          : this.#funds.available + this.#funds.blockedFor(order.id),
+        sellableQty: exit ? Number.MAX_SAFE_INTEGER : this.#sellableQty(order.token, order.id),
       });
       order.updatedAt = this.#now().toISOString();
       if (!checked.ok) {
@@ -667,9 +1074,10 @@ export class PaperEngine {
         this.#rejectCodes.set(order.id, checked.code);
         this.#record(order, 'REJECTED', { note: checked.reason });
         this.#emit(order);
+        this.#entryClosed(order);
         continue;
       }
-      this.#reblock(order.id, checked.blockAmount);
+      if (!exit) this.#reblock(order.id, checked.blockAmount);
       order.status = transitionOrder(order.status, 'RELEASE');
       this.#record(order, 'RELEASED');
       this.#emit(order);
@@ -677,11 +1085,13 @@ export class PaperEngine {
     }
   }
   /**
-   * 15:20 IST (T-130): cancels OPEN intraday orders, then closes every open intraday position
-   * with a MARKET order at the LTP (at the position's average price, on the tick, if there is no
-   * LTP). The buy-back of a short always settles, even into a debit balance.
+   * 15:20 IST (T-130): expires Intraday trailing stops (SPEC-TFC-1 §6.4), cancels OPEN intraday
+   * orders, then closes every open intraday position with a MARKET order at the LTP (at the
+   * position's average price, on the tick, if there is no LTP). The buy-back of a short always
+   * settles, even into a debit balance.
    */
   #squareOffIntraday(): void {
+    this.#expireStops('INTRADAY');
     for (const order of this.#orders.values()) {
       if (order.status === 'OPEN' && order.product === 'INTRADAY') {
         this.#cancel(order, CANCELLED_AT_SQUARE_OFF);
@@ -708,12 +1118,13 @@ export class PaperEngine {
   }
 
   /**
-   * 15:30 IST (T-130): cancels every OPEN order (day orders do not carry over), moves today's
-   * delivery buys into holdings at their cost, and starts a fresh day of positions. AMOs placed
-   * after the close wait for the next session.
+   * 15:30 IST (T-130): expires Delivery trailing stops, cancels every OPEN order (day orders do
+   * not carry over), moves today's delivery buys into holdings at their cost, and starts a fresh
+   * day of positions. AMOs placed after the close wait for the next session.
    */
   #closeDay(): void {
     this.#squareOffIntraday();
+    this.#expireStops('DELIVERY');
     for (const order of this.#orders.values()) {
       if (order.status === 'OPEN') this.#cancel(order, CANCELLED_AT_CLOSE);
     }
@@ -780,6 +1191,10 @@ export class PaperEngine {
     order.updatedAt = this.#now().toISOString();
     this.#record(order, 'CANCELLED', { note: reason });
     this.#emit(order);
+    this.#entryClosed(order);
+    // A triggered stop whose exit is cancelled some other way (the user, the square-off) ends too.
+    const stop = this.#stopOfExit(order.id);
+    if (stop?.status === 'TRIGGERED') this.#cancelStop(stop, reason);
   }
 
   /** Moves the order's block to `amount`: blocks more or releases the difference. */
@@ -811,12 +1226,24 @@ export class PaperEngine {
    * block in proportion to the shares filled, and all of what is left on the last fill. The order
    * stays OPEN until its last share fills.
    */
-  #execute(order: StoredOrder, qty: number, price: number, squareOff = false): void {
+  #execute(order: StoredOrder, fillQty: number, price: number, squareOff = false): void {
+    const exit = this.#exits.has(order.id);
+    let qty = fillQty;
+    if (exit) {
+      // Reduce-only (SPEC-TFC-1 §6.4): an exit never takes the position past flat, even when a
+      // manual exit filled on the same tick.
+      const closable = this.#closableQty(order);
+      if (closable === 0) {
+        this.#cancel(order, EXIT_NOT_NEEDED);
+        return;
+      }
+      qty = Math.min(qty, closable);
+    }
     const value = qty * price;
     const remaining = order.qty - order.filledQty;
     const last = qty === remaining;
     if (order.side === 'SELL') this.#mustLedger(this.#funds.settleSell(order.id, value));
-    else if (squareOff) this.#mustLedger(this.#funds.settleForcedBuy(order.id, value));
+    else if (squareOff || exit) this.#mustLedger(this.#funds.settleForcedBuy(order.id, value));
     else {
       const release = last
         ? undefined
@@ -846,6 +1273,7 @@ export class PaperEngine {
       fillQty: qty,
     });
     this.#emit(order);
+    this.#afterFill(order, price);
   }
 
   /** The value of the order's fills so far, from its history. */
@@ -932,9 +1360,299 @@ export class PaperEngine {
   }
 
   #emit(order: StoredOrder): void {
+    this.#seq += 1;
+    order.seq = this.#seq;
     const snapshot = copy(order);
     for (const collector of this.#collectors) collector.push(snapshot);
     this.#onOrderUpdate?.(snapshot);
+  }
+
+  // ---- Trailing stops (SPEC-TFC-1 §6) -----------------------------------------------------------
+
+  #newStop(
+    names: { token: InstrumentToken; symbol: TradingSymbol; exchange: Exchange },
+    product: ProductType,
+    direction: PositionDirection,
+    params: TrailingStopParams,
+    entryOrderId: string | null,
+  ): StoredStop {
+    const now = this.#now().toISOString();
+    return {
+      id: this.#ctx.nextId(),
+      token: names.token,
+      symbol: names.symbol,
+      exchange: names.exchange,
+      product,
+      direction,
+      trail: { ...params.trail },
+      activationPrice: params.activationPrice,
+      exitOrderType: params.exitOrderType,
+      exitLimitOffset: params.exitLimitOffset,
+      status: 'PENDING_ENTRY',
+      statusReason: null,
+      watermarkPrice: null,
+      stopPrice: null,
+      protectedQty: 0,
+      entryOrderId,
+      exitOrderId: null,
+      seq: this.#seq,
+      createdAt: now,
+      updatedAt: now,
+    };
+  }
+
+  /** A stop attached to a new entry order waits for the entry's first fill (PENDING_ENTRY). */
+  #attachStop(entry: StoredOrder, params: TrailingStopParams, direction: PositionDirection): void {
+    const stop = this.#newStop(entry, entry.product, direction, paramsOf(params), entry.id);
+    this.#stops.set(stop.id, stop);
+    this.#stopByEntry.set(entry.id, stop.id);
+    this.#emitStop(stop);
+  }
+
+  /** The stops protecting the position (at most one, by construction). */
+  #protectingStops(token: InstrumentToken, product: ProductType): StoredStop[] {
+    return [...this.#stops.values()].filter(
+      (stop) =>
+        stop.token === token &&
+        stop.product === product &&
+        PROTECTING_STOP_STATUSES.has(stop.status),
+    );
+  }
+
+  /** One tick for one stop; a trigger places its exit (SPEC-TFC-1 §6.3). */
+  #stepStop(stop: StoredStop, ltp: number): void {
+    const { state, triggered } = stepTrailingStop(stopState(stop), ltp);
+    if (!applyStep(stop, state)) return;
+    this.#touchStop(stop);
+    if (triggered) this.#triggerStop(stop);
+    else this.#emitStop(stop);
+  }
+
+  /**
+   * TRIGGERED: places one reduce-only exit for the protected quantity, MARKET or LIMIT at the
+   * stop less (long) or plus (short) the offset. A refused exit leaves the stop REJECTED with the
+   * reason, and the position unprotected (SPEC-TFC-1 §6.4).
+   */
+  #triggerStop(stop: StoredStop): void {
+    const stopPrice = stop.stopPrice ?? 0;
+    const offset = stop.exitLimitOffset ?? 0;
+    const draft: OrderDraft = {
+      token: stop.token,
+      side: stop.direction === 'LONG' ? 'SELL' : 'BUY',
+      type: stop.exitOrderType,
+      product: stop.product,
+      qty: stop.protectedQty,
+      price:
+        stop.exitOrderType === 'LIMIT'
+          ? stop.direction === 'LONG'
+            ? stopPrice - offset
+            : stopPrice + offset
+          : null,
+    };
+    const exit = this.#placeExit(draft, stop, stopExitReason(stopPrice));
+    stop.exitOrderId = exit.id;
+    if (exit.status === 'REJECTED') {
+      this.#finishStop(stop, 'REJECTED', exit.statusReason);
+      return;
+    }
+    this.#emitStop(stop);
+    if (exit.status === 'OPEN') this.#match(exit, true);
+  }
+
+  /**
+   * Stores an engine-placed exit. It skips the cash and holdings checks: it is reduce-only, so it
+   * can only close shares the position holds, and a buy-back settles like the square-off. The
+   * other rules (circuit band, intraday hours, a price) still apply; a failure stores it REJECTED.
+   */
+  #placeExit(
+    draft: OrderDraft,
+    names: { symbol: TradingSymbol; exchange: Exchange },
+    note: string,
+  ): StoredOrder {
+    const checked: ValidationResult =
+      draft.price !== null && draft.price < TICK_SIZE_PAISE
+        ? {
+            ok: false,
+            code: 'PRICE_OFF_TICK',
+            reason: TRAILING_STOP_MESSAGES.limitOffsetTooLarge,
+          }
+        : validateOrder(draft, {
+            now: this.#now(),
+            holidays: this.#holidays,
+            marketHours: this.#marketHours,
+            instrument: this.#instruments.getInstrument(draft.token),
+            ltp: this.#ctx.ltp(draft.token),
+            availableCash: Number.MAX_SAFE_INTEGER,
+            sellableQty: Number.MAX_SAFE_INTEGER,
+          });
+    const status: OrderStatus = !checked.ok ? 'REJECTED' : this.#marketOpen() ? 'OPEN' : 'AMO';
+    const order = this.#newOrder(draft, names, status, null);
+    order.statusReason = checked.ok ? note : checked.reason;
+    this.#orders.set(order.id, order);
+    this.#exits.add(order.id);
+    if (!checked.ok) this.#rejectCodes.set(order.id, checked.code);
+    this.#record(order, 'PLACED', { note: order.statusReason });
+    this.#emit(order);
+    return order;
+  }
+
+  /** Shares a reduce-only exit may still close: what the position holds on the other side. */
+  #closableQty(order: StoredOrder): number {
+    const netQty = this.#positions.get(positionKey(order.token, order.product))?.book.netQty ?? 0;
+    return order.side === 'SELL' ? Math.max(0, netQty) : Math.max(0, -netQty);
+  }
+
+  /**
+   * After every fill (SPEC-TFC-1 §6.4): an entry's attached stop arms on the first fill that
+   * opens its position, replacing the position's stop; every stop on the position protects its
+   * open quantity, or ends when the position closes or flips; exits the position no longer needs
+   * are cancelled.
+   */
+  #afterFill(order: StoredOrder, price: number): void {
+    const { token, product } = order;
+    const netQty = this.#positions.get(positionKey(token, product))?.book.netQty ?? 0;
+    const pendingId = this.#stopByEntry.get(order.id);
+    const pending = pendingId === undefined ? undefined : this.#stops.get(pendingId);
+    if (
+      pending?.status === 'PENDING_ENTRY' &&
+      netQty !== 0 &&
+      directionOf(netQty) === pending.direction
+    ) {
+      this.#stopByEntry.delete(order.id);
+      for (const other of this.#protectingStops(token, product)) {
+        this.#cancelStop(other, STOP_REPLACED);
+      }
+      pending.protectedQty = Math.abs(netQty);
+      // An attached stop starts from the entry's first fill price (§6.3).
+      applyStep(pending, stepTrailingStop({ ...stopState(pending), status: 'ARMED' }, price).state);
+      this.#touchStop(pending);
+      this.#emitStop(pending);
+    }
+    for (const stop of this.#protectingStops(token, product)) this.#followPosition(stop, netQty);
+    for (const id of this.#exits) {
+      const exit = this.#orders.get(id);
+      if (
+        exit?.token === token &&
+        exit.product === product &&
+        LIVE_STATUSES.has(exit.status) &&
+        this.#closableQty(exit) === 0
+      ) {
+        this.#cancel(exit, EXIT_NOT_NEEDED);
+      }
+    }
+    if (pending?.status === 'PENDING_ENTRY' && order.status === 'EXECUTED') {
+      this.#entryClosed(order);
+    }
+    if (product === 'DELIVERY' && order.side === 'SELL' && this.#exits.has(order.id)) {
+      this.#coverDeliverySells(token);
+    }
+  }
+
+  /**
+   * An exit skips the holdings check, so after it sells, the user's own delivery SELL orders may
+   * cover more shares than are left. Those that no longer fit are cancelled, oldest kept first, so
+   * no fill can sell shares the account does not hold.
+   */
+  #coverDeliverySells(token: InstrumentToken): void {
+    let sellable =
+      (this.#holdings.get(token)?.qty ?? 0) +
+      Math.max(0, this.#positions.get(positionKey(token, 'DELIVERY'))?.book.netQty ?? 0);
+    for (const order of this.#orders.values()) {
+      if (
+        order.token !== token ||
+        order.side !== 'SELL' ||
+        order.product !== 'DELIVERY' ||
+        !LIVE_STATUSES.has(order.status) ||
+        this.#exits.has(order.id)
+      ) {
+        continue;
+      }
+      const remaining = order.qty - order.filledQty;
+      if (remaining <= sellable) sellable -= remaining;
+      else this.#cancel(order, SELL_UNCOVERED);
+    }
+  }
+
+  /** Keeps a stop on its position: the open quantity, EXECUTED by its exit, or CANCELLED. */
+  #followPosition(stop: StoredStop, netQty: number): void {
+    const exit = stop.exitOrderId === null ? undefined : this.#orders.get(stop.exitOrderId);
+    const open = netQty !== 0 && directionOf(netQty) === stop.direction;
+    if (open && exit?.status !== 'EXECUTED') {
+      if (stop.protectedQty === Math.abs(netQty)) return;
+      stop.protectedQty = Math.abs(netQty);
+      this.#touchStop(stop);
+      this.#emitStop(stop);
+      return;
+    }
+    if (exit && exit.filledQty > 0) {
+      // The exit closed the position (a manual exit may have taken part of it).
+      stop.protectedQty = open ? Math.abs(netQty) : 0;
+      this.#finishStop(stop, 'EXECUTED', null);
+      if (LIVE_STATUSES.has(exit.status)) this.#cancel(exit, EXIT_NOT_NEEDED);
+      return;
+    }
+    stop.protectedQty = 0;
+    this.#cancelStop(stop, STOP_POSITION_CLOSED);
+  }
+
+  /** An entry order ended (cancelled, rejected, or filled without opening the position). */
+  #entryClosed(order: StoredOrder): void {
+    const stopId = this.#stopByEntry.get(order.id);
+    if (stopId === undefined) return;
+    this.#stopByEntry.delete(order.id);
+    const stop = this.#stops.get(stopId);
+    if (stop?.status !== 'PENDING_ENTRY') return;
+    const reason =
+      order.status === 'REJECTED'
+        ? STOP_ENTRY_REJECTED
+        : order.filledQty === 0
+          ? STOP_ENTRY_CANCELLED
+          : STOP_NOTHING_TO_PROTECT;
+    this.#cancelStop(stop, reason);
+  }
+
+  #stopOfExit(orderId: string): StoredStop | undefined {
+    if (!this.#exits.has(orderId)) return undefined;
+    for (const stop of this.#stops.values()) if (stop.exitOrderId === orderId) return stop;
+    return undefined;
+  }
+
+  /** CANCELLED with the reason; a working exit is cancelled with it, in the same step. */
+  #cancelStop(stop: StoredStop, reason: string): void {
+    if (!ACTIVE_STOP_STATUSES.has(stop.status)) return;
+    stop.status = 'CANCELLED';
+    stop.statusReason = reason;
+    this.#touchStop(stop);
+    if (stop.entryOrderId !== null) this.#stopByEntry.delete(stop.entryOrderId);
+    const exit = stop.exitOrderId === null ? undefined : this.#orders.get(stop.exitOrderId);
+    if (exit && LIVE_STATUSES.has(exit.status)) this.#cancel(exit, EXIT_CANCELLED_WITH_STOP);
+    this.#emitStop(stop);
+  }
+
+  #finishStop(stop: StoredStop, status: 'EXECUTED' | 'REJECTED', reason: string | null): void {
+    stop.status = status;
+    stop.statusReason = reason;
+    this.#touchStop(stop);
+    this.#emitStop(stop);
+  }
+
+  /** Day validity (SPEC-TFC-1 §6.4): Intraday stops end at 15:20, Delivery ones at 15:30. */
+  #expireStops(product: ProductType): void {
+    for (const stop of this.#stops.values()) {
+      if (stop.product === product && ACTIVE_STOP_STATUSES.has(stop.status)) {
+        this.#cancelStop(stop, STOP_EXPIRED);
+      }
+    }
+  }
+
+  #touchStop(stop: StoredStop): void {
+    stop.updatedAt = this.#now().toISOString();
+  }
+
+  #emitStop(stop: StoredStop): void {
+    this.#seq += 1;
+    stop.seq = this.#seq;
+    this.#onTrailingStopUpdate?.(copyStop(stop));
   }
 
   #result(order: StoredOrder): OrderActionResult {
@@ -1032,13 +1750,94 @@ function ledgerOptions(snapshot: PaperEngineSnapshot): FundsLedgerOptions {
   return { openingBalance: snapshot.openingBalance, entries: snapshot.ledger };
 }
 
-/**
- * Order fields the contracts accept before the engine acts on them (SPEC-TFC-1, PLAN-TFC-1 T06).
- * Refusing them keeps an order from looking protected when it is not.
- */
-function unsupportedPlaceReason(request: PlaceOrderRequest): string | null {
-  if (request.attachedTrailingStop !== undefined) {
-    return 'A trailing stop cannot be attached to an order yet.';
+function positionKey(token: InstrumentToken, product: ProductType): string {
+  return `${String(token)}:${product}`;
+}
+
+function directionOf(netQty: number): PositionDirection {
+  return netQty > 0 ? 'LONG' : 'SHORT';
+}
+
+/** The part of a stop the per-tick rules read (`trailingStop.ts`). */
+function stopState(stop: StoredStop): TrailingStopState {
+  return {
+    status: stop.status,
+    direction: stop.direction,
+    trail: stop.trail,
+    activationPrice: stop.activationPrice,
+    watermarkPrice: stop.watermarkPrice,
+    stopPrice: stop.stopPrice,
+  };
+}
+
+/** Writes a step's result into the stop; false when nothing moved. */
+function applyStep(stop: StoredStop, state: TrailingStopState): boolean {
+  if (
+    stop.status === state.status &&
+    stop.watermarkPrice === state.watermarkPrice &&
+    stop.stopPrice === state.stopPrice
+  ) {
+    return false;
   }
-  return null;
+  stop.status = state.status;
+  stop.watermarkPrice = state.watermarkPrice;
+  stop.stopPrice = state.stopPrice;
+  return true;
+}
+
+/** Request params with the contract defaults filled in. */
+function paramsOf(params: {
+  trail: TrailingStopParams['trail'];
+  activationPrice?: number | null | undefined;
+  exitOrderType?: TrailingStopParams['exitOrderType'] | undefined;
+  exitLimitOffset?: number | null | undefined;
+}): TrailingStopParams {
+  return {
+    trail: params.trail,
+    activationPrice: params.activationPrice ?? null,
+    exitOrderType: params.exitOrderType ?? 'MARKET',
+    exitLimitOffset: params.exitLimitOffset ?? null,
+  };
+}
+
+/** A detached copy, so callers can't change engine state. */
+function copyStop(stop: StoredStop): TrailingStop {
+  return { ...stop, trail: { ...stop.trail } };
+}
+
+/** An order as the working set keeps it: without `seq`. */
+function withoutSeq(order: StoredOrder): Order {
+  const { seq, ...rest } = order;
+  void seq;
+  return rest;
+}
+
+const CHECK_CODES: Record<
+  Extract<TrailingStopCheck, { ok: false }>['field'],
+  TrailingStopCheckCode
+> = {
+  position: 'NO_POSITION',
+  trail: 'INVALID_TRAIL',
+  stopPrice: 'INVALID_STOP_PRICE',
+  exitLimitOffset: 'INVALID_LIMIT_OFFSET',
+};
+
+function checkCode(check: Extract<TrailingStopCheck, { ok: false }>): TrailingStopCheckCode {
+  return CHECK_CODES[check.field];
+}
+
+function stopRefusal(
+  code: TrailingStopActionErrorCode,
+  reason: string,
+  stop?: StoredStop,
+): TrailingStopActionResult {
+  return { ok: false, code, reason, trailingStop: stop ? copyStop(stop) : null };
+}
+
+function stopNotFound(): TrailingStopActionResult {
+  return stopRefusal('TRAILING_STOP_NOT_FOUND', 'This trailing stop was not found.');
+}
+
+function noPriceReason(symbol: string): string {
+  return `There is no market price for ${symbol} yet. Try again shortly.`;
 }

@@ -24,7 +24,7 @@ test passes, then **Met**. Where the specification interprets a requirement, the
 | REQ-TSLO-03 | Trail in rupees and in percent; the user picks one | §6.1, §7, §8.4 | T01, T02, T13, T18 | Unit tests for both units; ticket component test | Planned |
 | REQ-TSLO-04 | Optional activation price; without it, trails at once from entry | §6.1, §6.3 | T02, T13 | `trailingStop.test.ts`: activation | Interpretation: an attached stop starts from the entry fill; a stop added later to an open position starts from the LTP at that moment, because the price history before it was placed is not part of the order |
 | REQ-TSLO-05 | On trigger, exit the position quantity; market by default; limit with an offset optional | §6.1, §6.4 | T06, T13 | Engine test: market exit; limit exit with offset | Planned |
-| REQ-TSLO-06 | Lifecycle: Armed, Trailing, Triggered, Filled or Cancelled | §6.2 | T01, T06 | Engine lifecycle tests | Planned (adds Waiting for entry and Exit failed, §6.2) |
+| REQ-TSLO-06 | Lifecycle: Armed, Trailing, Triggered, Filled or Cancelled | §6.2 | T01, T06 | Engine lifecycle tests: [`trailingStopLifecycle.test.ts`](../../packages/paperEngine/src/trailingStopLifecycle.test.ts) | Met (adds Waiting for entry and Exit failed, §6.2) |
 | REQ-TSLO-07 | Live: the stop recomputes on every tick and the chart line moves as it ratchets | §6.3, §10.1 | T06, T19 | US-04 E2E with the Simulator | Planned |
 | REQ-TSLO-08 | Price gaps through the stop: the exit fires once | §6.3 | T02, T06, T09 | Unit test; mock test with Simulator gap | Planned |
 | REQ-TSLO-09 | Lifecycle visible wherever the TSLO appears | §6.2, §8.1, §11.1 | T11, T13, T18, T19, T21 | Status asserted on chart, ticket, strip, positions and orders in US-04 | Planned |

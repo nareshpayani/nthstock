@@ -200,6 +200,42 @@ describe('MSW orders (T-132)', () => {
     );
   });
 
+  it('loads accounts saved before trailing stops, as version 1 (SPEC-TFC-1 §10.3)', async () => {
+    const storages = { auth: memoryStorage(), orders: memoryStorage() };
+    const first = pageLoad(storages);
+    await login(first.client, '8300000005');
+    const quote = await infy(first.client);
+    const open = await first.client.call('orderPlace', {
+      body: {
+        token: quote.token,
+        side: 'BUY',
+        type: 'LIMIT',
+        product: 'DELIVERY',
+        qty: 3,
+        price: quote.ltp - 100,
+      },
+    });
+    const cookies = first.client.cookies.header() ?? '';
+    for (const cleanup of cleanups.splice(0).reverse()) cleanup();
+
+    // Rewrite what was saved the way the previous release saved it.
+    type Saved = { v: number; users: Record<string, Record<string, unknown>> };
+    const saved = JSON.parse(storages.orders.data.get(ORDERS_MOCK_STORAGE_KEY) ?? '') as Saved;
+    const legacyUsers = Object.fromEntries(
+      Object.entries(saved.users).map(([userId, snapshot]) => {
+        const { seq, trailingStops, exitOrderIds, trailingStopRequestIds, ...rest } = snapshot;
+        void [seq, trailingStops, exitOrderIds, trailingStopRequestIds];
+        return [userId, { ...rest, v: 1 }];
+      }),
+    );
+    storages.orders.setItem(ORDERS_MOCK_STORAGE_KEY, JSON.stringify({ v: 1, users: legacyUsers }));
+
+    const second = pageLoad(storages);
+    second.client.cookies.store(cookies.split('; ').map((pair) => `${pair}; Path=/`));
+    const page = await second.client.call('ordersList', { query: { status: 'OPEN' } });
+    expect(page.items.map((o) => o.id)).toEqual([open.id]);
+  });
+
   it('serves positions, the summary and order history from the same engine (T-142)', async () => {
     const storages = { auth: memoryStorage(), orders: memoryStorage() };
     const first = pageLoad(storages);

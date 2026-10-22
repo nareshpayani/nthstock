@@ -8,7 +8,11 @@ import {
   type DemoInstrument,
   type PaperEngineSnapshot,
 } from '@nthstock/paperEngine';
-import { ORDERS_MOCK_STORAGE_KEY, WATCHLIST_MOCK_STORAGE_KEY } from './handlers';
+import {
+  ORDERS_MOCK_STORAGE_KEY,
+  READABLE_SAVED_VERSIONS,
+  WATCHLIST_MOCK_STORAGE_KEY,
+} from './handlers';
 
 /**
  * The demo seed for msw mode (T-174): open the app with `?demo=1` and the demo user (mobile
@@ -60,7 +64,8 @@ export function seedMockDemo(
   };
   const saved = readObject(storage, ORDERS_MOCK_STORAGE_KEY);
   const users =
-    saved['v'] === PAPER_ENGINE_SNAPSHOT_VERSION &&
+    typeof saved['v'] === 'number' &&
+    READABLE_SAVED_VERSIONS.includes(saved['v']) &&
     saved['users'] &&
     typeof saved['users'] === 'object'
       ? (saved['users'] as Record<string, PaperEngineSnapshot>)
