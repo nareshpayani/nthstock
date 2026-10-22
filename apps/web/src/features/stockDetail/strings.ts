@@ -14,6 +14,14 @@ export const strings = {
     body: 'Something went wrong here. The rest of the page still works.',
     retry: 'Try again',
   },
+  simulator: {
+    label: 'Demo simulator',
+    badge: 'Simulated',
+    rally: 'Rally +1%',
+    pullBack: 'Pull back −1%',
+    gap: 'Gap −3%',
+    split: 'Split large fills',
+  },
   chart: {
     title: 'Price chart',
     rangeLabel: 'Chart range',

@@ -169,6 +169,17 @@ export const strings = {
     placedDescription: (stop: string) => `Initial stop ${stop}.`,
     failedTitle: 'Trailing stop not placed',
     failed: 'The trailing stop could not be placed. Try again.',
+    attach: 'Add trailing stop',
+    attachHint: 'Protect the position this order opens. The stop starts from your fill price.',
+    attachUnavailable: 'Trailing stops run on the in-browser demo engine only.',
+    attachNotForSale: 'A delivery sale closes holdings, so there is nothing to protect.',
+    ifFillsAt: (price: string) => `If the entry fills at ${price}:`,
+    attachedTerm: 'Trailing stop',
+    attachedSentence: (trail: string, move: string, exit: string) =>
+      `Once the entry fills, exits with ${exit} when the price ${move} by ${trail}. The stop starts from your fill price and only ever tightens.`,
+    attachedReplaces:
+      'This order adds to a position that already has a trailing stop. The new stop replaces it and protects the whole position.',
+    attachedPlaced: 'Trailing stop attached',
   },
   sides: { BUY: 'Buy', SELL: 'Sell' },
   types: { MARKET: 'Market', LIMIT: 'Limit' },

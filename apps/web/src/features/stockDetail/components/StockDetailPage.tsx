@@ -18,6 +18,7 @@ import { MarketDepthCard } from './MarketDepthCard';
 import { OverviewCard } from './OverviewCard';
 import { PhoneStockDetail } from './PhoneStockDetail';
 import { StockChartCard } from './StockChartCard';
+import { SimulatorPanel } from './SimulatorPanel';
 import { StockHeader } from './StockHeader';
 
 export type StockDetailPageProps = {
@@ -93,14 +94,17 @@ export function StockDetailPage({
         )}
       >
         <Section label={strings.chart.title}>
-          <StockChartCard
-            instrument={instrument}
-            range={search.range ?? DEFAULT_STOCK_RANGE}
-            chartType={search.chart ?? DEFAULT_CHART_TYPE}
-            onRangeChange={(range) => onSearchChange({ range })}
-            onChartTypeChange={(chart) => onSearchChange({ chart })}
-            trading={instrument.type === 'EQUITY'}
-          />
+          <div className="grid gap-3">
+            {equity ? <SimulatorPanel symbol={instrument.symbol} /> : null}
+            <StockChartCard
+              instrument={instrument}
+              range={search.range ?? DEFAULT_STOCK_RANGE}
+              chartType={search.chart ?? DEFAULT_CHART_TYPE}
+              onRangeChange={(range) => onSearchChange({ range })}
+              onChartTypeChange={(chart) => onSearchChange({ chart })}
+              trading={equity}
+            />
+          </div>
         </Section>
         {equity ? (
           <>
