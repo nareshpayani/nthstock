@@ -128,7 +128,9 @@ export function quoteStreamHandler(adapter: MarketDataAdapter, options: QuoteStr
         userId && orders?.accountState ? orders.accountState(userId) : null,
         focused ? adapter.getDepth(focused.symbol, focused.exchange) : null,
       ]);
-      seq = Math.max(seq, state?.seq ?? 0, ...changedOrders.map((o) => o.seq ?? 0));
+      // The frame's seq is its newest change (or the last frame's), never the snapshot's: a change
+      // the snapshot already holds goes out in the next frame, so a client sees no false gap.
+      seq = Math.max(seq, ...changedOrders.map((o) => o.seq ?? 0));
       seq = Math.max(seq, ...changedStops.map((stop) => stop.seq));
       const ticked = new Set(quotes.map((quote) => quote.token));
       send({
@@ -163,10 +165,14 @@ export function quoteStreamHandler(adapter: MarketDataAdapter, options: QuoteStr
       send({ v: WS_PROTOCOL_VERSION, type: 'quotes', quotes });
     }, flushMs);
 
-    const focus = (symbol: string | null, exchange: Exchange) => {
-      deltas = true;
+    const focus = async (symbol: string | null, exchange: Exchange) => {
       focused = symbol === null ? null : { symbol, exchange };
       if (hasFocus(adapter)) adapter.focus(symbol);
+      if (deltas) return;
+      // The first frame starts from the account's seq, so changes before it read as stale.
+      const userId = signedIn();
+      if (userId && orders?.accountState) seq = (await orders.accountState(userId)).seq;
+      deltas = true;
     };
 
     const subscribe = async (symbols: readonly string[], exchange: Exchange) => {
@@ -251,7 +257,7 @@ export function quoteStreamHandler(adapter: MarketDataAdapter, options: QuoteStr
       if (message.type === 'ping') {
         send({ v: WS_PROTOCOL_VERSION, type: 'pong', id: message.id });
       } else if (message.type === 'focus') {
-        focus(message.symbol, message.exchange);
+        await focus(message.symbol, message.exchange);
       } else if (message.type === 'subscribe') {
         await subscribe(message.symbols, message.exchange);
       } else {
