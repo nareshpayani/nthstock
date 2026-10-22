@@ -18,5 +18,6 @@ export const LINE_STYLES: Record<OverlayTone, { color: string; lineStyle: LineSt
   ghost: { color: colors['ink-muted'], lineStyle: DASHED },
   position: { color: colors.ink, lineStyle: SOLID },
   trailing: { color: colors.marigold, lineStyle: DASHED },
+  activation: { color: colors.marigold, lineStyle: DOTTED },
   pending: { color: colors['ink-muted'], lineStyle: DOTTED },
 };

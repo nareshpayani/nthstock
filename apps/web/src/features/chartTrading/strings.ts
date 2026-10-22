@@ -21,6 +21,15 @@ export const strings = {
       `${name} ${price} · ${trail} · ${status}`,
     description: (price: string, trail: string, status: string) =>
       `Trailing stop at ${price}, trailing by ${trail}, ${status.toLowerCase()}. Open to change it.`,
+    dragDescription: (price: string, trail: string) =>
+      `Trailing stop at ${price}, trailing by ${trail}. Drag, or use the arrow keys (one tick, Shift for ten), to move the stop and change the trail; Enter saves, Escape restores.`,
+    updating: (price: string) => `Updating… ${price}`,
+    activation: (price: string) => `Activates at ${price}`,
+    activationDescription: (price: string) =>
+      `The trailing stop starts trailing once the price reaches ${price}. Open to change it.`,
+    moved: 'Trailing stop updated',
+    movedBody: (price: string, trail: string) => `Stop now ${price}, trailing by ${trail}.`,
+    moveFailed: 'Trailing stop not changed',
   },
   order: {
     sides: { BUY: 'Buy', SELL: 'Sell' },

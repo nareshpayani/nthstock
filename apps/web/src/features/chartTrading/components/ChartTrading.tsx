@@ -1,8 +1,10 @@
 import {
   TERMINAL_TRAILING_STOP_STATUSES,
+  TRAILING_STOP_MESSAGES,
   type Instrument,
   type Order,
   type OrderSide,
+  type TrailingStop,
 } from '@nthstock/contracts';
 import { useToast } from '@nthstock/ui';
 import { formatInr } from '@nthstock/utils';
@@ -19,7 +21,15 @@ import { useChartOrders } from '../hooks/useChartOrders';
 import { useChartPositions, useChartTrailingStops } from '../hooks/useChartPositions';
 import { actionErrorText, useOrderLineActions } from '../hooks/useOrderLineActions';
 import { CANCEL_ACTION, orderLine } from '../model/orderLines';
-import { positionLine, stopLine } from '../model/positionLines';
+import {
+  activationLine,
+  positionLine,
+  stopLine,
+  stopLineId,
+  stopTriggersNow,
+  trailWords,
+  type PendingStop,
+} from '../model/positionLines';
 import type { OverlayLine } from '../model/overlayLine';
 import { strings } from '../strings';
 import { ChartOverlay } from './ChartOverlay';
@@ -30,6 +40,7 @@ export type ChartTradingProps = {
 };
 
 const GHOST = 'ghost';
+const STOP_LINE = stopLineId('');
 const TERMINAL_STOP: ReadonlySet<string> = new Set(TERMINAL_TRAILING_STOP_STATUSES);
 /** A first tap on × arms "Cancel?" for this long (§8.3). */
 export const CANCEL_ARM_MS = 3_000;
@@ -60,6 +71,7 @@ export function ChartTrading({ handle, instrument }: ChartTradingProps) {
   const [ghost, setGhost] = useState<number | null>(null);
   const [ghostDrag, setGhostDrag] = useState<number | null>(null);
   const [armed, setArmed] = useState<string | null>(null);
+  const [stopMove, setStopMove] = useState<(PendingStop & { id: string }) | null>(null);
   const armTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Leaving the chart mid-drag must not leave a moving price on the other surfaces.
@@ -76,6 +88,7 @@ export function ChartTrading({ handle, instrument }: ChartTradingProps) {
   );
   // Positions and their stops (T18, §8.1, §8.4): a stop only ever belongs to one position.
   const sheetFor = new Map<string, Order['product']>();
+  const stopFor = new Map<string, TrailingStop>();
   for (const position of positions) {
     const stop = stops.find((candidate) => candidate.product === position.product) ?? null;
     const active = stop && !TERMINAL_STOP.has(stop.status) ? stop : null;
@@ -84,10 +97,17 @@ export function ChartTrading({ handle, instrument }: ChartTradingProps) {
       lines.push(chip);
       sheetFor.set(chip.id, position.product);
     }
-    const stopAt = active ? stopLine(active) : null;
+    if (!active) continue;
+    const stopAt = stopLine(active, stopMove?.id === active.id ? stopMove : undefined);
     if (stopAt) {
       lines.push(stopAt);
       sheetFor.set(stopAt.id, position.product);
+      stopFor.set(stopAt.id, active);
+    }
+    const activation = activationLine(active);
+    if (activation) {
+      lines.push(activation);
+      sheetFor.set(activation.id, position.product);
     }
   }
   if (ghost !== null) {
@@ -183,6 +203,45 @@ export function ChartTrading({ handle, instrument }: ChartTradingProps) {
     });
   };
 
+  // Dragging the stop changes the trail (T19, §6.5): one modify with the new stop on release,
+  // unless it would trigger at once (§6.6), which is said and not sent.
+  const moveStop = (stop: TrailingStop, price: number) => {
+    if (price === stop.stopPrice) {
+      setStopMove(null);
+      return;
+    }
+    if (stopTriggersNow(stop.direction, ltp, price)) {
+      setStopMove(null);
+      toast.show({
+        title: strings.stop.moveFailed,
+        description: TRAILING_STOP_MESSAGES.stopWouldTrigger,
+        tone: 'error',
+      });
+      return;
+    }
+    setStopMove({ id: stop.id, price, phase: 'sending' });
+    actions
+      .modifyStop(stop, price)
+      .then(
+        (moved) =>
+          toast.show({
+            title: strings.stop.moved,
+            description: strings.stop.movedBody(
+              formatInr(moved.stopPrice ?? price),
+              trailWords(moved.trail),
+            ),
+            tone: 'success',
+          }),
+        (error: unknown) =>
+          toast.show({
+            title: strings.stop.moveFailed,
+            description: actionErrorText(error),
+            tone: 'error',
+          }),
+      )
+      .finally(() => setStopMove((current) => (current?.id === stop.id ? null : current)));
+  };
+
   const onAction = (id: string, action: string) => {
     if (id === GHOST) {
       if (action === 'BUY' || action === 'SELL') placeFromGhost(action);
@@ -211,13 +270,21 @@ export function ChartTrading({ handle, instrument }: ChartTradingProps) {
         setGhost(price);
       }}
       onDragMove={(id, price) => {
+        const stop = stopFor.get(id);
         if (id === GHOST) setGhostDrag(price);
+        else if (stop) setStopMove({ id: stop.id, price, phase: 'dragging' });
         else setDraft({ orderId: id, price });
       }}
       onDragEnd={(id, price) => {
         if (id === GHOST) {
           setGhostDrag(null);
           if (price !== null) setGhost(price);
+          return;
+        }
+        if (id.startsWith(STOP_LINE)) {
+          const stop = stopFor.get(id);
+          if (stop && price !== null) moveStop(stop, price);
+          else setStopMove(null);
           return;
         }
         setDraft(null);

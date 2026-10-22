@@ -270,4 +270,30 @@ describe('chart overlay (T15, SPEC-TFC-1 §10.5)', () => {
     fireEvent.keyDown(chip, { key: 'Enter' });
     expect(onHandleTap).toHaveBeenCalledWith('pos');
   });
+
+  it('dragging an offset label moves its price by the finger, not to the label (T19, §8.4)', () => {
+    const handle = makeHandle();
+    const onDragMove = vi.fn();
+    render(
+      <ChartOverlay
+        handle={handle}
+        tickSize={5}
+        label="Chart orders for INFY"
+        lines={[
+          line({ id: 'o1', price: 150_000 }),
+          line({ id: 'o2', price: 149_500, tone: 'sell' }),
+        ]}
+        onDragMove={onDragMove}
+      />,
+    );
+    // o2's line is at y = 210, 10 px under o1, so its label is pushed down to 244.
+    expect(handleY('o2')).toBe(244);
+    const o2 = screen.getAllByTestId('chart-handle').find((el) => el.dataset.line === 'o2');
+    if (!o2) throw new Error('no o2');
+    pointer(o2, 'pointerdown', 244);
+    pointer(o2, 'pointermove', 254);
+    // 10 px down from the line, not from the label: ₹1,490.00, not ₹1,473.00.
+    expect(onDragMove).toHaveBeenLastCalledWith('o2', 149_000);
+    pointer(o2, 'pointerup', 254);
+  });
 });

@@ -1,7 +1,7 @@
 import type { Position, TrailingStop } from '@nthstock/contracts';
 import { describe, expect, it } from 'vitest';
 import { livePosition } from '@/features/positions';
-import { positionLine, stopLine } from './positionLines';
+import { activationLine, positionLine, stopLine, stopTriggersNow } from './positionLines';
 
 const long: Position = {
   token: 408065,
@@ -89,7 +89,7 @@ describe('trailing-stop line (§8.1)', () => {
       price: 122_840,
       tone: 'trailing',
       label: 'Trailing SL ₹1,228.40 · 1.5% · Trailing',
-      draggable: false,
+      draggable: true,
     });
     expect(stopLine(stop({ trail: { unit: 'AMOUNT', amount: 1_250 } }))?.label).toBe(
       'Trailing SL ₹1,228.40 · ₹12.50 · Trailing',
@@ -100,5 +100,45 @@ describe('trailing-stop line (§8.1)', () => {
   it('has no line while waiting for entry or armed', () => {
     expect(stopLine(stop({ status: 'ARMED', stopPrice: null }))).toBeNull();
     expect(stopLine(stop({ status: 'PENDING_ENTRY', stopPrice: null }))).toBeNull();
+  });
+});
+
+describe('moving the trailing stop (T19, SPEC-TFC-1 §6.5, §6.6)', () => {
+  it('can be dragged only while trailing; it follows the finger, then reads Updating…', () => {
+    expect(stopLine(stop({ status: 'TRIGGERED' }))?.draggable).toBe(false);
+    expect(stopLine(stop(), { price: 123_000, phase: 'dragging' })).toMatchObject({
+      price: 123_000,
+      tone: 'trailing',
+      label: 'Trailing SL ₹1,230.00 · 1.5% · Trailing',
+      draggable: true,
+    });
+    expect(stopLine(stop(), { price: 123_000, phase: 'sending' })).toMatchObject({
+      price: 123_000,
+      tone: 'pending',
+      label: 'Updating… ₹1,230.00',
+      draggable: false,
+    });
+  });
+
+  it('refuses a stop at or through the price: below it for a long, above it for a short', () => {
+    expect(stopTriggersNow('LONG', 150_000, 149_995)).toBe(false);
+    expect(stopTriggersNow('LONG', 150_000, 150_000)).toBe(true);
+    expect(stopTriggersNow('SHORT', 150_000, 150_005)).toBe(false);
+    expect(stopTriggersNow('SHORT', 150_000, 149_995)).toBe(true);
+    expect(stopTriggersNow('LONG', undefined, 160_000)).toBe(false);
+  });
+
+  it('draws the activation price of a stop waiting to trail as a dotted line', () => {
+    expect(
+      activationLine(stop({ status: 'ARMED', stopPrice: null, activationPrice: 156_000 })),
+    ).toMatchObject({
+      id: 'activation:ts_1',
+      price: 156_000,
+      tone: 'activation',
+      label: 'Activates at ₹1,560.00',
+      draggable: false,
+    });
+    expect(activationLine(stop({ status: 'ARMED', stopPrice: null }))).toBeNull();
+    expect(activationLine(stop({ activationPrice: 156_000 }))).toBeNull();
   });
 });

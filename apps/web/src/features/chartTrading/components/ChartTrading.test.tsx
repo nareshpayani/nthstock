@@ -1,5 +1,5 @@
 import { createTradingStore, type ApiClient, type TradingStore } from '@nthstock/apiClient';
-import type { AccountState, Order, Position } from '@nthstock/contracts';
+import type { AccountState, Order, Position, TrailingStop } from '@nthstock/contracts';
 import { act, fireEvent, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { ChartHandle } from '@/features/charts';
@@ -7,6 +7,7 @@ import { initialOrderDraftState, useOrderDraftStore } from '@/shared/lib/orderDr
 import { initialTicketIntentState, useTicketIntentStore } from '@/shared/lib/ticketIntentStore';
 import { initialTrailingSheetState, useTrailingSheetStore } from '@/shared/lib/trailingSheetStore';
 import { AreaSeries, chartsMock, createChart } from '@/test/chartsMock';
+import { createTestQuoteStore, testQuote } from '@/test/quotes';
 import { renderWithProviders } from '@/test/renderWithProviders';
 import { CANCEL_ARM_MS, ChartTrading } from './ChartTrading';
 
@@ -51,11 +52,15 @@ const limit = (extra: Partial<Order> = {}): Order => ({
   ...extra,
 });
 
-const account = (orders: Order[], positions: Position[] = []): AccountState => ({
+const account = (
+  orders: Order[],
+  positions: Position[] = [],
+  trailingStops: TrailingStop[] = [],
+): AccountState => ({
   seq: 1,
   orders,
   positions,
-  trailingStops: [],
+  trailingStops,
   funds: {
     openingBalance: 100_000_000,
     balance: 100_000_000,
@@ -82,19 +87,21 @@ function fakeApi() {
   return { api, calls };
 }
 
-async function setup(orders: Order[], positions: Position[] = []) {
+async function setup(orders: Order[], positions: Position[] = [], stops: TrailingStop[] = []) {
   const { api, calls } = fakeApi();
   const store: TradingStore = createTradingStore({
-    loadState: () => Promise.resolve(account(orders, positions)),
+    loadState: () => Promise.resolve(account(orders, positions, stops)),
     schedule: (flush) => queueMicrotask(flush),
   });
   await store.start();
+  const quotes = createTestQuoteStore();
   renderWithProviders(<ChartTrading handle={makeHandle()} instrument={INFY} />, {
     apiClient: api,
     tradingStore: store,
+    quoteStore: quotes.store,
   });
   await screen.findByRole('group', { name: 'Chart orders for INFY' });
-  return { store, calls };
+  return { store, calls, quotes };
 }
 
 const handleFor = (id: string) =>
@@ -302,5 +309,114 @@ describe('position chip (T18, SPEC-TFC-1 §8.1, §8.4)', () => {
       token: INFY.token,
       product: 'INTRADAY',
     });
+  });
+});
+
+describe('trailing-stop line (T19, SPEC-TFC-1 §6.5, §6.6, §8.1)', () => {
+  const position: Position = {
+    token: INFY.token,
+    symbol: 'INFY',
+    exchange: 'NSE',
+    product: 'INTRADAY',
+    netQty: 10,
+    buyQty: 10,
+    sellQty: 0,
+    avgBuyPrice: 150_000,
+    avgSellPrice: 0,
+    ltp: 150_000,
+    realisedPnl: 0,
+    unrealisedPnl: 0,
+  };
+  const trailing: TrailingStop = {
+    id: 'ts_1',
+    token: INFY.token,
+    symbol: 'INFY',
+    exchange: 'NSE',
+    product: 'INTRADAY',
+    direction: 'LONG',
+    trail: { unit: 'PERCENT', basisPoints: 100 },
+    activationPrice: null,
+    exitOrderType: 'MARKET',
+    exitLimitOffset: null,
+    status: 'TRAILING',
+    statusReason: null,
+    watermarkPrice: 150_000,
+    stopPrice: 148_500,
+    protectedQty: 10,
+    entryOrderId: null,
+    exitOrderId: null,
+    seq: 1,
+    createdAt: AT,
+    updatedAt: AT,
+  };
+
+  it('a drag sends one modify with the new stop, shown as Updating… until the engine answers', async () => {
+    const { calls, quotes } = await setup([], [position], [trailing]);
+    act(() => quotes.push(testQuote('INFY', 150_000)));
+    const line = handleFor('stop:ts_1');
+    expect(line).toHaveTextContent('Trailing SL ₹1,485.00 · 1% · Trailing');
+
+    // ₹1,485.00 is at y = 230, its label pushed to 244 by the position chip at 200; 10 px up
+    // from wherever it is grabbed is ₹1,490.00.
+    expect(line.dataset.y).toBe('244');
+    pointer(line, 'pointerdown', 244);
+    pointer(line, 'pointermove', 234);
+    expect(line).toHaveTextContent('Trailing SL ₹1,490.00');
+    pointer(line, 'pointerup', 234);
+    expect(handleFor('stop:ts_1')).toHaveTextContent('Updating… ₹1,490.00');
+    const sent = calls.filter((call) => call.route === 'trailingStopModify');
+    expect(sent.map((call) => call.args)).toEqual([
+      { params: { id: 'ts_1' }, body: { stopPrice: 149_000 } },
+    ]);
+
+    await act(async () => {
+      sent[0]?.answer.resolve({
+        ...trailing,
+        trail: { unit: 'AMOUNT', amount: 1_000 },
+        stopPrice: 149_000,
+        seq: 2,
+      } as unknown as Order);
+      await Promise.resolve();
+    });
+    expect(await screen.findByText('Stop now ₹1,490.00, trailing by ₹10.00.')).toBeInTheDocument();
+    await waitFor(() =>
+      expect(handleFor('stop:ts_1')).toHaveTextContent('Trailing SL ₹1,490.00 · ₹10.00 · Trailing'),
+    );
+  });
+
+  it('a drag to or through the price is refused in words and not sent', async () => {
+    const { calls, quotes } = await setup([], [position], [trailing]);
+    act(() => quotes.push(testQuote('INFY', 150_000)));
+    const line = handleFor('stop:ts_1');
+    // 40 px up from the label at 244 puts the stop at y = 190, ₹1,505.00: above the ₹1,500.00 LTP.
+    pointer(line, 'pointerdown', 244);
+    pointer(line, 'pointermove', 204);
+    pointer(line, 'pointerup', 204);
+    expect(await screen.findByText('That stop would trigger immediately.')).toBeInTheDocument();
+    expect(calls.filter((call) => call.route === 'trailingStopModify')).toEqual([]);
+    expect(handleFor('stop:ts_1')).toHaveTextContent('Trailing SL ₹1,485.00');
+  });
+
+  it('an armed stop with an activation price draws it as a dotted line that opens the sheet', async () => {
+    await setup(
+      [],
+      [position],
+      [
+        {
+          ...trailing,
+          status: 'ARMED',
+          stopPrice: null,
+          watermarkPrice: null,
+          activationPrice: 156_000,
+        },
+      ],
+    );
+    const line = handleFor('activation:ts_1');
+    expect(line).toHaveTextContent('Activates at ₹1,560.00');
+    expect(line.dataset.tone).toBe('activation');
+    expect(screen.queryByText(/^Trailing SL ₹/)).toBeNull();
+    pointer(line, 'pointerdown', 80);
+    pointer(line, 'pointerup', 80);
+    expect(useTrailingSheetStore.getState().target).toMatchObject({ product: 'INTRADAY' });
   });
 });

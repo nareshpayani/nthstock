@@ -100,6 +100,9 @@ export function ChartOverlay({
   const keyMoveRef = useRef<KeyMove>(null);
   const gutterPressRef = useRef<{ pointerId: number; y: number } | null>(null);
   const chipRef = useRef<ChipPress | null>(null);
+  // How far the dragged line sits from its label (an offset label has a leader line), so the drag
+  // moves the price by the finger's movement instead of jumping to the label's height (§8.4).
+  const dragOffsetRef = useRef(0);
   const primitiveRef = useRef<RepaintPrimitive | null>(null);
   // The latest lines and callbacks, for the repaint hook and the event handlers.
   const latestRef = useRef({
@@ -179,6 +182,12 @@ export function ChartOverlay({
       chipRef.current = { id, pointerId, startX: x, startY: y, x, panning: false };
       return;
     }
+    if (gestureRef.current.phase === 'idle' && line) {
+      const labelY = Number(elementsRef.current.handles.get(id)?.dataset.y);
+      const lineY = handle.series.priceToCoordinate(line.price);
+      dragOffsetRef.current =
+        lineY !== null && Number.isFinite(labelY) && Number.isFinite(lineY) ? lineY - labelY : 0;
+    }
     apply(press(gestureRef.current, id, event.pointerId, paneY(event.clientY)));
   };
   const onHandlePointerMove = (event: ReactPointerEvent<HTMLElement>) => {
@@ -196,7 +205,10 @@ export function ChartOverlay({
       chip.x = event.clientX;
       return;
     }
-    apply(move(gestureRef.current, event.pointerId, paneY(event.clientY), priceAt));
+    const offset = dragOffsetRef.current;
+    apply(
+      move(gestureRef.current, event.pointerId, paneY(event.clientY), (y) => priceAt(y + offset)),
+    );
   };
   const onHandlePointerUp = (event: ReactPointerEvent<HTMLElement>) => {
     const chip = chipRef.current;
@@ -416,6 +428,7 @@ const TONE_CLASSES: Record<OverlayLine['tone'], string> = {
   ghost: 'border-dashed border-ink-muted bg-surface text-ink',
   position: 'border-ink bg-surface text-ink',
   trailing: 'border-dashed border-ink bg-marigold text-ink',
+  activation: 'border-dotted border-ink-muted bg-surface text-ink',
   pending: 'border-dotted border-ink-muted bg-surface text-ink-muted',
 };
 

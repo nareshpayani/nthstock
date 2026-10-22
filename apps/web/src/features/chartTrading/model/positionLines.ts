@@ -14,10 +14,11 @@ import type { OverlayLine } from './overlayLine';
 export const positionLineId = (product: string) => `position:${product}`;
 export const stopLineId = (id: string) => `stop:${id}`;
 
-const trailWords = (stop: TrailingStop) =>
-  stop.trail.unit === 'AMOUNT'
-    ? formatInr(stop.trail.amount)
-    : `${(stop.trail.basisPoints / 100).toLocaleString('en-IN', { maximumFractionDigits: 2 })}%`;
+/** A trail in words: "1.5%" or "₹12.50". */
+export const trailWords = (trail: TrailingStop['trail']) =>
+  trail.unit === 'AMOUNT'
+    ? formatInr(trail.amount)
+    : `${(trail.basisPoints / 100).toLocaleString('en-IN', { maximumFractionDigits: 2 })}%`;
 
 /**
  * The line for an open position (T18, SPEC-TFC-1 §8.1): at the average price, with a chip
@@ -50,23 +51,70 @@ export function positionLine(live: LivePosition, stop: TrailingStop | null): Ove
   };
 }
 
+/** A stop being moved on the chart: under the finger, or sent and waiting for the engine. */
+export type PendingStop = { price: number; phase: 'dragging' | 'sending' };
+
 /**
  * The trailing stop's line (§8.1): dashed amber at the stop, "Trailing SL ₹1,228.40 · 1.5% ·
  * Trailing". Only while it has a stop price (trailing or triggered); waiting and armed stops show
- * on the position chip instead. Tapping it opens the sheet; dragging it comes in T19.
+ * on the position chip instead. It rises as the stop ratchets. While trailing it can be dragged to
+ * a new stop, which changes the trail (T19, §6.5): it follows the finger, then reads "Updating…"
+ * until the engine answers. Tapping it opens the sheet.
  */
-export function stopLine(stop: TrailingStop): OverlayLine | null {
+export function stopLine(stop: TrailingStop, pending?: PendingStop): OverlayLine | null {
   if (stop.stopPrice === null || (stop.status !== 'TRAILING' && stop.status !== 'TRIGGERED')) {
     return null;
   }
-  const price = formatInr(stop.stopPrice);
+  const at = pending?.price ?? stop.stopPrice;
+  const price = formatInr(at);
+  const trail = trailWords(stop.trail);
   const status = TRAILING_STOP_STATUS_WORDS[stop.status];
+  const sending = pending?.phase === 'sending';
+  const draggable = stop.status === 'TRAILING' && !sending;
   return {
     id: stopLineId(stop.id),
-    price: stop.stopPrice,
-    tone: 'trailing',
-    label: strings.stop.label(TRAILING_STOP_NAME, price, trailWords(stop), status),
-    description: strings.stop.description(price, trailWords(stop), status),
+    price: at,
+    tone: sending ? 'pending' : 'trailing',
+    label: sending
+      ? strings.stop.updating(price)
+      : strings.stop.label(TRAILING_STOP_NAME, price, trail, status),
+    description: draggable
+      ? strings.stop.dragDescription(price, trail)
+      : strings.stop.description(price, trail, status),
+    draggable,
+  };
+}
+
+/** Line id for a stop's activation price. */
+export const activationLineId = (id: string) => `activation:${id}`;
+
+/**
+ * A stop waiting to start trailing draws its activation price as a thin dotted line (§8.1),
+ * "Activates at ₹1,560.00". Tapping it opens the sheet.
+ */
+export function activationLine(stop: TrailingStop): OverlayLine | null {
+  if (stop.activationPrice === null) return null;
+  if (stop.status !== 'ARMED' && stop.status !== 'PENDING_ENTRY') return null;
+  const price = formatInr(stop.activationPrice);
+  return {
+    id: activationLineId(stop.id),
+    price: stop.activationPrice,
+    tone: 'activation',
+    label: strings.stop.activation(price),
+    description: strings.stop.activationDescription(price),
     draggable: false,
   };
+}
+
+/**
+ * Whether a stop at `stopPrice` would trigger at once (§6.6): at or above the LTP for a long, at
+ * or below it for a short. The engine checks the same and says the same.
+ */
+export function stopTriggersNow(
+  direction: TrailingStop['direction'],
+  ltp: number | undefined,
+  stopPrice: number,
+): boolean {
+  if (ltp === undefined) return false;
+  return direction === 'LONG' ? stopPrice >= ltp : stopPrice <= ltp;
 }
