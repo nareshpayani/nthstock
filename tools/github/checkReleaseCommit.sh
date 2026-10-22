@@ -1,13 +1,16 @@
 #!/usr/bin/env bash
-# Refuses to release a commit unless it is on main and its latest CI run on that commit passed.
-# Run from the checked-out commit by web-hosting.yml's release stages (docs/runbooks/release.md).
+# Refuses to deploy a commit unless it is on the environment's branch (develop for development, main
+# for production, ADR 0010) and its latest CI run on that commit passed.
+# Run from the checked-out commit by web-hosting.yml's dispatch stages (docs/runbooks/release.md).
 # Needs gh with GH_TOKEN and GITHUB_REPOSITORY.
+#   checkReleaseCommit.sh [branch]   (default main)
 set -euo pipefail
 
+branch="${1:-main}"
 sha=$(git rev-parse HEAD)
-git fetch --quiet origin main
-if ! git merge-base --is-ancestor "$sha" origin/main; then
-  echo "::error title=Not on main::$sha is not on main. Merge its PR first; only main is released."
+git fetch --quiet origin "$branch"
+if ! git merge-base --is-ancestor "$sha" "origin/$branch"; then
+  echo "::error title=Not on $branch::$sha is not on $branch. Merge its PR first; only $branch deploys here."
   exit 1
 fi
 
@@ -17,7 +20,7 @@ run=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/ci.yml/runs?head_sha=$s
 case "$run" in
   success\ *) echo "CI passed on $sha: ${run#success }" ;;
   none)
-    echo "::error title=No CI run::No finished CI run on $sha yet. Wait for CI (or dispatch it on main), then release again."
+    echo "::error title=No CI run::No finished CI run on $sha yet. Wait for CI (or dispatch it on $branch), then deploy again."
     exit 1 ;;
   *)
     echo "::error title=CI not green::The latest CI run on $sha ended '${run%% *}': ${run#* }"

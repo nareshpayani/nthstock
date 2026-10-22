@@ -11,7 +11,7 @@ description: Run nthstock's quality gate (format, lint, typecheck, tests, build)
 3. Run everything: `npm run check` (format check, lint, typecheck, tests with coverage, build).
 4. Faster loops while working:
    - one package: `npx turbo run lint typecheck test --filter=@nthstock/<name>`
-   - only what changed vs `main`: `npx turbo run lint typecheck test --filter='...[origin/main]'`
+   - only what changed vs `develop`: `npx turbo run lint typecheck test --filter='...[origin/develop]'`
    - format: `npm run format` (writes), `npm run format:check` (checks)
 5. Integration tests need Docker (Testcontainers). Without Docker run with
    `SKIP_REDIS_INTEGRATION=1 SKIP_PG_INTEGRATION=1`; coverage in `apps/realtime` and `apps/api` can then

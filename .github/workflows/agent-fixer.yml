@@ -3,9 +3,10 @@ name: 'Agent: Fixer'
 # Self-healing CI. Fixes, on the PR's own branch:
 #   - blocking review findings (label `agent:fix-needed`),
 #   - red CI on any owner, agent or Dependabot PR,
-# and when CI goes red on main, opens an `agent/fix-main-*` PR (main itself is never pushed to).
+# and when CI goes red on develop (where PRs merge, ADR 0010), opens an `agent/fix-develop-*` PR
+# (develop and main are never pushed to).
 # An hourly sweep catches what events miss: Dependabot-triggered runs get no secrets, and a PR
-# that went red because main was broken needs another look once main is green again.
+# that went red because develop was broken needs another look once develop is green again.
 
 on:
   pull_request:
@@ -58,13 +59,13 @@ jobs:
             { echo "mode=$1"; echo "pr=$2"; echo "branch=$3"; echo "reason=$4"; } >> "$GITHUB_OUTPUT"
             echo "Target: mode=$1 pr=$2 branch=$3 ($4)"
           }
-          fix_main_pr_open() {
+          fix_develop_pr_open() {
             [ -n "$(gh pr list --repo "$repo" --state open --limit 100 --json headRefName \
-              --jq '.[] | select(.headRefName | test("^(agent|claude)/fix-main-")) | .headRefName')" ]
+              --jq '.[] | select(.headRefName | test("^(agent|claude)/fix-(develop|main)-")) | .headRefName')" ]
           }
-          main_is_red() {
-            # The latest finished run on main: a push, the post-merge dispatch or a scheduled health run.
-            [ "$(gh run list --repo "$repo" --workflow ci.yml --branch main \
+          develop_is_red() {
+            # The latest finished run on develop: a push, the post-merge dispatch or a scheduled health run.
+            [ "$(gh run list --repo "$repo" --workflow ci.yml --branch develop \
               --status completed --limit 1 --json conclusion --jq '.[0].conclusion // ""')" = "failure" ]
           }
           # Prints "ok" when the PR is one agents may fix; flags it needs-human when out of attempts.
@@ -102,28 +103,31 @@ jobs:
 
           if [ "$EVENT" = "workflow_run" ]; then
             [ "$RUN_CONCLUSION" = "failure" ] && [ "$RUN_HEAD_REPO" = "$repo" ] || exit 0
-            if [ "$RUN_BRANCH" = "main" ] && [[ "$RUN_EVENT" =~ ^(push|schedule|workflow_dispatch)$ ]]; then
-              fix_main_pr_open && { echo "A fix-main PR is already open."; exit 0; }
-              emit main "" "agent/fix-main-${RUN_SHA:0:7}" "CI is red on main ($RUN_URL)"
+            if [ "$RUN_BRANCH" = "develop" ] && [[ "$RUN_EVENT" =~ ^(push|schedule|workflow_dispatch)$ ]]; then
+              fix_develop_pr_open && { echo "A fix-develop PR is already open."; exit 0; }
+              emit develop "" "agent/fix-develop-${RUN_SHA:0:7}" "CI is red on develop ($RUN_URL)"
               exit 0
             fi
             [ "$RUN_EVENT" = "pull_request" ] || exit 0
-            # A PR that is red because main is red is fixed by the fix-main PR, not on its own branch.
-            main_is_red && { echo "main is red; the fix-main PR handles this."; exit 0; }
+            # A PR that is red because develop is red is fixed by the fix-develop PR, not on its own branch.
+            develop_is_red && { echo "develop is red; the fix-develop PR handles this."; exit 0; }
             pr=$(gh pr list --repo "$repo" --head "$RUN_BRANCH" --state open --json number --jq '.[0].number // ""')
             [ -n "$pr" ] || exit 0
+            # A release PR's head is develop itself, which agents never push to.
+            [ "$RUN_BRANCH" != "develop" ] || exit 0
             [ "$(eligible "$pr")" = "ok" ] && emit pr "$pr" "$RUN_BRANCH" "failing CI ($RUN_URL)"
             exit 0
           fi
 
-          # schedule / workflow_dispatch: sweep. main first, then the oldest red PR.
-          if main_is_red; then
-            fix_main_pr_open || emit main "" "agent/fix-main-$(git ls-remote "https://github.com/$repo" refs/heads/main | cut -c1-7)" "CI is red on main"
+          # schedule / workflow_dispatch: sweep. develop first, then the oldest red PR.
+          if develop_is_red; then
+            fix_develop_pr_open || emit develop "" "agent/fix-develop-$(git ls-remote "https://github.com/$repo" refs/heads/develop | cut -c1-7)" "CI is red on develop"
             exit 0
           fi
           for row in $(gh pr list --repo "$repo" --state open --limit 100 \
               --json number,headRefName,headRefOid --jq 'sort_by(.number) | .[] | "\(.number):\(.headRefName):\(.headRefOid)"'); do
             pr=${row%%:*}; rest=${row#*:}; branch=${rest%%:*}; sha=${rest#*:}
+            [ "$branch" != "develop" ] || continue
             conclusion=$(gh run list --repo "$repo" --workflow ci.yml --commit "$sha" --event pull_request \
               --status completed --limit 1 --json conclusion --jq '.[0].conclusion // ""')
             [ "$conclusion" = "failure" ] || continue
@@ -141,16 +145,16 @@ jobs:
     env:
       HAS_AGENT_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN != '' }}
     concurrency:
-      group: agent-fixer-${{ needs.resolve-target.outputs.pr || 'main' }}
+      group: agent-fixer-${{ needs.resolve-target.outputs.pr || 'develop' }}
       cancel-in-progress: false
     steps:
       - uses: actions/checkout@v7
         with:
-          ref: ${{ needs.resolve-target.outputs.mode == 'main' && 'main' || needs.resolve-target.outputs.branch }}
+          ref: ${{ needs.resolve-target.outputs.mode == 'develop' && 'develop' || needs.resolve-target.outputs.branch }}
           fetch-depth: 0
-      - name: Block pushes to main
+      - name: Block pushes to main and develop
         run: |
-          printf '#!/bin/sh\nwhile read -r _ _ ref _; do [ "$ref" = refs/heads/main ] && { echo "Pushing to main is not allowed." >&2; exit 1; }; done\nexit 0\n' > .git/hooks/pre-push
+          printf '#!/bin/sh\nwhile read -r _ _ ref _; do case "$ref" in refs/heads/main|refs/heads/develop) echo "Pushing to main or develop is not allowed." >&2; exit 1 ;; esac; done\nexit 0\n' > .git/hooks/pre-push
           chmod +x .git/hooks/pre-push
       - uses: actions/setup-node@v7
         with:
@@ -177,7 +181,7 @@ jobs:
 
             Act as the Fixer. Follow .claude/agents/fixer.md exactly.
           # gh is limited to what fixer.md needs: read PRs, runs and review threads, comment and reply,
-          # edit labels, check out, open the fix-main PR and the needs-human issue. No `gh pr merge`.
+          # edit labels, check out, open the fix-develop PR and the needs-human issue. No `gh pr merge`.
           claude_args: |
             --max-turns 60
             --allowedTools "Read,Glob,Grep,Edit,Write,Bash(npm:*),Bash(npx:*),Bash(node:*),Bash(git:*),Bash(gh pr view:*),Bash(gh pr diff:*),Bash(gh pr checks:*),Bash(gh pr list:*),Bash(gh pr comment:*),Bash(gh pr edit:*),Bash(gh pr checkout:*),Bash(gh pr create:*),Bash(gh issue create:*),Bash(gh run view:*),Bash(gh run list:*),Bash(gh api repos/*/pulls/*/comments*),Bash(gh api repos/*/pulls/*/reviews*),Bash(gh api repos/*/issues/*/comments*),Bash(gh api repos/*/actions/*),Bash(gh api repos/*/commits/*),Bash(bash tools/github/issueKey.sh:*)"
