@@ -4,6 +4,10 @@ export const strings = {
     label: (price: string) => `New order @ ${price}`,
     description: (price: string) =>
       `New order at ${price}. Arrow keys move one tick, Shift for ten, Enter saves, Escape restores, Delete removes.`,
+    buy: 'Buy',
+    sell: 'Sell',
+    buyDescription: (price: string) => `Buy at ${price}: review before placing`,
+    sellDescription: (price: string) => `Sell at ${price}: review before placing`,
   },
   order: {
     sides: { BUY: 'Buy', SELL: 'Sell' },

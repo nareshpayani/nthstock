@@ -4,6 +4,9 @@ import type { PendingOrderPrice } from '@/shared/hooks/usePendingOrderPrices';
 import { strings } from '../strings';
 import type { OverlayLine } from './overlayLine';
 
+/** The id of an order line's × action. */
+export const CANCEL_ACTION = 'cancel';
+
 /** A limit order still working on the book: the ones drawn as lines (§8.1). */
 export const isWorkingLimit = (order: Order): order is Order & { price: number } =>
   (order.status === 'OPEN' || order.status === 'AMO') &&
@@ -34,14 +37,17 @@ export function orderLine(
       : strings.order.label(side, open, formatInr(price)),
     description: strings.order.description(side, open, formatInr(price)),
     draggable: !sending,
-    action: sending
+    actions: sending
       ? undefined
-      : {
-          label: cancelArmed ? strings.order.confirmCancel : '×',
-          description: cancelArmed
-            ? strings.order.confirmCancelDescription(side, open, formatInr(order.price))
-            : strings.order.cancelDescription(side, open, formatInr(order.price)),
-          armed: cancelArmed,
-        },
+      : [
+          {
+            id: CANCEL_ACTION,
+            label: cancelArmed ? strings.order.confirmCancel : '×',
+            description: cancelArmed
+              ? strings.order.confirmCancelDescription(side, open, formatInr(order.price))
+              : strings.order.cancelDescription(side, open, formatInr(order.price)),
+            look: cancelArmed ? 'armed' : 'plain',
+          },
+        ],
   };
 }

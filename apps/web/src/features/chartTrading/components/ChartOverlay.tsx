@@ -20,7 +20,7 @@ import {
   type GestureEffect,
   type HandleGesture,
 } from '../model/handleGesture';
-import { byPriority, type OverlayLine } from '../model/overlayLine';
+import { byPriority, type LineAction, type OverlayLine } from '../model/overlayLine';
 import { layoutHandles, snapToTick } from '../model/overlayLayout';
 
 export type ChartOverlayProps = {
@@ -41,8 +41,8 @@ export type ChartOverlayProps = {
   onHandleTap?: ((id: string) => void) | undefined;
   /** Delete or Backspace on a focused handle. */
   onHandleDelete?: ((id: string) => void) | undefined;
-  /** The line's action button (its × ) was pressed. */
-  onAction?: ((id: string) => void) | undefined;
+  /** One of the line's action buttons (× on an order, Buy or Sell on the ghost) was pressed. */
+  onAction?: ((id: string, action: string) => void) | undefined;
 };
 
 type Elements = {
@@ -296,25 +296,25 @@ export function ChartOverlay({
                   {line.label}
                 </span>
               </button>
-              {line.action ? (
+              {line.actions?.map((action) => (
                 <button
+                  key={action.id}
                   type="button"
-                  aria-label={line.action.description}
+                  aria-label={action.description}
                   data-testid="chart-handle-action"
-                  data-armed={line.action.armed ? 'true' : 'false'}
+                  data-action={action.id}
+                  data-armed={action.look === 'armed' ? 'true' : 'false'}
                   className={cn(
-                    'pointer-events-auto grid min-h-11 min-w-11 place-items-center rounded-sm text-label font-medium',
+                    'pointer-events-auto grid min-h-11 min-w-11 place-items-center rounded-sm px-2 text-label font-medium shadow-sm',
                     'focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-brand',
-                    line.action.armed
-                      ? 'bg-down px-2 text-surface'
-                      : 'border border-line bg-surface text-ink',
+                    ACTION_CLASSES[action.look],
                   )}
                   onPointerDown={(event) => event.stopPropagation()}
-                  onClick={() => latestRef.current.on.onAction?.(line.id)}
+                  onClick={() => latestRef.current.on.onAction?.(line.id, action.id)}
                 >
-                  {line.action.label}
+                  {action.label}
                 </button>
-              ) : null}
+              ))}
             </div>
           </div>
         ))}
@@ -369,4 +369,11 @@ const TONE_CLASSES: Record<OverlayLine['tone'], string> = {
   position: 'border-ink bg-surface text-ink',
   trailing: 'border-dashed border-ink bg-marigold text-ink',
   pending: 'border-dotted border-ink-muted bg-surface text-ink-muted',
+};
+
+const ACTION_CLASSES: Record<LineAction['look'], string> = {
+  plain: 'border border-line bg-surface text-ink',
+  armed: 'bg-down text-surface',
+  buy: 'bg-brand text-surface',
+  sell: 'bg-down text-surface',
 };

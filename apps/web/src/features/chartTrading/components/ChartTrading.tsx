@@ -1,21 +1,22 @@
-import type { Instrument, Order } from '@nthstock/contracts';
+import type { Instrument, Order, OrderSide } from '@nthstock/contracts';
 import { useToast } from '@nthstock/ui';
 import { formatInr } from '@nthstock/utils';
 import { useEffect, useRef, useState } from 'react';
 import type { ChartHandle } from '@/features/charts';
+import { useOpenTicket } from '@/shared/hooks/useOpenTicket';
 import { usePendingOrderPrices } from '@/shared/hooks/usePendingOrderPrices';
 import { useOrderDraftStore } from '@/shared/lib/orderDraftStore';
 import { useTradingStore } from '@/shared/lib/tradingStoreContext';
 import { useChartOrders } from '../hooks/useChartOrders';
 import { actionErrorText, useOrderLineActions } from '../hooks/useOrderLineActions';
-import { orderLine } from '../model/orderLines';
+import { CANCEL_ACTION, orderLine } from '../model/orderLines';
 import type { OverlayLine } from '../model/overlayLine';
 import { strings } from '../strings';
 import { ChartOverlay } from './ChartOverlay';
 
 export type ChartTradingProps = {
   handle: ChartHandle;
-  instrument: Pick<Instrument, 'symbol' | 'tickSize' | 'token'>;
+  instrument: Pick<Instrument, 'symbol' | 'exchange' | 'tickSize' | 'token'>;
 };
 
 const GHOST = 'ghost';
@@ -26,7 +27,8 @@ export const CANCEL_ARM_MS = 3_000;
  * Trading on the instrument chart (SPEC-TFC-1 §8). Working limit orders are lines (T16): drag one
  * and its price follows the finger on every surface, with one modify on release; tap × twice to
  * cancel. A fill or cancel during the drag ends it, puts the line back and says why. Tap the
- * price gutter for a ghost line at that price (T15); placing from it follows in T17.
+ * price gutter for a ghost line at that price (T15), drag it to adjust, then tap Buy or Sell for
+ * the compact ticket at that price (T17, §8.2); nothing is sent until Place.
  */
 export function ChartTrading({ handle, instrument }: ChartTradingProps) {
   const toast = useToast();
@@ -35,6 +37,7 @@ export function ChartTrading({ handle, instrument }: ChartTradingProps) {
   const orders = useChartOrders(instrument.token);
   const pending = usePendingOrderPrices();
   const setDraft = useOrderDraftStore((state) => state.setDraft);
+  const openTicket = useOpenTicket();
   const [ghost, setGhost] = useState<number | null>(null);
   const [ghostDrag, setGhostDrag] = useState<number | null>(null);
   const [armed, setArmed] = useState<string | null>(null);
@@ -61,6 +64,20 @@ export function ChartTrading({ handle, instrument }: ChartTradingProps) {
       label: strings.ghost.label(formatInr(price)),
       description: strings.ghost.description(formatInr(price)),
       draggable: true,
+      actions: [
+        {
+          id: 'BUY',
+          label: strings.ghost.buy,
+          description: strings.ghost.buyDescription(formatInr(price)),
+          look: 'buy',
+        },
+        {
+          id: 'SELL',
+          label: strings.ghost.sell,
+          description: strings.ghost.sellDescription(formatInr(price)),
+          look: 'sell',
+        },
+      ],
     });
   }
 
@@ -116,9 +133,28 @@ export function ChartTrading({ handle, instrument }: ChartTradingProps) {
     );
   };
 
-  const onAction = (id: string) => {
+  // Buy or Sell on the ghost: the compact ticket, a limit at the ghost's price (§8.2).
+  const placeFromGhost = (side: OrderSide) => {
+    if (ghost === null) return;
+    const price = ghost;
+    setGhost(null);
+    setGhostDrag(null);
+    void openTicket({
+      symbol: instrument.symbol,
+      exchange: instrument.exchange,
+      side,
+      price,
+      compact: true,
+    });
+  };
+
+  const onAction = (id: string, action: string) => {
+    if (id === GHOST) {
+      if (action === 'BUY' || action === 'SELL') placeFromGhost(action);
+      return;
+    }
     const order = orderById(id);
-    if (!order) return;
+    if (!order || action !== CANCEL_ACTION) return;
     if (armTimer.current) clearTimeout(armTimer.current);
     if (armed === id) {
       setArmed(null);

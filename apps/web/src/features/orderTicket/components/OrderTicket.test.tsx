@@ -333,6 +333,41 @@ describe('order ticket with the market open', () => {
     },
     HEAVY,
   );
+
+  it(
+    'from the chart: a compact limit at the chart price, warning when it would fill at once (T17)',
+    async () => {
+      await renderTicket(mock.session);
+      await screen.findByRole('button', { name: 'Buy INFY' });
+      // ₹9,99,999.95 is far above any LTP: a buy there crosses the market.
+      act(() => {
+        useTicketIntentStore.getState().openTicket({
+          symbol: 'INFY',
+          exchange: 'NSE',
+          side: 'BUY',
+          price: 99_999_995,
+          compact: true,
+        });
+      });
+      const dialog = await screen.findByRole('dialog', { name: 'Trade INFY' });
+      await within(dialog).findByRole('form', { name: 'Order details' });
+      expect(priceInput()).toHaveValue('999999.95');
+      // Side, quantity, price, product and the trailing stop; no type switch, no depth.
+      expect(within(dialog).getByRole('radiogroup', { name: 'Order side' })).toBeInTheDocument();
+      expect(within(dialog).getByRole('radiogroup', { name: 'Product' })).toBeInTheDocument();
+      expect(within(dialog).queryByRole('radiogroup', { name: 'Order type' })).toBeNull();
+      expect(within(dialog).queryByRole('region', { name: 'Market depth' })).toBeNull();
+      expect(within(dialog).getByTestId('attach-trailing')).toBeInTheDocument();
+      expect(await within(dialog).findByTestId('fills-immediately')).toHaveTextContent(
+        'This will fill immediately',
+      );
+
+      // As a sell at that price it rests on the book: no warning.
+      fireEvent.click(within(dialog).getByRole('radio', { name: 'Sell' }));
+      await waitFor(() => expect(within(dialog).queryByTestId('fills-immediately')).toBeNull());
+    },
+    HEAVY,
+  );
 });
 
 describe('order ticket with the market closed (T-138)', () => {
