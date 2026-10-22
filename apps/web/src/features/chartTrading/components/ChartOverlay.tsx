@@ -155,16 +155,33 @@ export function ChartOverlay({
     }
   });
 
-  // A second finger anywhere cancels a drag (§9.1).
+  // A second finger anywhere, or Escape, cancels what the first finger started (§9.1, T20): a
+  // drag restores its line, a press on the chip neither opens it nor keeps panning, and a press
+  // on the gutter places no ghost (it was the start of a pinch).
   useEffect(() => {
-    const onPointerDown = (event: PointerEvent) => {
+    const cancelAll = (keep?: number) => {
       const active = gestureRef.current;
-      if (active.phase === 'idle' || event.pointerId === active.pointerId) return;
-      gestureRef.current = IDLE;
-      if (active.phase === 'dragging') latestRef.current.on.onDragEnd?.(active.id, null);
+      if (active.phase !== 'idle' && active.pointerId !== keep) {
+        gestureRef.current = IDLE;
+        if (active.phase === 'dragging') latestRef.current.on.onDragEnd?.(active.id, null);
+      }
+      if (chipRef.current && chipRef.current.pointerId !== keep) chipRef.current = null;
+      if (gutterPressRef.current && gutterPressRef.current.pointerId !== keep) {
+        gutterPressRef.current = null;
+      }
+    };
+    const onPointerDown = (event: PointerEvent) => cancelAll(event.pointerId);
+    const onKeyDown = (event: globalThis.KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      if (gestureRef.current.phase === 'dragging') event.preventDefault();
+      cancelAll();
     };
     document.addEventListener('pointerdown', onPointerDown, true);
-    return () => document.removeEventListener('pointerdown', onPointerDown, true);
+    document.addEventListener('keydown', onKeyDown, true);
+    return () => {
+      document.removeEventListener('pointerdown', onPointerDown, true);
+      document.removeEventListener('keydown', onKeyDown, true);
+    };
   }, []);
 
   const paneY = (clientY: number) => clientY - handle.host.getBoundingClientRect().top;
@@ -305,6 +322,7 @@ export function ChartOverlay({
         onPointerDown={onGutterPointerDown}
         onPointerUp={onGutterPointerUp}
         onPointerCancel={() => (gutterPressRef.current = null)}
+        onContextMenu={preventDefault}
       />
       <div
         ref={(element) => {
@@ -348,6 +366,7 @@ export function ChartOverlay({
                 onPointerUp={onHandlePointerUp}
                 onPointerCancel={onHandlePointerCancel}
                 onLostPointerCapture={onHandlePointerCancel}
+                onContextMenu={preventDefault}
                 onKeyDown={onHandleKeyDown(line)}
                 onBlur={onHandleBlur(line)}
               >
@@ -389,6 +408,9 @@ export function ChartOverlay({
     </div>
   );
 }
+
+/** A long-press on a handle or the gutter opens no menu or callout (Android, iOS Safari). */
+const preventDefault = (event: { preventDefault: () => void }) => event.preventDefault();
 
 /** Moves every handle, leader line and the gutter to the chart's current coordinates. */
 function placeHandles(
