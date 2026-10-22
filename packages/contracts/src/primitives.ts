@@ -21,6 +21,14 @@ export type TickPrice = z.infer<typeof TickPrice>;
 export const BasisPoints = z.number().int();
 export type BasisPoints = z.infer<typeof BasisPoints>;
 
+/**
+ * The paper engine's sequence number (ADR 0012): it rises by one with every change the engine
+ * makes to an account's orders, positions or trailing stops, so a client can drop a stale update
+ * and notice a missed one.
+ */
+export const Seq = z.number().int().min(0);
+export type Seq = z.infer<typeof Seq>;
+
 /** A whole-number count (quantity, volume, orders) that can be zero. */
 export const Count = z.number().int().min(0);
 export type Count = z.infer<typeof Count>;
