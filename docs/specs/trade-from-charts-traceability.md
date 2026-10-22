@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | Document | RCM-TFC-1 |
-| Version | 1.0 (in review) |
+| Version | 1.0 (approved) |
 | Date | 2026-10-22 |
 | Product owner and approver | Naresh Payani |
 | Specification | [SPEC-TFC-1](trade-from-charts.md) |
