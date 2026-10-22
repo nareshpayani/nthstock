@@ -7,6 +7,13 @@ import { generateSymbolMaster } from './symbolMaster.js';
 // SPEC-TFC-1 §6.7 and TFC-11, PLAN-TFC-1 T07: per-instrument streams, the 250 ms focus lane,
 // timestamped catch-up replay, tick-built 1-minute bars, nudge and gap.
 
+// This package is isomorphic (no Node types); the timing test only needs process.cpuUsage.
+interface CpuUsage {
+  user: number;
+  system: number;
+}
+declare const process: { cpuUsage(previous?: CpuUsage): CpuUsage };
+
 const master = generateSymbolMaster();
 const [A, B] = master.equities.map((e) => e.instrument.symbol) as [string, string];
 
@@ -140,17 +147,18 @@ describe('catch-up replay (§6.7)', () => {
   });
 
   it('replays 30 minutes of one instrument in under 100 ms', () => {
-    // A unit benchmark (SPEC-TFC-1 §15): the best of three fresh replays after a warm-up, so the
-    // figure is the replay's own cost, not JIT warm-up or a busy CI runner.
+    // A unit benchmark (SPEC-TFC-1 §15), timed like the symbol master's: CPU time, best of three
+    // after a warm-up. CI runs every package's tests at once on a few cores, and waiting for a
+    // core is not replay cost.
     const replay = (): number => {
       const { adapter, clock, scheduler, batches } = setup();
       adapter.setReplaySymbols([A]);
       clock.advance(30 * 60_000);
-      const started = Date.now();
+      const start = process.cpuUsage();
       scheduler.fire();
-      const took = Date.now() - started;
+      const used = process.cpuUsage(start);
       expect(batches.flat().filter((quote) => quote.symbol === A)).toHaveLength(1_800);
-      return took;
+      return (used.user + used.system) / 1_000;
     };
     replay();
     expect(Math.min(replay(), replay(), replay())).toBeLessThan(100);
