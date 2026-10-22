@@ -1,9 +1,11 @@
 import { setupWorker } from 'msw/browser';
 import { resolveWsUrl, type RuntimeConfig } from '@/app/config/runtimeConfig';
+import { enterDemoMode, isDemoMode, registerSimulator } from '@/shared/lib/demoSimulator';
 import { wantsDemo, withoutDemoParam } from './demoParam';
 import { seedMockDemo } from './demoSeed';
 import { ORDER_SWEEP_MS, createMockHandlers } from './handlers';
 import { createMockMarket } from './marketAdapter';
+import { createSimulator } from './simulator';
 import type { TestControls } from './testControls';
 import { startWorkerKeeper } from './workerKeeper';
 
@@ -47,7 +49,9 @@ export async function startMockWorker(
   // ?demo=1 (T-174): the demo user's watchlists, holdings and ledger, as `npm run seed:demo` gives
   // in api mode. Written before the mocks read their saved state; the parameter is then dropped so
   // a reload keeps the demo's changes.
-  if (options.demo ?? wantsDemo(window.location.search)) {
+  const demoRequested = options.demo ?? wantsDemo(window.location.search);
+  if (demoRequested) {
+    if (listStorage) enterDemoMode(listStorage);
     const seeded = listStorage ? seedMockDemo(listStorage, adapter.master) : false;
     if (wantsDemo(window.location.search)) {
       window.history.replaceState(window.history.state, '', withoutDemoParam(window.location.href));
@@ -92,6 +96,10 @@ export async function startMockWorker(
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'hidden') orders.flush();
   });
+  // The Simulator exists only in demo mode (SPEC-TFC-1 TFC-12); a reload in the same session keeps it.
+  if (listStorage && isDemoMode(listStorage)) {
+    registerSimulator(createSimulator({ adapter, orders }));
+  }
   // Chrome stops idle service workers; this re-registers the tab with a restarted one.
   const keeper = startWorkerKeeper();
   return { worker, adapter, orders, ensureActive: keeper.ensureActive };
