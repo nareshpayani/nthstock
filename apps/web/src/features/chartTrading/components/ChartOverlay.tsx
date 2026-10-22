@@ -41,9 +41,12 @@ export type ChartOverlayProps = {
   onHandleTap?: ((id: string) => void) | undefined;
   /** Delete or Backspace on a focused handle. */
   onHandleDelete?: ((id: string) => void) | undefined;
+  /** The line's action button (its × ) was pressed. */
+  onAction?: ((id: string) => void) | undefined;
 };
 
 type Elements = {
+  rows: Map<string, HTMLElement>;
   handles: Map<string, HTMLElement>;
   leaders: Map<string, HTMLElement>;
   gutter: HTMLElement | null;
@@ -72,9 +75,11 @@ export function ChartOverlay({
   onDragEnd,
   onHandleTap,
   onHandleDelete,
+  onAction,
 }: ChartOverlayProps) {
   const ordered = byPriority(lines);
   const elementsRef = useRef<Elements>({
+    rows: new Map(),
     handles: new Map(),
     leaders: new Map(),
     gutter: null,
@@ -88,7 +93,7 @@ export function ChartOverlay({
   // The latest lines and callbacks, for the repaint hook and the event handlers.
   const latestRef = useRef({
     lines: ordered,
-    on: { onGutterTap, onDragMove, onDragEnd, onHandleTap, onHandleDelete },
+    on: { onGutterTap, onDragMove, onDragEnd, onHandleTap, onHandleDelete, onAction },
   });
 
   const apply = (step: { gesture: HandleGesture; effect: GestureEffect }) => {
@@ -122,7 +127,7 @@ export function ChartOverlay({
   useLayoutEffect(() => {
     latestRef.current = {
       lines: ordered,
-      on: { onGutterTap, onDragMove, onDragEnd, onHandleTap, onHandleDelete },
+      on: { onGutterTap, onDragMove, onDragEnd, onHandleTap, onHandleDelete, onAction },
     };
     syncPriceLines(handle.series, drawnRef.current, ordered);
     placeHandles(handle, ordered, elementsRef.current);
@@ -215,7 +220,7 @@ export function ChartOverlay({
   };
 
   const refFor =
-    (kind: 'handles' | 'leaders', id: string) =>
+    (kind: 'rows' | 'handles' | 'leaders', id: string) =>
     (element: HTMLElement | null): void => {
       const map = elementsRef.current[kind];
       if (element) map.set(id, element);
@@ -255,38 +260,62 @@ export function ChartOverlay({
               hidden
               className="absolute right-2 w-px bg-ink-muted"
             />
-            <button
-              ref={refFor('handles', line.id)}
-              type="button"
-              aria-label={line.description}
-              data-testid="chart-handle"
-              data-line={line.id}
-              data-tone={line.tone}
-              className={cn(
-                'group pointer-events-auto absolute top-0 right-0 flex min-h-11 touch-none items-center select-none [-webkit-touch-callout:none]',
-                'focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-brand',
-                line.draggable ? 'cursor-ns-resize' : 'cursor-pointer',
-              )}
-              onPointerDown={onHandlePointerDown(line.id)}
-              onPointerMove={onHandlePointerMove}
-              onPointerUp={onHandlePointerUp}
-              onPointerCancel={onHandlePointerCancel}
-              onLostPointerCapture={onHandlePointerCancel}
-              onKeyDown={onHandleKeyDown(line)}
-              onBlur={onHandleBlur(line)}
+            <div
+              ref={refFor('rows', line.id)}
+              className="absolute top-0 right-0 flex items-center gap-1"
             >
-              <span
-                aria-hidden="true"
+              <button
+                ref={refFor('handles', line.id)}
+                type="button"
+                aria-label={line.description}
+                data-testid="chart-handle"
+                data-line={line.id}
+                data-tone={line.tone}
                 className={cn(
-                  'flex items-center gap-1 rounded-sm border px-2 py-0.5 text-label whitespace-nowrap shadow-sm',
-                  TONE_CLASSES[line.tone],
+                  'group pointer-events-auto flex min-h-11 touch-none items-center select-none [-webkit-touch-callout:none]',
+                  'focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-brand',
+                  line.draggable ? 'cursor-ns-resize' : 'cursor-pointer',
                 )}
+                onPointerDown={onHandlePointerDown(line.id)}
+                onPointerMove={onHandlePointerMove}
+                onPointerUp={onHandlePointerUp}
+                onPointerCancel={onHandlePointerCancel}
+                onLostPointerCapture={onHandlePointerCancel}
+                onKeyDown={onHandleKeyDown(line)}
+                onBlur={onHandleBlur(line)}
               >
-                <span className="hidden group-data-[pinned=top]:inline">↑</span>
-                <span className="hidden group-data-[pinned=bottom]:inline">↓</span>
-                {line.label}
-              </span>
-            </button>
+                <span
+                  aria-hidden="true"
+                  className={cn(
+                    'flex items-center gap-1 rounded-sm border px-2 py-0.5 text-label whitespace-nowrap shadow-sm',
+                    TONE_CLASSES[line.tone],
+                  )}
+                >
+                  <span className="hidden group-data-[pinned=top]:inline">↑</span>
+                  <span className="hidden group-data-[pinned=bottom]:inline">↓</span>
+                  {line.label}
+                </span>
+              </button>
+              {line.action ? (
+                <button
+                  type="button"
+                  aria-label={line.action.description}
+                  data-testid="chart-handle-action"
+                  data-armed={line.action.armed ? 'true' : 'false'}
+                  className={cn(
+                    'pointer-events-auto grid min-h-11 min-w-11 place-items-center rounded-sm text-label font-medium',
+                    'focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-brand',
+                    line.action.armed
+                      ? 'bg-down px-2 text-surface'
+                      : 'border border-line bg-surface text-ink',
+                  )}
+                  onPointerDown={(event) => event.stopPropagation()}
+                  onClick={() => latestRef.current.on.onAction?.(line.id)}
+                >
+                  {line.action.label}
+                </button>
+              ) : null}
+            </div>
           </div>
         ))}
       </div>
@@ -298,7 +327,7 @@ export function ChartOverlay({
 function placeHandles(
   { chart, series }: ChartHandle,
   lines: readonly OverlayLine[],
-  { handles, leaders, gutter, layer }: Elements,
+  { rows, handles, leaders, gutter, layer }: Elements,
 ): void {
   const height = chart.paneSize(0).height;
   const axisWidth = chart.priceScale('right').width();
@@ -312,9 +341,12 @@ function placeHandles(
   }
   const layout = layoutHandles(lines, (price) => series.priceToCoordinate(price), { height });
   for (const place of layout) {
+    const row = rows.get(place.id);
+    if (row) {
+      row.style.transform = `translateY(${String(Math.round(place.labelY))}px) translateY(-50%)`;
+    }
     const element = handles.get(place.id);
     if (element) {
-      element.style.transform = `translateY(${String(Math.round(place.labelY))}px) translateY(-50%)`;
       element.dataset.pinned = place.pinned ?? '';
       element.dataset.y = String(Math.round(place.labelY));
     }

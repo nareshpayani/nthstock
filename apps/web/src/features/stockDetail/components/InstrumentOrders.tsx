@@ -3,6 +3,8 @@ import type { Instrument, Order } from '@nthstock/contracts';
 import { formatInr } from '@nthstock/utils';
 import { Link } from '@tanstack/react-router';
 import { useCallback } from 'react';
+import { PendingPrice } from '@/shared/components/PendingPrice';
+import { usePendingOrderPrices } from '@/shared/hooks/usePendingOrderPrices';
 import { useTradingSelector } from '@/shared/hooks/useTradingSelector';
 import { strings } from '../strings';
 
@@ -25,6 +27,7 @@ export function InstrumentOrders({ instrument }: { instrument: Instrument }) {
     [instrument.token],
   );
   const orders = useTradingSelector(select, sameOrders);
+  const pendingPrices = usePendingOrderPrices();
   const text = strings.phone.orders;
   const all = (
     <Link to="/orders" className={linkClass}>
@@ -59,6 +62,7 @@ export function InstrumentOrders({ instrument }: { instrument: Instrument }) {
                     {formatInr(order.price)}
                   </span>
                 )}
+                <PendingPrice pending={pendingPrices.get(order.id)} />
               </span>
               <span className="shrink-0 text-label font-semibold text-ink-muted">
                 {text.statuses[order.status]}
