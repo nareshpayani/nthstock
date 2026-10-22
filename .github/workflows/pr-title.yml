@@ -1,7 +1,7 @@
 name: PR title
 
 # PR titles are "<type>(NSTOCK-0001): <subject>", naming the issue the PR delivers, e.g.
-# "feat(NSTOCK-0001): create login flow". Squash merge makes the title the commit on main, so the
+# "feat(NSTOCK-0001): create login flow". Squash merge makes the title the commit on develop, so the
 # history stays Conventional Commits and every commit points at its issue. The key must belong to
 # an existing issue. Dependabot PRs and PRs opened before 2026-10-08 are exempt.
 

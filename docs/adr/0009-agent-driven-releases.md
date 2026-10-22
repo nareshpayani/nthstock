@@ -1,6 +1,7 @@
 # 0009. Agent-driven releases with an owner-confirmed preview
 
-- Status: Accepted
+- Status: Accepted; amended by [0010](0010-develop-and-main-branches.md) (releases are PRs from
+  `develop` into `main`)
 - Date: 2026-10-21
 - Amends: [0006](0006-auto-merge-and-self-healing.md) (agents may now deploy, through this flow only)
 

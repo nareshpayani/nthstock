@@ -2,13 +2,14 @@ name: CI
 
 on:
   pull_request:
+  # develop is where PRs merge; main is production (ADR 0010).
   push:
-    branches: [main]
+    branches: [develop, main]
   # Started by agent-automerge.yml after it merges (GITHUB_TOKEN merges don't trigger push runs).
   workflow_dispatch:
-  # Health runs on main, so breakage that only shows at some hours (market open or closed) or
+  # Health runs on the default branch (develop), so breakage that only shows at some hours (market open or closed) or
   # without a new commit is caught without anyone reporting it. A red run starts agent-fixer.yml,
-  # which opens an agent/fix-main-* PR. Times are UTC: 09:20 and 12:30 IST on weekdays (NSE open),
+  # which opens an agent/fix-develop-* PR. Times are UTC: 09:20 and 12:30 IST on weekdays (NSE open),
   # and 20:00 IST every day (market closed).
   schedule:
     - cron: '50 3 * * 1-5'
