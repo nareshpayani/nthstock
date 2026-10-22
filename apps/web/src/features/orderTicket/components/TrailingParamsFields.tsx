@@ -9,6 +9,8 @@ export type TrailingParamsFieldsProps = {
   errorFor: (field: 'value' | 'exitLimitOffset') => string | undefined;
   /** The live preview sentence, or null while there is not enough to say. */
   preview: string | null;
+  /** Unit and value only, for the chart's trailing-stop sheet (T18, §8.4). */
+  compact?: boolean | undefined;
 };
 
 /**
@@ -21,6 +23,7 @@ export function TrailingParamsFields({
   onChange,
   errorFor,
   preview,
+  compact = false,
 }: TrailingParamsFieldsProps) {
   return (
     <>
@@ -65,56 +68,60 @@ export function TrailingParamsFields({
         </Field>
       </div>
 
-      <Field
-        label={strings.trailing.activation}
-        hint={strings.trailing.activationHint}
-        className="min-w-0"
-      >
-        <NumberInput
-          className="w-full min-w-0"
-          mode="price"
-          name="activationPrice"
-          value={values.activationPrice}
-          onChange={(activationPrice) => onChange({ activationPrice })}
-        />
-      </Field>
-
-      <div className="grid gap-3 sm:grid-cols-2 [&>*]:min-w-0">
-        <div className="grid content-start gap-1">
-          <span className="text-label text-ink-muted" aria-hidden="true">
-            {strings.trailing.exitType}
-          </span>
-          <SegmentedControl
-            label={strings.trailing.exitType}
-            size="sm"
-            value={values.exitOrderType}
-            onValueChange={(exitOrderType) =>
-              onChange({ exitOrderType, exitLimitOffset: exitOrderType === 'LIMIT' ? 0 : null })
-            }
-            options={[
-              { value: 'MARKET', label: strings.form.market },
-              { value: 'LIMIT', label: strings.form.limit },
-            ]}
-          />
-        </div>
-        {values.exitOrderType === 'LIMIT' ? (
+      {compact ? null : (
+        <>
           <Field
+            label={strings.trailing.activation}
+            hint={strings.trailing.activationHint}
             className="min-w-0"
-            label={strings.trailing.offset}
-            hint={strings.trailing.offsetHint}
-            error={errorFor('exitLimitOffset')}
           >
             <NumberInput
               className="w-full min-w-0"
               mode="price"
-              name="exitLimitOffset"
-              min={0}
-              value={values.exitLimitOffset}
-              onChange={(exitLimitOffset) => onChange({ exitLimitOffset })}
+              name="activationPrice"
+              value={values.activationPrice}
+              onChange={(activationPrice) => onChange({ activationPrice })}
             />
           </Field>
-        ) : null}
-      </div>
+
+          <div className="grid gap-3 sm:grid-cols-2 [&>*]:min-w-0">
+            <div className="grid content-start gap-1">
+              <span className="text-label text-ink-muted" aria-hidden="true">
+                {strings.trailing.exitType}
+              </span>
+              <SegmentedControl
+                label={strings.trailing.exitType}
+                size="sm"
+                value={values.exitOrderType}
+                onValueChange={(exitOrderType) =>
+                  onChange({ exitOrderType, exitLimitOffset: exitOrderType === 'LIMIT' ? 0 : null })
+                }
+                options={[
+                  { value: 'MARKET', label: strings.form.market },
+                  { value: 'LIMIT', label: strings.form.limit },
+                ]}
+              />
+            </div>
+            {values.exitOrderType === 'LIMIT' ? (
+              <Field
+                className="min-w-0"
+                label={strings.trailing.offset}
+                hint={strings.trailing.offsetHint}
+                error={errorFor('exitLimitOffset')}
+              >
+                <NumberInput
+                  className="w-full min-w-0"
+                  mode="price"
+                  name="exitLimitOffset"
+                  min={0}
+                  value={values.exitLimitOffset}
+                  onChange={(exitLimitOffset) => onChange({ exitLimitOffset })}
+                />
+              </Field>
+            ) : null}
+          </div>
+        </>
+      )}
 
       <p className="text-body text-ink" aria-live="polite" data-testid="trailing-preview">
         {preview ?? strings.trailing.previewWaiting}
