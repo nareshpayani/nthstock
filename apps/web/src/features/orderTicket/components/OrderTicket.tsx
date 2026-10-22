@@ -47,7 +47,14 @@ import { strings } from '../strings';
 import { ReviewStep } from './ReviewStep';
 import { TRAILING_SL, TicketForm, orderTypeOptions } from './TicketForm';
 import { TrailingStopForm } from './TrailingStopForm';
-import { openPositions } from '../model/trailingStopForm';
+import { AttachedStop } from './AttachedStop';
+import {
+  attachPlan,
+  initialAttachState,
+  replacesStop,
+  type AttachState,
+} from '../model/attachedStop';
+import { attachedReviewSentence, openPositions, toAttachedParams } from '../model/trailingStopForm';
 import { TicketSkeleton } from './TicketSkeleton';
 
 export type OrderTicketProps = {
@@ -85,6 +92,8 @@ type Review = {
   changes?: ModifyOrderRequest;
   ltp: number | null;
   value: number | null;
+  /** The trailing stop attached to the entry (T14), in words for the review. */
+  attached?: { sentence: string; replaces: boolean };
 };
 
 /** Cash the order already has blocked, which a modify can reuse (T-145). An estimate only. */
@@ -115,6 +124,7 @@ function TicketFlow({
   const [review, setReview] = useState<Review | null>(null);
   const [error, setError] = useState<TicketError | null>(null);
   const [trailingMode, setTrailingMode] = useState(false);
+  const [attach, setAttach] = useState<AttachState>(initialAttachState);
   // Trailing SL (T13): offered on a position in this instrument, never when modifying an order.
   const positions = useQuery({ ...positionsQuery(api), enabled: !intent.modify });
   const held = openPositions(positions.data?.items ?? [], instrument.token);
@@ -183,7 +193,14 @@ function TicketFlow({
       }
       return;
     }
-    const request = toPlaceOrderRequest(values, instrument.token, newClientOrderId());
+    // "Add trailing stop" (T14): checked against the expected fill before the review.
+    const plan = modifying ? null : attachPlan(values, attach, { trailingAvailable, ltp });
+    if (plan?.attaching && !plan.check.ok) {
+      setAttach((current) => ({ ...current, touched: true }));
+      return;
+    }
+    const attached = plan?.attaching ? toAttachedParams(attach.values) : null;
+    const request = toPlaceOrderRequest(values, instrument.token, newClientOrderId(), attached);
     if (modifying) {
       const changes = toModifyRequest(values, modifying);
       if (!changes) {
@@ -195,7 +212,19 @@ function TicketFlow({
       return;
     }
     setError(null);
-    setReview({ request, ltp, value: orderValue(values, ltp) });
+    setReview({
+      request,
+      ltp,
+      value: orderValue(values, ltp),
+      ...(attached && plan?.direction
+        ? {
+            attached: {
+              sentence: attachedReviewSentence(attach.values, plan.direction),
+              replaces: replacesStop(activeStops, values, plan.direction),
+            },
+          }
+        : {}),
+    });
   });
 
   const viewOrders = (event: MouseEvent<HTMLAnchorElement>) => {
@@ -322,6 +351,7 @@ function TicketFlow({
           value={review.value}
           amoDate={amoDate}
           mode={modifying ? 'modify' : 'place'}
+          {...(review.attached ? { attached: review.attached } : {})}
           placing={placeOrder.isPending || modifyOrder.isPending}
           onEdit={() => setReview(null)}
           onConfirm={onConfirm}
@@ -339,6 +369,20 @@ function TicketFlow({
           error={error}
           onSubmit={(event) => void onSubmit(event)}
           trailing={trailingOffer}
+          attach={
+            modifying ? undefined : (
+              <AttachedStop
+                control={control}
+                symbol={intent.symbol}
+                exchange={intent.exchange}
+                snapshotLtp={snapshot.data?.ltp}
+                trailingAvailable={trailingAvailable}
+                activeStops={activeStops}
+                state={attach}
+                onState={setAttach}
+              />
+            )
+          }
         />
       )}
     </div>

@@ -8,6 +8,7 @@ import {
   TickPrice,
   type InstrumentToken,
   type Order,
+  type TrailingStopParams,
 } from '@nthstock/contracts';
 import { z } from 'zod';
 import { strings } from '../strings';
@@ -68,12 +69,14 @@ export function defaultTicketValues(
 
 /**
  * The `POST /v1/orders` body for valid form values, parsed with the contract's
- * `PlaceOrderRequest` (throws when the values were not validated first).
+ * `PlaceOrderRequest` (throws when the values were not validated first), with the trailing stop
+ * attached to the entry when there is one (T14).
  */
 export function toPlaceOrderRequest(
   values: TicketFormValues,
   token: InstrumentToken,
   clientOrderId: string,
+  attachedTrailingStop: TrailingStopParams | null = null,
 ): PlaceOrderRequest {
   return PlaceOrderRequest.parse({
     token,
@@ -83,6 +86,7 @@ export function toPlaceOrderRequest(
     qty: values.qty,
     ...(values.type === 'LIMIT' ? { price: values.price } : {}),
     clientOrderId,
+    ...(attachedTrailingStop ? { attachedTrailingStop } : {}),
   });
 }
 

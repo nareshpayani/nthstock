@@ -1,6 +1,6 @@
 import { isApiError } from '@nthstock/apiClient';
 import type { Instrument, Position, TrailingStop } from '@nthstock/contracts';
-import { Button, Field, IconAlert, NumberInput, SegmentedControl, useToast } from '@nthstock/ui';
+import { Button, IconAlert, SegmentedControl, useToast } from '@nthstock/ui';
 import { formatInr } from '@nthstock/utils';
 import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import { useQuote } from '@/shared/hooks/useQuote';
@@ -18,6 +18,7 @@ import {
 } from '../model/trailingStopForm';
 import { previewTrailingStop } from '@nthstock/paperEngine';
 import { strings } from '../strings';
+import { TrailingParamsFields } from './TrailingParamsFields';
 
 export type TrailingStopFormProps = {
   instrument: Pick<Instrument, 'token' | 'symbol' | 'exchange'>;
@@ -178,104 +179,15 @@ export function TrailingStopForm({
         </p>
       ) : null}
 
-      <div className="grid gap-3 sm:grid-cols-2 [&>*]:min-w-0">
-        <div className="grid content-start gap-1">
-          <span className="text-label text-ink-muted" aria-hidden="true">
-            {strings.trailing.unit}
-          </span>
-          <SegmentedControl
-            label={strings.trailing.unit}
-            size="sm"
-            value={values.unit}
-            onValueChange={(unit) => set({ unit, value: null })}
-            options={[
-              { value: 'AMOUNT', label: strings.trailing.rupees },
-              { value: 'PERCENT', label: strings.trailing.percent },
-            ]}
-          />
-        </div>
-        <Field
-          className="min-w-0"
-          label={
-            values.unit === 'AMOUNT' ? strings.trailing.valueRupees : strings.trailing.valuePercent
-          }
-          hint={
-            values.unit === 'AMOUNT'
-              ? strings.trailing.valueHintRupees
-              : strings.trailing.valueHintPercent
-          }
-          error={errorFor('value')}
-        >
-          <NumberInput
-            className="w-full min-w-0"
-            mode="price"
-            name="trailValue"
-            // Rupees step by the tick; a percentage by one basis point.
-            step={values.unit === 'AMOUNT' ? 5 : 1}
-            min={values.unit === 'AMOUNT' ? 5 : 1}
-            value={values.value}
-            onChange={(value) => {
-              set({ value });
-              setTouched(true);
-            }}
-          />
-        </Field>
-      </div>
-
-      <Field
-        label={strings.trailing.activation}
-        hint={strings.trailing.activationHint}
-        className="min-w-0"
-      >
-        <NumberInput
-          className="w-full min-w-0"
-          mode="price"
-          name="activationPrice"
-          value={values.activationPrice}
-          onChange={(activationPrice) => set({ activationPrice })}
-        />
-      </Field>
-
-      <div className="grid gap-3 sm:grid-cols-2 [&>*]:min-w-0">
-        <div className="grid content-start gap-1">
-          <span className="text-label text-ink-muted" aria-hidden="true">
-            {strings.trailing.exitType}
-          </span>
-          <SegmentedControl
-            label={strings.trailing.exitType}
-            size="sm"
-            value={values.exitOrderType}
-            onValueChange={(exitOrderType) =>
-              set({ exitOrderType, exitLimitOffset: exitOrderType === 'LIMIT' ? 0 : null })
-            }
-            options={[
-              { value: 'MARKET', label: strings.form.market },
-              { value: 'LIMIT', label: strings.form.limit },
-            ]}
-          />
-        </div>
-        {values.exitOrderType === 'LIMIT' ? (
-          <Field
-            className="min-w-0"
-            label={strings.trailing.offset}
-            hint={strings.trailing.offsetHint}
-            error={errorFor('exitLimitOffset')}
-          >
-            <NumberInput
-              className="w-full min-w-0"
-              mode="price"
-              name="exitLimitOffset"
-              min={0}
-              value={values.exitLimitOffset}
-              onChange={(exitLimitOffset) => set({ exitLimitOffset })}
-            />
-          </Field>
-        ) : null}
-      </div>
-
-      <p className="text-body text-ink" aria-live="polite" data-testid="trailing-preview">
-        {preview ?? strings.trailing.previewWaiting}
-      </p>
+      <TrailingParamsFields
+        values={values}
+        onChange={(patch, typed) => {
+          set(patch);
+          if (typed) setTouched(true);
+        }}
+        errorFor={errorFor}
+        preview={preview}
+      />
 
       <dl className="grid grid-cols-2 gap-4 rounded-md bg-canvas p-3">
         <div className="grid gap-0.5">
