@@ -27,7 +27,7 @@ test passes, then **Met**. Where the specification interprets a requirement, the
 | REQ-TSLO-06 | Lifecycle: Armed, Trailing, Triggered, Filled or Cancelled | §6.2 | T01, T06 | Engine lifecycle tests: [`trailingStopLifecycle.test.ts`](../../packages/paperEngine/src/trailingStopLifecycle.test.ts) | Met (adds Waiting for entry and Exit failed, §6.2) |
 | REQ-TSLO-07 | Live: the stop recomputes on every tick and the chart line moves as it ratchets | §6.3, §10.1 | T06, T19 | US-04 E2E with the Simulator | Planned |
 | REQ-TSLO-08 | Price gaps through the stop: the exit fires once | §6.3 | T02, T06, T09 | Unit test; mock test with Simulator gap | Planned |
-| REQ-TSLO-09 | Lifecycle visible wherever the TSLO appears | §6.2, §8.1, §11.1 | T11, T13, T18, T19, T21 | Status asserted on chart, ticket, strip, positions and orders in US-04 | Planned |
+| REQ-TSLO-09 | Lifecycle visible wherever the TSLO appears | §6.2, §8.1, §11.1 | T11, T13, T18, T19, T21 | Status asserted on chart, ticket, strip, positions and orders in US-04 | In progress: positions and order rows show the status word and the stop (`app/live/tradingSurfaces.test.tsx`, T11); ticket, chart and strip follow in T13, T18, T19, T21 |
 | REQ-TSLO-10 | App backgrounded and resumed: watermark and stop recomputed, not reset | §6.7 | T07, T08 | Replay unit test; E2E with a clock jump and `visibilitychange` | In progress: replay and tick-time engine proven (`simulatedMarket.test.ts`, `paperDesk.test.ts` 15:19 replay); flush on hide in T08; E2E with T13 |
 | REQ-TSLO-11 | Invalid trail (≥ price, zero, unreasonable) rejected with a clear message | §6.6 | T02, T13, T18, T19 | Unit tests per rule; component and chart-drag tests | Planned |
 | REQ-TSLO-12 | Partial fills and quantity changes: the TSLO tracks the open quantity | §6.4, §10.3 | T05, T06 | Engine tests with split fills; US-02 with Split large fills | Planned |
@@ -44,7 +44,7 @@ test passes, then **Met**. Where the specification interprets a requirement, the
 | REQ-TFC-05 | A TSLO can be attached inline when placing from the chart | §8.2 | T14, T17 | US-02 E2E | Planned |
 | REQ-TFC-06 | Tapping the position opens TSLO set, modify and cancel | §8.4, §9.1 | T18, T19 | E2E set, update, cancel from the chip | Planned |
 | REQ-TFC-07 | Simplified on-chart TSLO: trail and unit with defaults; the line ratchets visibly and can be dragged to change the trail | §6.5, §8.4 | T18, T19 | US-04 E2E | Planned |
-| REQ-TFC-08 | Order lines, position line, TSLO line, depth and ticket never disagree | §10.1 | T08, T10, T11 | Consistency E2E sampling every surface per frame | In progress: one `accountDelta` frame carries the tick, depth and fill (`mocks/handlers/trailingStops.test.ts`); the trading store commits a fill to orders, positions, funds and price together with no disagreeing commit (`mocks/handlers/tradingStore.test.ts`); surfaces and E2E in T11 |
+| REQ-TFC-08 | Order lines, position line, TSLO line, depth and ticket never disagree | §10.1 | T08, T10, T11 | Consistency E2E sampling every surface per frame | In progress: one `accountDelta` frame carries the tick, depth and fill (`mocks/handlers/trailingStops.test.ts`); the trading store commits a fill to orders, positions, funds and price together with no disagreeing commit (`mocks/handlers/tradingStore.test.ts`); the order book, positions page and market depth show the same frame, partial fill included (`app/live/tradingSurfaces.test.tsx`, T11); the per-frame consistency E2E follows with the chart surfaces |
 
 ## Order ticket
 
