@@ -25,11 +25,20 @@ export type OrderDraft = {
   price: number | null;
 };
 
+/**
+ * When the paper market trades (SPEC-TFC-1 §10.3). `nse` follows NSE hours and holidays;
+ * `alwaysOpen` trades at any hour, for the demo and E2E runs that use VITE_MOCK_MARKET_OPEN, so
+ * orders fill immediately instead of waiting as after-market orders.
+ */
+export type MarketHours = 'nse' | 'alwaysOpen';
+
 /** Everything outside the order that the rules depend on. The caller reads it from engine state. */
 export type ValidationContext = {
   now: Date;
   /** Defaults to the NSE 2026 table. */
   holidays?: HolidayTable;
+  /** Defaults to `nse`. */
+  marketHours?: MarketHours;
   instrument: InstrumentInfo | null;
   /** LTP in paise, or `null` when there is no price yet. */
   ltp: number | null;
@@ -122,7 +131,11 @@ export function validateOrder(order: OrderDraft, ctx: ValidationContext): Valida
   const instrument = ctx.instrument;
   if (!instrument) return fail('UNKNOWN_INSTRUMENT', 'This stock is not available to trade.');
 
-  if (order.product === 'INTRADAY' && !intradayWindowOpen(ctx.now, ctx.holidays)) {
+  if (
+    order.product === 'INTRADAY' &&
+    ctx.marketHours !== 'alwaysOpen' &&
+    !intradayWindowOpen(ctx.now, ctx.holidays)
+  ) {
     return fail(
       'INTRADAY_MARKET_CLOSED',
       'Intraday orders can be placed only while the market is open, 9:15 AM to 3:20 PM IST. Choose Delivery to place an after-market order.',
