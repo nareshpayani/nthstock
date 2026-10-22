@@ -121,18 +121,18 @@ Recorded as ADR 0005 (`docs/adr/0005-web-ui-architecture.md`).
 
 ## Round 9: Trade from Charts, TSLO and Scalper (answered 2026-10-22)
 
-Context: a take-home brief from Paytm Money, built on nthstock. Spec:
-`docs/specs/trade-from-charts.md`. The owner answered Q1 to Q6 and Q8 and accepted the recommended
-default for every other question ("go ahead with your decisions").
+Context: Trade from Charts, TSLO and Scalper requirements (Paytm Money, received 2026-10-22),
+delivered on nthstock. Specification: `docs/specs/trade-from-charts.md`. The product owner decided
+TFC-01 to TFC-06 and TFC-08 and approved the recommended option for every other question.
 
 | ID | Question | Recommended default | Answer | Status |
 |---|---|---|---|---|
-| TFC-01 | Submission deadline? | Plan for about 2 weeks | 25 October 2026, three days from today. | Answered |
+| TFC-01 | Submission deadline? | About two weeks | 2026-10-25 (three working days). | Answered |
 | TFC-02 | Pause Phase 2 backend (E15 to E21)? | Pause, run this as its own phase | Skip E15 to E21 if not needed; they are not needed (mock mode), so they resume after this. | Answered |
-| TFC-03 | Mock only, or the real API too? Is a TSLO engine needed? | Mock only; engine in `packages/paperEngine` | Owner delegated. Mock only, and the engine is required (TSLO behaviour is the core of the brief). No free real-time API can be redistributed (see the live market data research), so the demo stays on the mock feed. | Answered |
+| TFC-03 | Mock only, or the real API too? Is a TSLO engine needed? | Mock only; engine in `packages/paperEngine` | Simulated data only, with a production-grade trailing-stop engine in `packages/paperEngine` (the core of the requirements). Licensed real-time data cannot be redistributed in a public demo, so the demo stays on the simulated feed. | Answered |
 | TFC-04 | Commit history: squash or keep every commit? | Squash, small PRs | Squash merge, with several commits per PR. | Answered |
-| TFC-05 | May WRITEUP.md name the AI tools? | Yes, honest disclosure | Owner delegated; yes, for WRITEUP.md only. Commits and PRs keep the attribution rule. | Answered |
-| TFC-06 | Who makes the design calls? | AI proposes options, owner picks, logged | Owner delegated the calls to the AI; each is logged with its reasoning in the spec §3 so the owner can defend it. | Answered |
+| TFC-05 | May the design rationale (WRITEUP.md) name the AI tools used? | Yes, as the requirements ask | Yes, in WRITEUP.md only; attribution elsewhere is unchanged. | Answered |
+| TFC-06 | Who makes the design decisions? | Engineering proposes options, product owner approves | Engineering proposes each decision with alternatives and rationale; the product owner approves; all are logged in the specification §5. | Answered |
 | TFC-07 | Place-from-chart gesture? | Tap the price-axis gutter; handles for drag | As recommended. | Default accepted |
 | TFC-08 | Where does Scalper live? | A mode on the instrument page | As recommended, no separate route. | Answered |
 | TFC-09 | Scalper safety model? | Arm switch, idle disarm, hold-to-confirm Reverse | As recommended. | Default accepted |
@@ -143,7 +143,7 @@ default for every other question ("go ahead with your decisions").
 | TFC-14 | Limit exit with offset? | Ticket only | As recommended. | Default accepted |
 | TFC-15 | Resume from background? | Replay missed ticks | As recommended. | Default accepted |
 | TFC-16 | Phones? | iPhone Safari and Android Chrome (exception to D4) | As recommended. | Default accepted |
-| TFC-17 | Who records the video? | Owner, from a shot list | As recommended. | Default accepted |
-| TFC-18 | Reviewer URL and login? | Production plus one-tap Try demo | As recommended. | Default accepted |
-| TFC-19 | Who builds? | The AI developer in the project thread, Reviewer agent on each PR | As recommended. | Default accepted |
+| TFC-17 | Who produces the demo walkthrough? | Product owner, from a scripted shot list | As recommended. | Default accepted |
+| TFC-18 | Demo access for stakeholders? | Production URL with a one-tap Try demo | As recommended. | Default accepted |
+| TFC-19 | Who builds? | The project agent workflow (`docs/agent-workflow.md`), automated review on every pull request | As recommended. | Default accepted |
 | TFC-20 | Default chart view? | 1D, last 60 minutes | As recommended. | Default accepted |
