@@ -16,8 +16,8 @@ function makeHandle(): ChartHandle {
 }
 const series = () => chartsMock.active().at(-1)?.series[0];
 
-function pointer(target: Element, type: string, clientY: number, pointerId = 1) {
-  const event = new MouseEvent(type, { bubbles: true, cancelable: true, clientY });
+function pointer(target: Element, type: string, clientY: number, pointerId = 1, clientX = 0) {
+  const event = new MouseEvent(type, { bubbles: true, cancelable: true, clientY, clientX });
   Object.defineProperty(event, 'pointerId', { value: pointerId });
   fireEvent(target, event);
 }
@@ -54,8 +54,9 @@ describe('chart overlay (T15, SPEC-TFC-1 §10.5)', () => {
       />,
     );
     expect(screen.getByRole('group', { name: 'Chart orders for INFY' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Buy limit at 150000' })).toHaveTextContent(
-      'Buy @ 150000',
+    // The name is the visible label (WCAG 2.5.3); the long text is the description.
+    expect(screen.getByRole('button', { name: 'Buy @ 150000' })).toHaveAccessibleDescription(
+      'Buy limit at 150000',
     );
     expect(series()?.priceLines.map((l) => l.options.price)).toEqual([150_000, 145_000]);
     expect(handleY('o1')).toBe(200);
@@ -232,5 +233,42 @@ describe('chart overlay (T15, SPEC-TFC-1 §10.5)', () => {
     pointer(grab, 'pointermove', 150);
     act(() => screen.getByRole('button', { name: 'fill' }).click());
     expect(onDragEnd).toHaveBeenCalledExactlyOnceWith('o1', null);
+  });
+
+  it('a chip that does not move a price: a tap opens it, a drag that starts on it pans (T18, §9.1)', () => {
+    const handle = makeHandle();
+    const onHandleTap = vi.fn();
+    const onDragMove = vi.fn();
+    render(
+      <ChartOverlay
+        handle={handle}
+        tickSize={5}
+        label="Chart orders for INFY"
+        lines={[line({ id: 'pos', price: 150_000, tone: 'position', draggable: false })]}
+        onHandleTap={onHandleTap}
+        onDragMove={onDragMove}
+      />,
+    );
+    const chip = screen.getByTestId('chart-handle');
+    const range = () => chartsMock.active().at(-1)?.logicalRange;
+
+    pointer(chip, 'pointerdown', 200, 1, 100);
+    pointer(chip, 'pointerup', 200, 1, 102);
+    expect(onHandleTap).toHaveBeenCalledWith('pos');
+    expect(range()).toEqual({ from: 0, to: 60 });
+
+    // Drag right 40 px at 10 px a bar: four bars earlier, and no tap and no price move.
+    onHandleTap.mockClear();
+    pointer(chip, 'pointerdown', 200, 1, 100);
+    pointer(chip, 'pointermove', 201, 1, 120);
+    pointer(chip, 'pointermove', 202, 1, 140);
+    pointer(chip, 'pointerup', 202, 1, 140);
+    expect(range()).toEqual({ from: -4, to: 56 });
+    expect(onHandleTap).not.toHaveBeenCalled();
+    expect(onDragMove).not.toHaveBeenCalled();
+
+    // Enter on the focused chip opens it too.
+    fireEvent.keyDown(chip, { key: 'Enter' });
+    expect(onHandleTap).toHaveBeenCalledWith('pos');
   });
 });

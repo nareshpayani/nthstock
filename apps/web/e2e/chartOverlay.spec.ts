@@ -42,7 +42,7 @@ for (const viewport of VIEWPORTS) {
 
     const tapY = lane.y + lane.height * 0.4;
     await page.mouse.click(lane.x + lane.width / 2, tapY);
-    const ghost = figure.getByRole('button', { name: /^New order at ₹/ });
+    const ghost = figure.getByRole('button', { name: /^New order @ ₹/ });
     await expect(ghost).toHaveText(/New order @ ₹[\d,]+\.\d\d/);
     // The handle is centred on the line drawn at the tapped price (snapped to ₹0.05).
     const placed = await box(ghost);

@@ -1,6 +1,6 @@
 import { Sheet } from '@nthstock/ui';
 import { Link } from '@tanstack/react-router';
-import { OrderTicketHost } from '@/features/orderTicket';
+import { OrderTicketHost, TrailingStopSheetHost } from '@/features/orderTicket';
 import { OrderUpdatesBridge } from '@/features/orders';
 import { TradingIntentTimeouts } from '../live/TradingIntentTimeouts';
 import { useEffect, useRef, type ReactNode } from 'react';
@@ -104,6 +104,7 @@ export function AppShell({ children }: AppShellProps) {
       </Sheet>
       <ShortcutHelpDialog open={helpOpen} onOpenChange={setHelpOpen} />
       <OrderTicketHost />
+      <TrailingStopSheetHost />
       <OrderUpdatesBridge />
       <TradingIntentTimeouts />
     </div>

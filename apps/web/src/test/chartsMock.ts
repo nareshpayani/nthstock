@@ -31,6 +31,8 @@ type FakeChart = {
   removed: boolean;
   /** Crosshair handlers currently subscribed. */
   crosshair: Set<(param: unknown) => void>;
+  /** The visible logical range; a pan moves it. */
+  logicalRange: { from: number; to: number };
 };
 
 /**
@@ -90,6 +92,7 @@ export function createChart(_host: HTMLElement, options: unknown) {
     fitContent: vi.fn(),
     removed: false,
     crosshair: new Set(),
+    logicalRange: { from: 0, to: 60 },
   };
   chartsMock.charts.push(chart);
   return {
@@ -131,7 +134,14 @@ export function createChart(_host: HTMLElement, options: unknown) {
     subscribeCrosshairMove: (handler: (param: unknown) => void) => chart.crosshair.add(handler),
     unsubscribeCrosshairMove: (handler: (param: unknown) => void) =>
       chart.crosshair.delete(handler),
-    timeScale: () => ({ fitContent: chart.fitContent }),
+    timeScale: () => ({
+      fitContent: chart.fitContent,
+      options: () => ({ barSpacing: 10 }),
+      getVisibleLogicalRange: () => ({ ...chart.logicalRange }),
+      setVisibleLogicalRange: (range: { from: number; to: number }) => {
+        chart.logicalRange = { ...range };
+      },
+    }),
     paneSize: () => ({ height: chartsMock.scale.height, width: 600 }),
     priceScale: () => ({ width: () => chartsMock.scale.axisWidth }),
   };

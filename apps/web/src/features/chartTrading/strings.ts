@@ -9,6 +9,19 @@ export const strings = {
     buyDescription: (price: string) => `Buy at ${price}: review before placing`,
     sellDescription: (price: string) => `Sell at ${price}: review before placing`,
   },
+  position: {
+    label: (qty: string, avg: string, pnl: string) => `${qty} @ ${avg} · ${pnl}`,
+    long: 'Long',
+    short: 'Short',
+    description: (direction: string, qty: number, avg: string, pnl: string, stop: string | null) =>
+      `${direction} ${String(qty)} shares at ${avg}, P&L ${pnl}. ${stop ? `Trailing SL: ${stop}. Open to change it.` : 'Open to set a trailing stop.'}`,
+  },
+  stop: {
+    label: (name: string, price: string, trail: string, status: string) =>
+      `${name} ${price} · ${trail} · ${status}`,
+    description: (price: string, trail: string, status: string) =>
+      `Trailing stop at ${price}, trailing by ${trail}, ${status.toLowerCase()}. Open to change it.`,
+  },
   order: {
     sides: { BUY: 'Buy', SELL: 'Sell' },
     label: (side: string, qty: number, price: string) => `${side} ${String(qty)} @ ${price}`,

@@ -1,10 +1,11 @@
 import { createTradingStore, type ApiClient, type TradingStore } from '@nthstock/apiClient';
-import type { AccountState, Order } from '@nthstock/contracts';
+import type { AccountState, Order, Position } from '@nthstock/contracts';
 import { act, fireEvent, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { ChartHandle } from '@/features/charts';
 import { initialOrderDraftState, useOrderDraftStore } from '@/shared/lib/orderDraftStore';
 import { initialTicketIntentState, useTicketIntentStore } from '@/shared/lib/ticketIntentStore';
+import { initialTrailingSheetState, useTrailingSheetStore } from '@/shared/lib/trailingSheetStore';
 import { AreaSeries, chartsMock, createChart } from '@/test/chartsMock';
 import { renderWithProviders } from '@/test/renderWithProviders';
 import { CANCEL_ARM_MS, ChartTrading } from './ChartTrading';
@@ -50,10 +51,10 @@ const limit = (extra: Partial<Order> = {}): Order => ({
   ...extra,
 });
 
-const account = (orders: Order[]): AccountState => ({
+const account = (orders: Order[], positions: Position[] = []): AccountState => ({
   seq: 1,
   orders,
-  positions: [],
+  positions,
   trailingStops: [],
   funds: {
     openingBalance: 100_000_000,
@@ -81,10 +82,10 @@ function fakeApi() {
   return { api, calls };
 }
 
-async function setup(orders: Order[]) {
+async function setup(orders: Order[], positions: Position[] = []) {
   const { api, calls } = fakeApi();
   const store: TradingStore = createTradingStore({
-    loadState: () => Promise.resolve(account(orders)),
+    loadState: () => Promise.resolve(account(orders, positions)),
     schedule: (flush) => queueMicrotask(flush),
   });
   await store.start();
@@ -103,6 +104,7 @@ afterEach(() => {
   chartsMock.reset();
   useOrderDraftStore.setState(initialOrderDraftState);
   useTicketIntentStore.setState(initialTicketIntentState);
+  useTrailingSheetStore.setState(initialTrailingSheetState);
   vi.useRealTimers();
 });
 
@@ -128,9 +130,9 @@ describe('order lines (T16, SPEC-TFC-1 §8.1, §8.3)', () => {
         ?.priceLines.map((line) => line.options.price)
         .sort(),
     ).toEqual([150_000, 155_000]);
-    expect(
-      screen.getByRole('button', { name: /^Buy limit, 10 shares at ₹1,500\.00\. Drag/ }),
-    ).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Buy 10 @ ₹1,500.00' })).toHaveAccessibleDescription(
+      /^Buy limit, 10 shares at ₹1,500\.00\. Drag/,
+    );
   });
 
   it('a drag shows the price under the finger to every surface and sends one modify on release', async () => {
@@ -265,5 +267,40 @@ describe('ghost line (T15, SPEC-TFC-1 §8.2)', () => {
     });
     expect(screen.queryByTestId('chart-handle')).not.toBeInTheDocument();
     expect(calls.filter((call) => call.route.startsWith('orders'))).toEqual([]);
+  });
+});
+
+describe('position chip (T18, SPEC-TFC-1 §8.1, §8.4)', () => {
+  it('draws an open position at its average with P&L; a tap opens the trailing-stop sheet', async () => {
+    await setup(
+      [],
+      [
+        {
+          token: INFY.token,
+          symbol: 'INFY',
+          exchange: 'NSE',
+          product: 'INTRADAY',
+          netQty: 10,
+          buyQty: 10,
+          sellQty: 0,
+          avgBuyPrice: 150_000,
+          avgSellPrice: 0,
+          ltp: 151_200,
+          realisedPnl: 0,
+          unrealisedPnl: 12_000,
+        },
+      ],
+    );
+    const chip = await screen.findByRole('button', { name: '+10 @ ₹1,500.00 · +₹120.00' });
+    expect(chip).toHaveAccessibleDescription(/^Long 10 shares at ₹1,500\.00/);
+    expect(chip.dataset.tone).toBe('position');
+    pointer(chip, 'pointerdown', 200);
+    pointer(chip, 'pointerup', 200);
+    expect(useTrailingSheetStore.getState().target).toEqual({
+      symbol: 'INFY',
+      exchange: 'NSE',
+      token: INFY.token,
+      product: 'INTRADAY',
+    });
   });
 });

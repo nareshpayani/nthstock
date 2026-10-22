@@ -2,12 +2,14 @@ import { cn } from '@nthstock/ui';
 import type { IPriceLine } from 'lightweight-charts';
 import {
   useEffect,
+  useId,
   useLayoutEffect,
   useRef,
   type KeyboardEvent,
   type PointerEvent as ReactPointerEvent,
 } from 'react';
 import type { ChartHandle } from '@/features/charts';
+import { panBy } from '../lib/panChart';
 import { syncPriceLines } from '../lib/priceLines';
 import { RepaintPrimitive } from '../lib/repaintPrimitive';
 import {
@@ -54,6 +56,15 @@ type Elements = {
 };
 type Drawn = Map<string, { line: IPriceLine; price: number; tone: OverlayLine['tone'] }>;
 type KeyMove = { id: string; price: number } | null;
+/** A press on a handle that does not move a price: a tap, or a pan once it moves (§9.1). */
+type ChipPress = {
+  id: string;
+  pointerId: number;
+  startX: number;
+  startY: number;
+  x: number;
+  panning: boolean;
+};
 
 /**
  * The trading layer over the price chart (T15, SPEC-TFC-1 §8, §9, §10.5). Lines are the library's
@@ -78,6 +89,7 @@ export function ChartOverlay({
   onAction,
 }: ChartOverlayProps) {
   const ordered = byPriority(lines);
+  const describedBy = useId();
   const elementsRef = useRef<Elements>({
     rows: new Map(),
     handles: new Map(),
@@ -89,6 +101,7 @@ export function ChartOverlay({
   const gestureRef = useRef<HandleGesture>(IDLE);
   const keyMoveRef = useRef<KeyMove>(null);
   const gutterPressRef = useRef<{ pointerId: number; y: number } | null>(null);
+  const chipRef = useRef<ChipPress | null>(null);
   const primitiveRef = useRef<RepaintPrimitive | null>(null);
   // The latest lines and callbacks, for the repaint hook and the event handlers.
   const latestRef = useRef({
@@ -160,15 +173,47 @@ export function ChartOverlay({
   const onHandlePointerDown = (id: string) => (event: ReactPointerEvent<HTMLElement>) => {
     event.stopPropagation();
     event.currentTarget.setPointerCapture?.(event.pointerId);
+    const line = latestRef.current.lines.find((candidate) => candidate.id === id);
+    if (line && !line.draggable) {
+      // The position chip: a tap opens it, a drag pans the chart (§9.1).
+      if (gestureRef.current.phase !== 'idle' || chipRef.current) return;
+      const { pointerId, clientX: x, clientY: y } = event;
+      chipRef.current = { id, pointerId, startX: x, startY: y, x, panning: false };
+      return;
+    }
     apply(press(gestureRef.current, id, event.pointerId, paneY(event.clientY)));
   };
   const onHandlePointerMove = (event: ReactPointerEvent<HTMLElement>) => {
+    const chip = chipRef.current;
+    if (chip) {
+      if (chip.pointerId !== event.pointerId) return;
+      if (
+        !chip.panning &&
+        Math.max(Math.abs(event.clientX - chip.startX), Math.abs(event.clientY - chip.startY)) >
+          DRAG_SLOP
+      ) {
+        chip.panning = true;
+      }
+      if (chip.panning) panBy(handle.chart, event.clientX - chip.x);
+      chip.x = event.clientX;
+      return;
+    }
     apply(move(gestureRef.current, event.pointerId, paneY(event.clientY), priceAt));
   };
   const onHandlePointerUp = (event: ReactPointerEvent<HTMLElement>) => {
+    const chip = chipRef.current;
+    if (chip) {
+      if (chip.pointerId !== event.pointerId) return;
+      chipRef.current = null;
+      if (!chip.panning) latestRef.current.on.onHandleTap?.(chip.id);
+      return;
+    }
     apply(release(gestureRef.current, event.pointerId, paneY(event.clientY)));
   };
-  const onHandlePointerCancel = () => apply(cancel(gestureRef.current));
+  const onHandlePointerCancel = () => {
+    chipRef.current = null;
+    apply(cancel(gestureRef.current));
+  };
 
   // Keyboard (§13): arrows move one tick, Shift ten; Enter saves; Escape restores.
   const onHandleKeyDown = (line: OverlayLine) => (event: KeyboardEvent<HTMLElement>) => {
@@ -190,6 +235,11 @@ export function ChartOverlay({
       event.preventDefault();
       keyMoveRef.current = null;
       on.onDragEnd?.(line.id, current.price);
+      return;
+    }
+    if (!line.draggable && (event.key === 'Enter' || event.key === ' ')) {
+      event.preventDefault();
+      on.onHandleTap?.(line.id);
       return;
     }
     if (!line.draggable || (event.key !== 'ArrowUp' && event.key !== 'ArrowDown')) return;
@@ -254,6 +304,9 @@ export function ChartOverlay({
       >
         {ordered.map((line) => (
           <div key={line.id}>
+            <span id={`${describedBy}-${line.id}`} hidden>
+              {line.description}
+            </span>
             <span
               ref={refFor('leaders', line.id)}
               aria-hidden="true"
@@ -267,7 +320,9 @@ export function ChartOverlay({
               <button
                 ref={refFor('handles', line.id)}
                 type="button"
-                aria-label={line.description}
+                // The name is the visible label (WCAG 2.5.3); what the keys do is the description.
+                aria-label={line.label}
+                aria-describedby={`${describedBy}-${line.id}`}
                 data-testid="chart-handle"
                 data-line={line.id}
                 data-tone={line.tone}
