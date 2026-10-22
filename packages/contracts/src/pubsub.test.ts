@@ -56,6 +56,7 @@ describe('OrderUpdateEvent', () => {
     avgFillPrice: 149_000,
     status: 'EXECUTED',
     statusReason: null,
+    validity: 'DAY',
     placedAt: '2026-09-25T04:00:00.000Z',
     updatedAt: '2026-09-25T04:00:01.000Z',
   };

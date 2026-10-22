@@ -1,6 +1,6 @@
 # 0012. One trading state for every surface, and the chart gesture model
 
-- Status: Proposed (accepted when the TFC-1 specification is approved)
+- Status: Accepted (2026-10-22, with SPEC-TFC-1 in #393 and #394)
 - Date: 2026-10-22
 - Specification: [SPEC-TFC-1](../specs/trade-from-charts.md) §6, §9 and §10
 - Amends: [0005](0005-web-ui-architecture.md) (server state is no longer TanStack Query only)

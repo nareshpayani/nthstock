@@ -11,6 +11,7 @@ import {
   type OrderHistoryEntry,
   type OrderHistoryEvent,
   type OrderStatus,
+  type OrderValidity,
   type PlaceOrderRequest,
   type ProductType,
   type TradingSymbol,
@@ -124,7 +125,11 @@ export type PaperEngineWorkingSet = {
 export type PaperEngineSnapshot = PaperEngineSnapshotV1 | PaperEngineWorkingSet;
 
 export type OrderActionErrorCode =
-  OrderRejectionCode | 'ORDER_NOT_FOUND' | 'ILLEGAL_TRANSITION' | 'NOTHING_TO_CHANGE';
+  | OrderRejectionCode
+  | 'ORDER_NOT_FOUND'
+  | 'ILLEGAL_TRANSITION'
+  | 'NOTHING_TO_CHANGE'
+  | 'NOT_SUPPORTED';
 
 /**
  * The outcome of place, modify or cancel. On failure `reason` is plain language; `order` is the
@@ -306,6 +311,10 @@ export class PaperEngine {
     const existingId =
       clientOrderId === null ? undefined : this.#byClientOrderId.get(clientOrderId);
     if (existingId !== undefined) return this.#result(this.#mustGet(existingId));
+    const unsupported = unsupportedPlaceReason(request);
+    if (unsupported !== null) {
+      return { ok: false, code: 'NOT_SUPPORTED', reason: unsupported, order: null };
+    }
 
     const draft: OrderDraft = {
       token: request.token,
@@ -330,7 +339,7 @@ export class PaperEngine {
     if (!instrument) throw new Error('unreachable: validation accepts only known instruments');
 
     const status: OrderStatus = !checked.ok ? 'REJECTED' : this.#marketOpen() ? 'OPEN' : 'AMO';
-    const order = this.#newOrder(draft, instrument, status, clientOrderId);
+    const order = this.#newOrder(draft, instrument, status, clientOrderId, request.validity);
     order.statusReason = checked.ok ? null : checked.reason;
     this.#orders.set(order.id, order);
     if (!checked.ok) this.#rejectCodes.set(order.id, checked.code);
@@ -677,6 +686,7 @@ export class PaperEngine {
     names: { symbol: TradingSymbol; exchange: Exchange },
     status: OrderStatus,
     clientOrderId: string | null,
+    validity: OrderValidity = 'DAY',
   ): StoredOrder {
     const now = this.#now().toISOString();
     return {
@@ -694,6 +704,7 @@ export class PaperEngine {
       avgFillPrice: null,
       status,
       statusReason: null,
+      validity,
       placedAt: now,
       updatedAt: now,
     };
@@ -932,4 +943,16 @@ function ledgerOptions(snapshot: PaperEngineSnapshot): FundsLedgerOptions {
     };
   }
   return { openingBalance: snapshot.openingBalance, entries: snapshot.ledger };
+}
+
+/**
+ * Order fields the contracts accept before the engine acts on them (SPEC-TFC-1, PLAN-TFC-1 T05 and
+ * T06). Refusing them keeps an order from looking protected, or immediate-or-cancel, when it is not.
+ */
+function unsupportedPlaceReason(request: PlaceOrderRequest): string | null {
+  if (request.validity === 'IOC') return 'Immediate-or-cancel orders are not available yet.';
+  if (request.attachedTrailingStop !== undefined) {
+    return 'A trailing stop cannot be attached to an order yet.';
+  }
+  return null;
 }

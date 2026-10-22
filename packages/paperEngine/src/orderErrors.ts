@@ -18,6 +18,7 @@ const HTTP: Record<OrderActionErrorCode, readonly [status: number, code: ApiErro
   PRICE_NOT_ALLOWED: [400, 'VALIDATION_ERROR'],
   PRICE_OFF_TICK: [400, 'VALIDATION_ERROR'],
   NOTHING_TO_CHANGE: [400, 'VALIDATION_ERROR'],
+  NOT_SUPPORTED: [400, 'VALIDATION_ERROR'],
   UNKNOWN_INSTRUMENT: [404, 'NOT_FOUND'],
   ORDER_NOT_FOUND: [404, 'NOT_FOUND'],
   // Modify or cancel of an order that is no longer AMO or OPEN.

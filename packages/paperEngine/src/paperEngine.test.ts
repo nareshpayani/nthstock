@@ -91,6 +91,32 @@ describe('PaperEngine.place (T-127, T-128)', () => {
     expect(updates).toEqual([]);
   });
 
+  it('refuses IOC and attached trailing stops until the engine honours them', () => {
+    const { engine, updates } = createHarness();
+    expect(engine.place(order({ validity: 'IOC' }))).toMatchObject({
+      ok: false,
+      code: 'NOT_SUPPORTED',
+      order: null,
+    });
+    expect(
+      engine.place(
+        order({
+          attachedTrailingStop: {
+            trail: { unit: 'AMOUNT', amount: 5_00 },
+            activationPrice: null,
+            exitOrderType: 'MARKET',
+            exitLimitOffset: null,
+          },
+        }),
+      ),
+    ).toMatchObject({ ok: false, code: 'NOT_SUPPORTED', order: null });
+    expect(engine.place(order({ validity: 'DAY' }))).toMatchObject({
+      ok: true,
+      order: { validity: 'DAY' },
+    });
+    expect(updates).toHaveLength(1);
+  });
+
   it('returns the same order for a retried clientOrderId', () => {
     const { engine } = createHarness();
     const first = engine.place(order({ clientOrderId: 'c-1' }));

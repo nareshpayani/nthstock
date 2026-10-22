@@ -1,7 +1,16 @@
 import { z } from 'zod';
-import { Exchange, InstrumentToken, NonNegativePaise, TradingSymbol } from './primitives.js';
-import { Quote } from './market.js';
+import {
+  Exchange,
+  InstrumentToken,
+  IsoUtc,
+  NonNegativePaise,
+  Seq,
+  TradingSymbol,
+} from './primitives.js';
+import { Depth, Quote } from './market.js';
 import { Order } from './orders.js';
+import { FundsSummary, Position } from './portfolio.js';
+import { TrailingStop } from './trailingStops.js';
 
 /** Current WebSocket protocol version, carried as `v` on every message. */
 export const WS_PROTOCOL_VERSION = 1;
@@ -95,6 +104,30 @@ export const WsOrderUpdate = z.object({
 });
 export type WsOrderUpdate = z.infer<typeof WsOrderUpdate>;
 
+/**
+ * One flush of the paper engine (ADR 0012, SPEC-TFC-1 §10.1): every 250 ms, the quotes of the
+ * subscribed symbols, the focused instrument's depth, and every order, position and trailing stop
+ * those ticks changed, with the funds when they changed, all at engine `seq`. The client applies a
+ * frame in one commit, so no surface shows a fill another has not seen. Entities are upserts keyed
+ * by id (orders, trailing stops) or by instrument and product (positions); nothing is removed.
+ */
+export const WsAccountDelta = z.object({
+  v,
+  type: z.literal('accountDelta'),
+  seq: Seq,
+  /** When the engine produced the frame. */
+  at: IsoUtc,
+  quotes: z.array(Quote),
+  /** Depth of the instrument the client is focused on, when it has one. */
+  depth: Depth.optional(),
+  orders: z.array(Order),
+  positions: z.array(Position),
+  trailingStops: z.array(TrailingStop),
+  /** Present when a fill, block or release changed the funds. */
+  funds: FundsSummary.optional(),
+});
+export type WsAccountDelta = z.infer<typeof WsAccountDelta>;
+
 export const WsPong = z.object({
   v,
   type: z.literal('pong'),
@@ -127,6 +160,7 @@ export const WsServerMessage = z.discriminatedUnion('type', [
   WsQuotes,
   WsInstruments,
   WsOrderUpdate,
+  WsAccountDelta,
   WsPong,
   WsError,
 ]);

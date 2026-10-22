@@ -48,8 +48,8 @@ describe('route map types', () => {
 const entries = Object.entries(routes) as [RouteName, RouteDef][];
 
 describe('route map', () => {
-  it('has 41 routes', () => {
-    expect(entries).toHaveLength(41);
+  it('has 46 routes', () => {
+    expect(entries).toHaveLength(46);
   });
 
   it('keeps every path under /v1 and every method+path unique', () => {
@@ -79,7 +79,11 @@ describe('route map', () => {
   it('keeps market routes public and account routes private', () => {
     for (const [name, route] of entries) {
       if (route.path.startsWith('/v1/market/')) expect(route.auth, name).toBe('public');
-      if (/^\/v1\/(watchlists|orders|positions|holdings|portfolio|funds)/.test(route.path)) {
+      if (
+        /^\/v1\/(watchlists|orders|trailing-stops|account|positions|holdings|portfolio|funds)/.test(
+          route.path,
+        )
+      ) {
         expect(route.auth, name).toBe('user');
       }
     }
@@ -119,6 +123,11 @@ describe('route map', () => {
         'orderPlace',
         'orderModify',
         'orderCancel',
+        'trailingStopsList',
+        'trailingStopPlace',
+        'trailingStopModify',
+        'trailingStopCancel',
+        'accountState',
         'positionsList',
         'holdingsList',
         'portfolioSummary',

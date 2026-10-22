@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | Document | SPEC-TFC-1 |
-| Version | 1.0 (in review) |
+| Version | 1.1 (approved) |
 | Date | 2026-10-22 |
 | Product owner and approver | Naresh Payani |
 | Release | Trade from Charts (TFC-1), target 2026-10-25 |
@@ -15,6 +15,7 @@
 |---|---|---|
 | 0.1 | 2026-10-22 | First draft |
 | 1.0 | 2026-10-22 | Revised after architecture, requirements and documentation reviews: engine and transport corrections, complete TSLO rules, compliance matrix, delivery plan with milestones |
+| 1.1 | 2026-10-22 | Approved by the product owner (#393, #394). §10.6 filled in from the contracts (T01): trailing stops carry `direction`, `entryOrderId` and `exitOrderId`; `accountDelta` carries `at` and, when they change, `funds`; order history entries carry `fillQty` |
 
 ## 1. Executive summary
 
@@ -542,12 +543,13 @@ The CLAUDE.md §3 target of tick to screen under 500 ms holds with a 250 ms flus
 
 | Contract | Content |
 |---|---|
-| `TrailingStop`, `TrailingStopStatus`, `TrailingStopParams`, `Trail` | §6.1, §6.2 |
+| `TrailingStop`, `TrailingStopStatus`, `TrailingStopParams`, `Trail` | §6.1, §6.2; a stop also carries the position `direction` (`LONG`, `SHORT`), `entryOrderId` and `exitOrderId` |
 | `PlaceTrailingStopRequest`, `ModifyTrailingStopRequest` | Position key and params; modify also takes `stopPrice` (§6.5) |
 | `PlaceOrderRequest.attachedTrailingStop` | Optional params |
 | `PlaceOrderRequest.validity` | `'DAY' \| 'IOC'`, default `DAY` |
-| `OrderHistoryEvent` | Adds `PARTIALLY_EXECUTED` |
-| `WsAccountDelta` | `{ seq, quotes, depth?, orders, positions, trailingStops }` |
+| `OrderHistoryEvent` | Adds `PARTIALLY_EXECUTED`; entries carry `fillQty` |
+| `Order.validity`, `Order.seq` | `validity` defaults to `DAY` for saved orders; `seq` is set by the engine |
+| `WsAccountDelta` | `{ seq, at, quotes, depth?, orders, positions, trailingStops, funds? }` |
 | `AccountState` | `{ seq, orders, positions, trailingStops, funds }` |
 
 | Method and path | Route name |
