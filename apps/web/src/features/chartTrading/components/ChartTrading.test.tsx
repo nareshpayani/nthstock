@@ -4,13 +4,14 @@ import { act, fireEvent, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { ChartHandle } from '@/features/charts';
 import { initialOrderDraftState, useOrderDraftStore } from '@/shared/lib/orderDraftStore';
+import { initialTicketIntentState, useTicketIntentStore } from '@/shared/lib/ticketIntentStore';
 import { AreaSeries, chartsMock, createChart } from '@/test/chartsMock';
 import { renderWithProviders } from '@/test/renderWithProviders';
 import { CANCEL_ARM_MS, ChartTrading } from './ChartTrading';
 
 // The fake scale: ₹1,600.00 at y = 0, 50 paise per px, a 300 px pane.
 const AT = '2026-09-28T04:30:00.000Z';
-const INFY = { symbol: 'INFY', tickSize: 5, token: 408065 };
+const INFY = { symbol: 'INFY', exchange: 'NSE' as const, tickSize: 5, token: 408065 };
 
 function makeHandle(): ChartHandle {
   const host = document.createElement('div');
@@ -101,6 +102,7 @@ const handleFor = (id: string) =>
 afterEach(() => {
   chartsMock.reset();
   useOrderDraftStore.setState(initialOrderDraftState);
+  useTicketIntentStore.setState(initialTicketIntentState);
   vi.useRealTimers();
 });
 
@@ -233,5 +235,35 @@ describe('ghost line (T15, SPEC-TFC-1 §8.2)', () => {
     fireEvent.keyDown(ghost, { key: 'Delete' });
     expect(screen.queryByTestId('chart-handle')).not.toBeInTheDocument();
     expect(series()?.priceLines).toEqual([]);
+  });
+
+  it('Buy or Sell on the ghost opens the compact ticket as a limit at its price, sending nothing (T17)', async () => {
+    const { calls } = await setup([]);
+    const gutter = screen.getByTestId('chart-gutter');
+    pointer(gutter, 'pointerdown', 100);
+    pointer(gutter, 'pointerup', 100);
+    const ghost = screen.getByTestId('chart-handle');
+    pointer(ghost, 'pointerdown', 100);
+    pointer(ghost, 'pointermove', 80);
+    pointer(ghost, 'pointerup', 80);
+
+    const chips = screen.getAllByTestId('chart-handle-action');
+    expect(chips.map((chip) => chip.textContent)).toEqual(['Buy', 'Sell']);
+    expect(screen.getByRole('button', { name: 'Sell at ₹1,560.00: review before placing' })).toBe(
+      chips[1],
+    );
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Buy at ₹1,560.00: review before placing' }),
+    );
+
+    expect(useTicketIntentStore.getState().intent).toEqual({
+      symbol: 'INFY',
+      exchange: 'NSE',
+      side: 'BUY',
+      price: 156_000,
+      compact: true,
+    });
+    expect(screen.queryByTestId('chart-handle')).not.toBeInTheDocument();
+    expect(calls.filter((call) => call.route.startsWith('orders'))).toEqual([]);
   });
 });

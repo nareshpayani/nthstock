@@ -52,19 +52,38 @@ function firstMessage(error: z.ZodError): string {
 
 /**
  * A fresh ticket: the side the user asked for, a market order, for one delivery share unless the
- * intent prefills the quantity and product (Exit on a position, T-150).
+ * intent prefills the quantity and product (Exit on a position, T-150). A prefilled price makes it
+ * a limit order at that price (placing from the chart, T17).
  */
 export function defaultTicketValues(
   side: OrderSide,
-  prefill: { qty?: number | undefined; product?: ProductType | undefined } = {},
+  prefill: {
+    qty?: number | undefined;
+    product?: ProductType | undefined;
+    price?: number | undefined;
+  } = {},
 ): TicketFormValues {
   return {
     side,
-    type: 'MARKET',
+    type: prefill.price === undefined ? 'MARKET' : 'LIMIT',
     product: prefill.product ?? 'DELIVERY',
     qty: prefill.qty ?? 1,
-    price: null,
+    price: prefill.price ?? null,
   };
+}
+
+/**
+ * Whether a limit order would cross the market and fill at once (SPEC-TFC-1 §8.2): a buy above
+ * the LTP or a sell below it. Unknown until both prices are known.
+ */
+export function fillsImmediately(
+  values: Pick<TicketFormValues, 'side' | 'type' | 'price'>,
+  ltp: number | null | undefined,
+): boolean {
+  if (values.type !== 'LIMIT' || values.price === null || ltp === null || ltp === undefined) {
+    return false;
+  }
+  return values.side === 'BUY' ? values.price > ltp : values.price < ltp;
 }
 
 /**

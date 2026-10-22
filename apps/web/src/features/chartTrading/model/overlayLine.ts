@@ -1,6 +1,15 @@
 /** The kinds of line the trading overlay draws (SPEC-TFC-1 §8.1). */
 export type OverlayTone = 'buy' | 'sell' | 'ghost' | 'position' | 'trailing' | 'pending';
 
+/** A button beside a line's handle: × to cancel an order (§8.3), Buy and Sell on the ghost (§8.2). */
+export type LineAction = {
+  id: string;
+  label: string;
+  description: string;
+  /** `armed` is a confirm step ("Cancel?"); `buy` and `sell` carry the side's colour and word. */
+  look: 'plain' | 'armed' | 'buy' | 'sell';
+};
+
 export type OverlayLine = {
   id: string;
   /** Price in paise. */
@@ -12,8 +21,8 @@ export type OverlayLine = {
   description: string;
   /** Whether the handle can be dragged (or moved with the arrow keys) to a new price. */
   draggable: boolean;
-  /** A second button beside the handle, e.g. × to cancel an order (§8.3). */
-  action?: { label: string; description: string; armed: boolean } | undefined;
+  /** Buttons beside the handle, in order. */
+  actions?: readonly LineAction[] | undefined;
 };
 
 /**

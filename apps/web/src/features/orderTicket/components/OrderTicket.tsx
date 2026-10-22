@@ -369,6 +369,7 @@ function TicketFlow({
           error={error}
           onSubmit={(event) => void onSubmit(event)}
           trailing={trailingOffer}
+          compact={intent.compact === true && !modifying}
           attach={
             modifying ? undefined : (
               <AttachedStop

@@ -15,6 +15,13 @@ export type TicketIntent = {
   qty?: number;
   /** Product to prefill, e.g. the position's own when exiting it (T-150). */
   product?: ProductType;
+  /** A limit price to prefill, in paise: the ticket opens as a limit order at it (T17). */
+  price?: number;
+  /**
+   * The compact ticket placed from the chart (T17, SPEC-TFC-1 §8.2): side, quantity, price,
+   * product and "Add trailing stop", without the order-type switch or the depth panel.
+   */
+  compact?: boolean;
 };
 
 /**
