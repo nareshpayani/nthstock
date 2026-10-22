@@ -47,7 +47,15 @@ import {
   PositionsResponse,
   ResetRequest,
 } from './portfolio.js';
+import { AccountState } from './account.js';
 import { CursorQuery, IsoUtc, OkResponse } from './primitives.js';
+import {
+  ModifyTrailingStopRequest,
+  PlaceTrailingStopRequest,
+  TrailingStop,
+  TrailingStopIdParams,
+  TrailingStopsResponse,
+} from './trailingStops.js';
 import {
   AddWatchlistItemRequest,
   CreateWatchlistRequest,
@@ -341,6 +349,44 @@ export const routes = {
     auth: 'user',
     params: OrderParams,
     response: Order,
+  },
+
+  // Trailing stops (SPEC-TFC-1 §10.6). apps/api answers 501 until it adopts the engine's stops.
+  trailingStopsList: {
+    method: 'GET',
+    path: '/v1/trailing-stops',
+    auth: 'user',
+    response: TrailingStopsResponse,
+  },
+  trailingStopPlace: {
+    method: 'POST',
+    path: '/v1/trailing-stops',
+    auth: 'user',
+    body: PlaceTrailingStopRequest,
+    response: TrailingStop,
+  },
+  trailingStopModify: {
+    method: 'PATCH',
+    path: '/v1/trailing-stops/:id',
+    auth: 'user',
+    params: TrailingStopIdParams,
+    body: ModifyTrailingStopRequest,
+    response: TrailingStop,
+  },
+  trailingStopCancel: {
+    method: 'DELETE',
+    path: '/v1/trailing-stops/:id',
+    auth: 'user',
+    params: TrailingStopIdParams,
+    response: TrailingStop,
+  },
+
+  // Account (ADR 0012): one consistent snapshot of orders, positions, trailing stops and funds.
+  accountState: {
+    method: 'GET',
+    path: '/v1/account/state',
+    auth: 'user',
+    response: AccountState,
   },
 
   // Portfolio and funds

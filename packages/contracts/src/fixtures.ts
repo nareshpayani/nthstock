@@ -37,7 +37,13 @@ import type {
   Position,
   ResetRequest,
 } from './portfolio.js';
+import type { AccountState } from './account.js';
 import type { ApiError } from './primitives.js';
+import type {
+  ModifyTrailingStopRequest,
+  PlaceTrailingStopRequest,
+  TrailingStop,
+} from './trailingStops.js';
 import type { Watchlist, WatchlistItem } from './watchlist.js';
 import type { WsClientMessage, WsServerMessage } from './ws.js';
 
@@ -383,6 +389,56 @@ export const ledgerEntryFixture: LedgerEntry = {
 
 export const resetRequestFixture: ResetRequest = { confirm: 'RESET' };
 
+/** Protect the open INFY delivery position with a ₹12.50 trail that starts at once. */
+export const placeTrailingStopFixture: PlaceTrailingStopRequest = {
+  token: 408065,
+  product: 'DELIVERY',
+  trail: { unit: 'AMOUNT', amount: 1_250 },
+  activationPrice: null,
+  exitOrderType: 'MARKET',
+  exitLimitOffset: null,
+  clientRequestId: 'ts_c_1',
+};
+
+/** Widen to a 1.5% trail with a ₹0.50 limit exit. */
+export const modifyTrailingStopFixture: ModifyTrailingStopRequest = {
+  trail: { unit: 'PERCENT', basisPoints: 150 },
+  exitOrderType: 'LIMIT',
+  exitLimitOffset: 50,
+};
+
+/** Trailing 10 shares: best price ₹1,535.40, stop ₹1,522.90. */
+export const trailingStopFixture: TrailingStop = {
+  id: 'ts_1',
+  token: 408065,
+  symbol: 'INFY',
+  exchange: 'NSE',
+  product: 'DELIVERY',
+  direction: 'LONG',
+  trail: { unit: 'AMOUNT', amount: 1_250 },
+  activationPrice: null,
+  exitOrderType: 'MARKET',
+  exitLimitOffset: null,
+  status: 'TRAILING',
+  statusReason: null,
+  watermarkPrice: 153_540,
+  stopPrice: 152_290,
+  protectedQty: 10,
+  entryOrderId: 'ord_1',
+  exitOrderId: null,
+  seq: 14,
+  createdAt: TS,
+  updatedAt: TS,
+};
+
+export const accountStateFixture: AccountState = {
+  seq: 14,
+  orders: [orderFixture],
+  positions: [positionFixture],
+  trailingStops: [trailingStopFixture],
+  funds: fundsSummaryFixture,
+};
+
 export const wsClientFixtures: WsClientMessage[] = [
   { v: 1, type: 'subscribe', symbols: ['INFY', 'TCS'], exchange: 'NSE' },
   { v: 1, type: 'unsubscribe', symbols: ['TCS'], exchange: 'NSE' },
@@ -405,6 +461,18 @@ export const wsServerFixtures: WsServerMessage[] = [
     ],
   },
   { v: 1, type: 'orderUpdate', order: orderFixture },
+  {
+    v: 1,
+    type: 'accountDelta',
+    seq: 14,
+    at: TS,
+    quotes: [quoteFixture],
+    depth: depthFixture,
+    orders: [orderFixture],
+    positions: [positionFixture],
+    trailingStops: [trailingStopFixture],
+    funds: fundsSummaryFixture,
+  },
   { v: 1, type: 'pong', id: 7 },
   {
     v: 1,
