@@ -58,6 +58,9 @@ export const strings = {
   },
   depth: {
     title: 'Market depth',
+    moving: 'Your orders moving',
+    sides: { BUY: 'Buy', SELL: 'Sell' },
+    yourOrder: (side: string, qty: number) => `Your ${side.toLowerCase()} ${String(qty)}`,
     bids: 'Bids (buy orders)',
     asks: 'Offers (sell orders)',
     bidPrice: 'Bid price',

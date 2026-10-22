@@ -12,6 +12,8 @@ export type OverlayLine = {
   description: string;
   /** Whether the handle can be dragged (or moved with the arrow keys) to a new price. */
   draggable: boolean;
+  /** A second button beside the handle, e.g. × to cancel an order (§8.3). */
+  action?: { label: string; description: string; armed: boolean } | undefined;
 };
 
 /**

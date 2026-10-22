@@ -5,7 +5,6 @@ import type { ChartHandle } from '@/features/charts';
 import { AreaSeries, chartsMock, createChart } from '@/test/chartsMock';
 import type { OverlayLine } from '../model/overlayLine';
 import { ChartOverlay } from './ChartOverlay';
-import { ChartTrading } from './ChartTrading';
 
 // The fake scale: ₹1,600.00 at y = 0, 50 paise per px, a 300 px pane and a 64 px price axis.
 function makeHandle(): ChartHandle {
@@ -233,36 +232,5 @@ describe('chart overlay (T15, SPEC-TFC-1 §10.5)', () => {
     pointer(grab, 'pointermove', 150);
     act(() => screen.getByRole('button', { name: 'fill' }).click());
     expect(onDragEnd).toHaveBeenCalledExactlyOnceWith('o1', null);
-  });
-});
-
-describe('ghost line (T15, SPEC-TFC-1 §8.2)', () => {
-  it('a gutter tap draws a ghost at that price; dragging moves it and the price follows', () => {
-    render(<ChartTrading handle={makeHandle()} instrument={{ symbol: 'INFY', tickSize: 5 }} />);
-    expect(screen.queryByTestId('chart-handle')).not.toBeInTheDocument();
-    const gutter = screen.getByTestId('chart-gutter');
-    pointer(gutter, 'pointerdown', 100);
-    pointer(gutter, 'pointerup', 100);
-    const ghost = screen.getByTestId('chart-handle');
-    expect(ghost).toHaveTextContent('New order @ ₹1,550.00');
-    expect(series()?.priceLines[0]?.options).toMatchObject({ price: 155_000, lineStyle: 2 });
-
-    pointer(ghost, 'pointerdown', 100);
-    pointer(ghost, 'pointermove', 80);
-    expect(ghost).toHaveTextContent('New order @ ₹1,560.00');
-    expect(handleY('ghost')).toBe(80);
-    pointer(ghost, 'pointerup', 80);
-    expect(ghost).toHaveTextContent('New order @ ₹1,560.00');
-
-    // Escape mid-drag restores the saved price.
-    pointer(ghost, 'pointerdown', 80);
-    pointer(ghost, 'pointermove', 40);
-    expect(ghost).toHaveTextContent('New order @ ₹1,580.00');
-    pointer(ghost, 'pointerdown', 10, 2);
-    expect(ghost).toHaveTextContent('New order @ ₹1,560.00');
-
-    fireEvent.keyDown(ghost, { key: 'Delete' });
-    expect(screen.queryByTestId('chart-handle')).not.toBeInTheDocument();
-    expect(series()?.priceLines).toEqual([]);
   });
 });

@@ -12,7 +12,9 @@ import {
   VirtualList,
 } from '@nthstock/ui';
 import type { ReactNode } from 'react';
+import { PendingPrice } from '@/shared/components/PendingPrice';
 import { TrailingStopBadge } from '@/shared/components/TrailingStopBadge';
+import type { PendingOrderPrice } from '@/shared/hooks/usePendingOrderPrices';
 import { isLive, isPartlyFilled, orderName, orderTimeLabel, priceLabel } from '../model/orderBook';
 import { strings } from '../strings';
 import { OrderSideLabel, OrderStatusBadge } from './OrderStatusBadge';
@@ -33,6 +35,8 @@ export type OrderTableProps = {
   onCancel: (order: Order, trigger: HTMLElement) => void;
   /** Trailing stops by the id of their entry or exit order (T11): shown beside the status. */
   stops?: ReadonlyMap<string, TrailingStop>;
+  /** Prices orders are moving to from a chart drag (T16): shown under the price. */
+  pendingPrices?: ReadonlyMap<string, PendingOrderPrice>;
 };
 
 type Column = {
@@ -55,6 +59,7 @@ export function OrderTable({
   onModify,
   onCancel,
   stops,
+  pendingPrices,
 }: OrderTableProps) {
   const columns: Column[] = [
     {
@@ -96,7 +101,19 @@ export function OrderTable({
           ? strings.partQty(order.filledQty, order.qty)
           : strings.qty(order.filledQty, order.qty),
     },
-    { key: 'price', header: strings.columns.price, numeric: true, render: priceLabel },
+    {
+      key: 'price',
+      header: strings.columns.price,
+      numeric: true,
+      render: (order) => {
+        return (
+          <>
+            {priceLabel(order)}
+            <PendingPrice pending={pendingPrices?.get(order.id)} />
+          </>
+        );
+      },
+    },
     {
       key: 'status',
       header: strings.columns.status,

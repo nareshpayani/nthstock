@@ -13,6 +13,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useContext, useMemo, useRef, useState } from 'react';
 import { PageHeader } from '@/shared/components/PageHeader';
 import { SearchStocksButton } from '@/shared/components/SearchStocksButton';
+import { usePendingOrderPrices } from '@/shared/hooks/usePendingOrderPrices';
 import { useTrailingStops } from '@/shared/hooks/useTrailingStops';
 import { useApiClient } from '@/shared/lib/apiClientContext';
 import { MarketSessionContext } from '@/shared/lib/marketSessionContext';
@@ -58,6 +59,7 @@ export function OrdersPage({ search, onSearchChange }: OrdersPageProps) {
   const openTicket = useTicketIntentStore((s) => s.openTicket);
   const book = useQuery(orderBookQuery(api));
   const trailingStops = useTrailingStops();
+  const pendingPrices = usePendingOrderPrices();
   const stopsByOrder = useMemo(() => {
     const byOrder = new Map<string, TrailingStop>();
     // Oldest first, so the newest stop wins an order shared by two (a stop replaced on an entry).
@@ -149,6 +151,7 @@ export function OrdersPage({ search, onSearchChange }: OrdersPageProps) {
                 onModify={modify}
                 onCancel={(order) => setCancelling(order)}
                 stops={stopsByOrder}
+                pendingPrices={pendingPrices}
               />
             )}
           </TabsContent>

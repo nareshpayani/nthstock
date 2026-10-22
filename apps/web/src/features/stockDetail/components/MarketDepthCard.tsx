@@ -1,3 +1,4 @@
+import type { TradingState } from '@nthstock/apiClient';
 import type { Depth, Instrument } from '@nthstock/contracts';
 import { DEPTH_LEVELS } from '@nthstock/contracts';
 import { ErrorState, Skeleton, cn } from '@nthstock/ui';
@@ -5,10 +6,13 @@ import { formatInr, formatIstTime } from '@nthstock/utils';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { useRef } from 'react';
 import { Card } from '@/shared/components/Card';
+import { PendingPrice } from '@/shared/components/PendingPrice';
 import { useFocusedDepth } from '@/shared/hooks/useFocusedDepth';
 import { useInView } from '@/shared/hooks/useInView';
 import { useMarketOpen } from '@/shared/hooks/useMarketOpen';
 import { usePageVisible } from '@/shared/hooks/usePageVisible';
+import { usePendingOrderPrices } from '@/shared/hooks/usePendingOrderPrices';
+import { useTradingSelector } from '@/shared/hooks/useTradingSelector';
 import { useApiClient } from '@/shared/lib/apiClientContext';
 import { DEPTH_REFRESH_MS, depthQuery } from '../api/stockDetailQueries';
 import { barPercent, depthScale, padToWidest } from '../model/depthBars';
@@ -201,6 +205,7 @@ export function MarketDepthCard({ instrument }: MarketDepthCardProps) {
     refetchIntervalInBackground: false,
   });
   const data = live ?? rest.data;
+  const moving = useMovingOrders(instrument.token);
 
   const status = marketOpen
     ? polling
@@ -214,6 +219,24 @@ export function MarketDepthCard({ instrument }: MarketDepthCardProps) {
         {data ? (
           <div className="grid gap-3" data-source={live ? 'frame' : 'rest'}>
             <DepthBook depth={data} />
+            {moving.length > 0 ? (
+              <ul aria-label={strings.depth.moving} className="grid gap-1">
+                {moving.map(({ order, pending }) => (
+                  <li
+                    key={order.id}
+                    className="flex items-baseline justify-between gap-3 text-label"
+                  >
+                    <span className="text-ink-muted">
+                      {strings.depth.yourOrder(
+                        strings.depth.sides[order.side],
+                        order.qty - order.filledQty,
+                      )}
+                    </span>
+                    <PendingPrice pending={pending} />
+                  </li>
+                ))}
+              </ul>
+            ) : null}
             <p className="flex flex-wrap justify-between gap-x-3 text-label text-ink-muted">
               <span>{status}</span>
               <span>{strings.depth.asOf(formatIstTime(new Date(data.ts)))}</span>
@@ -238,4 +261,19 @@ export function MarketDepthCard({ instrument }: MarketDepthCardProps) {
       </Card>
     </div>
   );
+}
+
+const selectOrders = (state: TradingState) => state.orders;
+
+/**
+ * Your orders in this instrument that are moving (T16, TFC-21): a chart drag or a modify in flight,
+ * so the depth card shows the price the order is going to beside the book it will join.
+ */
+function useMovingOrders(token: number) {
+  const pending = usePendingOrderPrices();
+  const orders = useTradingSelector(selectOrders);
+  return orders.flatMap((order) => {
+    const price = order.token === token ? pending.get(order.id) : undefined;
+    return price ? [{ order, pending: price }] : [];
+  });
 }
