@@ -4,6 +4,7 @@ import {
   PAPER_ENGINE_SNAPSHOT_VERSION,
   PaperDesk,
   orderApiError,
+  type MarketHours,
   type OrderActionResult,
   type PaperEngineSnapshot,
 } from '@nthstock/paperEngine';
@@ -45,6 +46,8 @@ export type OrdersMockOptions = {
   /** Sync every account on this interval (the browser passes `ORDER_SWEEP_MS`); off by default. */
   sweepMs?: number;
   timers?: IntervalTimers;
+  /** `alwaysOpen` with VITE_MOCK_MARKET_OPEN, so the demo trades at any hour (T03); default `nse`. */
+  marketHours?: MarketHours;
 };
 
 type Saved = {
@@ -95,6 +98,7 @@ export function createOrdersMock(
     newId = randomId,
     sweepMs,
     timers = defaultTimers,
+    marketHours = 'nse',
   }: OrdersMockOptions = {},
 ) {
   const listeners = new Set<OrderUpdateListener>();
@@ -117,6 +121,7 @@ export function createOrdersMock(
     clock: { now: () => new Date(now()) },
     market: adapter,
     newId,
+    marketHours,
     onOrderUpdate: (userId, order) => {
       for (const listener of [...listeners]) listener(userId, order);
     },

@@ -153,6 +153,19 @@ describe('OTP screen (T-087)', () => {
   });
 });
 
+describe('Try demo (REQ-DEL-02)', () => {
+  it('one tap logs in as the demo user and opens the instrument page', async () => {
+    const { apiClient } = newBrowser();
+    const { router } = renderApp('/login', { apiClient });
+    await heading('Log in to nthstock');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Try demo' }));
+
+    await waitFor(() => expect(router.state.location.pathname).toBe('/stocks/RELIANCE'));
+    expect(paths).toContain('/v1/auth/otp/verify');
+  });
+});
+
 describe('PIN setup, PIN entry and lockout (T-088)', () => {
   it('first login sets a PIN; the trusted browser then goes straight to PIN entry; 5 wrong PINs lock; OTP unlocks', async () => {
     const { apiClient, mobile } = newBrowser();

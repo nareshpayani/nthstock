@@ -20,6 +20,7 @@ import { PAGE_LIMIT_DEFAULT } from '@nthstock/contracts';
 import { istDateKey, nseHolidays2026, type Clock, type HolidayTable } from '@nthstock/utils';
 import { createEngineContext, type PriceSource } from './context.js';
 import type { InstrumentInfo, InstrumentSource } from './instruments.js';
+import type { MarketHours } from './orderValidation.js';
 import { PaperEngine, type OrderActionResult, type PaperEngineSnapshot } from './paperEngine.js';
 import { averagePrice, basisPoints, holdingValues, positionValues } from './positionMath.js';
 
@@ -55,6 +56,8 @@ export type PaperDeskOptions = {
   /** Ids for orders and ledger entries: unique across users (the backend injects a random one). */
   newId: () => string;
   holidays?: HolidayTable;
+  /** Market hours for every engine on the desk; defaults to `nse` (see `PaperEngineOptions`). */
+  marketHours?: MarketHours;
   /** Defaults to a Map. */
   engines?: EngineRegistry;
   /** Every order change of every user: the backend turns these into `orderUpdate` frames. */
@@ -437,6 +440,7 @@ export class PaperDesk {
       instruments: this.#instrumentSource,
       holidays: this.#holidays,
       fillCap: (token) => this.fillCap(token),
+      ...(this.#options.marketHours ? { marketHours: this.#options.marketHours } : {}),
       ...(onOrderUpdate ? { onOrderUpdate: (order: Order) => onOrderUpdate(userId, order) } : {}),
       ...(snapshot ? { snapshot } : {}),
     });
