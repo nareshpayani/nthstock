@@ -35,7 +35,7 @@ concurrency:
 
 jobs:
   close:
-    if: github.event_name != 'pull_request' || (github.event.pull_request.merged && (github.event.pull_request.base.ref == 'develop' || github.event.pull_request.base.ref == 'main'))
+    if: github.event_name != 'pull_request' || (github.event.pull_request.merged && github.event.pull_request.base.ref == 'develop')
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -118,11 +118,9 @@ jobs:
             prs="$PR_INPUT"
           else
             since=$(date -u -d '3 days ago' +%Y-%m-%d)
-            # PRs merge into develop; release PRs merge into main.
-            prs=$(for base in develop main; do
-              gh pr list --repo "$repo" --state merged --base "$base" --limit 100 \
-                --search "merged:>=$since" --json number --jq '.[].number'
-            done)
+            # Every PR merges into develop (production moves by promotion, ADR 0011).
+            prs=$(gh pr list --repo "$repo" --state merged --base develop --limit 100 \
+              --search "merged:>=$since" --json number --jq '.[].number')
           fi
           for pr in $prs; do
             [ "$(gh pr view "$pr" --repo "$repo" --json state --jq .state)" = MERGED ] || continue

@@ -6,7 +6,7 @@ description: Fixes blocking review findings, red CI and merge conflicts on a PR 
 You are the **Fixer** for nthstock. Read `CLAUDE.md` first.
 
 ## Your job
-1. Check out the PR's branch (never `develop` or `main`). PRs merge into `develop` (ADR 0010).
+1. Check out the PR's branch (never `develop` or `production`). PRs merge into `develop` (ADR 0010).
 2. Read the latest comment starting with `<!-- nthstock-agent-review -->` and every unresolved
    **[blocking]** inline comment, plus any failing CI job logs.
 3. Fix each blocking item with the smallest correct change, adding tests where the finding was a bug.
@@ -53,7 +53,7 @@ You are the **Fixer** for nthstock. Read `CLAUDE.md` first.
 ## Merge conflicts
 When the reason is a merge conflict with `develop`:
 1. You are on the PR branch. Run `git fetch origin develop` then `git merge origin/develop`.
-   **Never** rebase, amend, force-push, or push to `develop` or `main` (a pre-push hook blocks it
+   **Never** rebase, amend, force-push, or push to `develop` or `production` (a pre-push hook blocks it
    anyway). Merge the PR's own base branch: `develop` for almost every PR.
 2. Resolve every conflicted file so **both** sides' intent survives: keep the PR's change and
    everything `develop` added. Never drop code from `develop` to make the conflict go away.
@@ -70,5 +70,4 @@ When the reason is a merge conflict with `develop`:
 - Attribution: no "Claude" or "Claude Code" name, `Co-Authored-By` trailer or "Generated with"
   footer in anything you write (`.claude/rules/git-and-prs.md`).
 - Do not open a new PR (except the `agent/fix-develop-*` PR above). Do not widen scope. Suggestions are optional; take only the plainly correct ones.
-- Never skip, disable or weaken a test to make CI pass. Never merge, never push to `develop` or `main`.
-- Release PRs (head `develop`, base `main`) are the owner's: never check them out to fix.
+- Never skip, disable or weaken a test to make CI pass. Never merge, never push to `develop` or `production`.

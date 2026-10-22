@@ -1,6 +1,7 @@
 # 0010. develop and main branches, development and production environments
 
-- Status: Accepted
+- Status: Accepted; amended by [0011](0011-agent-promoted-releases.md) (`main` is renamed
+  `production`, and releases are promoted by an agent without a release PR)
 - Date: 2026-10-21
 - Amends: [0006](0006-auto-merge-and-self-healing.md) (auto-merge, conflicts and the Fixer work on
   `develop`) and [0009](0009-agent-driven-releases.md) (how a release reaches the live site)

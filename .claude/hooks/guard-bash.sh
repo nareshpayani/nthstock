@@ -1,6 +1,6 @@
 #!/bin/bash
 # PreToolUse (Bash): blocks git commands that break the repo rules (CLAUDE.md §8, D9):
-# pushing to main or develop, force-pushing, skipping hooks/checks, printing secrets, merging PRs by hand
+# pushing to production or develop, force-pushing, skipping hooks/checks, printing secrets, merging PRs by hand
 # and adding dependencies without approval.
 set -uo pipefail
 
@@ -9,12 +9,12 @@ cmd=$(jq -r '.tool_input.command // empty')
 
 deny() { echo "Blocked by .claude/hooks/guard-bash.sh: $1" >&2; exit 2; }
 
-# Only the `git push …` segments are checked, so "main" or "develop" in a commit message or a heredoc in the same
+# Only the `git push …` segments are checked, so "production" or "develop" in a commit message or a heredoc in the same
 # command doesn't trip the rule.
 pushes=$(grep -oE '(^|[;&|(])[[:space:]]*git[[:space:]]+push[^;&|]*' <<< "$cmd" || true)
 if [ -n "$pushes" ]; then
-  grep -qE '[[:space:]](origin[[:space:]]+)?(HEAD:)?(refs/heads/)?(main|develop)([[:space:]]|$)|:(main|develop)([[:space:]]|$)' <<< "$pushes" \
-    && deny "never push to main or develop; open a PR from a branch into develop (ADR 0010)."
+  grep -qE '[[:space:]](origin[[:space:]]+)?(HEAD:)?(refs/heads/)?(production|main|develop)([[:space:]]|$)|:(production|main|develop)([[:space:]]|$)' <<< "$pushes" \
+    && deny "never push to production or develop; open a PR into develop, and promote with promote-to-production.yml (ADR 0011)."
   grep -qE '[[:space:]](--force|-f)([[:space:]]|$)' <<< "$pushes" \
     && deny "no force-push; use --force-with-lease on your own branch if you must."
 fi

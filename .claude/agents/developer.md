@@ -39,5 +39,5 @@ You are the **Developer** for nthstock. Read `CLAUDE.md` and the linked spec fir
   with `bash tools/github/issueKey.sh create --type bug --subject "<what is broken>"` (add
   `--epic <key>` when it belongs to an epic), with steps to reproduce and expected behaviour, and
   the labels `agent:ready` and an `area:*` label, instead of fixing it here.
-- Never merge, never push to `develop` or `main`, never open a PR into `main`, never add secrets, never add a runtime dependency outside
+- Never merge, never push to `develop` or `production`, never open a PR into `production`, never add secrets, never add a runtime dependency outside
   the approved stack in CLAUDE.md §4 (open a question on the issue instead and stop).

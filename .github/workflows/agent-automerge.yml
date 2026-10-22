@@ -5,8 +5,8 @@ name: 'Agent: Auto-merge'
 # a manual merge. Skipped: PRs without ready-to-merge, drafts, forks, Dependabot, spec PRs (the
 # owner still approves specs), PRs that change .github/**, .claude/** or CLAUDE.md (agent and CI
 # config needs the owner), and any PR labelled needs-human, agent:fix-needed or do-not-merge.
-# Add do-not-merge to hold a PR. PRs into main (releases, ADR 0010) are never auto-merged: the
-# owner merges them.
+# Add do-not-merge to hold a PR. Only PRs into develop merge; production moves by promotion
+# (ADR 0011).
 
 on:
   workflow_run:
