@@ -77,6 +77,13 @@ describe('Sheet', () => {
     expect(await screen.findByRole('dialog', { name: 'Menu' })).toHaveClass('left-0');
   });
 
+  it('can rise from the bottom as a full-width phone sheet (SPEC-TFC-1 §9.4)', async () => {
+    render(<Sheet title="Trade INFY" side="bottom" defaultOpen />);
+    const sheet = await screen.findByRole('dialog', { name: 'Trade INFY' });
+    expect(sheet).toHaveAttribute('data-side', 'bottom');
+    expect(sheet).toHaveClass('inset-x-0', 'bottom-0', 'max-h-[90dvh]');
+  });
+
   it('returns focus to returnFocus when opened without a trigger, over a light overlay', async () => {
     function Ticket() {
       const buy = useRef<HTMLButtonElement>(null);

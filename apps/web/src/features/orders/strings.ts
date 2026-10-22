@@ -59,6 +59,9 @@ export const strings = {
   } satisfies Record<OrderStatus, string>,
   atMarket: 'Market',
   qty: (filled: number, total: number) => `${String(filled)} / ${String(total)}`,
+  /** An open order with some of its quantity filled (SPEC-TFC-1 §10.3). */
+  partQty: (filled: number, total: number) => `${String(filled)} / ${String(total)} filled`,
+  partlyFilled: 'Partly filled',
   actions: {
     details: 'Details',
     detailsLabel: (what: string) => `Details of ${what}`,
@@ -122,6 +125,14 @@ export const strings = {
   },
   fill: {
     title: 'Order executed',
+    partTitle: 'Order partly filled',
+    partDescription: (
+      side: OrderSide,
+      filled: number,
+      qty: number,
+      symbol: string,
+      price: string,
+    ) => `${side} ${String(filled)} / ${String(qty)} ${symbol} @ ${price}`,
     viewOrders: 'View orders',
     viewOrdersAlt: 'Open Orders from the main navigation to see this order.',
     description: (side: OrderSide, qty: number, symbol: string, price: string) =>
