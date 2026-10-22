@@ -169,8 +169,10 @@ for (const width of [1440, 768]) {
 test('no horizontal scroll on stock detail at 360 px (T-112)', async ({ page }) => {
   await page.setViewportSize({ width: 360, height: 800 });
   await page.goto('/stocks/INFY');
-  await expectDepth(page);
+  // The phone layout (T12) keeps the overview in view and moves depth to its own tab.
   await expect(page.getByRole('region', { name: 'Overview' }).getByRole('heading')).toHaveCount(2);
+  await page.getByRole('tab', { name: 'Depth' }).click();
+  await expectDepth(page);
   const overflow = await page.evaluate(
     () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
   );

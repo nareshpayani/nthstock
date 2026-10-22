@@ -1,5 +1,5 @@
 import type { Candle, CandleRange, Instrument } from '@nthstock/contracts';
-import { ErrorState, SegmentedControl, Skeleton } from '@nthstock/ui';
+import { ErrorState, SegmentedControl, Skeleton, cn } from '@nthstock/ui';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import {
   CHART_RANGES,
@@ -22,9 +22,13 @@ export type StockChartCardProps = {
   chartType: ChartType;
   onRangeChange: (range: CandleRange) => void;
   onChartTypeChange: (type: ChartType) => void;
+  /** Chart height in px; the phone layout sizes it to the screen (T12). */
+  height?: number;
+  /** `touch` on phones: 44 px range and type segments in a row that scrolls sideways (T12). */
+  controls?: 'sm' | 'touch';
 };
 
-const CHART_HEIGHT = 320;
+export const CHART_HEIGHT = 320;
 const NO_CANDLES: readonly Candle[] = [];
 
 /**
@@ -39,6 +43,8 @@ export function StockChartCard({
   chartType,
   onRangeChange,
   onChartTypeChange,
+  height = CHART_HEIGHT,
+  controls = 'sm',
 }: StockChartCardProps) {
   const api = useApiClient();
   const marketOpen = useMarketOpen();
@@ -58,18 +64,23 @@ export function StockChartCard({
       // The LIVE badge sits beside the heading, not in it, so the section is named "Price chart".
       title={strings.chart.title}
       aside={
-        <div className="flex flex-wrap items-center gap-2">
+        <div
+          className={cn(
+            'flex items-center gap-2',
+            controls === 'touch' ? '-mx-1 max-w-full overflow-x-auto px-1 pb-1' : 'flex-wrap',
+          )}
+        >
           {marketOpen && range === '1D' ? <LiveBadge /> : null}
           <SegmentedControl
             label={strings.chart.rangeLabel}
-            size="sm"
+            size={controls}
             value={range}
             onValueChange={onRangeChange}
             options={CHART_RANGES.map((value) => ({ value, label: value }))}
           />
           <SegmentedControl
             label={strings.chart.typeLabel}
-            size="sm"
+            size={controls}
             value={chartType}
             onValueChange={onChartTypeChange}
             options={CHART_TYPES.map((value) => ({ value, label: strings.chart.types[value] }))}
@@ -79,7 +90,7 @@ export function StockChartCard({
     >
       <div aria-busy={candles.isFetching} className="relative">
         {candles.isError && !candles.data ? (
-          <div style={{ height: CHART_HEIGHT }} className="grid place-items-center">
+          <div style={{ height }} className="grid place-items-center">
             <ErrorState
               title={strings.chart.errorTitle}
               description={strings.chart.errorBody}
@@ -98,12 +109,12 @@ export function StockChartCard({
             type={chartType}
             format={format}
             intraday={isIntraday(range)}
-            height={CHART_HEIGHT}
+            height={height}
             tooltip
             className={candles.isPlaceholderData ? 'opacity-60' : undefined}
           />
         ) : (
-          <div role="status" aria-label={strings.chart.loading} style={{ height: CHART_HEIGHT }}>
+          <div role="status" aria-label={strings.chart.loading} style={{ height }}>
             <Skeleton className="h-full w-full" />
           </div>
         )}
