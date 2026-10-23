@@ -70,7 +70,7 @@ function figure(label: string): string {
 }
 
 beforeAll(() => {
-  mock.server.listen({ onUnhandledRequest: 'error' });
+  mock.server.listen({ onUnhandledFrame: 'error' });
 });
 beforeEach(() => {
   installResizeObserver();
@@ -237,7 +237,7 @@ describe('reset paper balance (T-160)', () => {
           screen.getByRole('dialog', { name: 'Reset your paper balance?' }),
         ).toBeInTheDocument();
       } finally {
-        mock.server.listen({ onUnhandledRequest: 'error' });
+        mock.server.listen({ onUnhandledFrame: 'error' });
       }
     },
     HEAVY,

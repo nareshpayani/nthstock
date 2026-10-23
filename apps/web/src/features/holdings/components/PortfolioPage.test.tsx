@@ -97,7 +97,7 @@ function expectSummaryEqualsRows() {
 }
 
 beforeAll(() => {
-  mock.server.listen({ onUnhandledRequest: 'error' });
+  mock.server.listen({ onUnhandledFrame: 'error' });
 });
 afterEach(() => {
   resetSession();

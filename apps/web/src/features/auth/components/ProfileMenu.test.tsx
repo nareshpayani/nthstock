@@ -12,7 +12,7 @@ import { KycBadge } from './ProfileMenu';
 const { server, adapter } = createMockServer();
 
 beforeAll(() => {
-  server.listen({ onUnhandledRequest: 'error' });
+  server.listen({ onUnhandledFrame: 'error' });
 });
 afterEach(() => {
   resetSession();

@@ -8,7 +8,7 @@ import { findStock, loginOnMock } from '@/test/watchlists';
 import { WatchlistStar } from './WatchlistStar';
 
 const { server, adapter } = createMockServer({ clock: fixedClock(fromIst(2026, 9, 25, 16 * 60)) });
-beforeAll(() => server.listen({ onUnhandledRequest: 'error' }));
+beforeAll(() => server.listen({ onUnhandledFrame: 'error' }));
 afterEach(() => {
   server.resetHandlers();
   resetSession();

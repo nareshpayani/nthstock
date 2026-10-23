@@ -71,7 +71,7 @@ const row = (symbol: string) =>
     .find((element) => element.textContent?.includes(symbol));
 
 beforeAll(() => {
-  mock.server.listen({ onUnhandledRequest: 'error' });
+  mock.server.listen({ onUnhandledFrame: 'error' });
 });
 beforeEach(() => {
   installResizeObserver();

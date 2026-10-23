@@ -68,7 +68,7 @@ const stopsOf = async (api: ApiClient) =>
     trail: stop.trail,
   }));
 
-beforeAll(() => mock.server.listen({ onUnhandledRequest: 'error' }));
+beforeAll(() => mock.server.listen({ onUnhandledFrame: 'error' }));
 beforeEach(() => {
   installResizeObserver();
 });
