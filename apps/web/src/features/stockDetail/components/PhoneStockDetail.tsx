@@ -1,6 +1,7 @@
 import type { Instrument, OrderSide, Quote } from '@nthstock/contracts';
-import { Button, Tabs, TabsContent, TabsList, TabsTrigger } from '@nthstock/ui';
-import { useState, useSyncExternalStore, type ReactNode } from 'react';
+import { Button, Tabs, TabsContent, TabsList, TabsTrigger, cn } from '@nthstock/ui';
+import { useId, useState, useSyncExternalStore, type ReactNode } from 'react';
+import { ScalperPad } from '@/features/scalper';
 import { useOpenTicket } from '@/shared/hooks/useOpenTicket';
 import {
   DEFAULT_CHART_TYPE,
@@ -60,6 +61,31 @@ export function PhoneStockDetail({
   const trade = (side: OrderSide) => {
     void openTicket({ symbol, exchange, side });
   };
+  // Scalper mode (T21, §11.1): the switch swaps Sell and Buy for the pad; the chart stays.
+  const [scalp, setScalp] = useState(false);
+  const scalpDescription = useId();
+  const scalpSwitch = (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={scalp}
+      aria-describedby={scalpDescription}
+      onClick={() => setScalp((on) => !on)}
+      className={cn(
+        'flex min-h-11 min-w-11 items-center gap-2 rounded-pill border px-3 text-body font-semibold',
+        scalp ? 'border-brand bg-brand-soft text-brand' : 'border-line bg-surface text-ink',
+      )}
+    >
+      <span
+        aria-hidden="true"
+        className={cn('size-2.5 rounded-pill', scalp ? 'bg-brand' : 'bg-ink-muted')}
+      />
+      {strings.phone.scalp}
+      <span id={scalpDescription} hidden>
+        {strings.phone.scalpDescription}
+      </span>
+    </button>
+  );
 
   return (
     <div className="mx-auto grid w-full grid-cols-[minmax(0,1fr)] gap-3" data-layout="phone">
@@ -113,28 +139,36 @@ export function PhoneStockDetail({
         className="sticky bottom-0 z-(--nth-z-header) -mx-4 -mb-4 border-t border-line bg-surface pb-[env(safe-area-inset-bottom)]"
       >
         <PositionStrip instrument={instrument} />
-        <div
-          role="group"
-          aria-label={strings.phone.tradeBar(symbol)}
-          className="grid grid-cols-2 gap-2 px-4 py-3"
-        >
-          <Button
-            variant="sell"
-            size="lg"
-            aria-label={strings.header.sellLabel(symbol)}
-            onClick={() => trade('SELL')}
+        {scalp ? (
+          <>
+            <ScalperPad instrument={instrument} />
+            <div className="flex justify-end px-4 pb-3">{scalpSwitch}</div>
+          </>
+        ) : (
+          <div
+            role="group"
+            aria-label={strings.phone.tradeBar(symbol)}
+            className="grid grid-cols-[1fr_1fr_auto] gap-2 px-4 py-3"
           >
-            {strings.header.sell}
-          </Button>
-          <Button
-            variant="buy"
-            size="lg"
-            aria-label={strings.header.buyLabel(symbol)}
-            onClick={() => trade('BUY')}
-          >
-            {strings.header.buy}
-          </Button>
-        </div>
+            <Button
+              variant="sell"
+              size="lg"
+              aria-label={strings.header.sellLabel(symbol)}
+              onClick={() => trade('SELL')}
+            >
+              {strings.header.sell}
+            </Button>
+            <Button
+              variant="buy"
+              size="lg"
+              aria-label={strings.header.buyLabel(symbol)}
+              onClick={() => trade('BUY')}
+            >
+              {strings.header.buy}
+            </Button>
+            {scalpSwitch}
+          </div>
+        )}
       </div>
     </div>
   );

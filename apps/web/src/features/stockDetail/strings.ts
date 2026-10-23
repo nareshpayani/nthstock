@@ -113,6 +113,8 @@ export const strings = {
     tabsLabel: 'Stock details',
     tabs: { overview: 'Overview', depth: 'Depth', orders: 'Orders' },
     tradeBar: (symbol: string) => `Trade ${symbol}`,
+    scalp: 'Scalp',
+    scalpDescription: 'Scalper mode: a one-tap pad for fast entry and exit.',
     strip: {
       label: (symbol: string) => `Your ${symbol} position`,
       qty: (netQty: number) => (netQty > 0 ? `+${String(netQty)}` : String(netQty)),
