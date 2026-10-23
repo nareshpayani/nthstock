@@ -1,12 +1,14 @@
 import type { TradingState } from '@nthstock/apiClient';
 import type { Instrument, Position } from '@nthstock/contracts';
+import { cn } from '@nthstock/ui';
 import { formatInr } from '@nthstock/utils';
-import { useCallback } from 'react';
+import { useCallback, useId } from 'react';
 import { livePosition } from '@/features/positions';
 import { PnlAmount } from '@/shared/components/PnlAmount';
 import { usePositionTrailingStop } from '@/shared/hooks/useTrailingStops';
 import { useQuote } from '@/shared/hooks/useQuote';
 import { useTradingSelector } from '@/shared/hooks/useTradingSelector';
+import { useTrailingSheetStore } from '@/shared/lib/trailingSheetStore';
 import { strings } from '../strings';
 
 const samePositions = (a: readonly Position[], b: readonly Position[]) =>
@@ -24,13 +26,30 @@ const samePositions = (a: readonly Position[], b: readonly Position[]) =>
   });
 
 function StripLine({ position }: { position: Position }) {
+  const openSheet = useTrailingSheetStore((state) => state.openSheet);
+  const hint = useId();
   const ltp = useQuote(position.symbol, position.exchange)?.quote.ltp;
   const live = livePosition(position, ltp);
   const stop = usePositionTrailingStop(position.token, position.product);
   const stopPrice =
     stop && (stop.status === 'TRAILING' || stop.status === 'TRIGGERED') ? stop.stopPrice : null;
   return (
-    <p className="flex min-w-0 flex-wrap items-center gap-x-2 text-body">
+    <button
+      type="button"
+      aria-describedby={hint}
+      onClick={() =>
+        openSheet({
+          symbol: position.symbol,
+          exchange: position.exchange,
+          token: position.token,
+          product: position.product,
+        })
+      }
+      className={cn(
+        'flex min-h-11 w-full min-w-0 flex-wrap items-center gap-x-2 rounded-md text-left text-body',
+        'focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-brand',
+      )}
+    >
       <span className="font-mono font-semibold tabular-nums">
         {strings.phone.strip.qty(position.netQty)}
       </span>
@@ -49,14 +68,18 @@ function StripLine({ position }: { position: Position }) {
           </span>
         </>
       )}
-    </p>
+      <span id={hint} hidden>
+        {strings.phone.strip.open}
+      </span>
+    </button>
   );
 }
 
 /**
  * The phone position strip (T12, SPEC-TFC-1 §9.4): this instrument's open position, average, live
- * P&L and trailing stop, just above the bottom bar. Nothing while flat or while the trading store
- * is idle. Tapping it opens the trailing-stop sheet once that exists (T18).
+ * P&L and trailing stop, just above the bottom bar, and above the scalper pad in scalp mode.
+ * Nothing while flat or while the trading store is idle. Tapping a line opens that position's
+ * trailing-stop sheet (T23, SPEC-TFC-1 §11.2), the same sheet the chart's position chip opens.
  */
 export function PositionStrip({ instrument }: { instrument: Instrument }) {
   const select = useCallback(
@@ -72,7 +95,7 @@ export function PositionStrip({ instrument }: { instrument: Instrument }) {
     <section
       aria-label={strings.phone.strip.label(instrument.symbol)}
       data-testid="position-strip"
-      className="grid min-h-11 content-center gap-1 border-b border-line px-4 py-2"
+      className="grid min-h-11 content-center gap-1 border-b border-line px-4 py-1"
     >
       {positions.map((position) => (
         <StripLine key={position.product} position={position} />
