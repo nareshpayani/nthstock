@@ -4,8 +4,9 @@ import { logIn } from './support/auth';
 
 // T19 (SPEC-TFC-1 §6.3, §6.5, §8.1, US-04, REQ-TFC-06, REQ-TFC-07, REQ-TSLO-09): the trailing
 // stop's line on the chart. With the demo Simulator, the line rises on a rally and holds on a
-// pullback; dragging it moves the stop and changes the trail. The Simulator is on the desktop
-// stock page, so this runs at 1440 px.
+// pullback and carries on after the tab goes to the background (REQ-TSLO-10); dragging it moves
+// the stop and changes the trail. The Simulator is on the desktop stock page, so this runs at
+// 1440 px.
 //
 // The page clock is fixed at Monday 28 Sep 2026, 10:00 IST, so NSE is open for the paper engine.
 const MONDAY_10_IST = new Date('2026-09-28T04:30:00.000Z');
@@ -63,6 +64,21 @@ test('the trailing-stop line ratchets with the Simulator and a drag changes the 
   await page.waitForTimeout(1_500);
   expect(rupees(await line.innerText())).toBeGreaterThanOrEqual(raised);
   const held = rupees(await line.innerText());
+
+  // Backgrounded and resumed (§6.7, REQ-TSLO-10): the tab hides, two minutes pass, the tab comes
+  // back and re-reads the account. The stop carries on from its watermark rather than reset.
+  const setVisibility = (state: 'hidden' | 'visible') =>
+    page.evaluate((next) => {
+      Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => next });
+      document.dispatchEvent(new Event('visibilitychange'));
+    }, state);
+  await setVisibility('hidden');
+  await page.clock.setFixedTime(new Date(MONDAY_10_IST.getTime() + 2 * 60_000));
+  await page.waitForTimeout(1_000);
+  await setVisibility('visible');
+  await page.waitForTimeout(1_500);
+  await expect(line).toHaveText(/Trailing SL ₹[\d,]+\.\d\d · 2% · Trailing$/);
+  expect(rupees(await line.innerText())).toBeGreaterThanOrEqual(held);
 
   // Drag the stop down: one modify, and the trail is now the distance in rupees.
   const at = await box(line);

@@ -115,6 +115,8 @@ export const strings = {
     cannotPlace: 'Order cannot be placed',
   },
   trailing: {
+    /** Names the trail's − and + buttons: "Decrease trail", in rupees or percent. */
+    stepLabel: 'trail',
     type: 'Trailing SL',
     notAvailable: 'Not available in this mode',
     notAvailableHint:

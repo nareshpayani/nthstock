@@ -59,6 +59,7 @@ export function TrailingParamsFields({
             className="w-full min-w-0"
             mode="price"
             name="trailValue"
+            stepLabel={strings.trailing.stepLabel}
             // Rupees step by the tick; a percentage by one basis point.
             step={values.unit === 'AMOUNT' ? 5 : 1}
             min={values.unit === 'AMOUNT' ? 5 : 1}

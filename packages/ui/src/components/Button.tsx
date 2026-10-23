@@ -1,6 +1,7 @@
 import { cva, type VariantProps } from 'class-variance-authority';
 import type { ButtonHTMLAttributes, ReactNode, Ref } from 'react';
 import { cn } from '../lib/cn.js';
+import { useTouchTargets } from '../lib/touchTargets.js';
 import { Spinner } from './Spinner.js';
 
 export const buttonVariants = cva(
@@ -49,10 +50,15 @@ export function Button({
   onClick,
   ...rest
 }: ButtonProps) {
+  const touch = useTouchTargets();
   return (
     <button
       type={type}
-      className={cn(buttonVariants({ variant, size, block }), className)}
+      className={cn(
+        buttonVariants({ variant, size, block }),
+        touch && 'min-h-11 min-w-11',
+        className,
+      )}
       disabled={disabled}
       aria-busy={loading || undefined}
       onClick={loading ? (event) => event.preventDefault() : onClick}

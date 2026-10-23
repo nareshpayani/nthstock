@@ -1,6 +1,6 @@
 import type { DepthLevel } from '@nthstock/contracts';
 import { DEPTH_LEVELS } from '@nthstock/contracts';
-import { Skeleton, cn } from '@nthstock/ui';
+import { Skeleton, cn, useTouchTargets } from '@nthstock/ui';
 import { formatInr } from '@nthstock/utils';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { useId } from 'react';
@@ -34,6 +34,7 @@ type SideProps = {
  * so colour is never the only way to tell the sides apart.
  */
 function DepthColumn({ side, levels, onPick }: SideProps) {
+  const touch = useTouchTargets();
   const caption = side === 'bid' ? strings.depth.bids : strings.depth.offers;
   const label = side === 'bid' ? strings.depth.pickBid : strings.depth.pickOffer;
   return (
@@ -49,7 +50,10 @@ function DepthColumn({ side, levels, onPick }: SideProps) {
                   type="button"
                   onClick={() => onPick(level.price)}
                   aria-label={label(formatInr(level.price), count.format(level.qty))}
-                  className="flex h-8 w-full items-center justify-between gap-2 rounded-sm border border-line px-2 font-mono text-label tabular-nums hover:bg-canvas"
+                  className={cn(
+                    'flex w-full items-center justify-between gap-2 rounded-sm border border-line px-2 font-mono text-label tabular-nums hover:bg-canvas',
+                    touch ? 'h-11' : 'h-8',
+                  )}
                 >
                   <span className={cn(side === 'bid' ? 'text-up' : 'text-down')}>
                     {formatInr(level.price)}
@@ -57,7 +61,7 @@ function DepthColumn({ side, levels, onPick }: SideProps) {
                   <span className="text-ink-muted">{count.format(level.qty)}</span>
                 </button>
               ) : (
-                <Skeleton className="h-8 w-full" />
+                <Skeleton className={cn('w-full', touch ? 'h-11' : 'h-8')} />
               )}
             </li>
           );

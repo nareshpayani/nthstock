@@ -1,5 +1,6 @@
 import { RadioGroup } from 'radix-ui';
 import { cn } from '../lib/cn.js';
+import { useTouchTargets } from '../lib/touchTargets.js';
 
 export type SegmentOption<T extends string> = {
   value: T;
@@ -16,7 +17,10 @@ export type SegmentedControlProps<T extends string> = {
   onValueChange: (value: T) => void;
   /** Accessible name of the group, e.g. "Order side". */
   label: string;
-  /** `touch` is the phone size (SPEC-TFC-1 §9.4): segments at least 44 × 44 px. */
+  /**
+   * `touch` is the phone size (SPEC-TFC-1 §9.4): segments at least 44 × 44 px. Inside
+   * `TouchTargets` every size is `touch`.
+   */
   size?: 'sm' | 'md' | 'touch';
   disabled?: boolean;
   className?: string;
@@ -48,6 +52,7 @@ export function SegmentedControl<T extends string>({
   disabled,
   className,
 }: SegmentedControlProps<T>) {
+  const touch = useTouchTargets();
   return (
     <RadioGroup.Root
       aria-label={label}
@@ -71,7 +76,7 @@ export function SegmentedControl<T extends string>({
           {...(option.disabled ? { disabled: true } : {})}
           className={cn(
             'rounded-[6px] font-medium text-ink-muted transition-colors duration-(--nth-duration-flash) hover:text-ink disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:text-ink-muted',
-            SIZES[size],
+            SIZES[touch ? 'touch' : size],
             selectedTone[option.tone ?? 'brand'],
           )}
         >
