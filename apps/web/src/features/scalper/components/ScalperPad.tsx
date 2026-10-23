@@ -1,16 +1,21 @@
-import { isApiError } from '@nthstock/apiClient';
+import { isApiError, type TradingState } from '@nthstock/apiClient';
 import type { Instrument, Order, OrderSide } from '@nthstock/contracts';
 import { cn, useToast } from '@nthstock/ui';
 import { formatInr } from '@nthstock/utils';
-import { useId, useState } from 'react';
+import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { useFocusedDepth } from '@/shared/hooks/useFocusedDepth';
+import { useTradingSelector } from '@/shared/hooks/useTradingSelector';
 import { claimFillToast, fillEventKey } from '@/shared/lib/fillToasts';
+import { useArming, type DisarmReason } from '../hooks/useArming';
+import { useClosePosition } from '../hooks/useClosePosition';
 import { useScalpOrder } from '../hooks/useScalpOrder';
 import {
   QTY_PRESETS,
   ackFor,
+  closeAck,
   newScalpOrderId,
   parseQty,
+  reverseAck,
   scalpRequest,
   sendingAck,
   touchPrices,
@@ -18,17 +23,27 @@ import {
 } from '../model/scalpOrder';
 import { useScalperPrefs } from '../model/scalperPrefs';
 import { strings } from '../strings';
+import { HoldButton } from './HoldButton';
 
 export type ScalperPadProps = { instrument: Instrument };
 
 const TARGET = 'min-h-11 min-w-11';
+const ACTION = cn(
+  'grid min-h-12 content-center gap-0.5 rounded-md border px-3 text-center font-semibold',
+  'focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-brand',
+);
+
+type Busy = 'close' | 'reverse' | null;
 
 /**
- * The scalper pad (T21, SPEC-TFC-1 §11): quantity chips with the size remembered on the device,
- * an Arm switch, and Sell at bid and Buy at ask, each one tap while armed. A button sends an
+ * The scalper pad (T21, T22, SPEC-TFC-1 §11): quantity chips with the size remembered on the
+ * device, an Arm switch, Sell at bid and Buy at ask, Flatten and Reverse. A trade button sends an
  * intraday IOC limit at the price it shows, taken from the depth in the same frame, so nothing is
- * left resting. Every answer shows as an acknowledgement chip and a toast. While disarmed the
- * buttons say "Arm to trade" and send nothing. No depth ladder (REQ-SCP-01).
+ * left resting. Flatten closes the intraday position in one tap; Reverse closes it and opens the
+ * same size the other way, and needs a 400 ms hold because it doubles exposure. Every answer
+ * shows as an acknowledgement chip and a toast. While disarmed the buttons say "Arm to trade" and
+ * send nothing; the pad disarms itself after two idle minutes, when the page is hidden and when
+ * the instrument changes (§11.3). No depth ladder (REQ-SCP-01).
  */
 export function ScalperPad({ instrument }: ScalperPadProps) {
   const { symbol, exchange, token } = instrument;
@@ -39,23 +54,48 @@ export function ScalperPad({ instrument }: ScalperPadProps) {
   const pick = useScalperPrefs((s) => s.pick);
   const pickCustom = useScalperPrefs((s) => s.pickCustom);
   const [custom, setCustom] = useState(customQty === null ? '' : String(customQty));
-  const [armed, setArmed] = useState(false);
   const [ack, setAck] = useState<Ack | null>(null);
+  const onDisarm = useCallback((reason: DisarmReason) => {
+    setAck({ tone: 'info', text: reason === 'idle' ? strings.arm.idle : strings.arm.hidden });
+  }, []);
+  const { armed, setArmed, noteTrade } = useArming(token, onDisarm);
+  const busy = useRef<Busy>(null);
+  // The touch when an answer lands: Reverse enters at the price on screen then, not at the tap.
+  const touch = useRef({ bid, ask });
+  useEffect(() => {
+    touch.current = { bid, ask };
+  }, [bid, ask]);
+  const selectNetQty = useCallback(
+    (state: TradingState) =>
+      state.positions.find(
+        (position) => position.token === token && position.product === 'INTRADAY',
+      )?.netQty ?? 0,
+    [token],
+  );
+  const netQty = useTradingSelector(selectNetQty);
   const armDescription = useId();
+  const flattenDescription = useId();
+  const reverseDescription = useId();
   const customSelected =
     customQty !== null && qty === customQty && !(QTY_PRESETS as readonly number[]).includes(qty);
   const send = useScalpOrder();
+  const close = useClosePosition();
   const toast = useToast();
 
-  const report = (order: Order) => {
-    const next = ackFor(order);
+  const report = (order: Order, next: Ack = ackFor(order), closing = false) => {
     setAck(next);
     const price = order.avgFillPrice === null ? '' : formatInr(order.avgFillPrice);
     const description = strings.toast.description(order.side, order.filledQty, symbol, price);
     if (next.tone === 'filled' || next.tone === 'partial') {
       if (!claimFillToast(fillEventKey(order))) return;
-      const title = next.tone === 'filled' ? strings.toast.filled : strings.toast.partial;
-      toast.show({ title, description, tone: 'success' });
+      const title = closing
+        ? next.tone === 'filled'
+          ? strings.toast.closed
+          : strings.toast.partlyClosed
+        : next.tone === 'filled'
+          ? strings.toast.filled
+          : strings.toast.partial;
+      toast.show({ title, description: closing ? next.text : description, tone: 'success' });
     } else {
       const title = next.tone === 'rejected' ? strings.toast.rejected : strings.toast.unfilled;
       toast.show({
@@ -66,18 +106,63 @@ export function ScalperPad({ instrument }: ScalperPadProps) {
     }
   };
 
+  const failed = (error: unknown) => {
+    const refused = isApiError(error) && error.kind !== 'network' && error.status < 500;
+    const text = refused ? strings.ack.rejected(error.message) : strings.ack.failed;
+    setAck({ tone: 'rejected', text });
+    toast.show({ title: strings.toast.rejected, description: text, tone: 'error' });
+  };
+
   const trade = (side: OrderSide) => {
     const price = side === 'BUY' ? ask : bid;
-    if (!armed || price === null) return;
+    if (!armed || price === null || busy.current !== null) return;
+    noteTrade();
     setAck(sendingAck(side, qty));
     send(scalpRequest(side, qty, price, token, newScalpOrderId()))
-      .then(report)
-      .catch((error: unknown) => {
-        const refused = isApiError(error) && error.kind !== 'network' && error.status < 500;
-        const text = refused ? strings.ack.rejected(error.message) : strings.ack.failed;
-        setAck({ tone: 'rejected', text });
-        toast.show({ title: strings.toast.rejected, description: text, tone: 'error' });
+      .then((order) => report(order))
+      .catch(failed);
+  };
+
+  const flatten = () => {
+    if (!armed || netQty === 0 || busy.current !== null) return;
+    busy.current = 'close';
+    noteTrade();
+    setAck({ tone: 'sending', text: strings.ack.closing });
+    close(token)
+      .then((exit) => report(exit, closeAck(exit), true))
+      .catch(failed)
+      .finally(() => {
+        busy.current = null;
       });
+  };
+
+  // Close, then the same size the other way at the touch; a part close stops there (§11.2).
+  const reverse = async () => {
+    if (!armed || netQty === 0 || busy.current !== null) return;
+    busy.current = 'reverse';
+    noteTrade();
+    setAck({ tone: 'sending', text: strings.ack.reversing });
+    try {
+      const exit = await close(token);
+      const closed = closeAck(exit);
+      if (closed.tone !== 'filled') {
+        report(exit, closed, true);
+        return;
+      }
+      const price = exit.side === 'BUY' ? touch.current.ask : touch.current.bid;
+      if (price === null) {
+        report(exit, closed, true);
+        return;
+      }
+      const entry = await send(
+        scalpRequest(exit.side, exit.filledQty, price, token, newScalpOrderId()),
+      );
+      report(entry, reverseAck(entry));
+    } catch (error) {
+      failed(error);
+    } finally {
+      busy.current = null;
+    }
   };
 
   const onCustom = (text: string) => {
@@ -138,7 +223,7 @@ export function ScalperPad({ instrument }: ScalperPadProps) {
           role="switch"
           aria-checked={armed}
           aria-describedby={armDescription}
-          onClick={() => setArmed((on) => !on)}
+          onClick={() => setArmed(!armed)}
           className={cn(
             TARGET,
             'flex items-center gap-2 rounded-pill border px-3 text-body font-semibold',
@@ -166,6 +251,58 @@ export function ScalperPad({ instrument }: ScalperPadProps) {
           onTrade={trade}
         />
         <PadButton side="BUY" armed={armed} price={ask} qty={qty} symbol={symbol} onTrade={trade} />
+      </div>
+
+      <div className="grid grid-cols-2 gap-2">
+        <button
+          type="button"
+          aria-disabled={!armed || netQty === 0}
+          aria-describedby={flattenDescription}
+          data-testid="scalp-flatten"
+          onClick={flatten}
+          className={cn(
+            ACTION,
+            armed && netQty !== 0
+              ? 'border-ink bg-surface text-ink'
+              : 'border-dashed border-line bg-canvas text-ink-muted',
+          )}
+        >
+          <span className="text-body">{strings.flatten.label}</span>{' '}
+          <span className="font-mono text-label tabular-nums">
+            {!armed
+              ? strings.armToTrade
+              : netQty === 0
+                ? strings.flatten.flat
+                : strings.flatten.exit(netQty > 0 ? 'SELL' : 'BUY', Math.abs(netQty))}
+          </span>
+          <span id={flattenDescription} hidden>
+            {strings.flatten.description(symbol)}
+          </span>
+        </button>
+        <HoldButton
+          ready={armed && netQty !== 0}
+          onHold={() => void reverse()}
+          describedBy={reverseDescription}
+          testId="scalp-reverse"
+          className={cn(
+            ACTION,
+            armed && netQty !== 0
+              ? 'border-ink bg-surface text-ink'
+              : 'border-dashed border-line bg-canvas text-ink-muted',
+          )}
+        >
+          <span className="text-body">{strings.reverse.label}</span>{' '}
+          <span className="text-label">
+            {!armed
+              ? strings.armToTrade
+              : netQty === 0
+                ? strings.flatten.flat
+                : strings.reverse.hold}
+          </span>
+          <span id={reverseDescription} hidden>
+            {strings.reverse.description(symbol)}
+          </span>
+        </HoldButton>
       </div>
 
       <p

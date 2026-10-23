@@ -96,3 +96,68 @@ test('scalp INFY from the pad at 390 px: arm, buy at ask, sell at bid (T21)', as
     'true',
   );
 });
+
+// T22 (SPEC-TFC-1 §11.2, §11.3, REQ-SCP-03, REQ-SCP-05): Flatten in one tap; Reverse only after a
+// 400 ms hold, which closes the position and opens the same size the other way.
+test('flatten and reverse from the pad at 390 px (T22)', async ({ page }) => {
+  test.setTimeout(90_000);
+  await page.clock.setFixedTime(MONDAY_10_IST);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto('/login?redirect=%2Fstocks%2FINFY');
+  await logIn(page, uniqueMobile());
+  await expect(page).toHaveURL(/\/stocks\/INFY$/);
+
+  const sent: string[] = [];
+  page.on('request', (request) => {
+    if (request.method() === 'POST' && /\/v1\/(orders|positions\/close)$/.test(request.url())) {
+      sent.push(new URL(request.url()).pathname);
+    }
+  });
+
+  await page.getByRole('switch', { name: 'Scalp' }).click();
+  const pad = page.getByRole('region', { name: 'Scalper for INFY' });
+  const buy = pad.getByTestId('scalp-buy');
+  const flatten = pad.getByTestId('scalp-flatten');
+  const reverse = pad.getByTestId('scalp-reverse');
+  const ack = pad.getByRole('status', { name: 'Last scalp order' });
+  const strip = page.getByTestId('position-strip');
+  await pad.getByRole('radio', { name: '5 shares', exact: true }).click();
+  await pad.getByRole('switch', { name: 'Arm' }).click();
+  await expect(flatten).toContainText('No position');
+
+  const buyFive = async () => {
+    await expect(buy).toContainText(/Buy at ask\s*₹[\d,]+\.\d\d/);
+    await setPrice(page, 'INFY', onTick(paiseIn(await buy.innerText()) * 0.97));
+    await buy.click();
+    await expect(ack).toHaveText(/^Bought 5 @ ₹/);
+    await expect(strip).toContainText(/\+5\s*@ ₹/);
+  };
+
+  // Flatten: one tap closes it.
+  await buyFive();
+  await expect(flatten).toContainText('Sell 5');
+  await flatten.click();
+  await expect(ack).toHaveText(/^Closed: sold 5 @ ₹/);
+  await expect(strip).toHaveCount(0);
+  expect(sent).toEqual(['/v1/orders', '/v1/positions/close']);
+
+  // Reverse: a tap sends nothing; holding it closes the long and opens a short of 5.
+  await buyFive();
+  await expect(reverse).toContainText('Hold to reverse');
+  await reverse.click();
+  await page.waitForTimeout(600);
+  expect(sent).toHaveLength(3);
+  const sell = pad.getByTestId('scalp-sell');
+  await setPrice(page, 'INFY', onTick(paiseIn(await sell.innerText()) * 1.03));
+  await reverse.hover();
+  await page.mouse.down();
+  await expect(ack).toHaveText(/^Reversed: Sold 5 @ ₹/);
+  await page.mouse.up();
+  await expect(strip).toContainText(/[−-]5\s*@ ₹/);
+  expect(sent.slice(3)).toEqual(['/v1/positions/close', '/v1/orders']);
+  await expectNoSeriousA11yViolations(
+    page,
+    'scalper pad with a position',
+    '[data-testid="scalper-pad"]',
+  );
+});

@@ -46,7 +46,7 @@ export function newScalpOrderId(): string {
   return `scp_${[...bytes].map((b) => b.toString(16).padStart(2, '0')).join('')}`;
 }
 
-export type AckTone = 'sending' | 'filled' | 'partial' | 'unfilled' | 'rejected';
+export type AckTone = 'sending' | 'filled' | 'partial' | 'unfilled' | 'rejected' | 'info';
 export type Ack = { tone: AckTone; text: string };
 
 const pastVerb = (side: OrderSide) => (side === 'BUY' ? 'Bought' : 'Sold');
@@ -78,6 +78,43 @@ export function ackFor(order: Order): Ack {
     };
   }
   return { tone: 'unfilled', text: strings.ack.unfilled };
+}
+
+/**
+ * The acknowledgement for a close (Flatten, or the first leg of Reverse; §11.2, T22). The close is
+ * a reduce-only market exit, so it settles at once: all of it, part of it ("Partly closed: N
+ * left"), none, or a rejection.
+ */
+export function closeAck(order: Order): Ack {
+  const price = order.avgFillPrice === null ? null : formatInr(order.avgFillPrice);
+  if (order.status === 'REJECTED') {
+    return { tone: 'rejected', text: strings.ack.rejected(order.statusReason ?? 'not accepted') };
+  }
+  if (order.filledQty >= order.qty && price !== null) {
+    return {
+      tone: 'filled',
+      text: strings.ack.closed(pastVerb(order.side), order.filledQty, price),
+    };
+  }
+  if (order.filledQty > 0) {
+    return { tone: 'partial', text: strings.ack.partlyClosed(order.qty - order.filledQty) };
+  }
+  return { tone: 'unfilled', text: strings.ack.notClosed };
+}
+
+/** The acknowledgement for Reverse once its entry, the second leg, has answered. */
+export function reverseAck(entry: Order): Ack {
+  const next = ackFor(entry);
+  if (next.tone === 'filled' || next.tone === 'partial') {
+    return { tone: next.tone, text: strings.ack.reversed(next.text) };
+  }
+  if (next.tone === 'rejected') {
+    return {
+      tone: 'rejected',
+      text: strings.ack.reverseRejected(entry.statusReason ?? 'not accepted'),
+    };
+  }
+  return { tone: 'unfilled', text: strings.ack.reverseUnfilled };
 }
 
 /** A whole number of shares, 1 or more, from the custom field; null otherwise. */

@@ -1,6 +1,14 @@
 import type { Depth, Order } from '@nthstock/contracts';
 import { describe, expect, it } from 'vitest';
-import { ackFor, parseQty, scalpRequest, sendingAck, touchPrices } from './scalpOrder';
+import {
+  ackFor,
+  closeAck,
+  parseQty,
+  reverseAck,
+  scalpRequest,
+  sendingAck,
+  touchPrices,
+} from './scalpOrder';
 
 const level = (price: number) => ({ price, qty: 100, orders: 2 });
 const depth = (bid: number, ask: number) =>
@@ -73,5 +81,63 @@ describe('scalp orders (T21, SPEC-TFC-1 §11.2)', () => {
     expect(parseQty('0')).toBeNull();
     expect(parseQty('2.5')).toBeNull();
     expect(parseQty('')).toBeNull();
+  });
+});
+
+describe('close and reverse acknowledgements (T22, SPEC-TFC-1 §11.2)', () => {
+  const EXIT: Order = {
+    ...ORDER,
+    id: 'ord_2',
+    clientOrderId: null,
+    side: 'SELL',
+    type: 'MARKET',
+    price: null,
+    validity: 'DAY',
+  };
+
+  it('a full close says what was closed', () => {
+    expect(closeAck(EXIT)).toEqual({ tone: 'filled', text: 'Closed: sold 10 @ ₹1,234.55' });
+  });
+
+  it('a part close says how much is left', () => {
+    expect(closeAck({ ...EXIT, filledQty: 6, status: 'CANCELLED' })).toEqual({
+      tone: 'partial',
+      text: 'Partly closed: 4 left',
+    });
+  });
+
+  it('a close with no fill, or a rejected one, says so', () => {
+    expect(closeAck({ ...EXIT, filledQty: 0, avgFillPrice: null, status: 'CANCELLED' }).tone).toBe(
+      'unfilled',
+    );
+    expect(
+      closeAck({
+        ...EXIT,
+        filledQty: 0,
+        avgFillPrice: null,
+        status: 'REJECTED',
+        statusReason: 'Market closed',
+      }),
+    ).toEqual({ tone: 'rejected', text: 'Rejected: Market closed' });
+  });
+
+  it('a reverse names its entry, or says the entry did not fill', () => {
+    const entry: Order = { ...ORDER, side: 'SELL' };
+    expect(reverseAck(entry)).toEqual({ tone: 'filled', text: 'Reversed: Sold 10 @ ₹1,234.55' });
+    expect(reverseAck({ ...entry, filledQty: 0, avgFillPrice: null, status: 'CANCELLED' })).toEqual(
+      {
+        tone: 'unfilled',
+        text: 'Closed, but the reverse entry did not fill: the price moved.',
+      },
+    );
+    expect(
+      reverseAck({
+        ...entry,
+        filledQty: 0,
+        avgFillPrice: null,
+        status: 'REJECTED',
+        statusReason: 'Insufficient funds',
+      }).text,
+    ).toBe('Closed, but the reverse entry was rejected: Insufficient funds');
   });
 });
