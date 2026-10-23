@@ -162,7 +162,9 @@ test.describe(`chart gestures by touch (T20, SPEC-TFC-1 §9.1) ${TOUCH_TAG}`, ()
     const from = await centreOf(ghost);
     await chart.touch.drag(from, { x: from.x - 40, y: from.y - 30 });
     expect(rupees(await ghost.innerText())).toBeGreaterThan(tapped);
-    expect((await chart.timeAxis()).equals(axis)).toBe(true);
+    // WebKit's drag is a mouse, which leaves the crosshair's date label on the axis: move it off.
+    if (!chart.touch.multiTouch) await page.mouse.move(0, 0);
+    await expect.poll(async () => (await chart.timeAxis()).equals(axis)).toBe(true);
     expect(sent).toEqual([]);
   });
 

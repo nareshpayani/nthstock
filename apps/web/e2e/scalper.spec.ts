@@ -62,7 +62,13 @@ test('scalp INFY from the pad at 390 px: arm, buy at ask, sell at bid (T21)', as
   await buy.click();
   const ack = pad.getByRole('status', { name: 'Last scalp order' });
   await expect(ack).toHaveText(/^Bought 5 @ ₹[\d,]+\.\d\d$/);
-  await expect(page.getByRole('status').filter({ hasText: 'Scalp filled' }).first()).toBeVisible();
+  // One toast per fill, from whichever hears of it first: the pad's answer or the order stream.
+  await expect(
+    page
+      .getByRole('status')
+      .filter({ hasText: /Scalp filled|Order executed/ })
+      .first(),
+  ).toBeVisible();
   const strip = page.getByTestId('position-strip');
   await expect(strip).toContainText(/\+5\s*@ ₹[\d,]+\.\d{2}/);
   await expect(strip).toContainText(/₹[\d,]+\.\d\d/);
