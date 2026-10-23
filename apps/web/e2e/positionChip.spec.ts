@@ -53,8 +53,9 @@ for (const viewport of VIEWPORTS) {
     await expect.poll(() => chip.innerText(), { timeout: 20_000 }).not.toBe(first);
 
     // A drag that starts on the chip pans the chart and opens nothing. Zoom in first: with every
-    // bar in view, the pinned edges leave nothing to pan to. The phone zooms by pinch only, which
-    // needs the CDP touch helper (T20), so there the drag is checked to open nothing.
+    // bar in view, the pinned edges leave nothing to pan to. The phone zooms by pinch only, so
+    // here the phone drag is checked to open nothing; chartGestures.spec.ts pinches, then pans
+    // from the chip by touch (T20).
     const phone = viewport.name === 'phone';
     const host = figure.getByTestId('chart-host');
     const plot = await box(host);

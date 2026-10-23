@@ -272,6 +272,69 @@ describe('chart overlay (T15, SPEC-TFC-1 §10.5)', () => {
     expect(onHandleTap).toHaveBeenCalledWith('pos');
   });
 
+  it('Escape mid-drag restores the line, and a pointer up after it sends nothing (T20, §9.1)', () => {
+    const onDragEnd = vi.fn();
+    render(
+      <ChartOverlay
+        handle={makeHandle()}
+        tickSize={5}
+        label="Chart orders"
+        lines={[line({ id: 'o1', price: 150_000 })]}
+        onDragEnd={onDragEnd}
+      />,
+    );
+    const handle = screen.getByTestId('chart-handle');
+    pointer(handle, 'pointerdown', 200);
+    pointer(handle, 'pointermove', 160);
+    fireEvent.keyDown(document.body, { key: 'Escape' });
+    expect(onDragEnd).toHaveBeenCalledExactlyOnceWith('o1', null);
+    pointer(handle, 'pointerup', 160);
+    expect(onDragEnd).toHaveBeenCalledTimes(1);
+  });
+
+  it('a second finger on a chip press or a gutter press cancels it: no tap, no pan, no ghost (T20)', () => {
+    const handle = makeHandle();
+    const onHandleTap = vi.fn();
+    const onGutterTap = vi.fn();
+    render(
+      <ChartOverlay
+        handle={handle}
+        tickSize={5}
+        label="Chart orders for INFY"
+        lines={[line({ id: 'pos', price: 150_000, tone: 'position', draggable: false })]}
+        onHandleTap={onHandleTap}
+        onGutterTap={onGutterTap}
+      />,
+    );
+    const chip = screen.getByTestId('chart-handle');
+    const range = () => chartsMock.active().at(-1)?.logicalRange;
+    pointer(chip, 'pointerdown', 200, 1, 100);
+    pointer(document.body, 'pointerdown', 200, 2, 200);
+    pointer(chip, 'pointermove', 200, 1, 160);
+    pointer(chip, 'pointerup', 200, 1, 160);
+    expect(onHandleTap).not.toHaveBeenCalled();
+    expect(range()).toEqual({ from: 0, to: 60 });
+
+    const gutter = screen.getByTestId('chart-gutter');
+    pointer(gutter, 'pointerdown', 100, 3);
+    pointer(document.body, 'pointerdown', 120, 4);
+    pointer(gutter, 'pointerup', 100, 3);
+    expect(onGutterTap).not.toHaveBeenCalled();
+  });
+
+  it('a long-press on a handle or the gutter opens no menu (T20)', () => {
+    render(
+      <ChartOverlay
+        handle={makeHandle()}
+        tickSize={5}
+        label="Chart orders"
+        lines={[line({ id: 'o1', price: 150_000 })]}
+      />,
+    );
+    expect(fireEvent.contextMenu(screen.getByTestId('chart-handle'))).toBe(false);
+    expect(fireEvent.contextMenu(screen.getByTestId('chart-gutter'))).toBe(false);
+  });
+
   it('dragging an offset label moves its price by the finger, not to the label (T19, §8.4)', () => {
     const handle = makeHandle();
     const onDragMove = vi.fn();
