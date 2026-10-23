@@ -37,6 +37,11 @@ async function openChart(page: Page): Promise<Chart> {
   const host = figure.getByTestId('chart-host');
   await host.scrollIntoViewIfNeeded();
   const timeAxis = async () => {
+    // The same place on screen each time, clear of the sticky bottom bar on a short phone (the
+    // iPhone 13 is 664 px tall): a tap target scrolled to the centre moves the page.
+    await host.evaluate((element) =>
+      element.scrollIntoView({ block: 'center', inline: 'nearest' }),
+    );
     const plot = await host.boundingBox();
     if (!plot) throw new Error('no chart');
     const clip = { x: plot.x, y: plot.y + plot.height - 26, width: plot.width - 72, height: 26 };
