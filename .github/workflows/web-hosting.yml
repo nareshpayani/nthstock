@@ -94,8 +94,8 @@ jobs:
         run: |
           export GOOGLE_APPLICATION_CREDENTIALS="$RUNNER_TEMP/firebaseServiceAccount.json"
           printf '%s' "$SERVICE_ACCOUNT" > "$GOOGLE_APPLICATION_CREDENTIALS"
+          trap 'rm -f "$GOOGLE_APPLICATION_CREDENTIALS"' EXIT
           bash tools/github/sweepPreviewChannels.sh || echo "::warning::Preview channel sweep failed"
-          rm -f "$GOOGLE_APPLICATION_CREDENTIALS"
       # Third-party and handed the service-account key, so pinned to a commit.
       - id: deploy
         uses: FirebaseExtended/action-hosting-deploy@500ac625ca2dd40cbd15f7659af953801858032a # v0
