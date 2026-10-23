@@ -9,6 +9,7 @@ import {
   E2E_WEBKIT,
   PERF_TAG,
   REALTIME_ORIGIN,
+  JOURNEY_TAG,
   TOUCH_TAG,
 } from './e2e/support/env';
 
@@ -94,11 +95,14 @@ const apiServers = [
   },
 ];
 
+// The touch projects run the touch specs and the journeys (T26); the desktop project runs the
+// journeys too, since it skips only @touch and @perf.
+const TOUCH_PROJECT_GREP = new RegExp(`${TOUCH_TAG}|${JOURNEY_TAG}`);
 const launch = executablePath ? { launchOptions: { executablePath } } : {};
 const touchProjects = [
   {
     name: 'chromium-mobile',
-    grep: new RegExp(TOUCH_TAG),
+    grep: TOUCH_PROJECT_GREP,
     use: {
       ...devices['Pixel 7'],
       viewport: { width: 390, height: 844 },
@@ -107,7 +111,7 @@ const touchProjects = [
     },
   },
   ...(E2E_WEBKIT
-    ? [{ name: 'webkit-iphone', grep: new RegExp(TOUCH_TAG), use: { ...devices['iPhone 13'] } }]
+    ? [{ name: 'webkit-iphone', grep: TOUCH_PROJECT_GREP, use: { ...devices['iPhone 13'] } }]
     : []),
 ];
 

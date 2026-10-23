@@ -37,3 +37,24 @@ test('demo login, a market buy, and the guide', async ({ page }) => {
   await expectNoSeriousA11yViolations(page, '/dashboard');
   expect(errors, 'uncaught page errors').toEqual([]);
 });
+
+// T26 (SPEC-TFC-1 §13, REQ-DEL-03): a reviewer on a phone. A cold load of /login at 390 px, then
+// Try demo, lands on the demo instrument with the chart and the trade bar on screen, with no
+// sideways scroll and no uncaught errors.
+test('on a 390 px phone: cold load, Try demo, the chart and trade bar', async ({ page }) => {
+  test.setTimeout(120_000);
+  const errors: string[] = [];
+  page.on('pageerror', (error) => errors.push(error.message));
+  await page.setViewportSize({ width: 390, height: 844 });
+
+  await page.goto('/login');
+  await page.getByRole('button', { name: 'Try demo' }).click();
+  await expect(page).toHaveURL(/\/stocks\/RELIANCE$/);
+  await expect(page.getByRole('figure', { name: /RELIANCE area chart/ })).toBeVisible();
+  await expect(page.getByRole('group', { name: 'Trade RELIANCE' })).toBeVisible();
+  const overflow = await page.evaluate(
+    () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+  );
+  expect(overflow, 'horizontal scroll at 390 px').toBeLessThanOrEqual(0);
+  expect(errors, 'uncaught page errors').toEqual([]);
+});
