@@ -1,4 +1,5 @@
 export { cn, type ClassValue } from './lib/cn.js';
+export { TouchTargets, useTouchTargets } from './lib/touchTargets.js';
 export { createIcon, type IconComponent, type IconProps } from './icons/createIcon.js';
 export * from './icons/icons.js';
 export { Logo, type LogoProps } from './icons/Logo.js';
