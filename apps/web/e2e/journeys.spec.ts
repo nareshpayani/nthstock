@@ -92,8 +92,17 @@ test.describe(`journeys US-01 to US-05 (T26) ${JOURNEY_TAG}`, () => {
     const limit = rupees(await ghost.innerText());
 
     // US-02: Buy from the ghost opens the compact ticket at that price; attach a 1% trailing stop.
-    await input.press(figure.getByRole('button', { name: /^Buy at ₹.*review before placing$/ }));
+    // The handle's buttons move with every chart repaint, so a tap at a centre measured a moment
+    // ago can miss: measure and tap again until the ticket opens.
     const ticket = page.getByRole('dialog', { name: 'Trade INFY' });
+    await expect(async () => {
+      if (!(await ticket.isVisible())) {
+        await input.press(
+          figure.getByRole('button', { name: /^Buy at ₹.*review before placing$/ }),
+        );
+      }
+      await expect(ticket).toBeVisible({ timeout: 1500 });
+    }).toPass({ timeout: 15_000 });
     await expect(ticket.getByRole('textbox', { name: 'Price (₹)' })).toHaveValue(limit.toFixed(2));
     await input.press(ticket.getByRole('switch', { name: 'Add trailing stop' }));
     await ticket.getByRole('textbox', { name: 'Trail (%)' }).fill('1');
