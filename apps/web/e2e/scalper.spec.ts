@@ -1,6 +1,7 @@
 import { expect, test } from '@playwright/test';
 import { logIn, uniqueMobile } from './support/auth';
 import { expectNoSeriousA11yViolations } from './support/axe';
+import { setPrice } from './support/testControls';
 
 // T21 (SPEC-TFC-1 §11, REQ-SCP-01, REQ-SCP-02, REQ-SCP-04): the scalper pad on a 390 px phone.
 // The Scalp switch swaps Sell and Buy for the pad. Disarmed, nothing sends; armed, Buy at ask and
@@ -10,6 +11,13 @@ import { expectNoSeriousA11yViolations } from './support/axe';
 // The page clock is fixed at Monday 28 Sep 2026, 10:00 IST, so the in-browser paper engine sees
 // NSE open.
 const MONDAY_10_IST = new Date('2026-09-28T04:30:00.000Z');
+
+const paiseIn = (text: string) => {
+  const match = /₹([\d,]+\.\d\d)/.exec(text);
+  if (!match?.[1]) throw new Error(`no price in "${text}"`);
+  return Math.round(Number(match[1].replaceAll(',', '')) * 100);
+};
+const onTick = (paise: number) => Math.round(paise / 5) * 5;
 
 test('scalp INFY from the pad at 390 px: arm, buy at ask, sell at bid (T21)', async ({ page }) => {
   test.setTimeout(90_000);
@@ -48,10 +56,19 @@ test('scalp INFY from the pad at 390 px: arm, buy at ask, sell at bid (T21)', as
   await pad.getByRole('switch', { name: 'Arm' }).click();
   await expect(buy).toContainText(/Buy at ask\s*₹[\d,]+\.\d\d/);
   await expectNoSeriousA11yViolations(page, 'scalper pad, armed', '[data-testid="scalper-pad"]');
+  // The engine's price is pinned a little under the ask shown, so the IOC buy is marketable even
+  // if the live price ticks between the frame and the tap (it fills at the better price).
+  await setPrice(page, 'INFY', onTick(paiseIn(await buy.innerText()) * 0.97));
   await buy.click();
   const ack = pad.getByRole('status', { name: 'Last scalp order' });
   await expect(ack).toHaveText(/^Bought 5 @ ₹[\d,]+\.\d\d$/);
-  await expect(page.getByRole('status').filter({ hasText: 'Scalp filled' }).first()).toBeVisible();
+  // One toast per fill, from whichever hears of it first: the pad's answer or the order stream.
+  await expect(
+    page
+      .getByRole('status')
+      .filter({ hasText: /Scalp filled|Order executed/ })
+      .first(),
+  ).toBeVisible();
   const strip = page.getByTestId('position-strip');
   await expect(strip).toContainText(/\+5\s*@ ₹[\d,]+\.\d{2}/);
   await expect(strip).toContainText(/₹[\d,]+\.\d\d/);
@@ -64,7 +81,8 @@ test('scalp INFY from the pad at 390 px: arm, buy at ask, sell at bid (T21)', as
     validity: 'IOC',
   });
 
-  // Sell at bid closes it.
+  // Sell at bid closes it; the engine's price is pinned a little over the bid shown.
+  await setPrice(page, 'INFY', onTick(paiseIn(await sell.innerText()) * 1.03));
   await sell.click();
   await expect(ack).toHaveText(/^Sold 5 @ ₹[\d,]+\.\d\d$/);
   await expect(strip).toHaveCount(0);

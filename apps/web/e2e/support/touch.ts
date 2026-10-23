@@ -29,9 +29,15 @@ export type Touch = {
 
 const LONG_PRESS_MS = 700;
 
-/** The centre of an element, scrolled into view, for a tap or the start of a drag. */
+/**
+ * The centre of an element, for a tap or the start of a drag. The element is scrolled to the
+ * middle of the screen first, clear of the sticky trade bar and the toasts at the bottom, which a
+ * plain scroll into view can leave on top of it on a short phone.
+ */
 export async function centreOf(locator: Locator): Promise<Point> {
-  await locator.scrollIntoViewIfNeeded();
+  await locator.evaluate((element) =>
+    element.scrollIntoView({ block: 'center', inline: 'nearest' }),
+  );
   const rect = await locator.boundingBox();
   if (!rect) throw new Error('element has no box');
   return { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 };

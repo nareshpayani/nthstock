@@ -1,0 +1,4 @@
+# False positives from `gitleaks git` (the Secret scan job), one fingerprint per line.
+# A localStorage item name for the scalper's quantity preference, not a credential.
+5376650717b8ac7d374a9e4b0b16b5cf1fff0063:apps/web/src/features/scalper/model/scalperPrefs.ts:generic-api-key:5
+3c64438ab19265112a49f48ec95be1c0551722d2:apps/web/src/features/scalper/model/scalperPrefs.ts:generic-api-key:5

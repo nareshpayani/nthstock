@@ -11,6 +11,8 @@ import { centreOf, touchscreen, type Touch } from './support/touch';
 // The page clock is fixed at Monday 28 Sep 2026, 10:00 IST, so NSE is open for the paper engine.
 const MONDAY_10_IST = new Date('2026-09-28T04:30:00.000Z');
 const NEEDS_REAL_TOUCH = 'Playwright drives WebKit with a one-finger touchscreen only';
+const NEEDS_PINCH =
+  'Panning needs a zoom first, and mobile WebKit in Playwright has neither a pinch nor a wheel';
 
 type Chart = {
   page: Page;
@@ -51,14 +53,9 @@ async function openChart(page: Page): Promise<Chart> {
   return { page, touch: await touchscreen(page), figure, host, gutter, timeAxis, settle };
 }
 
-/** Zooms in on the plot, so there is time to pan to: a pinch, or the wheel where there is none. */
-async function zoomIn({ page, touch, host, settle }: Chart) {
-  const centre = await centreOf(host);
-  if (touch.multiTouch) await touch.pinch(centre, 40, 240);
-  else {
-    await page.mouse.move(centre.x, centre.y);
-    await page.mouse.wheel(0, -600);
-  }
+/** Zooms in on the plot with a pinch, so there is time to pan to. */
+async function zoomIn({ touch, host, settle }: Chart) {
+  await touch.pinch(await centreOf(host), 40, 240);
   await settle();
 }
 
@@ -118,6 +115,7 @@ test.describe(`chart gestures by touch (T20, SPEC-TFC-1 §9.1) ${TOUCH_TAG}`, ()
     page,
   }) => {
     const chart = await openChart(page);
+    test.skip(!chart.touch.multiTouch, NEEDS_PINCH);
     const sent = orderRequests(page);
     await zoomIn(chart);
     const before = await chart.timeAxis();
@@ -164,7 +162,9 @@ test.describe(`chart gestures by touch (T20, SPEC-TFC-1 §9.1) ${TOUCH_TAG}`, ()
     const from = await centreOf(ghost);
     await chart.touch.drag(from, { x: from.x - 40, y: from.y - 30 });
     expect(rupees(await ghost.innerText())).toBeGreaterThan(tapped);
-    expect((await chart.timeAxis()).equals(axis)).toBe(true);
+    // WebKit's drag is a mouse, which leaves the crosshair's date label on the axis: move it off.
+    if (!chart.touch.multiTouch) await page.mouse.move(0, 0);
+    await expect.poll(async () => (await chart.timeAxis()).equals(axis)).toBe(true);
     expect(sent).toEqual([]);
   });
 
@@ -181,6 +181,13 @@ test.describe(`chart gestures by touch (T20, SPEC-TFC-1 §9.1) ${TOUCH_TAG}`, ()
     await expect(ticket).toBeHidden();
     const chip = chart.figure.locator('[data-testid="chart-handle"][data-tone="position"]');
     await expect(chip).toHaveText(/\+2 @ ₹/);
+    // Tapping the chip works everywhere; the pan from it needs a zoom first (Chromium).
+    await chart.touch.tap(await centreOf(chip));
+    const sheet = page.getByRole('dialog', { name: 'Trailing stop · INFY' });
+    await expect(sheet).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(sheet).toBeHidden();
+    if (!chart.touch.multiTouch) return;
 
     await zoomIn(chart);
     const before = await chart.timeAxis();

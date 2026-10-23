@@ -2,7 +2,8 @@ import { create } from 'zustand';
 import { safeStorage } from '@/shared/lib/safeStorage';
 import { QTY_PRESETS } from './scalpOrder';
 
-const KEY = 'nthstock.scalper.v1';
+/** The localStorage item that holds the size (a preference, never a credential). */
+const PREFS_ITEM = 'nthstock.scalper.v1';
 
 export type ScalperPrefs = {
   /** The size the pad sends. */
@@ -18,7 +19,7 @@ const validQty = (value: unknown): value is number =>
 
 function load(): ScalperPrefs {
   try {
-    const saved: unknown = JSON.parse(safeStorage.get(KEY) ?? 'null');
+    const saved: unknown = JSON.parse(safeStorage.get(PREFS_ITEM) ?? 'null');
     if (!saved || typeof saved !== 'object') return DEFAULTS;
     const { qty, customQty } = saved as Record<string, unknown>;
     return {
@@ -42,7 +43,7 @@ type ScalperPrefsStore = ScalperPrefs & {
 export const useScalperPrefs = create<ScalperPrefsStore>()((set, get) => {
   const save = () => {
     const { qty, customQty } = get();
-    safeStorage.set(KEY, JSON.stringify({ qty, customQty }));
+    safeStorage.set(PREFS_ITEM, JSON.stringify({ qty, customQty }));
   };
   return {
     ...load(),
@@ -59,6 +60,6 @@ export const useScalperPrefs = create<ScalperPrefsStore>()((set, get) => {
 
 /** Tests only: forget the saved size. */
 export function resetScalperPrefs(): void {
-  safeStorage.remove(KEY);
+  safeStorage.remove(PREFS_ITEM);
   useScalperPrefs.setState(DEFAULTS);
 }
