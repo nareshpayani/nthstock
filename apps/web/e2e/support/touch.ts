@@ -38,7 +38,18 @@ export async function centreOf(locator: Locator): Promise<Point> {
   await locator.evaluate((element) =>
     element.scrollIntoView({ block: 'center', inline: 'nearest' }),
   );
-  const rect = await locator.boundingBox();
+  // The chart's handles are placed from a scroll listener, a frame after the scroll, so the box
+  // read straight after scrolling can be where the handle used to be: wait until it holds still.
+  let rect = await locator.boundingBox();
+  for (let frame = 0; frame < 10; frame += 1) {
+    await locator.evaluate(
+      () => new Promise<void>((resolve) => requestAnimationFrame(() => resolve())),
+    );
+    const next = await locator.boundingBox();
+    const still = rect && next && rect.x === next.x && rect.y === next.y;
+    rect = next;
+    if (still) break;
+  }
   if (!rect) throw new Error('element has no box');
   return { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 };
 }

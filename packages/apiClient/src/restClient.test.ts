@@ -180,7 +180,8 @@ describe('trimTrailingSlashes', () => {
     const input = `a${'/'.repeat(100_000)}b${'/'.repeat(100_000)}`;
     const start = performance.now();
     expect(trimTrailingSlashes(input)).toBe(`a${'/'.repeat(100_000)}b`);
-    expect(performance.now() - start).toBeLessThan(100);
+    // A quadratic trim takes many seconds on this input; the bound only has to ride out a loaded runner.
+    expect(performance.now() - start).toBeLessThan(1000);
   });
 });
 
