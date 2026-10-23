@@ -33,9 +33,7 @@ async function inputFor(page: Page, testInfo: TestInfo): Promise<Input> {
     const touch = await touchscreen(page);
     return {
       touch: true,
-      // Playwright's own tap waits until the target is visible, stable and the one hit at its
-      // centre: handles move with every chart repaint, so a tap at a stale centre can miss.
-      press: (target) => target.tap(),
+      press: async (target) => touch.tap(await centreOf(target)),
       tapAt: (at) => touch.tap(at),
       drag: (from, to) => touch.drag(from, to),
     };
