@@ -43,21 +43,21 @@ export async function seedList(
  * scroll area. Returns the restore function.
  */
 export function fakeLayout(height: number): () => void {
-  const original = {
-    height: Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'offsetHeight'),
-    width: Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'offsetWidth'),
-  };
-  Object.defineProperty(HTMLElement.prototype, 'offsetHeight', {
-    configurable: true,
-    get: () => height,
-  });
-  Object.defineProperty(HTMLElement.prototype, 'offsetWidth', {
-    configurable: true,
-    get: () => 320,
-  });
+  // TanStack Virtual reads clientHeight/clientWidth (offset* in older versions): fake both.
+  const sizes = [
+    { proto: HTMLElement.prototype, key: 'offsetHeight', value: height },
+    { proto: HTMLElement.prototype, key: 'offsetWidth', value: 320 },
+    { proto: Element.prototype, key: 'clientHeight', value: height },
+    { proto: Element.prototype, key: 'clientWidth', value: 320 },
+  ] as const;
+  const originals = sizes.map(({ proto, key }) => Object.getOwnPropertyDescriptor(proto, key));
+  for (const { proto, key, value } of sizes) {
+    Object.defineProperty(proto, key, { configurable: true, get: () => value });
+  }
   return () => {
-    if (original.height)
-      Object.defineProperty(HTMLElement.prototype, 'offsetHeight', original.height);
-    if (original.width) Object.defineProperty(HTMLElement.prototype, 'offsetWidth', original.width);
+    sizes.forEach(({ proto, key }, index) => {
+      const descriptor = originals[index];
+      if (descriptor) Object.defineProperty(proto, key, descriptor);
+    });
   };
 }
