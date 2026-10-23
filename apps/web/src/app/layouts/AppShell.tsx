@@ -3,6 +3,7 @@ import { Link } from '@tanstack/react-router';
 import { OrderTicketHost, TrailingStopSheetHost } from '@/features/orderTicket';
 import { OrderUpdatesBridge } from '@/features/orders';
 import { TradingIntentTimeouts } from '../live/TradingIntentTimeouts';
+import { TrailingStopAnnouncer } from '../live/TrailingStopAnnouncer';
 import { useEffect, useRef, type ReactNode } from 'react';
 import { useShortcut } from '@/shared/hooks/useShortcut';
 import { useSearchFocusStore } from '@/shared/lib/searchFocusStore';
@@ -107,6 +108,7 @@ export function AppShell({ children }: AppShellProps) {
       <TrailingStopSheetHost />
       <OrderUpdatesBridge />
       <TradingIntentTimeouts />
+      <TrailingStopAnnouncer />
     </div>
   );
 }
