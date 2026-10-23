@@ -63,6 +63,20 @@ for (const viewport of PHONES) {
       page.getByRole('radiogroup', { name: 'Exchange' }).getByRole('radio'),
     ]);
 
+    // The chart controls wrap rather than squeeze: in each group no segment overlaps the next,
+    // so "Candles" is never cut off (NSTOCK-0337). Each group ends within the chart's width.
+    const chart = await box(page.getByRole('figure', { name: 'INFY area chart over 1 day' }));
+    for (const name of ['Chart range', 'Chart type']) {
+      let previousEnd = -Infinity;
+      for (const segment of await page.getByRole('radiogroup', { name }).getByRole('radio').all()) {
+        const rect = await box(segment);
+        const label = await segment.innerText();
+        expect(rect.x, label).toBeGreaterThanOrEqual(previousEnd);
+        expect(rect.x + rect.width, label).toBeLessThanOrEqual(chart.x + chart.width);
+        previousEnd = rect.x + rect.width;
+      }
+    }
+
     // Depth is a tab on a phone, not a card in the scroll.
     await expect(page.getByRole('region', { name: 'Market depth' })).toHaveCount(0);
     await tabs.getByRole('tab', { name: 'Depth' }).click();
