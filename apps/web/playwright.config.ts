@@ -6,11 +6,14 @@ import {
   E2E_MODE,
   E2E_PERF,
   E2E_PORTS,
+  E2E_WEBKIT,
   PERF_TAG,
   REALTIME_ORIGIN,
+  TOUCH_TAG,
 } from './e2e/support/env';
 
-// E2E suites (T-030, T-078, T-163 to T-167). Chrome only (D4).
+// E2E suites (T-030, T-078, T-163 to T-167). Chrome only (D4), plus iPhone Safari for the Trade
+// from Charts surfaces (TFC-16).
 //
 // msw mode (default, `npm run e2e`): a production build with MSW in the browser, the mock market
 // forced open (live prices tick at any hour) and the MSW test controls (VITE_TEST_CONTROLS, T-162)
@@ -25,6 +28,10 @@ import {
 //
 // perf (`E2E_PERF=1`, T-169 and T-170): the msw-mode build, only the specs tagged @perf (Web Vitals
 // and render budgets), one at a time so nothing competes for the CPU. The other modes skip them.
+//
+// Touch projects (T04, SPEC-TFC-1 §13): specs tagged @touch run on `chromium-mobile` (390 × 844,
+// touch, Chromium) and, with E2E_WEBKIT=1 once WebKit is installed, on `webkit-iphone` (an iPhone 13
+// in WebKit). They drive gestures through `e2e/support/touch.ts`. The desktop project skips them.
 //
 // The variables are set here, so CI needs no extra env. PW_CHROMIUM_PATH points at a preinstalled
 // Chromium in sandboxes; CI installs its own.
@@ -87,22 +94,54 @@ const apiServers = [
   },
 ];
 
+const launch = executablePath ? { launchOptions: { executablePath } } : {};
+const touchProjects = [
+  {
+    name: 'chromium-mobile',
+    grep: new RegExp(TOUCH_TAG),
+    use: {
+      ...devices['Pixel 7'],
+      viewport: { width: 390, height: 844 },
+      screen: { width: 390, height: 844 },
+      ...launch,
+    },
+  },
+  ...(E2E_WEBKIT
+    ? [{ name: 'webkit-iphone', grep: new RegExp(TOUCH_TAG), use: { ...devices['iPhone 13'] } }]
+    : []),
+];
+
 export default defineConfig({
   testDir: './e2e',
   fullyParallel: !api && !E2E_PERF,
-  ...(api
-    ? { workers: 1, grep: new RegExp(API_TAG) }
-    : E2E_PERF
-      ? { workers: 1, grep: new RegExp(PERF_TAG) }
-      : { grepInvert: new RegExp(PERF_TAG) }),
+  ...(api || E2E_PERF ? { workers: 1 } : {}),
   forbidOnly: Boolean(process.env['CI']),
   retries: process.env['CI'] ? 1 : 0,
   reporter: process.env['CI'] ? [['github'], ['html', { open: 'never' }]] : 'list',
-  use: {
-    baseURL: web,
-    trace: 'retain-on-failure',
-    ...(executablePath ? { launchOptions: { executablePath } } : {}),
-  },
-  projects: [{ name: api ? 'chrome-api' : 'chrome', use: { ...devices['Desktop Chrome'] } }],
+  use: { baseURL: web, trace: 'retain-on-failure' },
+  projects: api
+    ? [
+        {
+          name: 'chrome-api',
+          grep: new RegExp(API_TAG),
+          use: { ...devices['Desktop Chrome'], ...launch },
+        },
+      ]
+    : E2E_PERF
+      ? [
+          {
+            name: 'chrome',
+            grep: new RegExp(PERF_TAG),
+            use: { ...devices['Desktop Chrome'], ...launch },
+          },
+        ]
+      : [
+          {
+            name: 'chrome',
+            grepInvert: new RegExp(`${PERF_TAG}|${TOUCH_TAG}`),
+            use: { ...devices['Desktop Chrome'], ...launch },
+          },
+          ...touchProjects,
+        ],
   webServer: api ? apiServers : mswServer,
 });
