@@ -1,5 +1,5 @@
 import type { Candle, CandleRange, Instrument } from '@nthstock/contracts';
-import { ErrorState, SegmentedControl, Skeleton, cn } from '@nthstock/ui';
+import { ErrorState, SegmentedControl, Skeleton } from '@nthstock/ui';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
 import { ChartTrading } from '@/features/chartTrading';
@@ -71,13 +71,15 @@ export function StockChartCard({
       // The LIVE badge sits beside the heading, not in it, so the section is named "Price chart".
       title={strings.chart.title}
       aside={
-        <div
-          className={cn(
-            'flex items-center gap-2',
-            controls === 'touch' ? '-mx-1 max-w-full overflow-x-auto px-1 pb-1' : 'flex-wrap',
-          )}
-        >
-          {marketOpen && range === '1D' ? <LiveBadge /> : null}
+        // The controls wrap onto a second row on a narrow phone rather than scroll sideways, so
+        // "Candles" is never cut off at the card's edge. There the LIVE badge goes last, beside
+        // the chart type, so two rows hold everything down to 340 px.
+        <div className="flex flex-wrap items-center gap-2">
+          {marketOpen && range === '1D' ? (
+            <span className={controls === 'touch' ? 'order-last' : undefined}>
+              <LiveBadge />
+            </span>
+          ) : null}
           <SegmentedControl
             label={strings.chart.rangeLabel}
             size={controls}
