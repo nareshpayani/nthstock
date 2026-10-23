@@ -118,6 +118,28 @@ export function chartOptions({ format, intraday }: ChartThemeOptions): DeepParti
   };
 }
 
+/**
+ * Gestures for a chart you trade from (SPEC-TFC-1 §10.5): horizontal touch drag pans and pinch
+ * zooms, but vertical touch drag stays with the page so it still scrolls. The price axis belongs
+ * to the trading gutter, so dragging or double-clicking it does nothing, and it is at least 64 px
+ * wide to hold a thumb.
+ */
+export const TRADING_INTERACTION = {
+  handleScroll: {
+    mouseWheel: true,
+    pressedMouseMove: true,
+    horzTouchDrag: true,
+    vertTouchDrag: false,
+  },
+  handleScale: {
+    mouseWheel: true,
+    pinch: true,
+    axisPressedMouseMove: { time: true, price: false },
+    axisDoubleClickReset: false,
+  },
+  rightPriceScale: { minimumWidth: 64 },
+} as const satisfies DeepPartial<ChartOptions>;
+
 const toneColor = (direction: ChartDirection) =>
   direction === 'up' ? colors.up : direction === 'down' ? colors.down : colors.brand;
 

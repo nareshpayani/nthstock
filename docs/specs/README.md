@@ -34,3 +34,11 @@ backend and paper engine, and ADR 0005, the web UI architecture).
 | Spec | Epics | Tasks | Status |
 |---|---|---|---|
 | [Backend core on PostgreSQL](backend-core.md) ([task list](backend-core-tasks.md)) | E11 to E21 | T-176 to T-244 | Approved 2026-09-28 (PR #236); E11 to E14 merged |
+
+## Release TFC-1: Trade from Charts (ahead of the remaining Phase 2 epics)
+
+| Document | Content | Status |
+|---|---|---|
+| [SPEC-TFC-1](trade-from-charts.md) | Product and technical specification | In review, 2026-10-22 |
+| [PLAN-TFC-1](trade-from-charts-tasks.md) | Delivery plan: epics TFC-A to TFC-G, tasks T01 to T30, milestones M0 to M5 | In review, 2026-10-22 |
+| [RCM-TFC-1](trade-from-charts-traceability.md) | Requirements compliance matrix | In review, 2026-10-22 |

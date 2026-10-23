@@ -18,6 +18,7 @@ const rejected: Order = {
   avgFillPrice: null,
   status: 'REJECTED',
   statusReason: 'You have no INFY shares to sell for delivery.',
+  validity: 'DAY',
   placedAt: '2026-09-28T04:30:00.000Z',
   updatedAt: '2026-09-28T04:30:00.000Z',
 };

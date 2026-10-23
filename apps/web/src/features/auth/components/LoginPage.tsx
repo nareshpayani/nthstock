@@ -14,6 +14,7 @@ import { MobileStep, type OtpSent } from './MobileStep';
 import { OtpStep } from './OtpStep';
 import { PinEntryStep, PinLocked } from './PinEntryStep';
 import { PinSetupStep } from './PinSetupStep';
+import { TryDemo } from './TryDemo';
 
 type Step =
   | { kind: 'mobile'; purpose: OtpPurpose; notice?: string; mobile?: string }
@@ -99,6 +100,7 @@ export function LoginPage({ redirect, devOtp = devOtpHint }: LoginPageProps) {
     <main className="grid min-h-dvh place-items-center bg-canvas p-4">
       <div className="grid w-full max-w-sm gap-6 rounded-lg border border-line bg-surface p-6">
         {content}
+        {devOtp ? <TryDemo devOtp={devOtp} /> : null}
         <p className="text-label text-ink-muted">{strings.paperNote}</p>
         <div className="grid gap-3">
           {/* Before logging in: what the app does and how to trade, then back here (NSTOCK-0280). */}

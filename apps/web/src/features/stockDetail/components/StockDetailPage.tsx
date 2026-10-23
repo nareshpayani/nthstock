@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 import { SectionBoundary } from '@/shared/components/SectionBoundary';
 import { useDocumentTitle } from '@/shared/hooks/useDocumentTitle';
+import { usePhoneLayout } from '@/shared/hooks/usePhoneLayout';
 import { useApiClient } from '@/shared/lib/apiClientContext';
 import { quoteSnapshotQuery } from '../api/stockDetailQueries';
 import {
@@ -15,7 +16,9 @@ import { strings } from '../strings';
 import { KeyStatsCard } from './KeyStatsCard';
 import { MarketDepthCard } from './MarketDepthCard';
 import { OverviewCard } from './OverviewCard';
+import { PhoneStockDetail } from './PhoneStockDetail';
 import { StockChartCard } from './StockChartCard';
+import { SimulatorPanel } from './SimulatorPanel';
 import { StockHeader } from './StockHeader';
 
 export type StockDetailPageProps = {
@@ -41,9 +44,12 @@ function Section({ label, children }: { label: string; children: ReactNode }) {
   );
 }
 
+const section = (label: string, children: ReactNode) => <Section label={label}>{children}</Section>;
+
 /**
  * Stock detail (E5): header, chart, market depth, key stats and overview for one instrument on
- * one exchange. Indices show the header and chart only.
+ * one exchange. Indices show the header and chart only. An equity on a phone gets its own layout
+ * (T12, `PhoneStockDetail`); from 768 px the page is unchanged.
  */
 export function StockDetailPage({
   instrument,
@@ -55,6 +61,19 @@ export function StockDetailPage({
   const listing = { symbol: instrument.symbol, exchange: instrument.exchange };
   const snapshot = useQuery(quoteSnapshotQuery(api, listing));
   const equity = instrument.type === 'EQUITY';
+  const phone = usePhoneLayout();
+
+  if (phone && equity) {
+    return (
+      <PhoneStockDetail
+        instrument={instrument}
+        snapshot={snapshot.data}
+        search={search}
+        onSearchChange={onSearchChange}
+        section={section}
+      />
+    );
+  }
 
   return (
     <div className="mx-auto grid w-full max-w-[1200px] grid-cols-[minmax(0,1fr)] gap-4 lg:gap-6">
@@ -75,13 +94,17 @@ export function StockDetailPage({
         )}
       >
         <Section label={strings.chart.title}>
-          <StockChartCard
-            instrument={instrument}
-            range={search.range ?? DEFAULT_STOCK_RANGE}
-            chartType={search.chart ?? DEFAULT_CHART_TYPE}
-            onRangeChange={(range) => onSearchChange({ range })}
-            onChartTypeChange={(chart) => onSearchChange({ chart })}
-          />
+          <div className="grid gap-3">
+            {equity ? <SimulatorPanel symbol={instrument.symbol} /> : null}
+            <StockChartCard
+              instrument={instrument}
+              range={search.range ?? DEFAULT_STOCK_RANGE}
+              chartType={search.chart ?? DEFAULT_CHART_TYPE}
+              onRangeChange={(range) => onSearchChange({ range })}
+              onChartTypeChange={(chart) => onSearchChange({ chart })}
+              trading={equity}
+            />
+          </div>
         </Section>
         {equity ? (
           <>

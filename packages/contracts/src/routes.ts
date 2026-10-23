@@ -47,7 +47,16 @@ import {
   PositionsResponse,
   ResetRequest,
 } from './portfolio.js';
+import { AccountState } from './account.js';
 import { CursorQuery, IsoUtc, OkResponse } from './primitives.js';
+import {
+  ModifyTrailingStopRequest,
+  PlaceTrailingStopRequest,
+  PositionKey,
+  TrailingStop,
+  TrailingStopIdParams,
+  TrailingStopsResponse,
+} from './trailingStops.js';
 import {
   AddWatchlistItemRequest,
   CreateWatchlistRequest,
@@ -343,7 +352,56 @@ export const routes = {
     response: Order,
   },
 
+  // Trailing stops (SPEC-TFC-1 §10.6). apps/api answers 501 until it adopts the engine's stops.
+  trailingStopsList: {
+    method: 'GET',
+    path: '/v1/trailing-stops',
+    auth: 'user',
+    response: TrailingStopsResponse,
+  },
+  trailingStopPlace: {
+    method: 'POST',
+    path: '/v1/trailing-stops',
+    auth: 'user',
+    body: PlaceTrailingStopRequest,
+    response: TrailingStop,
+  },
+  trailingStopModify: {
+    method: 'PATCH',
+    path: '/v1/trailing-stops/:id',
+    auth: 'user',
+    params: TrailingStopIdParams,
+    body: ModifyTrailingStopRequest,
+    response: TrailingStop,
+  },
+  trailingStopCancel: {
+    method: 'DELETE',
+    path: '/v1/trailing-stops/:id',
+    auth: 'user',
+    params: TrailingStopIdParams,
+    response: TrailingStop,
+  },
+
+  // Account (ADR 0012): one consistent snapshot of orders, positions, trailing stops and funds.
+  accountState: {
+    method: 'GET',
+    path: '/v1/account/state',
+    auth: 'user',
+    response: AccountState,
+  },
+
   // Portfolio and funds
+  /**
+   * Closes a position in one step (SPEC-TFC-1 §6.4): cancels its trailing stop and working orders
+   * and sends a reduce-only market exit, which the response is. Flatten, Reverse and Exit use it.
+   */
+  positionClose: {
+    method: 'POST',
+    path: '/v1/positions/close',
+    auth: 'user',
+    body: PositionKey,
+    response: Order,
+  },
   positionsList: {
     method: 'GET',
     path: '/v1/positions',

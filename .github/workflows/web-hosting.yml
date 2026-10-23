@@ -3,15 +3,17 @@ name: Web hosting
 # Free Firebase Hosting (Spark plan) for the msw-mode web build: the whole app, mock market and
 # paper engine included, runs in the browser, so a static deploy is a working demo (WF-06).
 # Branches and environments (ADR 0010, docs/runbooks/environments.md):
-# - pull requests: a preview channel per PR (expires after 7 days), its URL commented on the PR.
+# - pull requests: a preview channel per PR (expires after 7 days), its URL commented on the PR,
+#   deleted when the PR closes. The channel quota is small, so each preview deploy first frees the
+#   channels of PRs already closed (NSTOCK-0333, tools/github/sweepPreviewChannels.sh).
 # - develop → the `development` environment: every green CI run on develop deploys to the
 #   long-lived `dev` channel. Never the live site.
-# - main → the `production` environment, https://<project>.web.app: every green CI run on main
-#   deploys live. main only moves when the owner merges a release PR from develop
-#   (docs/runbooks/release.md), so that merge is the go-ahead.
+# - production → the `production` environment, https://<project>.web.app: every green CI run on
+#   the production branch deploys live. production only moves through Promote to production
+#   (promote-to-production.yml, docs/runbooks/release.md), which first checks develop is tested.
 # Both deploys check the site serves the new build and run the reviewer smoke test.
 # Run workflow redeploys either environment (stage development or live) from a commit on its branch
-# with green CI; rolling production back is a live dispatch with an older commit on main.
+# with green CI; rolling production back is a live dispatch with an older commit on production.
 # Needs the repo variable FIREBASE_PROJECT_ID and the secret FIREBASE_SERVICE_ACCOUNT (see
 # docs/runbooks/web-hosting.md). Until both are set, every job here is skipped, not failed.
 
@@ -19,19 +21,20 @@ on:
   workflow_run:
     workflows: [CI]
     types: [completed]
-    branches: [develop, main]
+    branches: [develop, production]
   pull_request:
+    types: [opened, synchronize, reopened, closed]
   workflow_dispatch:
     inputs:
       stage:
-        description: 'development: the dev channel, from develop; live: the production site, from main'
+        description: 'development: the dev channel, from develop; live: the production site, from production'
         type: choice
         options: [development, live]
         default: development
       ref:
         description: >-
           Commit SHA (or branch) to deploy. development: a commit on develop; live: a commit on
-          main. Either way its CI must be green.
+          production. Either way its CI must be green.
         type: string
         default: develop
 
@@ -51,7 +54,7 @@ concurrency:
   group: >-
     web-hosting-${{ github.event.pull_request.number || inputs.stage ||
     (github.event.workflow_run.conclusion == 'success' &&
-    (github.event.workflow_run.head_branch == 'main' && 'live' || 'development') || github.run_id) }}
+    (github.event.workflow_run.head_branch == 'production' && 'live' || 'development') || github.run_id) }}
   # A deploy to an environment is never cancelled halfway; a newer one waits for it.
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
@@ -63,6 +66,7 @@ jobs:
     # A PR from this repo (fork PRs get no secrets).
     if: >-
       vars.FIREBASE_PROJECT_ID != '' && github.event_name == 'pull_request' &&
+      github.event.action != 'closed' &&
       github.event.pull_request.head.repo.full_name == github.repository
     permissions:
       contents: read
@@ -80,6 +84,18 @@ jobs:
         env:
           VITE_API_MODE: msw
           VITE_MOCK_MARKET_OPEN: 'true'
+      # A full channel quota fails every new preview ("channel quota reached"), so free the
+      # channels of closed PRs first. A failed sweep only warns; the deploy says if room is short.
+      - name: Free the preview channels of closed PRs
+        env:
+          SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          FIREBASE_PROJECT_ID: ${{ vars.FIREBASE_PROJECT_ID }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          export GOOGLE_APPLICATION_CREDENTIALS="$RUNNER_TEMP/firebaseServiceAccount.json"
+          printf '%s' "$SERVICE_ACCOUNT" > "$GOOGLE_APPLICATION_CREDENTIALS"
+          trap 'rm -f "$GOOGLE_APPLICATION_CREDENTIALS"' EXIT
+          bash tools/github/sweepPreviewChannels.sh || echo "::warning::Preview channel sweep failed"
       # Third-party and handed the service-account key, so pinned to a commit.
       - id: deploy
         uses: FirebaseExtended/action-hosting-deploy@500ac625ca2dd40cbd15f7659af953801858032a # v0
@@ -97,6 +113,35 @@ jobs:
           E2E_BASE_URL: ${{ steps.deploy.outputs.details_url }}
         working-directory: apps/web
         run: npx playwright test -c playwright.deployed.config.ts
+
+  preview-cleanup:
+    name: Delete the preview channel
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    # The PR closed (merged or not): its preview channel goes, and any other closed PR's with it.
+    if: >-
+      vars.FIREBASE_PROJECT_ID != '' && github.event_name == 'pull_request' &&
+      github.event.action == 'closed' &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+      - name: Delete the preview channels of closed PRs
+        env:
+          SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          FIREBASE_PROJECT_ID: ${{ vars.FIREBASE_PROJECT_ID }}
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          export GOOGLE_APPLICATION_CREDENTIALS="$RUNNER_TEMP/firebaseServiceAccount.json"
+          printf '%s' "$SERVICE_ACCOUNT" > "$GOOGLE_APPLICATION_CREDENTIALS"
+          trap 'rm -f "$GOOGLE_APPLICATION_CREDENTIALS"' EXIT
+          bash tools/github/sweepPreviewChannels.sh "$PR_NUMBER"
 
   development:
     name: Deploy the development environment
@@ -197,13 +242,13 @@ jobs:
     name: Deploy the live site
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    # Every green CI run on main (a merged release PR, never a PR's run or a fork), or a dispatched
+    # Every green CI run on production (after a promotion, never a PR's run or a fork), or a dispatched
     # "live" (redeploy or rollback).
     if: >-
       vars.FIREBASE_PROJECT_ID != '' && (
         (github.event_name == 'workflow_dispatch' && inputs.stage == 'live') ||
         (github.event_name == 'workflow_run' &&
-          github.event.workflow_run.head_branch == 'main' &&
+          github.event.workflow_run.head_branch == 'production' &&
           github.event.workflow_run.conclusion == 'success' &&
           github.event.workflow_run.event != 'pull_request' &&
           github.event.workflow_run.head_repository.full_name == github.repository)
@@ -217,7 +262,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
-          # workflow_run starts on main's latest commit; deploy exactly the commit CI passed.
+          # workflow_run starts on the default branch; deploy exactly the commit CI passed.
           ref: >-
             ${{ github.event_name == 'workflow_dispatch' && inputs.ref ||
             github.event.workflow_run.head_sha }}
@@ -240,11 +285,11 @@ jobs:
           mkdir -p apps/web/e2e
           cp -r .release-tools/apps/web/e2e/deployed .release-tools/apps/web/e2e/support apps/web/e2e/
           cp .release-tools/apps/web/playwright.deployed.config.ts apps/web/
-      - name: Check the release commit (on main, CI green)
+      - name: Check the release commit (on production, CI green)
         if: github.event_name == 'workflow_dispatch'
         env:
           GH_TOKEN: ${{ github.token }}
-        run: bash .release-tools/tools/github/checkReleaseCommit.sh main
+        run: bash .release-tools/tools/github/checkReleaseCommit.sh production
       - uses: actions/setup-node@v7
         with:
           node-version-file: .nvmrc

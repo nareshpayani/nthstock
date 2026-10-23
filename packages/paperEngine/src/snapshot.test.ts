@@ -4,9 +4,17 @@ import { FundsLedger } from './fundsLedger.js';
 import {
   PaperEngine,
   type PaperEngineSnapshot,
-  type PaperEngineSnapshotV1,
+  type PaperEngineSnapshotV3,
 } from './paperEngine.js';
-import { INFY, TCS, createHarness, ist, marketOrder, order } from './testHarness.js';
+import {
+  INFY,
+  TCS,
+  createHarness,
+  ist,
+  legacySnapshot,
+  marketOrder,
+  order,
+} from './testHarness.js';
 
 /** A busy account: fills, an open order, a rejection, an AMO-free intraday short and a holding. */
 function busyHarness() {
@@ -58,7 +66,7 @@ describe('engine snapshot and restore', () => {
 
   it('rebuilds a short history for orders from a snapshot saved without one', () => {
     const harness = busyHarness();
-    const legacy = harness.engine.snapshot();
+    const legacy = legacySnapshot(harness.engine);
     delete legacy.history;
     const restored = restoreFrom(harness, legacy);
     const events = restored
@@ -121,12 +129,12 @@ describe('engine snapshot and restore', () => {
   it('refuses a snapshot that is corrupt or of another version', () => {
     const harness = busyHarness();
     const good = harness.engine.snapshot();
-    const bad = (change: (s: PaperEngineSnapshotV1) => void) => {
-      const snapshot = JSON.parse(JSON.stringify(good)) as PaperEngineSnapshotV1;
+    const bad = (change: (s: PaperEngineSnapshotV3) => void) => {
+      const snapshot = JSON.parse(JSON.stringify(good)) as PaperEngineSnapshotV3;
       change(snapshot);
       return () => restoreFrom(harness, snapshot);
     };
-    expect(bad((s) => ((s as { v: number }).v = 3))).toThrow(/version/);
+    expect(bad((s) => ((s as { v: number }).v = 4))).toThrow(/version/);
     expect(bad((s) => (s.syncedTo = 'nope'))).toThrow(RangeError);
     expect(bad((s) => ((s.orders[0] as { qty: number }).qty = 0.5))).toThrow();
     expect(bad((s) => s.ledger.splice(1, 1, { ...at(s.ledger, 1), balanceAfter: 1 }))).toThrow(

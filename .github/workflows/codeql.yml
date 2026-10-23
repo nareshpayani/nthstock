@@ -3,7 +3,7 @@ name: CodeQL
 on:
   pull_request:
   push:
-    branches: [develop, main]
+    branches: [develop, production]
   schedule:
     - cron: '0 20 * * 0'
   # Started by agent-automerge.yml after it merges.

@@ -30,6 +30,7 @@ function fakeWsClient() {
       released.push(symbol);
     }),
     connect: vi.fn(),
+    focus: vi.fn(),
     onQuotes: vi.fn(() => () => undefined),
     onMessage: vi.fn(() => () => undefined),
     onStatus: vi.fn(() => () => undefined),
@@ -128,6 +129,21 @@ describe('gateWsClient (T-169)', () => {
       ['TCS', undefined],
     ]);
     expect(mocks.connect).toHaveBeenCalledTimes(1);
+  });
+
+  it('holds focus until the gate opens and sends only the last one (T10)', async () => {
+    const gate = deferred();
+    const { client, mocks } = fakeWsClient();
+    const gated = gateWsClient(client, gate.promise);
+    gated.focus(null);
+    gated.focus('INFY', 'NSE');
+    await flush();
+    expect(mocks.focus).not.toHaveBeenCalled();
+    gate.resolve();
+    await flush();
+    expect(mocks.focus.mock.calls).toEqual([['INFY', 'NSE']]);
+    gated.focus('TCS', 'NSE');
+    expect(mocks.focus).toHaveBeenLastCalledWith('TCS', 'NSE');
   });
 
   it('drops a subscription released before the gate opens', async () => {

@@ -6,12 +6,13 @@ import {
   OrderHistoryResponse,
   PortfolioSummary,
   PositionsResponse,
+  TrailingStop,
   type Instrument,
   type Quote,
 } from '@nthstock/contracts';
 import { describe, expect, it } from 'vitest';
 import { createManualClock, createSequentialIds } from './context.js';
-import { orderApiError } from './orderErrors.js';
+import { orderApiError, trailingStopApiError } from './orderErrors.js';
 import { PaperDesk, type DeskMarket } from './paperDesk.js';
 import { INFY, TCS, ist } from './testHarness.js';
 
@@ -52,7 +53,7 @@ function fakeMarket() {
     listener: (q: readonly Quote[]) => void;
   }>();
   const calls = { stats: 0, quotes: 0, subscribes: 0 };
-  const quoteOf = (symbol: string): Quote => ({
+  const quoteOf = (symbol: string, ts = '2026-09-25T04:30:00.000Z'): Quote => ({
     token: tokens.get(symbol) ?? 0,
     symbol,
     exchange: 'NSE',
@@ -64,10 +65,11 @@ function fakeMarket() {
     low: 0,
     prevClose: prevCloses.get(symbol) ?? 0,
     volume: 0,
-    ts: '2026-09-25T04:30:00.000Z',
+    ts,
   });
   const market: DeskMarket & {
-    tick(symbol: string, ltp: number): void;
+    /** `at` stamps the tick (a replayed one); default the fixed 10:00 IST quote time. */
+    tick(symbol: string, ltp: number, at?: Date): void;
     calls: typeof calls;
     subscribers(): number;
   } = {
@@ -91,10 +93,10 @@ function fakeMarket() {
       listeners.add(entry);
       return () => listeners.delete(entry);
     },
-    tick(symbol, ltp) {
+    tick(symbol, ltp, at) {
       ltps.set(symbol, ltp);
       for (const { symbols, listener } of listeners) {
-        if (symbols.includes(symbol)) listener([quoteOf(symbol)]);
+        if (symbols.includes(symbol)) listener([quoteOf(symbol, at?.toISOString())]);
       }
     },
     calls,
@@ -167,6 +169,30 @@ describe('PaperDesk', () => {
     desk.unpinPrice(INFY.token);
     expect(desk.ltp(INFY.token)).toBe(1_700_00);
     expect(() => desk.pinPrice(INFY.token, 0)).toThrow(RangeError);
+  });
+
+  it('splits LIMIT fills over ticks under a fill cap, for every user (T05)', async () => {
+    const { desk, market } = setup();
+    desk.setFillCap(INFY.token, 4);
+    expect(desk.fillCap(INFY.token)).toBe(4);
+    expect(desk.fillCap(TCS.token)).toBeNull();
+    const placed = await desk.place('u1', limitBuy(1_500_00, 10));
+    if (!placed.ok) throw new Error('place failed');
+    expect(placed.order).toMatchObject({ status: 'OPEN', filledQty: 4 });
+    // A read on the same tick fills nothing more.
+    expect(desk.getOrder('u1', placed.order.id)?.filledQty).toBe(4);
+
+    market.tick('INFY', 1_500_00);
+    expect(desk.getOrder('u1', placed.order.id)?.filledQty).toBe(8);
+    desk.pinPrice(INFY.token, 1_495_00);
+    expect(desk.getOrder('u1', placed.order.id)).toMatchObject({
+      status: 'EXECUTED',
+      filledQty: 10,
+    });
+
+    desk.setFillCap(INFY.token, null);
+    expect(desk.fillCap(INFY.token)).toBeNull();
+    expect(() => desk.setFillCap(INFY.token, 0)).toThrow(RangeError);
   });
 
   it('modify and cancel go to the owner engine; another user gets ORDER_NOT_FOUND', async () => {
@@ -269,6 +295,138 @@ describe('PaperDesk', () => {
     if (!quote) throw new Error('no quote');
     desk.ingest([{ ...quote, ltp: 1_300_00 }]);
     expect(updates).toEqual([]);
+  });
+});
+
+describe('PaperDesk trailing stops (SPEC-TFC-1 §6, T06)', () => {
+  const stopRequest = {
+    token: INFY.token,
+    product: 'DELIVERY',
+    trail: { unit: 'AMOUNT', amount: 10_00 },
+    activationPrice: null,
+    exitOrderType: 'MARKET',
+    exitLimitOffset: null,
+  } as const;
+
+  function stopSetup() {
+    const base = setup();
+    const stopUpdates: { userId: string; stop: TrailingStop }[] = [];
+    const desk = new PaperDesk({
+      clock: base.clock,
+      market: base.market,
+      newId: createSequentialIds('o'),
+      onOrderUpdate: (userId, order) => base.updates.push({ userId, order: Order.parse(order) }),
+      onTrailingStopUpdate: (userId, stop) =>
+        stopUpdates.push({ userId, stop: TrailingStop.parse(stop) }),
+      onChange: (userId) => base.changes.push(userId),
+    });
+    return { ...base, desk, stopUpdates };
+  }
+
+  it('steps a stop on feed ticks with no working order, and exits through it', async () => {
+    const { desk, market, stopUpdates, changes } = stopSetup();
+    await desk.place('u1', marketBuy());
+    const placed = await desk.placeTrailingStop('u1', stopRequest);
+    if (!placed.ok) throw new Error(placed.reason);
+    changes.length = 0;
+
+    market.tick('INFY', 1_520_00);
+    expect(desk.trailingStops('u1')[0]).toMatchObject({ status: 'TRAILING', stopPrice: 1_510_00 });
+    expect(changes).toContain('u1');
+    market.tick('INFY', 1_505_00);
+    expect(desk.trailingStops('u1')[0]).toMatchObject({ status: 'EXECUTED' });
+    expect(stopUpdates.map((u) => [u.userId, u.stop.status])).toEqual([
+      ['u1', 'TRAILING'],
+      ['u1', 'TRAILING'],
+      ['u1', 'TRIGGERED'],
+      ['u1', 'EXECUTED'],
+    ]);
+    // Flat and with no stop left, the instrument no longer syncs the engine.
+    changes.length = 0;
+    market.tick('INFY', 1_400_00);
+    expect(changes).toEqual([]);
+    expect(desk.trailingStops('bob')).toEqual([]);
+  });
+
+  it('modifies, cancels and closes only for the owner', async () => {
+    const { desk } = stopSetup();
+    await desk.place('u1', marketBuy());
+    const placed = await desk.placeTrailingStop('u1', stopRequest);
+    if (!placed.ok) throw new Error(placed.reason);
+    const { id } = placed.trailingStop;
+    expect(
+      await desk.modifyTrailingStop('bob', id, { trail: { unit: 'AMOUNT', amount: 20_00 } }),
+    ).toMatchObject({ ok: false, code: 'TRAILING_STOP_NOT_FOUND' });
+    expect(
+      await desk.modifyTrailingStop('u1', id, { trail: { unit: 'AMOUNT', amount: 20_00 } }),
+    ).toMatchObject({ ok: true, trailingStop: { stopPrice: 1_480_00 } });
+    expect(await desk.cancelTrailingStop('bob', id)).toMatchObject({ ok: false });
+    expect(await desk.closePosition('u1', INFY.token, 'DELIVERY')).toMatchObject({
+      ok: true,
+      order: { side: 'SELL', status: 'EXECUTED' },
+    });
+    expect(desk.trailingStops('u1')[0]).toMatchObject({
+      status: 'CANCELLED',
+      statusReason: 'Position closed',
+    });
+  });
+
+  it('restores a user with only an active stop and keeps stepping it', async () => {
+    const first = stopSetup();
+    await first.desk.place('u1', marketBuy());
+    await first.desk.placeTrailingStop('u1', stopRequest);
+    const snapshot = first.desk.engineOf('u1').snapshot();
+
+    const second = stopSetup();
+    await second.desk.restore('u1', JSON.parse(JSON.stringify(snapshot)) as typeof snapshot);
+    expect(second.market.calls.subscribes).toBe(1);
+    second.market.tick('INFY', 1_480_00);
+    expect(second.desk.trailingStops('u1')[0]?.status).toBe('EXECUTED');
+  });
+
+  it('runs a replayed tick at its own time: a 15:19 trigger exits before the 15:20 square-off', async () => {
+    const { desk, clock, market } = stopSetup();
+    clock.set(ist(25, 15, 0));
+    await desk.place('u1', { ...marketBuy(), product: 'INTRADAY' });
+    const placed = await desk.placeTrailingStop('u1', { ...stopRequest, product: 'INTRADAY' });
+    if (!placed.ok) throw new Error(placed.reason);
+
+    // The tab slept through 15:20; the market replays the 15:19 tick that crossed the stop.
+    clock.set(ist(25, 15, 25));
+    market.tick('INFY', 1_485_00, ist(25, 15, 19));
+    const [stop] = desk.trailingStops('u1');
+    expect(stop?.status).toBe('EXECUTED');
+    const exit = desk.getOrder('u1', stop?.exitOrderId ?? '');
+    expect(exit?.statusReason).toContain('Trailing stop exit');
+
+    // A tick older than the replay window runs at the desk's time instead: the square-off wins.
+    const late = stopSetup();
+    late.clock.set(ist(25, 15, 0));
+    await late.desk.place('u1', { ...marketBuy(), product: 'INTRADAY' });
+    await late.desk.placeTrailingStop('u1', { ...stopRequest, product: 'INTRADAY' });
+    late.clock.set(ist(25, 15, 55));
+    late.market.tick('INFY', 1_485_00, ist(25, 15, 19));
+    expect(late.desk.trailingStops('u1')[0]?.status).toBe('CANCELLED');
+  });
+
+  it('refuses trailing stops when turned off (apps/api)', async () => {
+    const { clock, market } = setup();
+    const desk = new PaperDesk({
+      clock,
+      market,
+      newId: createSequentialIds('o'),
+      trailingStops: false,
+    });
+    await desk.place('u1', marketBuy());
+    const refused = await desk.placeTrailingStop('u1', stopRequest);
+    expect(refused).toMatchObject({ ok: false, code: 'NOT_SUPPORTED' });
+    if (refused.ok) throw new Error('expected a refusal');
+    expect(trailingStopApiError(refused)).toEqual({
+      status: 400,
+      code: 'VALIDATION_ERROR',
+      message: 'Trailing stops are not available in this mode.',
+      details: { reason: 'NOT_SUPPORTED' },
+    });
   });
 });
 

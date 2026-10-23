@@ -12,6 +12,8 @@ export type StockHeaderProps = {
   /** REST snapshot shown until the first live quote arrives. */
   snapshot?: Quote | null | undefined;
   onExchangeChange: (exchange: Exchange) => void;
+  /** The phone layout (T12): Buy and Sell move to the bottom bar, controls grow to 44 px. */
+  phone?: boolean;
 };
 
 /**
@@ -19,7 +21,12 @@ export type StockHeaderProps = {
  * change (LiveChange, ▲▼ with text), and Buy/Sell for equities. Buy and Sell open the order
  * ticket (T-135) through the ticket intent; a signed-out user goes through /login first.
  */
-export function StockHeader({ instrument, snapshot, onExchangeChange }: StockHeaderProps) {
+export function StockHeader({
+  instrument,
+  snapshot,
+  onExchangeChange,
+  phone = false,
+}: StockHeaderProps) {
   const { symbol, exchange, type } = instrument;
   const format = type === 'INDEX' ? 'index' : 'inr';
   const { listed, unlisted } = useExchangeListings(instrument);
@@ -53,7 +60,7 @@ export function StockHeader({ instrument, snapshot, onExchangeChange }: StockHea
         <div className="flex flex-wrap items-center gap-3">
           <SegmentedControl
             label={strings.header.exchangeLabel}
-            size="sm"
+            size={phone ? 'touch' : 'sm'}
             value={exchange}
             onValueChange={onExchangeChange}
             options={EXCHANGES.map((value) => ({
@@ -90,7 +97,7 @@ export function StockHeader({ instrument, snapshot, onExchangeChange }: StockHea
           />
         </div>
       </div>
-      {type === 'EQUITY' ? (
+      {type === 'EQUITY' && !phone ? (
         <div className="grid gap-2">
           <div
             role="group"

@@ -1,4 +1,4 @@
-import type { Order } from '@nthstock/contracts';
+import type { Order, TrailingStop } from '@nthstock/contracts';
 import {
   Button,
   Table,
@@ -12,7 +12,10 @@ import {
   VirtualList,
 } from '@nthstock/ui';
 import type { ReactNode } from 'react';
-import { isLive, orderName, orderTimeLabel, priceLabel } from '../model/orderBook';
+import { PendingPrice } from '@/shared/components/PendingPrice';
+import { TrailingStopBadge } from '@/shared/components/TrailingStopBadge';
+import type { PendingOrderPrice } from '@/shared/hooks/usePendingOrderPrices';
+import { isLive, isPartlyFilled, orderName, orderTimeLabel, priceLabel } from '../model/orderBook';
 import { strings } from '../strings';
 import { OrderSideLabel, OrderStatusBadge } from './OrderStatusBadge';
 
@@ -30,6 +33,10 @@ export type OrderTableProps = {
   onDetails: (order: Order, trigger: HTMLElement) => void;
   onModify: (order: Order) => void;
   onCancel: (order: Order, trigger: HTMLElement) => void;
+  /** Trailing stops by the id of their entry or exit order (T11): shown beside the status. */
+  stops?: ReadonlyMap<string, TrailingStop>;
+  /** Prices orders are moving to from a chart drag (T16): shown under the price. */
+  pendingPrices?: ReadonlyMap<string, PendingOrderPrice>;
 };
 
 type Column = {
@@ -44,7 +51,16 @@ type Column = {
  * and status, with Details on every row and Modify and Cancel on open orders (T-145). Up to 50
  * rows render as a table; a longer book scrolls in a virtualised grid.
  */
-export function OrderTable({ orders, label, now, onDetails, onModify, onCancel }: OrderTableProps) {
+export function OrderTable({
+  orders,
+  label,
+  now,
+  onDetails,
+  onModify,
+  onCancel,
+  stops,
+  pendingPrices,
+}: OrderTableProps) {
   const columns: Column[] = [
     {
       key: 'time',
@@ -80,13 +96,36 @@ export function OrderTable({ orders, label, now, onDetails, onModify, onCancel }
       key: 'qty',
       header: strings.columns.qty,
       numeric: true,
-      render: (order) => strings.qty(order.filledQty, order.qty),
+      render: (order) =>
+        isPartlyFilled(order)
+          ? strings.partQty(order.filledQty, order.qty)
+          : strings.qty(order.filledQty, order.qty),
     },
-    { key: 'price', header: strings.columns.price, numeric: true, render: priceLabel },
+    {
+      key: 'price',
+      header: strings.columns.price,
+      numeric: true,
+      render: (order) => {
+        return (
+          <>
+            {priceLabel(order)}
+            <PendingPrice pending={pendingPrices?.get(order.id)} />
+          </>
+        );
+      },
+    },
     {
       key: 'status',
       header: strings.columns.status,
-      render: (order) => <OrderStatusBadge status={order.status} />,
+      render: (order) => {
+        const stop = stops?.get(order.id);
+        return (
+          <span className="inline-flex items-center gap-1">
+            <OrderStatusBadge status={order.status} partial={isPartlyFilled(order)} />
+            {stop ? <TrailingStopBadge stop={stop} /> : null}
+          </span>
+        );
+      },
     },
     {
       key: 'actions',

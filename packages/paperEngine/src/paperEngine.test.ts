@@ -91,6 +91,32 @@ describe('PaperEngine.place (T-127, T-128)', () => {
     expect(updates).toEqual([]);
   });
 
+  it('refuses attached trailing stops when the engine has trailing stops turned off', () => {
+    const { engine, updates } = createHarness({ trailingStops: false });
+    expect(
+      engine.place(
+        order({
+          attachedTrailingStop: {
+            trail: { unit: 'AMOUNT', amount: 5_00 },
+            activationPrice: null,
+            exitOrderType: 'MARKET',
+            exitLimitOffset: null,
+          },
+        }),
+      ),
+    ).toMatchObject({
+      ok: false,
+      code: 'NOT_SUPPORTED',
+      reason: 'Trailing stops are not available in this mode.',
+      order: null,
+    });
+    expect(engine.place(order({ validity: 'DAY' }))).toMatchObject({
+      ok: true,
+      order: { validity: 'DAY' },
+    });
+    expect(updates).toHaveLength(1);
+  });
+
   it('returns the same order for a retried clientOrderId', () => {
     const { engine } = createHarness();
     const first = engine.place(order({ clientOrderId: 'c-1' }));
@@ -188,12 +214,12 @@ describe('PaperEngine.modify (T-128)', () => {
     expect(engine.modify(id, { qty: 5 })).toMatchObject({ ok: true });
     expect(engine.ledger.blockedFor(id)).toBe(7_000_00);
 
-    // A LIMIT raised to cross the market fills at the limit.
+    // A LIMIT raised through the market fills at once, at the better price: the LTP.
     expect(engine.modify(id, { price: 1_505_00 })).toMatchObject({
       ok: true,
-      order: { status: 'EXECUTED', avgFillPrice: 1_505_00 },
+      order: { status: 'EXECUTED', avgFillPrice: 1_500_00 },
     });
-    expect(engine.fundsSummary()).toMatchObject({ blocked: 0, available: OPENING - 7_525_00 });
+    expect(engine.fundsSummary()).toMatchObject({ blocked: 0, available: OPENING - 7_500_00 });
   });
 
   it('turns a LIMIT into a MARKET order, which fills at LTP', () => {

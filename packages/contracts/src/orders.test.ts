@@ -9,9 +9,11 @@ import {
 import {
   ModifyOrderRequest,
   Order,
+  OrderHistoryEvent,
   OrderHistoryResponse,
   OrderStatus,
   OrderType,
+  OrderValidity,
   OrdersPage,
   OrdersQuery,
   PlaceOrderRequest,
@@ -39,6 +41,8 @@ describe('order enums', () => {
     expect(OrderType.options).toEqual(['MARKET', 'LIMIT']);
     expect(ProductType.options).toEqual(['DELIVERY', 'INTRADAY']);
     expect(OrderStatus.options).toEqual(['AMO', 'OPEN', 'EXECUTED', 'CANCELLED', 'REJECTED']);
+    expect(OrderValidity.options).toEqual(['DAY', 'IOC']);
+    expect(OrderHistoryEvent.options).toContain('PARTIALLY_EXECUTED');
   });
 });
 
@@ -96,10 +100,29 @@ describe('ModifyOrderRequest', () => {
   });
 });
 
+describe('order validity', () => {
+  it('is optional on a place request, which the engine reads as DAY', () => {
+    expect(PlaceOrderRequest.parse(placeLimitFixture).validity).toBeUndefined();
+    expect(PlaceOrderRequest.parse({ ...placeLimitFixture, validity: 'IOC' }).validity).toBe('IOC');
+    expect(PlaceOrderRequest.safeParse({ ...placeLimitFixture, validity: 'GTC' }).success).toBe(
+      false,
+    );
+  });
+
+  it('defaults to DAY on an order saved before validity existed', () => {
+    const saved: Record<string, unknown> = { ...orderFixture };
+    delete saved.validity;
+    delete saved.seq;
+    expect(Order.parse(saved)).toEqual({ ...saved, validity: 'DAY' });
+  });
+});
+
 describe('Order and OrdersQuery', () => {
-  it('allows a null price for MARKET and rejects off-tick fills', () => {
+  it('allows a null price for MARKET and an off-tick average of several fills', () => {
     expect(Order.safeParse({ ...orderFixture, type: 'MARKET', price: null }).success).toBe(true);
-    expect(Order.safeParse({ ...orderFixture, avgFillPrice: 152_341 }).success).toBe(false);
+    expect(Order.safeParse({ ...orderFixture, avgFillPrice: 152_341 }).success).toBe(true);
+    expect(Order.safeParse({ ...orderFixture, avgFillPrice: 0 }).success).toBe(false);
+    expect(Order.safeParse({ ...orderFixture, avgFillPrice: 152_341.5 }).success).toBe(false);
   });
 
   it('filters by status and coerces the limit', () => {

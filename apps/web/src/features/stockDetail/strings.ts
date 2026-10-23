@@ -14,6 +14,14 @@ export const strings = {
     body: 'Something went wrong here. The rest of the page still works.',
     retry: 'Try again',
   },
+  simulator: {
+    label: 'Demo simulator',
+    badge: 'Simulated',
+    rally: 'Rally +1%',
+    pullBack: 'Pull back −1%',
+    gap: 'Gap −3%',
+    split: 'Split large fills',
+  },
   chart: {
     title: 'Price chart',
     rangeLabel: 'Chart range',
@@ -50,6 +58,9 @@ export const strings = {
   },
   depth: {
     title: 'Market depth',
+    moving: 'Your orders moving',
+    sides: { BUY: 'Buy', SELL: 'Sell' },
+    yourOrder: (side: string, qty: number) => `Your ${side.toLowerCase()} ${String(qty)}`,
     bids: 'Bids (buy orders)',
     asks: 'Offers (sell orders)',
     bidPrice: 'Bid price',
@@ -96,5 +107,37 @@ export const strings = {
     buyLabel: (symbol: string) => `Buy ${symbol}`,
     sellLabel: (symbol: string) => `Sell ${symbol}`,
     paperNote: 'Paper trading: virtual cash only.',
+  },
+  /** The phone layout (T12, SPEC-TFC-1 §9.4). */
+  phone: {
+    tabsLabel: 'Stock details',
+    tabs: { overview: 'Overview', depth: 'Depth', orders: 'Orders' },
+    tradeBar: (symbol: string) => `Trade ${symbol}`,
+    scalp: 'Scalp',
+    scalpDescription: 'Scalper mode: a one-tap pad for fast entry and exit.',
+    strip: {
+      label: (symbol: string) => `Your ${symbol} position`,
+      qty: (netQty: number) => (netQty > 0 ? `+${String(netQty)}` : String(netQty)),
+      at: (price: string) => `@ ${price}`,
+      trailing: (stop: string) => `Trailing SL ${stop}`,
+      open: 'Opens the trailing stop for this position.',
+    },
+    orders: {
+      label: (symbol: string) => `Today's ${symbol} orders`,
+      empty: (symbol: string) => `No ${symbol} orders today.`,
+      unavailable: 'Your orders are on the Orders page.',
+      all: 'All orders',
+      row: (side: string, filled: number, qty: number, type: string) =>
+        `${side} ${String(filled)} / ${String(qty)} · ${type}`,
+      sides: { BUY: 'Buy', SELL: 'Sell' },
+      types: { MARKET: 'Market', LIMIT: 'Limit' },
+      statuses: {
+        AMO: 'AMO',
+        OPEN: 'Open',
+        EXECUTED: 'Executed',
+        CANCELLED: 'Cancelled',
+        REJECTED: 'Rejected',
+      },
+    },
   },
 } as const;

@@ -1,5 +1,6 @@
 import { Sheet } from '@nthstock/ui';
 import { Suspense, lazy, useLayoutEffect, useRef } from 'react';
+import { usePhoneLayout } from '@/shared/hooks/usePhoneLayout';
 import { useSession } from '@/shared/hooks/useSession';
 import { useTicketIntentStore } from '@/shared/lib/ticketIntentStore';
 import { strings } from '../strings';
@@ -15,13 +16,15 @@ const OrderTicket = lazy(() =>
  * The order ticket slide-over (T-135), mounted once in the app shell. It opens from the ticket
  * intent (Buy/Sell on stock detail, watchlist rows and their B/S keys) once a session is held; a
  * signed-out Buy keeps the intent through /login, so the ticket opens on return. It slides in from
- * the right over a light overlay, so the chart and watchlist stay in view. Focus is trapped
- * inside, Esc closes it, and focus goes back to the control that opened it.
+ * the right over a light overlay, so the chart and watchlist stay in view; on a phone it rises
+ * from the bottom, within thumb reach (T12, SPEC-TFC-1 §9.4). Focus is trapped inside, Esc closes
+ * it, and focus goes back to the control that opened it.
  */
 export function OrderTicketHost() {
   const intent = useTicketIntentStore((s) => s.intent);
   const closeTicket = useTicketIntentStore((s) => s.closeTicket);
   const { status } = useSession();
+  const phone = usePhoneLayout();
   const open = intent !== null && status === 'authenticated';
   const returnFocus = useRef<HTMLElement | null>(null);
   const wasOpen = useRef(false);
@@ -55,12 +58,13 @@ export function OrderTicketHost() {
       description={strings.description}
       returnFocus={returnFocus}
       overlay="light"
-      className="w-[min(440px,calc(100vw-24px))]"
+      side={phone ? 'bottom' : 'right'}
+      {...(phone ? {} : { className: 'w-[min(440px,calc(100vw-24px))]' })}
     >
       {open ? (
         <Suspense fallback={<TicketSkeleton />}>
           <OrderTicket
-            key={`${intent.exchange}:${intent.symbol}:${intent.side}:${intent.modify?.id ?? ''}:${String(intent.qty ?? '')}:${intent.product ?? ''}`}
+            key={`${intent.exchange}:${intent.symbol}:${intent.side}:${intent.modify?.id ?? ''}:${String(intent.qty ?? '')}:${intent.product ?? ''}:${String(intent.price ?? '')}`}
             intent={intent}
             onClose={closeTicket}
           />

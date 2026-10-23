@@ -8,10 +8,13 @@ plan, no card). `.github/workflows/web-hosting.yml` deploys it:
   deploys there, so merged work is always on a shared link that is not the live site
   ([environments.md](environments.md)).
 - **Production environment**, the live site `https://<project id>.web.app`: every green CI run on
-  `main`, which only moves when the owner merges a release PR from `develop`
-  ([release.md](release.md), ADR 0010).
-- **PR previews**: a channel per PR from this repo, its URL commented on the PR, gone after 7 days,
-  smoke-tested as a reviewer would use it (`npm run e2e:deployed`).
+  `production`, which only moves when an agent runs Promote to production
+  ([release.md](release.md), ADR 0011).
+- **PR previews**: a channel per PR from this repo, its URL commented on the PR, smoke-tested as a
+  reviewer would use it (`npm run e2e:deployed`). A channel is deleted when its PR closes, or after
+  7 days. The site's channel quota is small, so each preview deploy first deletes the channels of
+  closed PRs ([`sweepPreviewChannels.sh`](../../tools/github/sweepPreviewChannels.sh)); if a
+  preview still fails with "channel quota reached", too many PRs are open at once.
 
 `firebase.json` sets the SPA rewrite, the same security headers as `vite preview`
 (`securityHeaders.test.ts` keeps them in step), and caching (hashed `/assets` for a year,
@@ -32,7 +35,7 @@ Blaze plan. That waits for the scalability phase (AWS Mumbai).
 
    Then delete the downloaded JSON file.
 
-5. Run **Actions → Web hosting → Run workflow** with stage `live` and ref `main` (CI must be green
+5. Run **Actions → Web hosting → Run workflow** with stage `live` and ref `production` (CI must be green
    on that commit). Later releases follow [release.md](release.md). The development environment
    fills itself on the next green CI run on `develop`.
 

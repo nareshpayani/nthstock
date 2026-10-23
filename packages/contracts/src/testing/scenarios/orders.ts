@@ -6,7 +6,7 @@ import { TICK_SIZE_PAISE } from '../../primitives.js';
 import { defineScenarios, type ScenarioClient } from '../harness.js';
 
 /**
- * Order scenarios (T-134): market, limit crossing, modify, cancel, insufficient funds and AMO,
+ * Order scenarios (T-134, T05): market, limit crossing, modify, IOC, cancel, insufficient funds and AMO,
  * against both mock backends (apps/api T-131 and MSW T-132).
  *
  * Time and prices are the scenario's, never the wall clock's or the random walk's:
@@ -207,6 +207,30 @@ export const orderScenarios = defineScenarios('orders', [
         400,
         'VALIDATION_ERROR',
       );
+    },
+  },
+  {
+    name: 'IOC: a marketable limit fills at the better price; one that cannot fill is cancelled',
+    async run(client) {
+      const stock = await start(client, '8400000009');
+      const filled = await client.call('orderPlace', {
+        body: buy(stock, { qty: 2, type: 'LIMIT', price: stock.above, validity: 'IOC' }),
+      });
+      expect(filled).toMatchObject({ status: 'EXECUTED', filledQty: 2, avgFillPrice: stock.base });
+
+      const missed = await client.call('orderPlace', {
+        body: buy(stock, { qty: 3, type: 'LIMIT', price: stock.below, validity: 'IOC' }),
+      });
+      expect(missed).toMatchObject({
+        status: 'CANCELLED',
+        filledQty: 0,
+        statusReason: 'Immediate or cancel: 3 of 3 shares did not fill and were cancelled.',
+      });
+      expect(await client.call('fundsSummary')).toMatchObject({
+        blocked: 0,
+        available: PAPER_OPENING_BALANCE_PAISE - 2 * stock.base,
+      });
+      expect(await ids(client, 'OPEN')).toEqual([]);
     },
   },
   {

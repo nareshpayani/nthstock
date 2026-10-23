@@ -1,13 +1,12 @@
 name: 'Agent: Resolve conflicts'
 
-# When develop or main moves, finds open PRs that no longer merge cleanly and resolves them on the
-# PR branch. develop and main are never modified: the job merges the PR's base INTO the PR branch
-# (no rebase, no force-push), a pre-push hook refuses any push to either, and release PRs (whose
-# head is develop) are left to the owner.
+# When develop moves, finds open PRs that no longer merge cleanly and resolves them on the PR
+# branch. develop and production are never modified: the job merges the PR's base INTO the PR
+# branch (no rebase, no force-push), and a pre-push hook refuses any push to either.
 
 on:
   push:
-    branches: [develop, main]
+    branches: [develop]
   workflow_dispatch:
 
 permissions:
@@ -46,7 +45,7 @@ jobs:
           targets=$(jq -c --arg owner "$OWNER" --arg bot "$BOT" '[.[]
             | select(.mergeable == "CONFLICTING")
             | select(.isCrossRepository | not)
-            | select(.headRefName != "develop" and .headRefName != "main")
+            | select(.headRefName != "develop" and .headRefName != "production")
             | select(.author.login == $owner or .author.login == $bot or .author.login == "app/claude")
             | select([.labels[].name] | index("needs-human") | not)
             | {number, branch: .headRefName, base: .baseRefName}]' <<< "$prs")
@@ -74,14 +73,14 @@ jobs:
         with:
           ref: ${{ matrix.pr.branch }}
           fetch-depth: 0
-      - name: Refuse any push to main or develop
+      - name: Refuse any push to production or develop
         run: |
           cat > .git/hooks/pre-push <<'HOOK'
           #!/bin/sh
           while read -r _local_ref _local_sha remote_ref _remote_sha; do
             case "$remote_ref" in
-              refs/heads/main|refs/heads/develop)
-                echo "pre-push: pushing to main or develop is not allowed for agents" >&2
+              refs/heads/production|refs/heads/main|refs/heads/develop)
+                echo "pre-push: pushing to production or develop is not allowed for agents" >&2
                 exit 1 ;;
             esac
           done

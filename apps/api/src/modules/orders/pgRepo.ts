@@ -86,6 +86,8 @@ const toOrder = (row: OrderRow): Order => ({
   avgFillPrice: row.avgFillPrice,
   status: row.status as OrderStatus,
   statusReason: row.statusReason,
+  // apps/api places DAY orders only until it adopts IOC with the engine's partial fills.
+  validity: 'DAY',
   placedAt: row.placedAt.toISOString(),
   updatedAt: row.updatedAt.toISOString(),
 });
@@ -98,6 +100,9 @@ const toHistoryEntry = (row: EventRow): OrderHistoryEntry => ({
   type: row.type as OrderType,
   price: row.price,
   fillPrice: row.fillPrice,
+  // apps/api fills every order in full on one tick (no fill cap until it adopts partial fills),
+  // so an EXECUTED event's fill is its quantity and the engine's average stays exact on reload.
+  ...(row.event === 'EXECUTED' && row.fillPrice !== null ? { fillQty: row.qty } : {}),
   note: row.note,
 });
 

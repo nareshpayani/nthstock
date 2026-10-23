@@ -176,3 +176,65 @@ describe('createLiveQuotes', () => {
     vi.unstubAllGlobals();
   });
 });
+
+describe('createLiveQuotes with a trading store (T10)', () => {
+  it('creates the store only when asked, and turns account frames into order updates', () => {
+    const sockets: {
+      onopen: (() => void) | null;
+      onmessage: ((e: { data: unknown }) => void) | null;
+      readyState: number;
+      sent: unknown[];
+    }[] = [];
+    class FrameSocket {
+      readyState = 0;
+      binaryType = 'blob';
+      sent: unknown[] = [];
+      onopen: (() => void) | null = null;
+      onmessage: ((e: { data: unknown }) => void) | null = null;
+      onclose = null;
+      onerror = null;
+      constructor() {
+        sockets.push(this);
+      }
+      send(data: string) {
+        this.sent.push(JSON.parse(data));
+      }
+      close() {}
+    }
+    vi.stubGlobal('WebSocket', FrameSocket);
+    const location = { protocol: 'http:', host: 'localhost:5173' };
+    expect(createLiveQuotes({ wsUrl: null }, location).tradingStore).toBeUndefined();
+
+    const { wsClient, orderUpdates, tradingStore } = createLiveQuotes(
+      { wsUrl: null },
+      location,
+      undefined,
+      { loadState: () => new Promise(() => undefined) },
+    );
+    expect(tradingStore?.getState().status).toBe('idle');
+    const listener = vi.fn();
+    orderUpdates.onOrderUpdate(listener);
+    tradingStore?.focus('INFY');
+    const socket = sockets.at(-1);
+    if (!socket) throw new Error('no socket');
+    socket.readyState = 1;
+    socket.onopen?.();
+    expect(socket.sent).toContainEqual({ v: 1, type: 'focus', symbol: 'INFY', exchange: 'NSE' });
+    const filled = testOrder({ status: 'EXECUTED', filledQty: 10, avgFillPrice: 151_000, seq: 4 });
+    socket.onmessage?.({
+      data: JSON.stringify({
+        v: 1,
+        type: 'accountDelta',
+        seq: 4,
+        at: '2026-09-28T04:30:00.000Z',
+        quotes: [],
+        orders: [filled],
+        positions: [],
+        trailingStops: [],
+      }),
+    });
+    expect(listener).toHaveBeenCalledWith(filled);
+    wsClient.close();
+    vi.unstubAllGlobals();
+  });
+});

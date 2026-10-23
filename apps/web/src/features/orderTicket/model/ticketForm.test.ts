@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   TicketFormSchema,
   defaultTicketValues,
+  fillsImmediately,
   newClientOrderId,
   orderValue,
   ticketValuesFromOrder,
@@ -74,6 +75,39 @@ describe('ticket form schema (T-136) validation matrix', () => {
       qty: 10,
       price: null,
     });
+  });
+
+  it('opens as a limit at a prefilled price (placing from the chart, T17)', () => {
+    expect(defaultTicketValues('BUY', { price: 156_000 })).toEqual({
+      side: 'BUY',
+      type: 'LIMIT',
+      product: 'DELIVERY',
+      qty: 1,
+      price: 156_000,
+    });
+  });
+});
+
+describe('fillsImmediately (SPEC-TFC-1 §8.2)', () => {
+  const limitAt = (side: 'BUY' | 'SELL', price: number | null) =>
+    ({ side, type: 'LIMIT', price }) as const;
+
+  it.each([
+    ['a buy above the LTP', limitAt('BUY', 150_005), true],
+    ['a buy at the LTP', limitAt('BUY', 150_000), false],
+    ['a buy below the LTP', limitAt('BUY', 149_995), false],
+    ['a sell below the LTP', limitAt('SELL', 149_995), true],
+    ['a sell at the LTP', limitAt('SELL', 150_000), false],
+    ['a sell above the LTP', limitAt('SELL', 150_005), false],
+    ['a limit with no price yet', limitAt('BUY', null), false],
+    ['a market order', { side: 'BUY', type: 'MARKET', price: 160_000 } as const, false],
+  ])('%s → %s', (_, values, expected) => {
+    expect(fillsImmediately(values, 150_000)).toBe(expected);
+  });
+
+  it('is unknown, so false, until the LTP is known', () => {
+    expect(fillsImmediately(limitAt('BUY', 150_005), null)).toBe(false);
+    expect(fillsImmediately(limitAt('BUY', 150_005), undefined)).toBe(false);
   });
 });
 

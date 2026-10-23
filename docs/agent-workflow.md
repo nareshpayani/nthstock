@@ -3,11 +3,11 @@
 nthstock is built by a team of Claude agents running on GitHub Actions. The owner approves plans and
 specs; everything else is automatic, including merging a PR once the Reviewer labels it
 `ready-to-merge` and every check is green (ADR 0006). The owner still merges spec PRs, PRs that
-change agent or CI config (`.github/`, `.claude/`, `CLAUDE.md`) and release PRs.
+change agent or CI config (`.github/`, `.claude/`, `CLAUDE.md`). Releases need no PR: an agent promotes `develop` to production when the owner asks.
 
 Branches (ADR 0010): every PR targets `develop`, the default branch and the development environment.
-`main` is production and moves only when the owner merges a release PR from `develop`
-([runbooks/environments.md](runbooks/environments.md)).
+`production` is the live site and moves only through Promote to production, which checks develop is
+fully tested first (ADR 0011, [runbooks/environments.md](runbooks/environments.md)).
 
 ## The loop
 
@@ -31,7 +31,7 @@ CI red on develop (after a merge, or in a scheduled health run: 09:20 and 12:30 
 Green CI on develop
   └─► Web hosting deploys the development environment and smoke-tests it
 Owner asks for a release
-  └─► release PR develop ─► main ─► owner merges ─► green CI on main ─► live deploy, smoke-tested
+  └─► Promote to production (develop CI green + dev smoke test) ─► green CI on production ─► live deploy, smoke-tested
 Hourly sweep
   └─► catches red PRs the events missed (Dependabot runs get no secrets; PRs red only because develop was red)
 Push to develop makes an open PR conflict
@@ -40,9 +40,9 @@ Push to develop makes an open PR conflict
                                                            └─ can't keep both sides ─► `needs-human`
 ```
 
-`develop` and `main` are never modified by agents: conflicts are always resolved on the PR branch by
+`develop` and `production` are never pushed to by agents: conflicts are always resolved on the PR branch by
 merging its base in (no rebase, no force-push), a pre-push hook blocks pushes to either, and branch
-protection is the final guard. Release PRs (head `develop`) are left to the owner. Dependabot PRs are skipped by the conflict resolver because
+protection is the final guard; only the promotion workflow moves `production`. Dependabot PRs are skipped by the conflict resolver because
 Dependabot rebases its own PRs, but their CI failures go to the Fixer.
 
 | Agent | Workflow | Role definition |
@@ -55,6 +55,7 @@ Dependabot rebases its own PRs, but their CI failures go to the Fixer.
 | Conflict resolver | `.github/workflows/agent-conflicts.yml` | `.claude/agents/fixer.md` (Merge conflicts) |
 | Auto-merge | `.github/workflows/agent-automerge.yml` | — |
 | Issue closer | `.github/workflows/agent-close-issues.yml` | — |
+| Branch cleanup (deletes a PR's head branch once it is merged; hourly sweep for auto-merges) | `.github/workflows/branch-cleanup.yml` | — |
 | Issue keys | `.github/workflows/issue-keys.yml`, `tools/github/issueKey.sh` | — |
 | PR title check | `.github/workflows/pr-title.yml` | — |
 | (glue) | `agent-promote-stories.yml`, `agent-labels.yml` | — |
@@ -98,16 +99,17 @@ Dependabot rebases its own PRs, but their CI failures go to the Fixer.
   variable `AGENT_AUTOMERGE` to `false`. It merges one PR per run, because the other PRs' checks ran
   against the old `develop`. After merging it starts CI, CodeQL, the conflict resolver and the label
   sync on `develop`, because merges made with the Actions token don't trigger push workflows. It
-  never merges into `main`.
+  only merges into `develop`.
 - **Environments (ADR 0010):** every green CI run on `develop` deploys to the **development**
-  environment (the Firebase `dev` channel); every green CI run on `main` deploys to **production**,
+  environment (the Firebase `dev` channel); every green CI run on `production` deploys to **production**,
   the live site (`docs/runbooks/environments.md`).
-- **Releases:** when the owner asks for a release, an agent follows `docs/runbooks/release.md` (the
-  `release` skill): a release PR from `develop` into `main`, the development site link to the owner,
-  the owner merges it with a merge commit, and the agent watches the smoke-tested live deploy.
-- **Agents never merge by hand, never push to `develop` or `main`, never touch secrets, and deploy
-  only through the release flow.** Every agent job that can push installs a pre-push hook that
-  refuses `develop` and `main`, and the Fixer's `gh` access excludes `gh pr merge`.
+- **Releases (ADR 0011):** when the owner asks for a release, an agent follows
+  `docs/runbooks/release.md` (the `release` skill): it runs Promote to production, which refuses
+  unless develop's head has green CI and passed the development smoke test, then moves `production`
+  to it; the agent watches the smoke-tested live deploy and rolls back on failure. No release PR.
+- **Agents never merge by hand, never push to `develop` or `production`, never touch secrets, and
+  deploy only through the release flow.** Every agent job that can push installs a pre-push hook that
+  refuses `develop` and `production`, and the Fixer's `gh` access excludes `gh pr merge`.
 - **Cost caps:** `--max-turns` per agent, job timeouts, one run per issue/PR at a time.
 
 ## One-time setup (owner)
@@ -119,9 +121,9 @@ Dependabot rebases its own PRs, but their CI failures go to the Fixer.
    this step when it expires. Set 2026-10-07.
 2. Make sure the Claude GitHub App is installed on the repo (it already is).
 3. Actions → "Agent: Sync labels" → Run workflow (creates the labels).
-4. Make `develop` the default branch and protect `develop` and `main`
-   ([runbooks/environments.md](runbooks/environments.md)). Settings → Branches → add a rule for
-   `develop` (and `main`): require a pull request, block force pushes, and
+4. Make `develop` the default branch, rename `main` to `production`, add `PROMOTE_TOKEN`, and
+   protect both branches ([runbooks/environments.md](runbooks/environments.md)). Settings → Branches
+   → add a rule for `develop`: require a pull request, block force pushes, and
    require these status checks (every `ci.yml` job, plus CodeQL): "Lint, typecheck, test, build",
    "Storybook build and a11y", "Playwright smoke (Chrome)", "Web vitals and render budgets (Chrome)",
    "Playwright golden path (api mode)", "Dependency audit", "Secret scan" and

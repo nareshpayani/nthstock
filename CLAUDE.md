@@ -16,14 +16,14 @@ specs and code comments cite them (`CLAUDE.md §4`).
 | D1 | Product name | **nthstock** |
 | D2 | Trading | **Paper trading only** for v1. No real-money order routing. |
 | D3 | Market data | **Mock feed**: seeded NSE/BSE symbol master (~5,000 equities + major indices) and a random-walk (GBM) tick generator; `@faker-js/faker` for company/user data. Adapter interface so a licensed vendor or broker API can plug in later. No scraped/unofficial APIs. |
-| D4 | Frontend | **Vite + React + TypeScript SPA**. Chrome only (latest 2). Fully responsive, desktop primary. **Single light theme, no dark mode.** English only, no i18n library in v1. |
+| D4 | Frontend | **Vite + React + TypeScript SPA**. Chrome only (latest 2); iPhone Safari too for the Trade from Charts surfaces (TFC-16, 2026-10-22). Fully responsive, desktop primary. **Single light theme, no dark mode.** English only, no i18n library in v1. |
 | D5 | Backend | **Modular monolith** on Node.js 22 + Fastify (`apps/api`), plus a **separate realtime WebSocket server** (`apps/realtime`) that scales independently. |
 | D6 | Database | **PostgreSQL 16** (+ TimescaleDB for candles from Phase 4) and **Redis 7** (quotes, sessions, pub/sub, jobs). |
 | D7 | Hosting | **Docker Compose locally** through Phase 5; **AWS Mumbai** from Phase 6, multi-AZ, warm standby in AWS Hyderabad. ECS Fargate first, EKS if needed. Terraform. |
 | D8 | Design | Same layout and information architecture as the reference, with **nthstock's own light theme** (own palette, typography, logo). Storybook is the design source. |
 | D9 | Repository | **Public**: https://github.com/nareshpayani/nthstock. No secrets, keys or real user data ever committed. |
 | D10 | Platforms | Desktop web first; mobile app later (React Native + Expo), so tokens, API client, contracts and utils live in `packages/*`. |
-| D11 | Tooling | **npm workspaces + Turborepo** (not pnpm). ESLint + Prettier. No git hooks; CI enforces (CI agent runners install a pre-push guard against pushing to `main` or `develop`). Claude Code hooks in `.claude/hooks/` give agents the same checks while they edit. Conventional Commits scoped by issue key (`feat(NSTOCK-0001): …`, owner decision 2026-10-07), squash merge. |
+| D11 | Tooling | **npm workspaces + Turborepo** (not pnpm). ESLint + Prettier. No git hooks; CI enforces (CI agent runners install a pre-push guard against pushing to `production` or `develop`). Claude Code hooks in `.claude/hooks/` give agents the same checks while they edit. Conventional Commits scoped by issue key (`feat(NSTOCK-0001): …`, owner decision 2026-10-07), squash merge. |
 
 ## 1. Product vision → [docs/product.md §1](docs/product.md)
 Reference UX: the Paytm Money stocks dashboard, its layout and information architecture only (D8).
@@ -60,14 +60,16 @@ docs/           product, architecture, adr/, specs/, agent-workflow, runbooks/ (
 - Accessibility WCAG 2.2 AA; colour is never the only up/down signal.
 - UI PRs get before/after screenshots of every changed screen in the PR body automatically
   (`pr-screenshots.yml`); a new route goes in `apps/web/e2e/screens/screens.ts`.
-- **Branches (ADR 0010):** `develop` is the default branch and the development environment; `main` is
-  production. Branches `feat|fix|chore|docs/…` off `develop`, PRs into `develop`, squash merge, every
-  PR green. Only a release PR from `develop` (merge commit, owner merges) moves `main`. Issues are titled
+- **Branches (ADR 0010, 0011):** `develop` is the default branch and the development environment;
+  `production` is the live site. Branches `feat|fix|chore|docs/…` off `develop`, PRs into `develop`,
+  squash merge, every PR green. Only the Promote to production workflow moves `production` (no release
+  PR). Issues are titled
   `NSTOCK-0001 : create login flow` (stories are sub-issues of their epic) and PR titles are
   `feat(NSTOCK-0001): create login flow` (`.claude/rules/git-and-prs.md`).
 - **Attribution (owner decision 2026-10-21):** work is credited to Naresh Payani only. No "Claude" or
   "Claude Code" name, `Co-Authored-By` trailer or "Generated with" footer in commits, branch
-  names, PR text, comments, reviews, issues or deploy messages (`.claude/rules/git-and-prs.md`).
+  names, PR text, comments, reviews, issues or deploy messages (`.claude/rules/git-and-prs.md`). One exception (TFC-05,
+  2026-10-22): `WRITEUP.md` names the AI tools used, as the client brief requires.
 - Quality gate = `npm run check` (format, lint, typecheck, tests, build), plus E2E, budgets and
   security scans in CI.
 
@@ -79,11 +81,12 @@ Each phase ends with a demo and owner sign-off before the next starts.
 2. **Architecture changes** go through an ADR in `docs/adr/`.
 3. **Agents** (Planner, Developer, Reviewer, Fixer; roles in `.claude/agents/`) run on GitHub
    Actions. Green non-spec PRs labelled `ready-to-merge` auto-merge (ADR 0006). The owner merges spec
-   PRs, release PRs into `main`, and PRs touching `.github/`, `.claude/` or `CLAUDE.md`.
+   PRs and PRs touching `.github/`, `.claude/` or `CLAUDE.md`.
 4. **Done means closed:** a PR lists `Closes #N` for every issue it completes.
-5. **Agents never** push to `develop` or `main`, touch real money, commit secrets, or add a paid service or a
-   dependency outside the approved stack without asking. Production changes only when the owner
-   merges a release PR from `develop` into `main` (ADR 0010, `docs/runbooks/release.md`).
+5. **Agents never** push to `develop` or `production`, touch real money, commit secrets, or add a paid service or a
+   dependency outside the approved stack without asking. Production changes only when the owner asks
+   for a deploy and an agent runs Promote to production, which refuses unless develop passed CI and
+   the development smoke test (ADR 0011, `docs/runbooks/release.md`).
 6. **One phase at a time:** no phase starts without owner sign-off in the project chat.
 
 ## 9. Compliance notes → [docs/product.md §9](docs/product.md)
@@ -107,7 +110,7 @@ Node 22 is required (`.nvmrc`). On the owner's Mac: `export PATH="$(brew --prefi
 | `agents/` | Planner, Developer, Reviewer, Fixer roles (used by GitHub Actions), and the report-only specialists the Reviewer calls: `frontend-reviewer`, `security-reviewer`, `database-reviewer`, `silent-failure-hunter`, `test-gap-analyzer`; plus `e2e-author` for Playwright specs |
 | `rules/` | Detailed standards, loaded when you work in matching paths: `frontend`, `backend`, `packages`, `testing`, `git-and-prs` |
 | `skills/` | Repeatable procedures: `run-checks`, `local-dev`, `new-web-feature`, `new-api-module`, `browser-qa`, `production-audit`, `database-migrations`, `latency`, `release` |
-| `hooks/` | Automatic checks (see `hooks/README.md`): format + lint after each edit, typecheck of changed workspaces at the end of a turn, guards against pushing to `main` or `develop` and editing secrets or generated files |
+| `hooks/` | Automatic checks (see `hooks/README.md`): format + lint after each edit, typecheck of changed workspaces at the end of a turn, guards against pushing to `production` or `develop` and editing secrets or generated files |
 | `settings.json` | Hook wiring and shared permissions |
 
 File names inside `.claude/` are kebab-case because Claude Code requires it for skill names; the

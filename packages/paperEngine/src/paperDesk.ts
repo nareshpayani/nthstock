@@ -1,26 +1,45 @@
 import type {
+  AccountState,
   Exchange,
   Holding,
   Instrument,
   InstrumentStats,
   InstrumentToken,
   ModifyOrderRequest,
+  ModifyTrailingStopRequest,
   Order,
   OrderStatus,
   OrderHistoryResponse,
   OrdersPage,
   PlaceOrderRequest,
+  PlaceTrailingStopRequest,
   PortfolioSummary,
+  ProductType,
   Position,
   Quote,
   FundsSummary,
   LedgerPage,
+  TrailingStop,
+  TrailingStopStatus,
 } from '@nthstock/contracts';
 import { PAGE_LIMIT_DEFAULT } from '@nthstock/contracts';
-import { istDateKey, nseHolidays2026, type Clock, type HolidayTable } from '@nthstock/utils';
+import {
+  fromIst,
+  istDateKey,
+  nseHolidays2026,
+  toIstParts,
+  type Clock,
+  type HolidayTable,
+} from '@nthstock/utils';
 import { createEngineContext, type PriceSource } from './context.js';
 import type { InstrumentInfo, InstrumentSource } from './instruments.js';
-import { PaperEngine, type OrderActionResult, type PaperEngineSnapshot } from './paperEngine.js';
+import type { MarketHours } from './orderValidation.js';
+import {
+  PaperEngine,
+  type OrderActionResult,
+  type PaperEngineSnapshot,
+  type TrailingStopActionResult,
+} from './paperEngine.js';
 import { averagePrice, basisPoints, holdingValues, positionValues } from './positionMath.js';
 
 /**
@@ -55,10 +74,16 @@ export type PaperDeskOptions = {
   /** Ids for orders and ledger entries: unique across users (the backend injects a random one). */
   newId: () => string;
   holidays?: HolidayTable;
+  /** Market hours for every engine on the desk; defaults to `nse` (see `PaperEngineOptions`). */
+  marketHours?: MarketHours;
   /** Defaults to a Map. */
   engines?: EngineRegistry;
   /** Every order change of every user: the backend turns these into `orderUpdate` frames. */
   onOrderUpdate?: (userId: string, order: Order) => void;
+  /** Every trailing-stop change of every user (SPEC-TFC-1 §10.1). */
+  onTrailingStopUpdate?: (userId: string, stop: TrailingStop) => void;
+  /** False refuses trailing stops (apps/api until its store keeps them). Default true. */
+  trailingStops?: boolean;
   /** After any change to a user's engine (MSW saves a snapshot here). */
   onChange?: (userId: string, engine: PaperEngine) => void;
 };
@@ -70,10 +95,19 @@ export type OrdersPageQuery = { status?: OrderStatus; cursor?: string; limit?: n
 export type LedgerPageQuery = { cursor?: string; limit?: number };
 
 const LIVE: ReadonlySet<OrderStatus> = new Set(['AMO', 'OPEN']);
+/** Trailing stops that must step on every tick of their instrument (SPEC-TFC-1 §10.3). */
+const STEPPED: ReadonlySet<TrailingStopStatus> = new Set(['ARMED', 'TRAILING', 'TRIGGERED']);
 
 type CachedInstrument = { info: InstrumentInfo | null; day: string };
 
 type CachedClose = { prevClose: number | null; day: string };
+
+/**
+ * A tick at most this old runs the engines at its own timestamp: the catch-up replay after a
+ * paused tab (SPEC-TFC-1 §6.7), so session events fall between the right ticks. Older ticks (a
+ * fixed test quote) run at the clock's time.
+ */
+const REPLAY_WINDOW_MS = 30 * 60_000;
 
 /**
  * The paper-trading desk: one `PaperEngine` per user, all fed by one market (ADR 0004). Both mock
@@ -85,8 +119,11 @@ type CachedClose = { prevClose: number | null; day: string };
  * - Prices: the last tick for each instrument, seeded from the adapter's quote the first time an
  *   order names it, then kept current by an adapter subscription. `pinPrice` overrides the feed
  *   for one instrument (scripted ticks in tests and scenarios).
- * - Ticks: every tick syncs only the engines with a live (AMO or OPEN) order in a ticked
- *   instrument, so a limit order fills on the tick that crosses it and `onOrderUpdate` fires.
+ * - Ticks: every tick syncs only the engines with a live (AMO or OPEN) order or an active
+ *   trailing stop in a ticked instrument, so a limit order fills on the tick that crosses it, a
+ *   stop steps even with no working order, and `onOrderUpdate` fires.
+ *   `setFillCap` splits LIMIT fills in an instrument over several ticks (the demo Simulator's
+ *   "Split large fills", SPEC-TFC-1 TFC-10).
  * - Session events (9:15 AMO release, 15:20 square-off, 15:30 close) run on the next sync of an
  *   engine: every read syncs first, and `sweep()` (a timer in the backend) syncs every engine.
  * - Instruments: names and today's circuit band, from the adapter's instrument list and stats,
@@ -98,17 +135,24 @@ export class PaperDesk {
   readonly #holidays: HolidayTable;
   readonly #ticks = new Map<InstrumentToken, number>();
   readonly #pins = new Map<InstrumentToken, number>();
+  /** Ticks seen per instrument, from the feed and from pinned prices. */
+  readonly #tickSeq = new Map<InstrumentToken, number>();
+  readonly #fillCaps = new Map<InstrumentToken, number>();
   readonly #instruments = new Map<InstrumentToken, CachedInstrument>();
   readonly #subscriptions = new Map<InstrumentToken, () => void>();
   readonly #prevCloses = new Map<InstrumentToken, CachedClose>();
-  /** Users with a live order in each instrument. */
+  /** Users with a live order or an active trailing stop in each instrument. */
   readonly #liveUsers = new Map<InstrumentToken, Set<string>>();
-  /** The instruments each user has live orders in (the reverse of `#liveUsers`). */
+  /** The instruments each user has live orders or stops in (the reverse of `#liveUsers`). */
   readonly #liveTokens = new Map<string, Set<InstrumentToken>>();
   readonly #prices: PriceSource;
   readonly #instrumentSource: InstrumentSource;
   #symbolMaster: Promise<Map<InstrumentToken, Instrument>> | null = null;
   #disposed = false;
+  /** While a batch of ticks is ingested, the instant they happened; the engines' "now". */
+  #tickAt: Date | null = null;
+  /** What the engines read as now: the tick being ingested, else the clock. */
+  readonly #engineClock: Clock = { now: () => this.#tickAt ?? this.#options.clock.now() };
 
   constructor(options: PaperDeskOptions) {
     this.#options = options;
@@ -116,6 +160,7 @@ export class PaperDesk {
     this.#holidays = options.holidays ?? nseHolidays2026;
     this.#prices = {
       getLtp: (token) => this.#pins.get(token) ?? this.#ticks.get(token) ?? null,
+      tickSeq: (token) => this.#tickSeq.get(token) ?? 0,
     };
     this.#instrumentSource = {
       getInstrument: (token) => this.#instruments.get(token)?.info ?? null,
@@ -148,6 +193,40 @@ export class PaperDesk {
     const token = this.#engines.get(userId)?.getOrder(id)?.token;
     if (token !== undefined) await this.#prepare(token);
     return this.#change(userId, (engine) => engine.cancel(id));
+  }
+
+  async placeTrailingStop(
+    userId: string,
+    request: PlaceTrailingStopRequest,
+  ): Promise<TrailingStopActionResult> {
+    await this.#prepare(request.token);
+    return this.#change(userId, (engine) => engine.placeTrailingStop(request));
+  }
+
+  async modifyTrailingStop(
+    userId: string,
+    id: string,
+    request: ModifyTrailingStopRequest,
+  ): Promise<TrailingStopActionResult> {
+    const token = this.#engines.get(userId)?.getTrailingStop(id)?.token;
+    if (token !== undefined) await this.#prepare(token);
+    return this.#change(userId, (engine) => engine.modifyTrailingStop(id, request));
+  }
+
+  async cancelTrailingStop(userId: string, id: string): Promise<TrailingStopActionResult> {
+    const token = this.#engines.get(userId)?.getTrailingStop(id)?.token;
+    if (token !== undefined) await this.#prepare(token);
+    return this.#change(userId, (engine) => engine.cancelTrailingStop(id));
+  }
+
+  /** Closes the user's position in one step (`PaperEngine.closePosition`); answers with the exit. */
+  async closePosition(
+    userId: string,
+    token: InstrumentToken,
+    product: ProductType,
+  ): Promise<OrderActionResult> {
+    await this.#prepare(token);
+    return this.#change(userId, (engine) => engine.closePosition(token, product));
   }
 
   // ---- Reads (each syncs the user's engine first) --------------------------------------------
@@ -197,6 +276,47 @@ export class PaperDesk {
       engine.reset();
       return engine.fundsSummary();
     });
+  }
+
+  /**
+   * The account's trading state at one `seq` (ADR 0012): today's and the working orders, today's
+   * positions and trailing stops, and the funds. The trading store loads it on start and after a
+   * gap in `accountDelta` frames.
+   */
+  async accountState(userId: string): Promise<AccountState> {
+    const { seq, orders, trailingStops, funds } = this.#change(userId, (engine) => {
+      engine.sync();
+      const day = toIstParts(this.#options.clock.now());
+      const since = fromIst(day.year, day.month, day.day, 0).toISOString();
+      const today = (record: { updatedAt: string }) => record.updatedAt >= since;
+      return {
+        seq: engine.seq,
+        orders: engine.orders().filter((order) => LIVE.has(order.status) || today(order)),
+        trailingStops: engine
+          .trailingStops()
+          .filter(
+            (stop) => STEPPED.has(stop.status) || stop.status === 'PENDING_ENTRY' || today(stop),
+          ),
+        funds: engine.fundsSummary(),
+      };
+    });
+    const positions = await this.positions(userId);
+    return {
+      seq,
+      orders: [...orders].reverse(),
+      positions,
+      trailingStops: [...trailingStops].reverse(),
+      funds,
+    };
+  }
+
+  /** Today's trailing stops, newest first (SPEC-TFC-1 §10.6). */
+  trailingStops(userId: string): TrailingStop[] {
+    const all = this.#change(userId, (engine) => {
+      engine.sync();
+      return engine.trailingStops();
+    });
+    return [...all].reverse();
   }
 
   /** The order's changes, oldest first (T-146); null when the user has no such order. */
@@ -311,16 +431,42 @@ export class PaperDesk {
 
   // ---- Feed ----------------------------------------------------------------------------------
 
-  /** A batch of ticks: updates prices, then syncs the engines with live orders in them. */
+  /**
+   * A batch of ticks: updates prices, then syncs the engines with live orders or stops in them.
+   * A recent tick (a replayed one after a paused tab included) runs the engines at its own
+   * timestamp, so a 15:20 square-off lands between the ticks either side of it (SPEC-TFC-1 §6.7).
+   */
   ingest(quotes: readonly Quote[]): void {
     if (this.#disposed) return;
     const users = new Set<string>();
+    let at = Number.NEGATIVE_INFINITY;
     for (const quote of quotes) {
       if (quote.ltp <= 0) continue;
       this.#ticks.set(quote.token, quote.ltp);
+      this.#countTick(quote.token);
+      at = Math.max(at, Date.parse(quote.ts));
       for (const userId of this.#liveUsers.get(quote.token) ?? []) users.add(userId);
     }
-    for (const userId of users) this.#syncUser(userId);
+    const now = this.#options.clock.now().getTime();
+    this.#tickAt = at <= now && now - at <= REPLAY_WINDOW_MS ? new Date(at) : null;
+    try {
+      for (const userId of users) this.#syncUser(userId);
+    } finally {
+      this.#tickAt = null;
+    }
+  }
+
+  /**
+   * Symbols with a live order or an active trailing stop, for any user: the instruments the mock
+   * market replays tick by tick after a paused tab (SPEC-TFC-1 §6.7).
+   */
+  activeSymbols(): string[] {
+    const symbols: string[] = [];
+    for (const token of this.#liveUsers.keys()) {
+      const symbol = this.#instruments.get(token)?.info?.symbol;
+      if (symbol !== undefined) symbols.push(symbol);
+    }
+    return symbols;
   }
 
   /**
@@ -332,11 +478,34 @@ export class PaperDesk {
       throw new RangeError(`A pinned price must be positive paise, got ${String(ltp)}`);
     }
     this.#pins.set(token, ltp);
+    this.#countTick(token);
     for (const userId of [...(this.#liveUsers.get(token) ?? [])]) this.#syncUser(userId);
   }
 
   unpinPrice(token: InstrumentToken): void {
     this.#pins.delete(token);
+  }
+
+  /**
+   * Caps how many shares of a LIMIT order in `token` fill per tick, for every user; `null` lifts
+   * the cap. The demo Simulator uses it to show partial fills (SPEC-TFC-1 TFC-10).
+   */
+  setFillCap(token: InstrumentToken, maxQty: number | null): void {
+    if (maxQty === null) {
+      this.#fillCaps.delete(token);
+      return;
+    }
+    if (!Number.isSafeInteger(maxQty) || maxQty < 1) {
+      throw new RangeError(
+        `A fill cap must be a whole number of at least 1, got ${String(maxQty)}`,
+      );
+    }
+    this.#fillCaps.set(token, maxQty);
+  }
+
+  /** The per-tick fill cap for `token`, or null when fills are whole. */
+  fillCap(token: InstrumentToken): number | null {
+    return this.#fillCaps.get(token) ?? null;
   }
 
   /**
@@ -354,8 +523,7 @@ export class PaperDesk {
    */
   async restore(userId: string, snapshot: PaperEngineSnapshot): Promise<void> {
     const engine = this.#newEngine(userId, snapshot);
-    const live = engine.orders().filter((order) => LIVE.has(order.status));
-    await Promise.all(live.map((order) => this.#prepare(order.token)));
+    await Promise.all([...activeTokens(engine)].map((token) => this.#prepare(token)));
     this.#engines.set(userId, engine);
     this.#reindex(userId, engine);
   }
@@ -379,12 +547,17 @@ export class PaperDesk {
     }
   }
 
+  #countTick(token: InstrumentToken): void {
+    this.#tickSeq.set(token, (this.#tickSeq.get(token) ?? 0) + 1);
+  }
+
   #syncUser(userId: string): void {
     const engine = this.#engines.get(userId);
     if (!engine) return;
-    const changed = engine.sync();
+    const before = engine.seq;
+    engine.sync();
     this.#reindex(userId, engine);
-    if (changed.length > 0) this.#options.onChange?.(userId, engine);
+    if (engine.seq !== before) this.#options.onChange?.(userId, engine);
   }
 
   #engineFor(userId: string): PaperEngine {
@@ -397,20 +570,28 @@ export class PaperDesk {
   }
 
   #newEngine(userId: string, snapshot?: PaperEngineSnapshot): PaperEngine {
-    const { clock, newId, onOrderUpdate } = this.#options;
+    const { newId, onOrderUpdate, onTrailingStopUpdate, trailingStops } = this.#options;
     return new PaperEngine({
-      ctx: createEngineContext({ clock, prices: this.#prices, nextId: newId }),
+      ctx: createEngineContext({ clock: this.#engineClock, prices: this.#prices, nextId: newId }),
       instruments: this.#instrumentSource,
       holidays: this.#holidays,
+      fillCap: (token) => this.fillCap(token),
+      ...(this.#options.marketHours ? { marketHours: this.#options.marketHours } : {}),
       ...(onOrderUpdate ? { onOrderUpdate: (order: Order) => onOrderUpdate(userId, order) } : {}),
+      ...(onTrailingStopUpdate
+        ? { onTrailingStopUpdate: (stop: TrailingStop) => onTrailingStopUpdate(userId, stop) }
+        : {}),
+      ...(trailingStops === undefined ? {} : { trailingStops }),
       ...(snapshot ? { snapshot } : {}),
     });
   }
 
-  /** Records which instruments the user has live orders in, so ticks find their engine. */
+  /**
+   * Records which instruments the user has live orders or active trailing stops in, so ticks find
+   * their engine.
+   */
   #reindex(userId: string, engine: PaperEngine): void {
-    const next = new Set<InstrumentToken>();
-    for (const order of engine.orders()) if (LIVE.has(order.status)) next.add(order.token);
+    const next = activeTokens(engine);
     const previous = this.#liveTokens.get(userId) ?? new Set<InstrumentToken>();
     for (const token of previous) {
       if (next.has(token)) continue;
@@ -508,6 +689,14 @@ function newestFirstPage<T extends { id: string }>(
   const last = items.at(-1);
   const more = start + limit < newestFirst.length;
   return { items, nextCursor: more && last ? last.id : null };
+}
+
+/** Instruments with a live order or a trailing stop that steps. */
+function activeTokens(engine: PaperEngine): Set<InstrumentToken> {
+  const tokens = new Set<InstrumentToken>();
+  for (const order of engine.orders()) if (LIVE.has(order.status)) tokens.add(order.token);
+  for (const stop of engine.trailingStops()) if (STEPPED.has(stop.status)) tokens.add(stop.token);
+  return tokens;
 }
 
 function mapRegistry(): EngineRegistry {

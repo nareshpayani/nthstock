@@ -1,4 +1,4 @@
-import type { Order } from '@nthstock/contracts';
+import type { Order, TrailingStop } from '@nthstock/contracts';
 import {
   EmptyState,
   ErrorState,
@@ -13,6 +13,8 @@ import { useQuery } from '@tanstack/react-query';
 import { useContext, useMemo, useRef, useState } from 'react';
 import { PageHeader } from '@/shared/components/PageHeader';
 import { SearchStocksButton } from '@/shared/components/SearchStocksButton';
+import { usePendingOrderPrices } from '@/shared/hooks/usePendingOrderPrices';
+import { useTrailingStops } from '@/shared/hooks/useTrailingStops';
 import { useApiClient } from '@/shared/lib/apiClientContext';
 import { MarketSessionContext } from '@/shared/lib/marketSessionContext';
 import { useTicketIntentStore } from '@/shared/lib/ticketIntentStore';
@@ -47,7 +49,8 @@ function LoadingRows() {
  * The order book (T-144 to T-147): Open (AMO and OPEN), Executed, and Cancelled (with Rejected)
  * tabs with counts, from one list so each count is exactly its rows. Open orders can be modified
  * in the order ticket or cancelled after a confirm (T-145); any row opens the detail drawer with
- * its status timeline (T-146). Live order updates refetch the book (T-147).
+ * its status timeline (T-146). Live order updates refetch the book (T-147), or with the trading
+ * store the store writes it through (T11), and an order tied to a trailing stop shows its status.
  */
 export function OrdersPage({ search, onSearchChange }: OrdersPageProps) {
   const api = useApiClient();
@@ -55,6 +58,17 @@ export function OrdersPage({ search, onSearchChange }: OrdersPageProps) {
   const { clock } = useContext(MarketSessionContext);
   const openTicket = useTicketIntentStore((s) => s.openTicket);
   const book = useQuery(orderBookQuery(api));
+  const trailingStops = useTrailingStops();
+  const pendingPrices = usePendingOrderPrices();
+  const stopsByOrder = useMemo(() => {
+    const byOrder = new Map<string, TrailingStop>();
+    // Oldest first, so the newest stop wins an order shared by two (a stop replaced on an entry).
+    for (const stop of [...trailingStops].reverse()) {
+      if (stop.entryOrderId) byOrder.set(stop.entryOrderId, stop);
+      if (stop.exitOrderId) byOrder.set(stop.exitOrderId, stop);
+    }
+    return byOrder;
+  }, [trailingStops]);
   const cancelOrder = useCancelOrder();
   const [cancelling, setCancelling] = useState<Order | null>(null);
   const detailTrigger = useRef<HTMLElement | null>(null);
@@ -136,6 +150,8 @@ export function OrdersPage({ search, onSearchChange }: OrdersPageProps) {
                 }}
                 onModify={modify}
                 onCancel={(order) => setCancelling(order)}
+                stops={stopsByOrder}
+                pendingPrices={pendingPrices}
               />
             )}
           </TabsContent>

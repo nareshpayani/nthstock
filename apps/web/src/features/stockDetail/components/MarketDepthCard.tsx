@@ -1,3 +1,4 @@
+import type { TradingState } from '@nthstock/apiClient';
 import type { Depth, Instrument } from '@nthstock/contracts';
 import { DEPTH_LEVELS } from '@nthstock/contracts';
 import { ErrorState, Skeleton, cn } from '@nthstock/ui';
@@ -5,9 +6,13 @@ import { formatInr, formatIstTime } from '@nthstock/utils';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { useRef } from 'react';
 import { Card } from '@/shared/components/Card';
+import { PendingPrice } from '@/shared/components/PendingPrice';
+import { useFocusedDepth } from '@/shared/hooks/useFocusedDepth';
 import { useInView } from '@/shared/hooks/useInView';
 import { useMarketOpen } from '@/shared/hooks/useMarketOpen';
 import { usePageVisible } from '@/shared/hooks/usePageVisible';
+import { usePendingOrderPrices } from '@/shared/hooks/usePendingOrderPrices';
+import { useTradingSelector } from '@/shared/hooks/useTradingSelector';
 import { useApiClient } from '@/shared/lib/apiClientContext';
 import { DEPTH_REFRESH_MS, depthQuery } from '../api/stockDetailQueries';
 import { barPercent, depthScale, padToWidest } from '../model/depthBars';
@@ -182,7 +187,8 @@ function DepthBook({ depth }: { depth: Depth | null }) {
  * every second, but only while the market is open, the card is on screen (IntersectionObserver)
  * and the tab is visible; otherwise the last book stays up. Rows keep a fixed height and the
  * skeleton has the same shape as the book, so loading and refreshing never shift the layout.
- * Equities only.
+ * Equities only. With the trading store running (T11) the book comes with each `accountDelta`
+ * frame, in step with the price and fills, and the REST poll only fills in until the first frame.
  */
 export function MarketDepthCard({ instrument }: MarketDepthCardProps) {
   const api = useApiClient();
@@ -191,12 +197,15 @@ export function MarketDepthCard({ instrument }: MarketDepthCardProps) {
   const pageVisible = usePageVisible();
   const marketOpen = useMarketOpen();
   const polling = marketOpen && inView && pageVisible;
-  const depth = useQuery({
+  const live = useFocusedDepth(instrument.symbol, instrument.exchange);
+  const rest = useQuery({
     ...depthQuery(api, { symbol: instrument.symbol, exchange: instrument.exchange }),
     placeholderData: keepPreviousData,
-    refetchInterval: polling ? DEPTH_REFRESH_MS : false,
+    refetchInterval: polling && !live ? DEPTH_REFRESH_MS : false,
     refetchIntervalInBackground: false,
   });
+  const data = live ?? rest.data;
+  const moving = useMovingOrders(instrument.token);
 
   const status = marketOpen
     ? polling
@@ -207,20 +216,38 @@ export function MarketDepthCard({ instrument }: MarketDepthCardProps) {
   return (
     <div ref={ref} data-polling={polling ? 'on' : 'off'}>
       <Card title={strings.depth.title}>
-        {depth.data ? (
-          <div className="grid gap-3">
-            <DepthBook depth={depth.data} />
+        {data ? (
+          <div className="grid gap-3" data-source={live ? 'frame' : 'rest'}>
+            <DepthBook depth={data} />
+            {moving.length > 0 ? (
+              <ul aria-label={strings.depth.moving} className="grid gap-1">
+                {moving.map(({ order, pending }) => (
+                  <li
+                    key={order.id}
+                    className="flex items-baseline justify-between gap-3 text-label"
+                  >
+                    <span className="text-ink-muted">
+                      {strings.depth.yourOrder(
+                        strings.depth.sides[order.side],
+                        order.qty - order.filledQty,
+                      )}
+                    </span>
+                    <PendingPrice pending={pending} />
+                  </li>
+                ))}
+              </ul>
+            ) : null}
             <p className="flex flex-wrap justify-between gap-x-3 text-label text-ink-muted">
               <span>{status}</span>
-              <span>{strings.depth.asOf(formatIstTime(new Date(depth.data.ts)))}</span>
+              <span>{strings.depth.asOf(formatIstTime(new Date(data.ts)))}</span>
             </p>
           </div>
-        ) : depth.isError ? (
+        ) : rest.isError ? (
           <ErrorState
             title={strings.depth.errorTitle}
             description={strings.depth.errorBody}
             retryLabel={strings.depth.retry}
-            onRetry={() => void depth.refetch()}
+            onRetry={() => void rest.refetch()}
           />
         ) : (
           <div role="status" aria-label={strings.depth.loading} className="grid gap-3">
@@ -234,4 +261,19 @@ export function MarketDepthCard({ instrument }: MarketDepthCardProps) {
       </Card>
     </div>
   );
+}
+
+const selectOrders = (state: TradingState) => state.orders;
+
+/**
+ * Your orders in this instrument that are moving (T16, TFC-21): a chart drag or a modify in flight,
+ * so the depth card shows the price the order is going to beside the book it will join.
+ */
+function useMovingOrders(token: number) {
+  const pending = usePendingOrderPrices();
+  const orders = useTradingSelector(selectOrders);
+  return orders.flatMap((order) => {
+    const price = order.token === token ? pending.get(order.id) : undefined;
+    return price ? [{ order, pending: price }] : [];
+  });
 }

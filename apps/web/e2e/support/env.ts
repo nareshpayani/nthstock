@@ -22,3 +22,18 @@ export const API_TAG = '@api';
 export const PERF_TAG = '@perf';
 
 export const E2E_PERF = process.env['E2E_PERF'] === '1';
+
+/**
+ * Tag for the touch specs (T04): they run on the `chromium-mobile` project and, with
+ * `E2E_WEBKIT=1`, on `webkit-iphone`. The desktop project skips them.
+ */
+export const TOUCH_TAG = '@touch';
+
+/** WebKit must be installed (`npx playwright install webkit`) before the iPhone project runs. */
+export const E2E_WEBKIT = process.env['E2E_WEBKIT'] === '1';
+
+/**
+ * Tag for the journey specs (T26, SPEC-TFC-1 US-01 to US-05): they run on every project, the
+ * desktop one and both touch ones.
+ */
+export const JOURNEY_TAG = '@journey';

@@ -40,6 +40,36 @@ describe('matchFill (T-065)', () => {
     expect(matchFill({ ...market('BUY', 10), filledQty: 10 }, 50_00)).toBeNull();
   });
 
+  it('fills a marketable limit at the better price on arrival, at the limit while resting', () => {
+    expect(matchFill(limit('BUY', 100_00), 99_50, { onArrival: true })).toEqual({
+      qty: 10,
+      price: 99_50,
+    });
+    expect(matchFill(limit('SELL', 100_00), 101_00, { onArrival: true })).toEqual({
+      qty: 10,
+      price: 101_00,
+    });
+    expect(matchFill(limit('BUY', 100_00), 100_05, { onArrival: true })).toBeNull();
+    expect(matchFill(market('BUY'), 99_50, { onArrival: true })).toEqual({ qty: 10, price: 99_50 });
+  });
+
+  it('caps a LIMIT fill per tick, never a MARKET fill', () => {
+    expect(matchFill(limit('BUY', 100_00), 100_00, { maxQty: 3 })).toEqual({
+      qty: 3,
+      price: 100_00,
+    });
+    expect(matchFill({ ...limit('BUY', 100_00), filledQty: 9 }, 99_00, { maxQty: 3 })).toEqual({
+      qty: 1,
+      price: 100_00,
+    });
+    expect(matchFill(market('SELL'), 100_00, { maxQty: 3 })).toEqual({ qty: 10, price: 100_00 });
+    expect(matchFill(limit('BUY', 100_00), 100_00, { maxQty: null })).toEqual({
+      qty: 10,
+      price: 100_00,
+    });
+    expect(() => matchFill(limit('BUY', 100_00), 100_00, { maxQty: 0 })).toThrow(/Fill cap/);
+  });
+
   it('rejects malformed input instead of guessing', () => {
     expect(() => matchFill(market('BUY'), 100.5)).toThrow(/integer number of paise/);
     expect(() => matchFill(market('BUY'), 0)).toThrow(/positive/);

@@ -6,10 +6,13 @@ import {
   Id,
   InstrumentToken,
   IsoUtc,
+  Paise,
+  Seq,
   TickPrice,
   TradingSymbol,
   cursorPage,
 } from './primitives.js';
+import { TrailingStopParams } from './trailingStopParams.js';
 
 export const OrderSide = z.enum(['BUY', 'SELL']);
 export type OrderSide = z.infer<typeof OrderSide>;
@@ -20,7 +23,18 @@ export type OrderType = z.infer<typeof OrderType>;
 export const ProductType = z.enum(['DELIVERY', 'INTRADAY']);
 export type ProductType = z.infer<typeof ProductType>;
 
-/** AMO → OPEN → EXECUTED | CANCELLED; REJECTED on validation failure. */
+/**
+ * How long an order works. `DAY` works until it fills, is cancelled or the session ends. `IOC`
+ * (immediate or cancel) fills what it can on the tick it arrives and cancels the rest; the
+ * scalper sends IOC orders (SPEC-TFC-1 §11.2).
+ */
+export const OrderValidity = z.enum(['DAY', 'IOC']);
+export type OrderValidity = z.infer<typeof OrderValidity>;
+
+/**
+ * AMO → OPEN → EXECUTED | CANCELLED; REJECTED on validation failure. A partly filled order stays
+ * OPEN with `filledQty` below `qty` (SPEC-TFC-1 §10.3).
+ */
 export const OrderStatus = z.enum(['AMO', 'OPEN', 'EXECUTED', 'CANCELLED', 'REJECTED']);
 export type OrderStatus = z.infer<typeof OrderStatus>;
 
@@ -54,6 +68,13 @@ export const PlaceOrderRequest = z
     price: TickPrice.optional(),
     /** Client-generated idempotency key, so a retried place does not create a second order. */
     clientOrderId: Id.optional(),
+    /** `DAY` when left out. */
+    validity: OrderValidity.optional(),
+    /**
+     * A trailing stop that protects the position this entry opens or adds to (SPEC-TFC-1 §6.4).
+     * It waits for the entry's first fill, then trails from that fill price.
+     */
+    attachedTrailingStop: TrailingStopParams.optional(),
   })
   .superRefine(checkPriceForType);
 export type PlaceOrderRequest = z.infer<typeof PlaceOrderRequest>;
@@ -90,10 +111,21 @@ export const Order = z.object({
   /** Limit price; null for MARKET. */
   price: TickPrice.nullable(),
   filledQty: Count,
-  avgFillPrice: TickPrice.nullable(),
+  /**
+   * Volume-weighted average of the fills so far, rounded to the paisa. Off the tick once fills at
+   * different prices are averaged (SPEC-TFC-1 §10.3).
+   */
+  avgFillPrice: Paise.positive().nullable(),
   status: OrderStatus,
   /** Plain-language reason when REJECTED. */
   statusReason: z.string().max(200).nullable(),
+  /** Orders saved before validity existed were all `DAY`, so restoring one fills it in. */
+  validity: OrderValidity.default('DAY'),
+  /**
+   * The engine sequence number of this order's latest change. The paper engine sets it; apps/api
+   * leaves it out until it adopts account frames (ADR 0012).
+   */
+  seq: Seq.optional(),
   placedAt: IsoUtc,
   updatedAt: IsoUtc,
 });
@@ -107,13 +139,14 @@ export type OrdersPage = z.infer<typeof OrdersPage>;
 
 /**
  * What happened to an order, one entry per change (T-146): placed (as OPEN, AMO or REJECTED),
- * modified, released at 9:15 (AMO → OPEN), executed, cancelled, or rejected when an AMO fails its
- * check at release.
+ * modified, released at 9:15 (AMO → OPEN), partly executed (some of the quantity filled, the order
+ * stays OPEN), executed, cancelled, or rejected when an AMO fails its check at release.
  */
 export const OrderHistoryEvent = z.enum([
   'PLACED',
   'MODIFIED',
   'RELEASED',
+  'PARTIALLY_EXECUTED',
   'EXECUTED',
   'CANCELLED',
   'REJECTED',
@@ -129,8 +162,13 @@ export const OrderHistoryEntry = z.object({
   type: OrderType,
   /** Limit price after the event; null for MARKET. */
   price: TickPrice.nullable(),
-  /** The fill price, on EXECUTED only. */
+  /** The fill price, on PARTIALLY_EXECUTED and EXECUTED only. */
   fillPrice: TickPrice.nullable(),
+  /**
+   * Shares filled by this event, on PARTIALLY_EXECUTED and EXECUTED. History recorded before
+   * partial fills has none: such an EXECUTED entry filled the whole quantity.
+   */
+  fillQty: OrderQty.nullable().optional(),
   /** Plain-language reason for a cancel or rejection. */
   note: z.string().max(200).nullable(),
 });

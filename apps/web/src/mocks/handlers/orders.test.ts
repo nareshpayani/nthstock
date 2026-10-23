@@ -200,6 +200,42 @@ describe('MSW orders (T-132)', () => {
     );
   });
 
+  it('loads accounts saved before trailing stops, as version 1 (SPEC-TFC-1 §10.3)', async () => {
+    const storages = { auth: memoryStorage(), orders: memoryStorage() };
+    const first = pageLoad(storages);
+    await login(first.client, '8300000005');
+    const quote = await infy(first.client);
+    const open = await first.client.call('orderPlace', {
+      body: {
+        token: quote.token,
+        side: 'BUY',
+        type: 'LIMIT',
+        product: 'DELIVERY',
+        qty: 3,
+        price: quote.ltp - 100,
+      },
+    });
+    const cookies = first.client.cookies.header() ?? '';
+    for (const cleanup of cleanups.splice(0).reverse()) cleanup();
+
+    // Rewrite what was saved the way the previous release saved it.
+    type Saved = { v: number; users: Record<string, Record<string, unknown>> };
+    const saved = JSON.parse(storages.orders.data.get(ORDERS_MOCK_STORAGE_KEY) ?? '') as Saved;
+    const legacyUsers = Object.fromEntries(
+      Object.entries(saved.users).map(([userId, snapshot]) => {
+        const { seq, trailingStops, exitOrderIds, trailingStopRequestIds, ...rest } = snapshot;
+        void [seq, trailingStops, exitOrderIds, trailingStopRequestIds];
+        return [userId, { ...rest, v: 1 }];
+      }),
+    );
+    storages.orders.setItem(ORDERS_MOCK_STORAGE_KEY, JSON.stringify({ v: 1, users: legacyUsers }));
+
+    const second = pageLoad(storages);
+    second.client.cookies.store(cookies.split('; ').map((pair) => `${pair}; Path=/`));
+    const page = await second.client.call('ordersList', { query: { status: 'OPEN' } });
+    expect(page.items.map((o) => o.id)).toEqual([open.id]);
+  });
+
   it('serves positions, the summary and order history from the same engine (T-142)', async () => {
     const storages = { auth: memoryStorage(), orders: memoryStorage() };
     const first = pageLoad(storages);
@@ -319,5 +355,47 @@ describe('MSW orders (T-132)', () => {
     second.client.cookies.store(cookies.split('; ').map((pair) => `${pair}; Path=/`));
     expect((await second.client.call('ordersList')).items).toEqual([]);
     expect((await second.client.call('fundsSummary')).available).toBe(PAPER_OPENING_BALANCE_PAISE);
+  });
+});
+
+describe('MSW orders with the market always open (T03)', () => {
+  /** Monday 28 Sep 2026, 21:00 IST: NSE is closed. */
+  const NIGHT_MS = fromIst(2026, 9, 28, 21 * 60).getTime();
+
+  function nightPage(marketHours: 'nse' | 'alwaysOpen') {
+    const mock = createMockServer({
+      clock: fixedClock(NIGHT_MS),
+      tickIntervalMs: 1_000_000_000,
+      auth: { now: () => NIGHT_MS },
+      orders: { marketHours },
+    });
+    mock.server.listen({ onUnhandledRequest: 'error' });
+    cleanups.push(() => {
+      mock.server.close();
+      mock.orders.dispose();
+      mock.adapter.dispose();
+    });
+    return createScenarioClient(fetchBackend(TEST_API_ORIGIN, fetch));
+  }
+
+  it('fills Delivery and Intraday market orders at 21:00 IST', async () => {
+    const client = nightPage('alwaysOpen');
+    await login(client, '8300000011');
+    const { token } = await infy(client);
+    const body = { token, side: 'BUY', type: 'MARKET', qty: 1 } as const;
+
+    const delivery = await client.call('orderPlace', { body: { ...body, product: 'DELIVERY' } });
+    const intraday = await client.call('orderPlace', { body: { ...body, product: 'INTRADAY' } });
+    expect([delivery.status, intraday.status]).toEqual(['EXECUTED', 'EXECUTED']);
+  });
+
+  it('keeps NSE hours otherwise: a Delivery order waits as an AMO', async () => {
+    const client = nightPage('nse');
+    await login(client, '8300000012');
+    const { token } = await infy(client);
+    const placed = await client.call('orderPlace', {
+      body: { token, side: 'BUY', type: 'MARKET', qty: 1, product: 'DELIVERY' },
+    });
+    expect(placed.status).toBe('AMO');
   });
 });

@@ -2,9 +2,10 @@ name: CI
 
 on:
   pull_request:
-  # develop is where PRs merge; main is production (ADR 0010).
+  # develop is where PRs merge; production is the live site (ADR 0010, 0011). A promotion pushes to
+  # production with PROMOTE_TOKEN (or dispatches this) so CI gates the live deploy.
   push:
-    branches: [develop, main]
+    branches: [develop, production]
   # Started by agent-automerge.yml after it merges (GITHUB_TOKEN merges don't trigger push runs).
   workflow_dispatch:
   # Health runs on the default branch (develop), so breakage that only shows at some hours (market open or closed) or
@@ -20,7 +21,7 @@ permissions:
   contents: read
 
 concurrency:
-  # The event is part of the key, so a scheduled health run never cancels a push run on main.
+  # The event is part of the key, so a scheduled health run never cancels a push run on develop.
   group: ci-${{ github.event_name }}-${{ github.ref }}
   cancel-in-progress: true
 
@@ -100,10 +101,14 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npx turbo run build --filter=@nthstock/web^...
-      - name: Install Chrome for Testing (Chromium)
-        run: npx playwright install --with-deps chromium
-      # playwright.config.ts builds in msw mode with VITE_MOCK_MARKET_OPEN=true; no env needed here.
+      # T04: WebKit too, for the webkit-iphone touch project (iPhone Safari, TFC-16).
+      - name: Install Chrome for Testing (Chromium) and WebKit
+        run: npx playwright install --with-deps chromium webkit
+      # playwright.config.ts builds in msw mode with VITE_MOCK_MARKET_OPEN=true. E2E_WEBKIT turns on
+      # the webkit-iphone project for the @touch specs.
       - run: npm run e2e
+        env:
+          E2E_WEBKIT: '1'
       # T-100: the frozen 1440 px dashboard screenshot, for the PR (the test also attaches it to
       # the HTML report). Uploaded whether or not the run passed.
       - if: always()

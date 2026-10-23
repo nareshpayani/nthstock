@@ -118,3 +118,32 @@ Recorded as ADR 0005 (`docs/adr/0005-web-ui-architecture.md`).
 | UI-05 | Component variant styling? | `class-variance-authority` + `tailwind-merge` | As recommended. | Default accepted |
 | UI-06 | Import alias inside the app? | `@/` → `apps/web/src` | As recommended. | Default accepted |
 | UI-07 | Storybook scope? | `packages/ui` plus feature components on MSW data | As recommended. | Default accepted |
+
+## Round 9: Trade from Charts, TSLO and Scalper (answered 2026-10-22)
+
+Context: Trade from Charts, TSLO and Scalper requirements (Paytm Money, received 2026-10-22),
+delivered on nthstock. Specification: `docs/specs/trade-from-charts.md`. The product owner decided
+TFC-01 to TFC-06 and TFC-08 and approved the recommended option for every other question.
+
+| ID | Question | Recommended default | Answer | Status |
+|---|---|---|---|---|
+| TFC-01 | Submission deadline? | About two weeks | 2026-10-25 (three working days). | Answered |
+| TFC-02 | Pause Phase 2 backend (E15 to E21)? | Pause, run this as its own phase | Skip E15 to E21 if not needed; they are not needed (mock mode), so they resume after this. | Answered |
+| TFC-03 | Mock only, or the real API too? Is a TSLO engine needed? | Mock only; engine in `packages/paperEngine` | Simulated data only, with a production-grade trailing-stop engine in `packages/paperEngine` (the core of the requirements). Licensed real-time data cannot be redistributed in a public demo, so the demo stays on the simulated feed. | Answered |
+| TFC-04 | Commit history: squash or keep every commit? | Squash, small PRs | Squash merge, with several commits per PR. | Answered |
+| TFC-05 | May the design rationale (WRITEUP.md) name the AI tools used? | Yes, as the requirements ask | Yes, in WRITEUP.md only; attribution elsewhere is unchanged. | Answered |
+| TFC-06 | Who makes the design decisions? | Engineering proposes options, product owner approves | Engineering proposes each decision with alternatives and rationale; the product owner approves; all are logged in the specification §5. | Answered |
+| TFC-07 | Place-from-chart gesture? | Tap the price-axis gutter; handles for drag | As recommended. | Default accepted |
+| TFC-08 | Where does Scalper live? | A mode on the instrument page | As recommended, no separate route. | Answered |
+| TFC-09 | Scalper safety model? | Arm switch, idle disarm, hold-to-confirm Reverse | As recommended. | Default accepted |
+| TFC-10 | Partial fills? | Against depth quantity per tick | As recommended. | Default accepted |
+| TFC-11 | Tick speed? | 4 a second for the focused instrument | As recommended. | Default accepted |
+| TFC-12 | Demo control for the recording? | Labelled Simulator in demo mode | As recommended. | Default accepted |
+| TFC-13 | TSLO products? | Delivery longs, Intraday longs and shorts | As recommended. | Default accepted |
+| TFC-14 | Limit exit with offset? | Ticket only | As recommended. | Default accepted |
+| TFC-15 | Resume from background? | Replay missed ticks | As recommended. | Default accepted |
+| TFC-16 | Phones? | iPhone Safari and Android Chrome (exception to D4) | As recommended. | Default accepted |
+| TFC-17 | Who produces the demo walkthrough? | Product owner, from a scripted shot list | As recommended. | Default accepted |
+| TFC-18 | Demo access for stakeholders? | Production URL with a one-tap Try demo | As recommended. | Default accepted |
+| TFC-19 | Who builds? | The project agent workflow (`docs/agent-workflow.md`), automated review on every pull request | As recommended. | Default accepted |
+| TFC-20 | Default chart view? | 1D, last 60 minutes | As recommended. | Default accepted |

@@ -16,6 +16,7 @@ const LEGAL: [OrderStatus, OrderEvent, OrderStatus][] = [
   ['AMO', 'MODIFY', 'AMO'],
   ['AMO', 'CANCEL', 'CANCELLED'],
   ['AMO', 'REJECT', 'REJECTED'],
+  ['OPEN', 'PARTIAL_FILL', 'OPEN'],
   ['OPEN', 'FILL', 'EXECUTED'],
   ['OPEN', 'MODIFY', 'OPEN'],
   ['OPEN', 'CANCEL', 'CANCELLED'],
@@ -37,9 +38,9 @@ describe('order state machine (T-128)', () => {
     expect(transitionOrder(status, event)).toBe(next);
   });
 
-  it('covers all 25 status × event pairs between the two tables', () => {
+  it('covers all 30 status × event pairs between the two tables', () => {
     expect(LEGAL.length + ILLEGAL.length).toBe(OrderStatus.options.length * ORDER_EVENTS.length);
-    expect(ILLEGAL).toHaveLength(18);
+    expect(ILLEGAL).toHaveLength(22);
   });
 
   it.each(ILLEGAL)('rejects %s + %s', (status, event) => {
@@ -61,6 +62,9 @@ describe('order state machine (T-128)', () => {
   it('explains an illegal transition in plain language', () => {
     expect(illegalTransitionReason('EXECUTED', 'CANCEL')).toBe(
       "This order is already executed, so it can't be cancelled.",
+    );
+    expect(illegalTransitionReason('AMO', 'PARTIAL_FILL')).toBe(
+      "This order is waiting for the market to open, so it can't be partly filled.",
     );
     expect(illegalTransitionReason('AMO', 'FILL')).toBe(
       "This order is waiting for the market to open, so it can't be filled.",

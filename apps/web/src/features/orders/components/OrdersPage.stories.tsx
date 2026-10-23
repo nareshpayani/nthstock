@@ -27,6 +27,7 @@ const base: Order = {
   avgFillPrice: null,
   status: 'OPEN',
   statusReason: null,
+  validity: 'DAY',
   placedAt: at(10 * 60 + 5),
   updatedAt: at(10 * 60 + 5),
 };

@@ -8,6 +8,7 @@ import {
   TickPrice,
   type InstrumentToken,
   type Order,
+  type TrailingStopParams,
 } from '@nthstock/contracts';
 import { z } from 'zod';
 import { strings } from '../strings';
@@ -51,29 +52,50 @@ function firstMessage(error: z.ZodError): string {
 
 /**
  * A fresh ticket: the side the user asked for, a market order, for one delivery share unless the
- * intent prefills the quantity and product (Exit on a position, T-150).
+ * intent prefills the quantity and product (Exit on a position, T-150). A prefilled price makes it
+ * a limit order at that price (placing from the chart, T17).
  */
 export function defaultTicketValues(
   side: OrderSide,
-  prefill: { qty?: number | undefined; product?: ProductType | undefined } = {},
+  prefill: {
+    qty?: number | undefined;
+    product?: ProductType | undefined;
+    price?: number | undefined;
+  } = {},
 ): TicketFormValues {
   return {
     side,
-    type: 'MARKET',
+    type: prefill.price === undefined ? 'MARKET' : 'LIMIT',
     product: prefill.product ?? 'DELIVERY',
     qty: prefill.qty ?? 1,
-    price: null,
+    price: prefill.price ?? null,
   };
 }
 
 /**
+ * Whether a limit order would cross the market and fill at once (SPEC-TFC-1 §8.2): a buy above
+ * the LTP or a sell below it. Unknown until both prices are known.
+ */
+export function fillsImmediately(
+  values: Pick<TicketFormValues, 'side' | 'type' | 'price'>,
+  ltp: number | null | undefined,
+): boolean {
+  if (values.type !== 'LIMIT' || values.price === null || ltp === null || ltp === undefined) {
+    return false;
+  }
+  return values.side === 'BUY' ? values.price > ltp : values.price < ltp;
+}
+
+/**
  * The `POST /v1/orders` body for valid form values, parsed with the contract's
- * `PlaceOrderRequest` (throws when the values were not validated first).
+ * `PlaceOrderRequest` (throws when the values were not validated first), with the trailing stop
+ * attached to the entry when there is one (T14).
  */
 export function toPlaceOrderRequest(
   values: TicketFormValues,
   token: InstrumentToken,
   clientOrderId: string,
+  attachedTrailingStop: TrailingStopParams | null = null,
 ): PlaceOrderRequest {
   return PlaceOrderRequest.parse({
     token,
@@ -83,6 +105,7 @@ export function toPlaceOrderRequest(
     qty: values.qty,
     ...(values.type === 'LIMIT' ? { price: values.price } : {}),
     clientOrderId,
+    ...(attachedTrailingStop ? { attachedTrailingStop } : {}),
   });
 }
 

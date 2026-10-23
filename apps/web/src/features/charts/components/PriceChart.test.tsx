@@ -178,4 +178,48 @@ describe('PriceChart disposal (T-113)', () => {
     expect(chartsMock.charts).toHaveLength(0);
     expect(resize.observers.size).toBe(0);
   });
+  it('pans and pinches for trading, and hands the chart to an overlay until it is removed (T15)', async () => {
+    const onReady = vi.fn();
+    const candles = makeCandles({ count: 3 });
+    const { rerender, unmount } = render(
+      <PriceChart
+        candles={candles}
+        label="INFY chart"
+        interactive
+        onReady={onReady}
+        overlay={<div data-testid="overlay" />}
+      />,
+    );
+    await chartMounted();
+    const [chart] = chartsMock.charts;
+    expect(chart?.options).toMatchObject({
+      handleScroll: { horzTouchDrag: true, vertTouchDrag: false },
+      handleScale: {
+        pinch: true,
+        axisPressedMouseMove: { price: false },
+        axisDoubleClickReset: false,
+      },
+      rightPriceScale: { minimumWidth: 64, borderColor: expect.any(String) as string },
+    });
+    expect(screen.getByTestId('overlay')).toBeInTheDocument();
+    expect(onReady).toHaveBeenLastCalledWith(
+      expect.objectContaining({ series: chart?.series[0], host: screen.getByTestId('chart-host') }),
+    );
+    // A new callback identity does not rebuild the chart.
+    const next = vi.fn();
+    rerender(<PriceChart candles={candles} label="INFY chart" interactive onReady={next} />);
+    expect(chartsMock.charts).toHaveLength(1);
+    unmount();
+    expect(onReady).toHaveBeenCalledTimes(1);
+    expect(next).toHaveBeenCalledExactlyOnceWith(null);
+  });
+
+  it('keeps the plain chart static', async () => {
+    render(<PriceChart candles={makeCandles({ count: 3 })} label="INFY chart" />);
+    await chartMounted();
+    expect(chartsMock.charts[0]?.options).toMatchObject({
+      handleScroll: false,
+      handleScale: false,
+    });
+  });
 });

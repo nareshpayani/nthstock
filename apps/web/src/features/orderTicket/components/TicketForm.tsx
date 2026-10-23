@@ -1,13 +1,24 @@
 import type { Exchange, Instrument, Order } from '@nthstock/contracts';
-import { Button, Field, IconAlert, IconClock, NumberInput, SegmentedControl } from '@nthstock/ui';
+import {
+  Button,
+  Field,
+  IconAlert,
+  IconClock,
+  NumberInput,
+  SegmentedControl,
+  Switch,
+} from '@nthstock/ui';
 import { formatInr } from '@nthstock/utils';
-import { useEffect, useRef, type FormEventHandler } from 'react';
-import { Controller, useWatch, type UseFormReturn } from 'react-hook-form';
+import { useEffect, useRef, type FormEventHandler, type ReactNode } from 'react';
+import { Controller, useWatch, type Control, type UseFormReturn } from 'react-hook-form';
+import { useQuote } from '@/shared/hooks/useQuote';
 import type { TicketError } from '../model/orderError';
-import type { TicketFormValues } from '../model/ticketForm';
+import { fillsImmediately, type TicketFormValues } from '../model/ticketForm';
+import type { TrailingFormValues } from '../model/trailingStopForm';
 import { strings } from '../strings';
 import { DepthMiniPanel } from './DepthMiniPanel';
 import { OrderEstimate } from './OrderEstimate';
+import { TrailingParamsFields } from './TrailingParamsFields';
 
 export type TicketFormProps = {
   form: UseFormReturn<TicketFormValues>;
@@ -23,7 +34,123 @@ export type TicketFormProps = {
   /** A refusal from the pre-check or the server, shown above the button. */
   error: TicketError | null;
   onSubmit: FormEventHandler<HTMLFormElement>;
+  /**
+   * The Trailing SL order type (T13), offered when the user holds a position in the instrument;
+   * `available` is false where the backend has no trailing stops yet (api mode).
+   */
+  trailing?: { available: boolean; onSelect: () => void } | undefined;
+  /** "Add trailing stop" on a new Market or Limit entry (T14), shown above the estimate. */
+  attach?: ReactNode;
+  /**
+   * The compact ticket placed from the chart (T17, SPEC-TFC-1 §8.2): a limit at the chart's
+   * price, so no order-type switch and no depth panel.
+   */
+  compact?: boolean | undefined;
 };
+
+export type AttachProps = {
+  /** Unavailable where the backend has no trailing stops; `notForSale` on a Delivery sell. */
+  status: 'available' | 'unavailable' | 'notForSale';
+  enabled: boolean;
+  onToggle: (on: boolean) => void;
+  values: TrailingFormValues;
+  onChange: (patch: Partial<TrailingFormValues>, typed?: boolean) => void;
+  errorFor: (field: 'value' | 'exitLimitOffset') => string | undefined;
+  preview: string | null;
+  /** The entry adds to a position that already has a trailing stop, which this one replaces. */
+  replaces: boolean;
+};
+
+/** The "Add trailing stop" switch and, when on, the stop's parameters (T14, SPEC-TFC-1 §7). */
+export function AttachSection({ attach }: { attach: AttachProps }) {
+  const offered = attach.status === 'available';
+  const hint =
+    attach.status === 'unavailable'
+      ? strings.trailing.attachUnavailable
+      : attach.status === 'notForSale'
+        ? strings.trailing.attachNotForSale
+        : strings.trailing.attachHint;
+  return (
+    <fieldset
+      className="grid gap-3 rounded-md border border-line p-3"
+      data-testid="attach-trailing"
+    >
+      <legend className="sr-only">{strings.trailing.attach}</legend>
+      <div className="grid gap-1">
+        <Switch
+          label={strings.trailing.attach}
+          checked={offered && attach.enabled}
+          onCheckedChange={attach.onToggle}
+          disabled={!offered}
+          className="min-h-11"
+        />
+        <p className="text-label text-ink-muted">{hint}</p>
+      </div>
+      {offered && attach.enabled ? (
+        <>
+          <TrailingParamsFields
+            values={attach.values}
+            onChange={attach.onChange}
+            errorFor={attach.errorFor}
+            preview={attach.preview}
+          />
+          {attach.replaces ? (
+            <p className="text-body text-ink">{strings.trailing.attachedReplaces}</p>
+          ) : null}
+        </>
+      ) : null}
+    </fieldset>
+  );
+}
+
+/**
+ * "This will fill immediately" under the price (SPEC-TFC-1 §8.2): a limit buy above the LTP, or a
+ * sell below it, crosses the market. Its own component, so live ticks re-render only this line.
+ */
+function ImmediateFillNote({
+  symbol,
+  exchange,
+  control,
+  snapshotLtp,
+}: {
+  symbol: string;
+  exchange: Exchange;
+  control: Control<TicketFormValues>;
+  snapshotLtp: number | null | undefined;
+}) {
+  const [side, type, price] = useWatch({ control, name: ['side', 'type', 'price'] });
+  const ltp = useQuote(symbol, exchange)?.quote.ltp ?? snapshotLtp;
+  if (!fillsImmediately({ side, type, price }, ltp)) return null;
+  return (
+    <p
+      data-testid="fills-immediately"
+      className="flex items-start gap-2 rounded-md bg-marigold-soft p-3 text-body text-ink"
+    >
+      <IconAlert size={18} className="mt-0.5 shrink-0" />
+      <span>{strings.form.fillsImmediately}</span>
+    </p>
+  );
+}
+
+/** The order type value that switches the ticket to the trailing-stop form (T13). */
+export const TRAILING_SL = 'TRAILING_SL';
+
+/** Market, Limit, and Trailing SL when the user holds a position (disabled where unavailable). */
+export function orderTypeOptions(trailing: TicketFormProps['trailing']) {
+  return [
+    { value: 'MARKET' as const, label: strings.form.market },
+    { value: 'LIMIT' as const, label: strings.form.limit },
+    ...(trailing
+      ? [
+          {
+            value: TRAILING_SL as typeof TRAILING_SL,
+            label: trailing.available ? strings.trailing.type : strings.trailing.notAvailable,
+            disabled: !trailing.available,
+          },
+        ]
+      : []),
+  ];
+}
 
 /**
  * The ticket form (T-136): side, product, order type, quantity stepper and price (disabled and
@@ -42,6 +169,9 @@ export function TicketForm({
   fundsLoading,
   error,
   onSubmit,
+  trailing,
+  attach,
+  compact = false,
 }: TicketFormProps) {
   const { control, formState, setValue, trigger } = form;
   const [side, type] = useWatch({ control, name: ['side', 'type'] });
@@ -123,31 +253,37 @@ export function TicketForm({
             <p className="text-label text-ink-muted">{strings.form.intradayClosed}</p>
           ) : null}
         </div>
-        <div className="grid content-start gap-1">
-          <span className="text-label text-ink-muted" aria-hidden="true">
-            {strings.form.type}
-          </span>
-          <Controller
-            control={control}
-            name="type"
-            render={({ field }) => (
-              <SegmentedControl
-                label={strings.form.type}
-                size="sm"
-                disabled={locked}
-                value={field.value}
-                onValueChange={(next) => {
-                  field.onChange(next);
-                  void trigger('price');
-                }}
-                options={[
-                  { value: 'MARKET', label: strings.form.market },
-                  { value: 'LIMIT', label: strings.form.limit },
-                ]}
-              />
-            )}
-          />
-        </div>
+        {compact ? null : (
+          <div className="grid content-start gap-1">
+            <span className="text-label text-ink-muted" aria-hidden="true">
+              {strings.form.type}
+            </span>
+            <Controller
+              control={control}
+              name="type"
+              render={({ field }) => (
+                <SegmentedControl
+                  label={strings.form.type}
+                  size="sm"
+                  disabled={locked}
+                  value={field.value}
+                  onValueChange={(next) => {
+                    if (next === TRAILING_SL) {
+                      trailing?.onSelect();
+                      return;
+                    }
+                    field.onChange(next);
+                    void trigger('price');
+                  }}
+                  options={orderTypeOptions(trailing)}
+                />
+              )}
+            />
+            {trailing && !trailing.available ? (
+              <p className="text-label text-ink-muted">{strings.trailing.notAvailableHint}</p>
+            ) : null}
+          </div>
+        )}
       </div>
 
       <div className="grid gap-3 sm:grid-cols-2 [&>*]:min-w-0">
@@ -204,9 +340,18 @@ export function TicketForm({
         </p>
       ) : null}
 
-      {locked && type === 'MARKET' ? null : (
+      <ImmediateFillNote
+        symbol={instrument.symbol}
+        exchange={instrument.exchange}
+        control={control}
+        snapshotLtp={snapshotLtp}
+      />
+
+      {compact || (locked && type === 'MARKET') ? null : (
         <DepthMiniPanel instrument={instrument} live={marketOpen} onPick={pickPrice} />
       )}
+
+      {locked ? null : attach}
 
       <OrderEstimate
         symbol={instrument.symbol}
