@@ -3,7 +3,9 @@ name: Web hosting
 # Free Firebase Hosting (Spark plan) for the msw-mode web build: the whole app, mock market and
 # paper engine included, runs in the browser, so a static deploy is a working demo (WF-06).
 # Branches and environments (ADR 0010, docs/runbooks/environments.md):
-# - pull requests: a preview channel per PR (expires after 7 days), its URL commented on the PR.
+# - pull requests: a preview channel per PR (expires after 7 days), its URL commented on the PR,
+#   deleted when the PR closes. The channel quota is small, so each preview deploy first frees the
+#   channels of PRs already closed (NSTOCK-0333, tools/github/sweepPreviewChannels.sh).
 # - develop → the `development` environment: every green CI run on develop deploys to the
 #   long-lived `dev` channel. Never the live site.
 # - production → the `production` environment, https://<project>.web.app: every green CI run on
@@ -21,6 +23,7 @@ on:
     types: [completed]
     branches: [develop, production]
   pull_request:
+    types: [opened, synchronize, reopened, closed]
   workflow_dispatch:
     inputs:
       stage:
@@ -63,6 +66,7 @@ jobs:
     # A PR from this repo (fork PRs get no secrets).
     if: >-
       vars.FIREBASE_PROJECT_ID != '' && github.event_name == 'pull_request' &&
+      github.event.action != 'closed' &&
       github.event.pull_request.head.repo.full_name == github.repository
     permissions:
       contents: read
@@ -80,6 +84,18 @@ jobs:
         env:
           VITE_API_MODE: msw
           VITE_MOCK_MARKET_OPEN: 'true'
+      # A full channel quota fails every new preview ("channel quota reached"), so free the
+      # channels of closed PRs first. A failed sweep only warns; the deploy says if room is short.
+      - name: Free the preview channels of closed PRs
+        env:
+          SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          FIREBASE_PROJECT_ID: ${{ vars.FIREBASE_PROJECT_ID }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          export GOOGLE_APPLICATION_CREDENTIALS="$RUNNER_TEMP/firebaseServiceAccount.json"
+          printf '%s' "$SERVICE_ACCOUNT" > "$GOOGLE_APPLICATION_CREDENTIALS"
+          trap 'rm -f "$GOOGLE_APPLICATION_CREDENTIALS"' EXIT
+          bash tools/github/sweepPreviewChannels.sh || echo "::warning::Preview channel sweep failed"
       # Third-party and handed the service-account key, so pinned to a commit.
       - id: deploy
         uses: FirebaseExtended/action-hosting-deploy@500ac625ca2dd40cbd15f7659af953801858032a # v0
@@ -97,6 +113,35 @@ jobs:
           E2E_BASE_URL: ${{ steps.deploy.outputs.details_url }}
         working-directory: apps/web
         run: npx playwright test -c playwright.deployed.config.ts
+
+  preview-cleanup:
+    name: Delete the preview channel
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    # The PR closed (merged or not): its preview channel goes, and any other closed PR's with it.
+    if: >-
+      vars.FIREBASE_PROJECT_ID != '' && github.event_name == 'pull_request' &&
+      github.event.action == 'closed' &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+      - name: Delete the preview channels of closed PRs
+        env:
+          SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          FIREBASE_PROJECT_ID: ${{ vars.FIREBASE_PROJECT_ID }}
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          export GOOGLE_APPLICATION_CREDENTIALS="$RUNNER_TEMP/firebaseServiceAccount.json"
+          printf '%s' "$SERVICE_ACCOUNT" > "$GOOGLE_APPLICATION_CREDENTIALS"
+          trap 'rm -f "$GOOGLE_APPLICATION_CREDENTIALS"' EXIT
+          bash tools/github/sweepPreviewChannels.sh "$PR_NUMBER"
 
   development:
     name: Deploy the development environment

@@ -10,8 +10,11 @@ plan, no card). `.github/workflows/web-hosting.yml` deploys it:
 - **Production environment**, the live site `https://<project id>.web.app`: every green CI run on
   `production`, which only moves when an agent runs Promote to production
   ([release.md](release.md), ADR 0011).
-- **PR previews**: a channel per PR from this repo, its URL commented on the PR, gone after 7 days,
-  smoke-tested as a reviewer would use it (`npm run e2e:deployed`).
+- **PR previews**: a channel per PR from this repo, its URL commented on the PR, smoke-tested as a
+  reviewer would use it (`npm run e2e:deployed`). A channel is deleted when its PR closes, or after
+  7 days. The site's channel quota is small, so each preview deploy first deletes the channels of
+  closed PRs ([`sweepPreviewChannels.sh`](../../tools/github/sweepPreviewChannels.sh)); if a
+  preview still fails with "channel quota reached", too many PRs are open at once.
 
 `firebase.json` sets the SPA rewrite, the same security headers as `vite preview`
 (`securityHeaders.test.ts` keeps them in step), and caching (hashed `/assets` for a year,
