@@ -37,6 +37,9 @@ async function openChart(page: Page): Promise<Chart> {
   const host = figure.getByTestId('chart-host');
   await host.scrollIntoViewIfNeeded();
   const timeAxis = async () => {
+    // Dragging a handle scrolls it to mid-screen, which can leave the axis below the fold, and a
+    // screenshot clip outside the viewport is not the same picture: look at the axis from one place.
+    await host.evaluate((element) => element.scrollIntoView({ block: 'end', inline: 'nearest' }));
     const plot = await host.boundingBox();
     if (!plot) throw new Error('no chart');
     const clip = { x: plot.x, y: plot.y + plot.height - 26, width: plot.width - 72, height: 26 };
