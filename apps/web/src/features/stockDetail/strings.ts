@@ -120,6 +120,7 @@ export const strings = {
       qty: (netQty: number) => (netQty > 0 ? `+${String(netQty)}` : String(netQty)),
       at: (price: string) => `@ ${price}`,
       trailing: (stop: string) => `Trailing SL ${stop}`,
+      open: 'Opens the trailing stop for this position.',
     },
     orders: {
       label: (symbol: string) => `Today's ${symbol} orders`,

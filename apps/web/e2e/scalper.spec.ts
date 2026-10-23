@@ -161,3 +161,45 @@ test('flatten and reverse from the pad at 390 px (T22)', async ({ page }) => {
     '[data-testid="scalper-pad"]',
   );
 });
+
+// T23 (US-05, SPEC-TFC-1 §11.2, REQ-SCP-06): the pad stays free of trailing stops; tapping the
+// scalp position opens the same trailing-stop sheet as the chart, and Flatten cancels the stop.
+test('scalp, set a trailing stop from the position strip, flatten: the stop goes too (T23, US-05)', async ({
+  page,
+}) => {
+  test.setTimeout(90_000);
+  await page.clock.setFixedTime(MONDAY_10_IST);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto('/login?redirect=%2Fstocks%2FINFY');
+  await logIn(page, uniqueMobile());
+  await expect(page).toHaveURL(/\/stocks\/INFY$/);
+
+  await page.getByRole('switch', { name: 'Scalp' }).click();
+  const pad = page.getByRole('region', { name: 'Scalper for INFY' });
+  const buy = pad.getByTestId('scalp-buy');
+  const ack = pad.getByRole('status', { name: 'Last scalp order' });
+  await expect(pad.getByRole('button', { name: /trailing/i })).toHaveCount(0);
+  await pad.getByRole('radio', { name: '5 shares', exact: true }).click();
+  await pad.getByRole('switch', { name: 'Arm' }).click();
+  await expect(buy).toContainText(/Buy at ask\s*₹[\d,]+\.\d\d/);
+  await setPrice(page, 'INFY', onTick(paiseIn(await buy.innerText()) * 0.97));
+  await buy.click();
+  await expect(ack).toHaveText(/^Bought 5 @ ₹/);
+
+  const strip = page.getByTestId('position-strip');
+  await strip.getByRole('button', { name: /^\+5\s*@ ₹/ }).click();
+  const sheet = page.getByRole('dialog', { name: 'Trailing stop · INFY' });
+  await sheet.getByRole('textbox', { name: 'Trail (%)' }).fill('2');
+  await sheet.getByRole('button', { name: 'Set trailing stop' }).click();
+  await expect(sheet).toBeHidden();
+  await expect(strip).toContainText(/Trailing SL ₹[\d,]+\.\d\d/);
+  const figure = page.getByRole('figure', { name: /INFY area chart/ });
+  const line = figure.locator('[data-testid="chart-handle"][data-tone="trailing"]');
+  await expect(line).toHaveCount(1);
+
+  // The scalper stays armed while the sheet was open, so Flatten is one tap.
+  await pad.getByTestId('scalp-flatten').click();
+  await expect(ack).toHaveText(/^Closed: sold 5 @ ₹/);
+  await expect(strip).toHaveCount(0);
+  await expect(line).toHaveCount(0);
+});
