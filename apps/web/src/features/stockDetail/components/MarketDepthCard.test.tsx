@@ -122,6 +122,8 @@ describe('market depth (T-110)', () => {
   it('scales bars against the largest quantity on either side', async () => {
     api.server.use(http.get(depthUrl, () => HttpResponse.json(handMade)));
     const card = await openDepth('/stocks/INFY');
+    // The skeleton already has both tables; the bars appear once the depth has loaded.
+    await within(card).findAllByTestId('depth-bar');
     const bids = within(card).getByRole('table', { name: 'Bids (buy orders)' });
     const asks = within(card).getByRole('table', { name: 'Offers (sell orders)' });
 

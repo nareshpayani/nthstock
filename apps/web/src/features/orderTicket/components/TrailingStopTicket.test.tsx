@@ -80,7 +80,7 @@ const liveStore = (api: ApiClient) =>
 
 const typeGroup = () => screen.getByRole('radiogroup', { name: 'Order type' });
 
-beforeAll(() => mock.server.listen({ onUnhandledRequest: 'error' }));
+beforeAll(() => mock.server.listen({ onUnhandledFrame: 'error' }));
 beforeEach(() => {
   installResizeObserver();
 });

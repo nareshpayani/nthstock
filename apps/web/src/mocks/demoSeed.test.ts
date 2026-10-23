@@ -43,7 +43,7 @@ async function demoPage(storage: ReturnType<typeof memoryStorage>) {
     watchlists: { now: () => OPEN_MS, storage },
     orders: { storage },
   });
-  mock.server.listen({ onUnhandledRequest: 'error' });
+  mock.server.listen({ onUnhandledFrame: 'error' });
   cleanups.push(() => {
     mock.server.close();
     mock.orders.dispose();

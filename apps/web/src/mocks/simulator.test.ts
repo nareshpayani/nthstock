@@ -30,7 +30,7 @@ function pageLoad() {
     flushMs: 20,
     auth: { now: () => OPEN_MS },
   });
-  mock.server.listen({ onUnhandledRequest: 'error' });
+  mock.server.listen({ onUnhandledFrame: 'error' });
   cleanups.push(() => {
     mock.server.close();
     mock.orders.dispose();

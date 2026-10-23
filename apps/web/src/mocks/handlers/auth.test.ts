@@ -19,7 +19,7 @@ const { server, adapter } = createMockServer({ auth: { now: () => now } });
 const covered = new Set<RouteName>();
 
 beforeAll(() => {
-  server.listen({ onUnhandledRequest: 'error' });
+  server.listen({ onUnhandledFrame: 'error' });
 });
 afterAll(() => {
   server.close();

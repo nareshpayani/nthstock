@@ -48,7 +48,7 @@ function pageLoad(storages: { auth?: Storage; orders?: Storage } = {}, at = OPEN
     auth: { now: () => at, ...(storages.auth ? { storage: storages.auth } : {}) },
     ...(storages.orders ? { orders: { storage: storages.orders } } : {}),
   });
-  mock.server.listen({ onUnhandledRequest: 'error' });
+  mock.server.listen({ onUnhandledFrame: 'error' });
   cleanups.push(() => {
     mock.server.close();
     mock.orders.dispose();
@@ -369,7 +369,7 @@ describe('MSW orders with the market always open (T03)', () => {
       auth: { now: () => NIGHT_MS },
       orders: { marketHours },
     });
-    mock.server.listen({ onUnhandledRequest: 'error' });
+    mock.server.listen({ onUnhandledFrame: 'error' });
     cleanups.push(() => {
       mock.server.close();
       mock.orders.dispose();
