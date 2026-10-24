@@ -34,6 +34,7 @@ function renderOtpStep() {
             resendAfterSec: OTP_RESEND_AFTER_SEC,
             expiresAt: new Date(T0 + 300_000).toISOString(),
           }}
+          onTotpRequired={vi.fn()}
           devOtp={null}
           onVerified={vi.fn()}
           onChangeNumber={vi.fn()}

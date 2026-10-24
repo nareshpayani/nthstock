@@ -1,4 +1,9 @@
-import type { OtpPurpose, OtpVerifyRequest, Session } from '@nthstock/contracts';
+import type {
+  LoginOtpPurpose,
+  OtpVerifyRequest,
+  Session,
+  TotpVerifyRequest,
+} from '@nthstock/contracts';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
 import { useApiClient } from '@/shared/lib/apiClientContext';
@@ -14,7 +19,7 @@ function startSession(session: Session) {
 export function useRequestOtp() {
   const apiClient = useApiClient();
   return useMutation({
-    mutationFn: (body: { mobile: string; purpose: OtpPurpose }) =>
+    mutationFn: (body: { mobile: string; purpose: LoginOtpPurpose }) =>
       apiClient.request('otpRequest', { body }),
   });
 }
@@ -43,6 +48,15 @@ export function useVerifyPin() {
   const apiClient = useApiClient();
   return useMutation({
     mutationFn: (pin: string) => apiClient.request('pinVerify', { body: { pin } }),
+    onSuccess: startSession,
+  });
+}
+
+/** The login's code step for a user with two-factor on (NSTOCK-0220). */
+export function useVerifyTotp() {
+  const apiClient = useApiClient();
+  return useMutation({
+    mutationFn: (body: TotpVerifyRequest) => apiClient.request('totpVerify', { body }),
     onSuccess: startSession,
   });
 }

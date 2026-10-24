@@ -36,6 +36,40 @@ describeRepoConformance(
     },
   },
   ({ driver, repo, redis }) => {
+    // ---- TOTP login challenges (NSTOCK-0216) ---------------------------------------------
+    const totp = (challengeId: string) => ({
+      challengeId,
+      userId: 'usr_a',
+      method: 'PIN' as const,
+      deviceId: 'dev_1',
+      failures: 0,
+      createdAt: created,
+      expiresAt: new Date(created.getTime() + 300_000),
+    });
+
+    it('keeps a TOTP challenge by id, counts wrong codes and consumes it once', async () => {
+      await repo().putTotpChallenge(totp('tc_1'));
+      await repo().putTotpChallenge({ ...totp('tc_2'), method: 'OTP', deviceId: null });
+
+      expect(await repo().getTotpChallenge('tc_1')).toEqual(totp('tc_1'));
+      expect(await repo().getTotpChallenge('tc_2')).toEqual({
+        ...totp('tc_2'),
+        method: 'OTP',
+        deviceId: null,
+      });
+      expect(await repo().recordTotpFailure('tc_1')).toBe(1);
+      expect(await repo().recordTotpFailure('tc_1')).toBe(2);
+      expect(await repo().recordTotpFailure('tc_missing')).toBeNull();
+
+      const consumed = await Promise.all([
+        repo().consumeTotpChallenge('tc_1'),
+        repo().consumeTotpChallenge('tc_1'),
+      ]);
+      expect(consumed.filter(Boolean)).toHaveLength(1);
+      expect(await repo().getTotpChallenge('tc_1')).toBeNull();
+      expect(await repo().recordTotpFailure('tc_1')).toBeNull();
+    });
+
     it('stores a challenge per mobile and reads it back; an unknown mobile has none', async () => {
       await repo().putOtpChallenge({ ...challenge('otp_1'), purpose: 'UNLOCK_PIN', failures: 2 });
 

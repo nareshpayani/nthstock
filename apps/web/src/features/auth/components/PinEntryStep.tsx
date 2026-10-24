@@ -10,6 +10,8 @@ import { PIN_LENGTH } from './PinSetupStep';
 export type PinEntryStepProps = {
   device: TrustedDeviceHint;
   onSuccess: () => void;
+  /** Two-factor is on: the PIN was right, and the code step finishes the login. */
+  onTotpRequired: (challengeId: string) => void;
   /** 5 wrong PINs: the account's PIN is locked until an OTP is verified. */
   onLocked: () => void;
   /** The server no longer trusts this browser for PIN login. */
@@ -21,6 +23,7 @@ export type PinEntryStepProps = {
 export function PinEntryStep({
   device,
   onSuccess,
+  onTotpRequired,
   onLocked,
   onUntrusted,
   onUseOtp,
@@ -37,6 +40,10 @@ export function PinEntryStep({
       onSuccess();
     } catch (failure) {
       const { code: errorCode, details } = authFailure(failure);
+      if (errorCode === 'TOTP_REQUIRED' && details.challengeId) {
+        onTotpRequired(details.challengeId);
+        return;
+      }
       if (errorCode === 'PIN_LOCKED') {
         onLocked();
         return;

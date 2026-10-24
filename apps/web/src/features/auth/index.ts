@@ -10,3 +10,6 @@ export const LoginPage = lazy(() =>
 export type { LoginPageProps } from './components/LoginPage';
 export { ProfileMenu } from './components/ProfileMenu';
 export { RequireSession } from './components/RequireSession';
+export { StepUpDialog } from './components/StepUpDialog';
+export { useEnsureSteppedUp, useStepUp } from './hooks/useStepUp';
+export { StepUpCancelledError } from './store/stepUpStore';

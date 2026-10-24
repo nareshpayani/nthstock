@@ -38,7 +38,8 @@ export type OtpServiceDeps = {
 export type VerifiedOtp = { mobile: string; purpose: OtpPurpose };
 
 export type OtpService = {
-  request(input: OtpRequest): Promise<OtpRequestResponse>;
+  /** A STEP_UP OTP is requested only by `stepUpOtpRequest`, for the signed-in user's own mobile. */
+  request(input: OtpRequest | { mobile: string; purpose: 'STEP_UP' }): Promise<OtpRequestResponse>;
   /** Checks the OTP and consumes it; throws an `ApiHttpError` for every failure. */
   verify(input: OtpVerifyRequest): Promise<VerifiedOtp>;
 };

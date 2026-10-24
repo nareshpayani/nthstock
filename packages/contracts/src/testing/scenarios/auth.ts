@@ -5,7 +5,7 @@ import {
   DEV_CAPTCHA_TOKEN,
   DEV_OTP,
   OTP_RESEND_AFTER_SEC,
-  type OtpPurpose,
+  type LoginOtpPurpose,
   type Session,
 } from '../../auth.js';
 import { defineScenarios, type ScenarioClient } from '../harness.js';
@@ -31,7 +31,11 @@ const expectError = async (
 const PIN = '482105';
 const WRONG_PIN = '000000';
 
-async function requestOtp(client: ScenarioClient, mobile: string, purpose: OtpPurpose = 'LOGIN') {
+async function requestOtp(
+  client: ScenarioClient,
+  mobile: string,
+  purpose: LoginOtpPurpose = 'LOGIN',
+) {
   const { requestId } = await client.call('otpRequest', { body: { mobile, purpose } });
   return requestId;
 }

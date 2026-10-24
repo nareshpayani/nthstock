@@ -10,6 +10,7 @@ import {
   IconClock,
   IconInfo,
   IconLogout,
+  IconSettings,
   IconUser,
   buttonVariants,
   cn,
@@ -52,7 +53,8 @@ export function KycBadge({ status }: { status: KycStatus }) {
 
 /**
  * The header's profile slot (T-090): "Log in" when signed out; when signed in, the initials open a
- * menu with the name, masked mobile, the mocked KYC badge and "Log out".
+ * menu with the name, masked mobile, the mocked KYC badge, "Security" (two-factor, NSTOCK-0221)
+ * and "Log out".
  */
 export function ProfileMenu() {
   const { status, session } = useSession();
@@ -101,6 +103,11 @@ export function ProfileMenu() {
           </span>
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
+        <DropdownMenuItem asChild>
+          <Link to="/settings/security">
+            <IconSettings size={16} /> {strings.profile.security}
+          </Link>
+        </DropdownMenuItem>
         <DropdownMenuItem disabled={logout.isPending} onSelect={() => logout.mutate()}>
           <IconLogout size={16} /> {strings.profile.logOut}
         </DropdownMenuItem>

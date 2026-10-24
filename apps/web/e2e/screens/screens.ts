@@ -22,6 +22,7 @@ export const SCREENS: readonly Screen[] = [
   { name: 'positions', path: '/positions', authed: true },
   { name: 'orders', path: '/orders', authed: true },
   { name: 'funds', path: '/funds', authed: true },
+  { name: 'security', path: '/settings/security', authed: true },
 ];
 
 export const VIEWPORTS = [

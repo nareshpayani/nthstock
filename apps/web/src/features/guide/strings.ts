@@ -178,6 +178,10 @@ export const strings = {
               body: 'A bell beside the star on any stock: set a level (quick ±1% and ±2%) and a note, see it as a dotted line on the chart, and get a toast the moment the price crosses it. A bell in the header counts unread alerts, fills and trailing stops.',
             },
             {
+              name: 'Two-factor authentication',
+              body: 'Settings, Security: scan a QR code into any authenticator app, confirm with its code and save ten one-time recovery codes. The next login asks for the code after the OTP or PIN; sensitive changes ask you to confirm it is you first.',
+            },
+            {
               name: 'Scalper',
               body: 'A one-tap pad: quantity chips, Sell at bid, Buy at ask, Flatten and Reverse, with an Arm switch.',
             },
@@ -493,6 +497,16 @@ export const strings = {
             'The web app toasts a fired alert on any page, refreshes the bell and the alerts list, and draws active alerts as dotted price lines on the chart. Routes: GET and POST /v1/alerts, DELETE /v1/alerts/:id, GET /v1/notifications, POST /v1/notifications/read.',
           ],
         },
+        { kind: 'heading', text: 'Two-factor authentication and step-up' },
+        {
+          kind: 'list',
+          items: [
+            'TOTP is RFC 6238 (6 digits, 30 s step, one step of clock drift either side) in packages/utils on Web Crypto, so the API and the in-browser mock compute the same codes with no library. The QR code is one SVG path; the qrcode library loads only on the Security page.',
+            'The secret is stored encrypted per user, and the last step used is kept so a code cannot be replayed. Ten recovery codes are stored only as hashes, shown once, and each works once.',
+            'A login for a user with two-factor on stops after the OTP or PIN with a 5-minute challenge; the code or a recovery code finishes it. Five wrong codes end the challenge.',
+            'Sensitive routes answer 403 STEP_UP_REQUIRED until the session re-proves the user (PIN, or a step-up OTP that can never log anyone in, plus the code when two-factor is on) for 10 minutes. One shared dialog asks and retries the action. Every change is in the audit log.',
+          ],
+        },
         { kind: 'heading', text: 'Rules every layer follows' },
         {
           kind: 'list',
@@ -805,7 +819,7 @@ export const strings = {
           rows: [
             [
               'Login',
-              'Mobile OTP with a 30 s resend throttle, and a 4-digit device PIN hashed with Argon2id on a trusted browser (TOTP comes in Phase 2)',
+              'Mobile OTP with a 30 s resend throttle, and a 4-digit device PIN hashed with Argon2id on a trusted browser, plus optional two-factor (TOTP) with recovery codes and step-up for sensitive changes',
             ],
             [
               'Sessions',
@@ -1155,7 +1169,7 @@ export const strings = {
             ],
             [
               'Beyond the brief',
-              'Chart bar sizes (1, 5, 15, 30 and 60 minutes), price alerts with a notification centre',
+              'Chart bar sizes (1, 5, 15, 30 and 60 minutes), price alerts with a notification centre, two-factor authentication with step-up',
               'Done, live',
             ],
             ['6', 'AWS Mumbai, multi-AZ, warm standby in Hyderabad, Terraform', 'Planned'],

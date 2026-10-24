@@ -29,3 +29,18 @@ export {
   type MarketStatus,
 } from './marketCalendar.js';
 export { nseHolidays2026 } from './nseHolidays2026.js';
+export {
+  TOTP_DIGITS,
+  TOTP_SECRET_BYTES,
+  TOTP_STEP_SEC,
+  TOTP_WINDOW,
+  base32Decode,
+  base32Encode,
+  groupSetupKey,
+  hotp,
+  newTotpSecret,
+  otpauthUri,
+  totpCode,
+  totpStep,
+  verifyTotp,
+} from './totp.js';

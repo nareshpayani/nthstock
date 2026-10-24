@@ -1,7 +1,7 @@
 import { OTP_RESEND_AFTER_SEC, OtpPurpose } from '@nthstock/contracts';
 import type { Redis } from 'ioredis';
 import { mobileHash, type PiiCrypto } from '../../db/crypto.js';
-import type { OtpChallenge, OtpStore } from './repo.js';
+import type { OtpChallenge, OtpStore, TotpChallenge } from './repo.js';
 
 /** Where apps/api keeps its keys in Redis unless told otherwise (tests use their own). */
 export const DEFAULT_REDIS_KEY_PREFIX = 'nthstock:';
@@ -29,6 +29,13 @@ if redis.call('HGET', KEYS[1], 'requestId') == ARGV[1] then
 end
 return 0`;
 
+/** Adds one failure to a TOTP challenge that still exists, or nil. */
+const RECORD_TOTP_FAILURE = `
+if redis.call('EXISTS', KEYS[1]) == 1 then
+  return redis.call('HINCRBY', KEYS[1], 'failures', 1)
+end
+return false`;
+
 const toInt = (value: string | undefined) =>
   value !== undefined && /^\d+$/.test(value) ? Number(value) : null;
 
@@ -44,6 +51,9 @@ const toInt = (value: string | undefined) =>
  * - Failures go up with HINCRBY and a challenge is consumed with a check-and-DEL, each in one Lua
  *   script, so concurrent verifies count exactly and at most one consumes.
  *
+ * - `<prefix>otp:totp:<challenge id>` is a hash per TOTP login challenge (NSTOCK-0216): the user
+ *   and device ids, the first factor's method and the wrong-code count, with the challenge's TTL.
+ *
  * Expiry is still judged by the service against its clock (`expiresAt`); the TTL only removes
  * what nobody will use, so a test clock that runs ahead or behind sees the same results as memory.
  */
@@ -55,8 +65,65 @@ export function createRedisOtpStore({
   const index = (mobile: string) => mobileHash(pii, mobile).toString('hex');
   const challengeKey = (mobile: string) => `${prefix}otp:${index(mobile)}`;
   const resendKey = (mobile: string) => `${prefix}otp:resend:${index(mobile)}`;
+  const totpKey = (challengeId: string) => `${prefix}otp:totp:${challengeId}`;
 
   return {
+    async putTotpChallenge(challenge) {
+      const key = totpKey(challenge.challengeId);
+      const ttlMs = Math.max(1, challenge.expiresAt.getTime() - challenge.createdAt.getTime());
+      const results = await redis
+        .multi()
+        .del(key)
+        .hset(key, {
+          userId: challenge.userId,
+          method: challenge.method,
+          deviceId: challenge.deviceId ?? '',
+          failures: String(challenge.failures),
+          createdAt: String(challenge.createdAt.getTime()),
+          expiresAt: String(challenge.expiresAt.getTime()),
+        })
+        .pexpire(key, ttlMs)
+        .exec();
+      const failed = results?.find(([error]) => error);
+      if (!results || failed) throw failed?.[0] ?? new Error('Storing the TOTP challenge failed');
+    },
+
+    async getTotpChallenge(challengeId) {
+      const stored = await redis.hgetall(totpKey(challengeId));
+      const failures = toInt(stored['failures']);
+      const createdAt = toInt(stored['createdAt']);
+      const expiresAt = toInt(stored['expiresAt']);
+      const { userId, method, deviceId } = stored;
+      if (
+        !userId ||
+        (method !== 'OTP' && method !== 'PIN') ||
+        deviceId === undefined ||
+        failures === null ||
+        createdAt === null ||
+        expiresAt === null
+      ) {
+        return null;
+      }
+      return {
+        challengeId,
+        userId,
+        method,
+        deviceId: deviceId === '' ? null : deviceId,
+        failures,
+        createdAt: new Date(createdAt),
+        expiresAt: new Date(expiresAt),
+      } satisfies TotpChallenge;
+    },
+
+    async recordTotpFailure(challengeId) {
+      const count = await redis.eval(RECORD_TOTP_FAILURE, 1, totpKey(challengeId));
+      return typeof count === 'number' ? count : null;
+    },
+
+    async consumeTotpChallenge(challengeId) {
+      return (await redis.del(totpKey(challengeId))) === 1;
+    },
+
     async putOtpChallenge(challenge) {
       const key = challengeKey(challenge.mobile);
       const ttlMs = Math.max(1, challenge.expiresAt.getTime() - challenge.createdAt.getTime());

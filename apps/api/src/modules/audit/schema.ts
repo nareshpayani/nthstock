@@ -20,6 +20,9 @@ export type AuditActor = { type: 'user'; userId: string } | { type: 'system' };
  *   the error code), `PIN_SET`, `PIN_LOCKED` (the wrong PIN that locked it), `LOGOUT`,
  *   `REFRESH_REUSE_DETECTED` (a rotated refresh token came back; the family is revoked) and
  *   `SESSION_REVOKED` (a session ended on someone's behalf).
+ * - Step-up and two-factor (NSTOCK-0214, NSTOCK-0215): `STEP_UP` (detail: method PIN or OTP),
+ *   `TOTP_ENABLED`, `TOTP_DISABLED` (detail: with a code or a recovery code), `RECOVERY_CODE_USED`
+ *   and `RECOVERY_CODES_REGENERATED`. `LOGIN_SUCCESS` records method `TOTP` after the code step.
  */
 export const AUDIT_ACTIONS = [
   'ORDER_PLACE',
@@ -35,6 +38,11 @@ export const AUDIT_ACTIONS = [
   'LOGOUT',
   'REFRESH_REUSE_DETECTED',
   'SESSION_REVOKED',
+  'STEP_UP',
+  'TOTP_ENABLED',
+  'TOTP_DISABLED',
+  'RECOVERY_CODE_USED',
+  'RECOVERY_CODES_REGENERATED',
 ] as const;
 
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];

@@ -4,6 +4,7 @@ import { healthScenarios } from './health.js';
 import { marketScenarios } from './market.js';
 import { orderScenarios } from './orders.js';
 import { portfolioScenarios } from './portfolio.js';
+import { twoFactorScenarios } from './twoFactor.js';
 import { watchlistScenarios } from './watchlists.js';
 
 /** Every shared scenario group; each backend runner passes this to `runScenarioSuite`. */
@@ -17,4 +18,6 @@ export const scenarioGroups = [
   orderScenarios,
   portfolioScenarios,
   fundsScenarios,
+  // Sets the clock to fixed instants too, so codes are computed for a known TOTP step.
+  twoFactorScenarios,
 ] as const;
