@@ -58,7 +58,7 @@ function DiagramFrame({
           viewBox={`0 0 ${width} ${height}`}
           role="img"
           aria-labelledby={`${titleId} ${descId}`}
-          className="h-auto w-full min-w-[640px] font-sans"
+          className="mx-auto h-auto w-full max-w-[960px] min-w-[640px] font-sans"
         >
           <title id={titleId}>{title}</title>
           <desc id={descId}>{description}</desc>

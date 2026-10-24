@@ -28,7 +28,9 @@ test('demo login, a market buy, and the guide', async ({ page }) => {
   );
 
   await page.goto('/guide');
-  await expect(page.getByRole('heading', { level: 1, name: 'nthstock guide' })).toBeVisible();
+  await expect(
+    page.getByRole('heading', { level: 1, name: 'nthstock documentation' }),
+  ).toBeVisible();
   await expectNoSeriousA11yViolations(page, '/guide');
 
   await page.goto('/dashboard');

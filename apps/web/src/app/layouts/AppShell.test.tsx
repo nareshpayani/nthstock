@@ -132,3 +132,18 @@ describe('drawer and more menu', () => {
     expect(await screen.findByRole('dialog', { name: 'Keyboard shortcuts' })).toBeInTheDocument();
   });
 });
+
+describe('Left rail on the guide (NSTOCK-0342)', () => {
+  it('shows the watchlist rail on app pages', async () => {
+    await renderDashboard();
+    expect(screen.getByRole('complementary', { name: 'Watchlist and search' })).toBeInTheDocument();
+  });
+
+  it('hides it on the guide, which brings its own topics in its place', async () => {
+    renderApp('/guide');
+    await screen.findByRole('tablist', { name: 'Documentation topics' });
+    expect(
+      screen.queryByRole('complementary', { name: 'Watchlist and search' }),
+    ).not.toBeInTheDocument();
+  });
+});

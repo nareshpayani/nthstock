@@ -8,12 +8,12 @@ import { defineTabs, repoLink } from './model/guideContent';
  * 2026-10-24).
  */
 export const strings = {
-  pageTitle: 'Guide',
-  title: 'nthstock guide',
+  pageTitle: 'Documentation',
+  title: 'nthstock documentation',
   description:
     'Everything about nthstock in one place, from what it does down to how each part is built, tested, scaled and shipped.',
   headerCta: 'Log in to start',
-  tabsLabel: 'Guide topics',
+  tabsLabel: 'Documentation topics',
   previous: 'Previous',
   next: 'Next',
   inWords: 'The diagram in words',
@@ -50,7 +50,7 @@ export const strings = {
             { term: 'Built', value: 'September to October 2026, in phases' },
           ],
         },
-        { kind: 'heading', text: 'How to read this guide' },
+        { kind: 'heading', text: 'How to read this documentation' },
         {
           kind: 'text',
           text: 'The tabs go from high level to low level. Start with the demo and the features, then the architecture, then the design of each part, and finish with how it is tested, scaled and shipped. Every tab links to the code it describes.',
@@ -198,7 +198,7 @@ export const strings = {
               body: 'NSE hours (9:15 AM to 3:30 PM IST) and holidays, tick size of 5 paise, ±20% circuit bands, intraday cut-off at 3:20 PM.',
             },
             {
-              name: 'Reviewer guide',
+              name: 'Documentation',
               body: 'This page: public, deep-linkable tabs, also linked from the login page.',
             },
           ],
@@ -983,7 +983,7 @@ export const strings = {
             'The owner asks for a release.',
             'An agent runs Promote to production. It refuses unless develop’s head commit has green CI and passed the development smoke test.',
             'It moves the production branch to that commit. CI runs on production.',
-            'Green CI deploys the live site, which is smoke-tested as a reviewer would use it: login, a buy, the guide and an accessibility check.',
+            'Green CI deploys the live site, which is smoke-tested as a reviewer would use it: login, a buy, the documentation and an accessibility check.',
             'If the smoke test fails, the agent rolls back by redeploying the previous production commit.',
           ],
         },
