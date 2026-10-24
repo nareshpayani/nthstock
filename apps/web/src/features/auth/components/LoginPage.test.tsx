@@ -1,10 +1,10 @@
 import type { ApiClient } from '@nthstock/apiClient';
-import { DEV_OTP, OTP_RESEND_AFTER_SEC } from '@nthstock/contracts';
+import { CONSENT_POLICY_VERSION, DEV_OTP, OTP_RESEND_AFTER_SEC } from '@nthstock/contracts';
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { createMockServer } from '@/mocks/node';
 import { renderApp } from '@/test/renderApp';
-import { resetSession } from '@/test/session';
+import { resetSession, signIn } from '@/test/session';
 import { createSessionApiClient } from '@/shared/lib/sessionClient';
 import { readTrustedDevice } from '../store/trustedDevice';
 
@@ -150,6 +150,9 @@ describe('OTP screen (T-087)', () => {
     await heading('Set a login PIN');
     fireEvent.click(screen.getByRole('button', { name: 'Skip for now' }));
     await waitFor(() => expect(router.state.location.pathname).toBe('/orders'));
+    // Let the page load while this test still owns the session store: a request left in flight
+    // would refresh into the next test's session.
+    await heading('Orders');
   });
 });
 
@@ -163,6 +166,7 @@ describe('Try demo (REQ-DEL-02)', () => {
 
     await waitFor(() => expect(router.state.location.pathname).toBe('/stocks/RELIANCE'));
     expect(paths).toContain('/v1/auth/otp/verify');
+    await heading(/Reliance/);
   });
 });
 
@@ -215,5 +219,34 @@ describe('PIN setup, PIN entry and lockout (T-088)', () => {
     await heading('Enter the OTP');
     typeCode('One-time password', DEV_OTP);
     await waitFor(() => expect(second.router.state.location.pathname).toBe('/dashboard'));
+  });
+});
+
+describe('account deletion in progress (NSTOCK-0233)', () => {
+  it('an OTP login for a deleted account shows when its data is erased, in IST', async () => {
+    const { apiClient, mobile } = newBrowser();
+    const { requestId } = await apiClient.request('otpRequest', { body: { mobile } });
+    signIn(
+      await apiClient.request('otpVerify', {
+        body: { requestId, mobile, otp: DEV_OTP, consentVersion: CONSENT_POLICY_VERSION },
+      }),
+    );
+    await apiClient.request('pinSet', { body: { pin: '4821', confirmPin: '4821' } });
+    await apiClient.request('stepUp', { body: { pin: '4821' } });
+    await apiClient.request('accountDelete', { body: { confirm: 'DELETE' } });
+    resetSession();
+    window.localStorage.clear();
+
+    now += (OTP_RESEND_AFTER_SEC + 1) * 1000;
+    renderApp('/login', { apiClient });
+    await heading('Log in to nthstock');
+    await reachOtp(mobile);
+    typeCode('One-time password', DEV_OTP);
+
+    await heading('Account deletion in progress');
+    // 30 days after 25 Sept 2026 (plus the throttle wait), in IST.
+    expect(screen.getByText(/Its data is erased for good on 25 Oct 2026/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Use another number' }));
+    await heading('Log in to nthstock');
   });
 });

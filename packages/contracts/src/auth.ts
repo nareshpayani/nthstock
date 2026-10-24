@@ -37,12 +37,23 @@ export const OtpRequestResponse = z.object({
 });
 export type OtpRequestResponse = z.infer<typeof OtpRequestResponse>;
 
+/**
+ * The terms and privacy notice a new user agrees to at sign-up (DPDP Act 2023, spec backend-core
+ * §10). Recorded with the user; a new version would ask existing users again.
+ */
+export const CONSENT_POLICY_VERSION = '2026-09-25';
+
 export const OtpVerifyRequest = z.object({
   requestId: Id,
   mobile: Mobile,
   otp: Otp,
   /** Required once the server has answered CAPTCHA_REQUIRED (after 3 wrong attempts). */
   captchaToken: z.string().min(1).max(2048).optional(),
+  /**
+   * The consent checkbox on the mobile step (NSTOCK-0227). A new mobile without it answers 400
+   * CONSENT_REQUIRED; an existing user is not asked again.
+   */
+  consentVersion: z.literal(CONSENT_POLICY_VERSION).optional(),
 });
 export type OtpVerifyRequest = z.infer<typeof OtpVerifyRequest>;
 
@@ -145,6 +156,8 @@ export const AuthErrorDetails = z.object({
   challengeId: Id.optional(),
   /** STEP_UP_REQUIRED: whether the step-up must also carry a TOTP code. */
   totpRequired: z.boolean().optional(),
+  /** ACCOUNT_DELETED: when the account's data is erased for good. */
+  purgeAfter: IsoUtc.optional(),
 });
 export type AuthErrorDetails = z.infer<typeof AuthErrorDetails>;
 
@@ -304,3 +317,15 @@ export type SessionParams = z.infer<typeof SessionParams>;
 
 export const RevokeOthersResponse = z.object({ revoked: z.number().int().min(0) });
 export type RevokeOthersResponse = z.infer<typeof RevokeOthersResponse>;
+
+// ---- Account deletion (NSTOCK-0227, spec backend-core §10) ------------------------------------
+
+/** Days between asking to delete the account and erasing its data. */
+export const ACCOUNT_PURGE_AFTER_DAYS = 30;
+
+/** The user types DELETE to confirm; nothing else is accepted. */
+export const AccountDeletionRequest = z.object({ confirm: z.literal('DELETE') });
+export type AccountDeletionRequest = z.infer<typeof AccountDeletionRequest>;
+
+export const AccountDeletionResponse = z.object({ purgeAfter: IsoUtc });
+export type AccountDeletionResponse = z.infer<typeof AccountDeletionResponse>;

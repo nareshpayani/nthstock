@@ -43,6 +43,8 @@ export const AUDIT_ACTIONS = [
   'TOTP_DISABLED',
   'RECOVERY_CODE_USED',
   'RECOVERY_CODES_REGENERATED',
+  'CONSENT_GRANTED',
+  'ACCOUNT_DELETION_REQUESTED',
 ] as const;
 
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];

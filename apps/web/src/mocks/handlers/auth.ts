@@ -1,6 +1,8 @@
 import {
   ACCESS_TOKEN_TTL_SEC,
+  ACCOUNT_PURGE_AFTER_DAYS,
   AUTH_COOKIES,
+  CONSENT_POLICY_VERSION,
   DEV_CAPTCHA_TOKEN,
   DEV_OTP,
   OTP_CAPTCHA_AFTER_FAILURES,
@@ -214,6 +216,10 @@ export function createAuthMock({
   /** SHA-256 hashes of each user's unused recovery codes. */
   const recoveryCodes = new Map<string, string[]>();
   const totpChallenges = new Map<string, TotpChallenge>();
+  /** The consent each user gave at sign-up (NSTOCK-0231): user id → policy version. */
+  const consents = new Map<string, string>();
+  /** Deleted accounts by mobile until their purge date (NSTOCK-0231). */
+  const deletedAccounts = new Map<string, { userId: string; purgeAfter: number }>();
   const tables = {
     users,
     otps,
@@ -225,6 +231,8 @@ export function createAuthMock({
     totpFactors,
     recoveryCodes,
     totpChallenges,
+    consents,
+    deletedAccounts,
   };
   /** The signed-in user per host (see `activeUserId`); not persisted, the next request sets it. */
   const activeUsers = new Map<string, string>();
@@ -292,6 +300,8 @@ export function createAuthMock({
     // Start fresh.
   }
 
+  // The demo user is seeded before the restore; a deleted demo account stays deleted.
+  if (deletedAccounts.has(MOCK_DEMO_USER.mobile)) users.delete(MOCK_DEMO_USER.mobile);
   seedDemoSessions();
 
   const save = () => {
@@ -651,6 +661,23 @@ export function createAuthMock({
 
         let user = users.get(body.mobile);
         if (!user) {
+          const deleted = deletedAccounts.get(body.mobile);
+          if (deleted && deleted.purgeAfter > now()) {
+            throw fail(
+              403,
+              'ACCOUNT_DELETED',
+              'This account is being deleted. It cannot log in until its data is erased.',
+              { purgeAfter: iso(deleted.purgeAfter) },
+            );
+          }
+          if (body.consentVersion !== CONSENT_POLICY_VERSION) {
+            throw fail(
+              400,
+              'CONSENT_REQUIRED',
+              'Agree to the terms and privacy policy to create an account.',
+            );
+          }
+          deletedAccounts.delete(body.mobile);
           user = {
             id: randomId('usr'),
             mobile: body.mobile,
@@ -662,6 +689,7 @@ export function createAuthMock({
             createdAt: now(),
           };
           users.set(user.mobile, user);
+          consents.set(user.id, body.consentVersion);
         }
         const trusted = trustedDevice(cookies);
         const deviceId = trusted?.userId === user.id ? trusted.id : null;
@@ -856,6 +884,30 @@ export function createAuthMock({
         }
         if (!(await codeIsRight(user.id, context.body.code))) throw totpInvalid();
         return { codes: await newRecoveryCodes(user.id) };
+      },
+      options,
+    ),
+
+    route(
+      'accountDelete',
+      (context) => {
+        const { session, user } = signedIn(context);
+        requireStepUp(session, user);
+        const purgeAfter = now() + ACCOUNT_PURGE_AFTER_DAYS * 24 * 3_600_000;
+        // Deleted: the mobile cannot log in until the purge, and every session ends now. The
+        // user's other mock data is keyed by an id no new login gets again.
+        users.delete(user.mobile);
+        deletedAccounts.set(user.mobile, { userId: user.id, purgeAfter });
+        for (const s of sessions.values()) if (s.userId === user.id) s.revoked = true;
+        for (const [token, entry] of deviceTokens) {
+          if (devices.get(entry.deviceId)?.userId === user.id) deviceTokens.delete(token);
+        }
+        pins.delete(user.id);
+        totpFactors.delete(user.id);
+        recoveryCodes.delete(user.id);
+        activeUsers.delete(new URL(context.request.url).host);
+        clearSessionCookie(context.headers);
+        return { purgeAfter: iso(purgeAfter) };
       },
       options,
     ),

@@ -1,5 +1,5 @@
 import { expect } from 'vitest';
-import { DEV_OTP } from '../../auth.js';
+import { CONSENT_POLICY_VERSION, DEV_OTP } from '../../auth.js';
 import type { Order, PlaceOrderRequest } from '../../orders.js';
 import { PAPER_OPENING_BALANCE_PAISE } from '../../portfolio.js';
 import { TICK_SIZE_PAISE } from '../../primitives.js';
@@ -56,7 +56,9 @@ export async function start(
 ): Promise<Stock> {
   await client.setTime(at);
   const { requestId } = await client.call('otpRequest', { body: { mobile } });
-  await client.call('otpVerify', { body: { requestId, mobile, otp: DEV_OTP } });
+  await client.call('otpVerify', {
+    body: { requestId, mobile, otp: DEV_OTP, consentVersion: CONSENT_POLICY_VERSION },
+  });
   return pinnedStock(client, symbol);
 }
 

@@ -27,5 +27,6 @@ export { orderScenarios } from './scenarios/orders.js';
 export { portfolioScenarios } from './scenarios/portfolio.js';
 export { twoFactorScenarios } from './scenarios/twoFactor.js';
 export { sessionScenarios } from './scenarios/sessions.js';
+export { dpdpScenarios } from './scenarios/dpdp.js';
 export { watchlistScenarios } from './scenarios/watchlists.js';
 export { scenarioGroups } from './scenarios/all.js';

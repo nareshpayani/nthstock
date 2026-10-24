@@ -1,7 +1,7 @@
 export const strings = {
   title: 'Security',
   description:
-    'Protect your nthstock account with two-factor authentication, and see where you are logged in.',
+    'Protect your nthstock account with two-factor authentication, see where you are logged in, or delete the account.',
 
   twoFactor: {
     title: 'Two-factor authentication',
@@ -104,6 +104,25 @@ export const strings = {
         ? 'No other devices were logged in'
         : `${String(count)} other ${count === 1 ? 'device' : 'devices'} logged out`,
     gone: 'That session had already ended.',
+  },
+
+  deleteAccount: {
+    title: 'Delete account',
+    body: 'Close your nthstock account and erase its data. You are logged out everywhere at once.',
+    open: 'Delete account',
+    dialogTitle: 'Delete your nthstock account?',
+    dialogBody: (days: number) =>
+      `This cannot be undone. Your data is erased for good after ${String(days)} days; until then this mobile number cannot log in.`,
+    whatGoes: 'What is deleted',
+    items: [
+      'Your profile, PIN, two-factor settings and trusted browsers',
+      'Your watchlists and price alerts',
+      'Your paper trading account: cash, orders, positions, holdings and history',
+    ],
+    kept: 'Security audit records stay, with no mobile number or name in them.',
+    typeLabel: 'Type DELETE to confirm',
+    confirm: 'Delete my account',
+    cancel: 'Cancel',
   },
 
   errors: {

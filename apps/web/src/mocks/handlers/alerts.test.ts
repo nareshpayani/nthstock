@@ -1,5 +1,5 @@
 // @vitest-environment node
-import { DEV_OTP, WsServerMessage, type Quote } from '@nthstock/contracts';
+import { CONSENT_POLICY_VERSION, DEV_OTP, WsServerMessage, type Quote } from '@nthstock/contracts';
 import { createScenarioClient, fetchBackend } from '@nthstock/contracts/testing';
 import { fixedClock, fromIst } from '@nthstock/utils';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -47,7 +47,9 @@ function pageLoad(storage?: ReturnType<typeof memoryStorage>) {
 
 async function login(client: ReturnType<typeof pageLoad>['client'], mobile: string) {
   const { requestId } = await client.call('otpRequest', { body: { mobile } });
-  await client.call('otpVerify', { body: { requestId, mobile, otp: DEV_OTP } });
+  await client.call('otpVerify', {
+    body: { requestId, mobile, otp: DEV_OTP, consentVersion: CONSENT_POLICY_VERSION },
+  });
 }
 
 async function infy(client: ReturnType<typeof pageLoad>['client']): Promise<Quote> {

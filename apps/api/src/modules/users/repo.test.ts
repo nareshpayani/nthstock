@@ -130,6 +130,43 @@ describeRepoConformance(
       expect(await repo().findById('usr_other')).toBeNull();
     });
 
+    it('stores the sign-up consent with the user (NSTOCK-0228)', async () => {
+      const user = await repo().create(
+        { mobile: '9123456781' },
+        { purpose: 'TERMS_AND_PRIVACY', policyVersion: '2026-09-25' },
+      );
+      expect(await repo().listConsents(user.id)).toEqual([
+        {
+          purpose: 'TERMS_AND_PRIVACY',
+          policyVersion: '2026-09-25',
+          grantedAt: new Date('2026-09-25T04:00:00.000Z'),
+          withdrawnAt: null,
+        },
+      ]);
+      const without = await repo().create({ mobile: '9123456782' });
+      expect(await repo().listConsents(without.id)).toEqual([]);
+    });
+
+    it('hides a deleted user from every read, and finds it as deleted by mobile', async () => {
+      const user = await repo().create({ mobile: '9123456783' });
+      const at = new Date('2026-09-26T04:00:00.000Z');
+      const purgeAfter = new Date('2026-10-26T04:00:00.000Z');
+      expect(await repo().findDeletedByMobile('9123456783')).toBeNull();
+
+      expect(await repo().markDeleted(user.id, at, purgeAfter)).toBe(true);
+      expect(await repo().markDeleted(user.id, at, purgeAfter)).toBe(false);
+      expect(await repo().findById(user.id)).toBeNull();
+      expect(await repo().findByMobile('9123456783')).toBeNull();
+      expect(await repo().findDeletedByMobile('9123456783')).toEqual({
+        id: user.id,
+        deletedAt: at,
+        purgeAfter,
+      });
+      // The store frees the mobile; the login route refuses it until the purge (NSTOCK-0229).
+      const again = await repo().create({ mobile: '9123456783' });
+      expect(again.id).not.toBe(user.id);
+    });
+
     it('uses uuid-based ids by default', async () => {
       const fresh =
         driver === 'memory'

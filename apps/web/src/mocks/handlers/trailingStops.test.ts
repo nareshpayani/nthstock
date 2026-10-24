@@ -1,5 +1,11 @@
 // @vitest-environment node
-import { DEV_OTP, WsServerMessage, type Quote, type WsAccountDelta } from '@nthstock/contracts';
+import {
+  CONSENT_POLICY_VERSION,
+  DEV_OTP,
+  WsServerMessage,
+  type Quote,
+  type WsAccountDelta,
+} from '@nthstock/contracts';
 import {
   createScenarioClient,
   fetchBackend,
@@ -94,7 +100,9 @@ function carryCookies(from: ScenarioClient, to: ScenarioClient) {
 
 async function login(client: ScenarioClient, mobile: string) {
   const { requestId } = await client.call('otpRequest', { body: { mobile } });
-  await client.call('otpVerify', { body: { requestId, mobile, otp: DEV_OTP } });
+  await client.call('otpVerify', {
+    body: { requestId, mobile, otp: DEV_OTP, consentVersion: CONSENT_POLICY_VERSION },
+  });
 }
 
 async function infy(client: ScenarioClient): Promise<Quote> {

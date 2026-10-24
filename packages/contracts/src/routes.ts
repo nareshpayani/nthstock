@@ -1,5 +1,7 @@
 import { z } from 'zod';
 import {
+  AccountDeletionRequest,
+  AccountDeletionResponse,
   OtpRequest,
   OtpRequestResponse,
   OtpVerifyRequest,
@@ -245,6 +247,16 @@ export const routes = {
     path: '/v1/auth/sessions/revoke-others',
     auth: 'user',
     response: RevokeOthersResponse,
+  },
+
+  // Account deletion (NSTOCK-0229): step-up, then every session ends and the data is erased after
+  // ACCOUNT_PURGE_AFTER_DAYS.
+  accountDelete: {
+    method: 'POST',
+    path: '/v1/account/deletion',
+    auth: 'user',
+    body: AccountDeletionRequest,
+    response: AccountDeletionResponse,
   },
 
   // Market

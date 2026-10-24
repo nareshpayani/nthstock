@@ -5,6 +5,9 @@ export {
   DEMO_USER,
   DuplicateMobileError,
   createMemoryUsersRepo,
+  type ConsentGrant,
+  type ConsentRecord,
+  type DeletedUser,
   type UserRecord,
   type UsersRepo,
 } from './repo.js';

@@ -4,6 +4,7 @@ import {
   ACCESS_TOKEN_TTL_SEC,
   AUTH_COOKIES,
   DEV_CAPTCHA_TOKEN,
+  CONSENT_POLICY_VERSION,
   DEV_OTP,
   OTP_RESEND_AFTER_SEC,
   routes,
@@ -65,7 +66,7 @@ function browser() {
     async login(mobile: string): Promise<Session> {
       const { requestId } = await client.request('otpRequest', { body: { mobile } });
       const session = await client.request('otpVerify', {
-        body: { requestId, mobile, otp: DEV_OTP },
+        body: { requestId, mobile, otp: DEV_OTP, consentVersion: CONSENT_POLICY_VERSION },
       });
       csrf = session.csrfToken;
       return session;
@@ -112,7 +113,12 @@ describe('MSW auth handlers (T-084)', () => {
     const response = await fetch(`${b.origin}${routes.otpVerify.path}`, {
       method: 'POST',
       headers: { 'content-type': 'application/json', 'x-csrf-token': 'pre-session' },
-      body: JSON.stringify({ requestId, mobile, otp: DEV_OTP }),
+      body: JSON.stringify({
+        requestId,
+        mobile,
+        otp: DEV_OTP,
+        consentVersion: CONSENT_POLICY_VERSION,
+      }),
     });
 
     expect(response.status).toBe(200);
@@ -134,7 +140,13 @@ describe('MSW auth handlers (T-084)', () => {
     const { requestId } = await b.client.request('otpRequest', { body: { mobile } });
     const verify = (otp: string, captchaToken?: string) =>
       b.client.request('otpVerify', {
-        body: { requestId, mobile, otp, ...(captchaToken ? { captchaToken } : {}) },
+        body: {
+          requestId,
+          mobile,
+          otp,
+          ...(captchaToken ? { captchaToken } : {}),
+          consentVersion: CONSENT_POLICY_VERSION,
+        },
       });
 
     const wrong = [await failure(verify('000000')), await failure(verify('000000'))];
@@ -260,7 +272,7 @@ describe('MSW auth handlers (T-084)', () => {
       body: { mobile, purpose: 'UNLOCK_PIN' },
     });
     const unlocked = await b.client.request('otpVerify', {
-      body: { requestId, mobile, otp: DEV_OTP },
+      body: { requestId, mobile, otp: DEV_OTP, consentVersion: CONSENT_POLICY_VERSION },
     });
     expect(unlocked.device.id).toBe(viaPin.device.id);
     await b.call('pinVerify', { body: { pin: '4821' } });

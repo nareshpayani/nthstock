@@ -3,6 +3,7 @@ import {
   ACCESS_TOKEN_TTL_SEC,
   AuthErrorDetails,
   DEV_CAPTCHA_TOKEN,
+  CONSENT_POLICY_VERSION,
   DEV_OTP,
   OTP_RESEND_AFTER_SEC,
   type LoginOtpPurpose,
@@ -42,7 +43,9 @@ async function requestOtp(
 
 async function login(client: ScenarioClient, mobile: string): Promise<Session> {
   const requestId = await requestOtp(client, mobile);
-  return client.call('otpVerify', { body: { requestId, mobile, otp: DEV_OTP } });
+  return client.call('otpVerify', {
+    body: { requestId, mobile, otp: DEV_OTP, consentVersion: CONSENT_POLICY_VERSION },
+  });
 }
 
 /** Logs in and sets the PIN, which trusts this client's device. */
@@ -94,7 +97,13 @@ export const authScenarios = defineScenarios('auth', [
       const requestId = await requestOtp(client, mobile);
       const verify = (otp: string, captchaToken?: string) =>
         client.callError('otpVerify', {
-          body: { requestId, mobile, otp, ...(captchaToken ? { captchaToken } : {}) },
+          body: {
+            requestId,
+            mobile,
+            otp,
+            ...(captchaToken ? { captchaToken } : {}),
+            consentVersion: CONSENT_POLICY_VERSION,
+          },
         });
 
       await expectError(verify('000000'), 400, 'OTP_INVALID', {
@@ -116,7 +125,13 @@ export const authScenarios = defineScenarios('auth', [
       await expectError(verify(DEV_OTP, 'forged-captcha'), 400, 'CAPTCHA_REQUIRED');
 
       const session = await client.call('otpVerify', {
-        body: { requestId, mobile, otp: DEV_OTP, captchaToken: DEV_CAPTCHA_TOKEN },
+        body: {
+          requestId,
+          mobile,
+          otp: DEV_OTP,
+          captchaToken: DEV_CAPTCHA_TOKEN,
+          consentVersion: CONSENT_POLICY_VERSION,
+        },
       });
       expect(session.user.mobileMasked).toBe('******0003');
     },
@@ -126,14 +141,25 @@ export const authScenarios = defineScenarios('auth', [
     async run(client) {
       const mobile = '8100000004';
       await expectError(
-        client.callError('otpVerify', { body: { requestId: 'otp_nope', mobile, otp: DEV_OTP } }),
+        client.callError('otpVerify', {
+          body: {
+            requestId: 'otp_nope',
+            mobile,
+            otp: DEV_OTP,
+            consentVersion: CONSENT_POLICY_VERSION,
+          },
+        }),
         400,
         'OTP_EXPIRED',
       );
       const requestId = await requestOtp(client, mobile);
-      await client.call('otpVerify', { body: { requestId, mobile, otp: DEV_OTP } });
+      await client.call('otpVerify', {
+        body: { requestId, mobile, otp: DEV_OTP, consentVersion: CONSENT_POLICY_VERSION },
+      });
       await expectError(
-        client.callError('otpVerify', { body: { requestId, mobile, otp: DEV_OTP } }),
+        client.callError('otpVerify', {
+          body: { requestId, mobile, otp: DEV_OTP, consentVersion: CONSENT_POLICY_VERSION },
+        }),
         400,
         'OTP_EXPIRED',
       );
@@ -284,7 +310,7 @@ export const authScenarios = defineScenarios('auth', [
       await client.advanceTime(OTP_RESEND_AFTER_SEC * 1000);
       const requestId = await requestOtp(client, mobile, 'UNLOCK_PIN');
       const unlocked = await client.call('otpVerify', {
-        body: { requestId, mobile, otp: DEV_OTP },
+        body: { requestId, mobile, otp: DEV_OTP, consentVersion: CONSENT_POLICY_VERSION },
       });
       expect(unlocked.device.trusted).toBe(true);
       await client.call('logout');

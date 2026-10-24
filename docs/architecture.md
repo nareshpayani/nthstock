@@ -99,6 +99,23 @@ CDN + WAF ─► Load balancer ─► apps/api (Fastify, stateless)     apps/rea
   (400); it logs out from the profile menu.
 - Turning two-factor on or off offers "Log out all other devices" (ASVS 3.3.3).
 
+### Consent and account deletion (DPDP Act 2023)
+- Consent: the first OTP login sends `consentVersion` (`CONSENT_POLICY_VERSION` in
+  `packages/contracts`). A sign-up without the current version answers 400 `CONSENT_REQUIRED`; the
+  user and its `consents` row (purpose `TERMS_AND_PRIVACY`, policy version, time) are written in one
+  transaction, then `CONSENT_GRANTED` is audited. Existing users are not asked again.
+- Deletion: `POST /v1/account/deletion` (`{ confirm: 'DELETE' }`, step-up) runs
+  `accountDeletionService`: mark the user deleted with `purge_after` = now + 30 days (so no login
+  can start a session), revoke every live session with reason `ACCOUNT_DELETED` (audited and
+  published, so tokens and sockets end at once), cancel OPEN and AMO paper orders, and audit
+  `ACCOUNT_DELETION_REQUESTED`. The response clears the auth cookies.
+- Until the purge, an OTP login for the mobile answers 403 `ACCOUNT_DELETED` with `purgeAfter`, and
+  `findById` hides the user from every read. The purge job (T-230, with the BullMQ jobs of E16)
+  erases the PII columns and leaves a tombstone; the mobile can then sign up as a new user.
+- Web: Settings, Security has a danger card (DELETE typed, then step-up). On success the app
+  navigates to `/login?deleted=<purgeAfter>` first (its `beforeLoad` skips the session check), then
+  clears the session, the query cache and the trusted-browser record.
+
 ### Security baseline
 - Rate limits per IP and per user; OTP resend throttling; CAPTCHA after 3 failed OTP/PIN attempts; PIN lockout after 5, unlock via OTP.
 - TLS 1.2+ and HSTS; encryption at rest (KMS); phone/PII column-level encryption.

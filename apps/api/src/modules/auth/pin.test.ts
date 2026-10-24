@@ -1,4 +1,5 @@
 import {
+  CONSENT_POLICY_VERSION,
   AUTH_COOKIES,
   ApiError,
   AuthErrorDetails,
@@ -157,7 +158,7 @@ describe('POST /v1/auth/pin/verify', () => {
       method: 'POST',
       url: routes.otpVerify.path,
       headers: { ...PRE_SESSION_CSRF, cookie: cookieHeader({ [AUTH_COOKIES.device]: device }) },
-      payload: { requestId, mobile: MOBILE, otp: DEV_OTP },
+      payload: { requestId, mobile: MOBILE, otp: DEV_OTP, consentVersion: CONSENT_POLICY_VERSION },
     });
     expect(unlocked.statusCode).toBe(200);
     // The same trusted device carries on; its cookie is untouched.
@@ -206,7 +207,12 @@ describe('POST /v1/auth/pin/verify', () => {
       method: 'POST',
       url: routes.otpVerify.path,
       headers: { ...PRE_SESSION_CSRF, cookie: cookieHeader({ [AUTH_COOKIES.device]: device }) },
-      payload: { requestId, mobile: '9123456789', otp: DEV_OTP },
+      payload: {
+        requestId,
+        mobile: '9123456789',
+        otp: DEV_OTP,
+        consentVersion: CONSENT_POLICY_VERSION,
+      },
     });
 
     const session = Session.parse(other.json());

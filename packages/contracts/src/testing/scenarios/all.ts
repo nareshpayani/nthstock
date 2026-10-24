@@ -1,4 +1,5 @@
 import { authScenarios } from './auth.js';
+import { dpdpScenarios } from './dpdp.js';
 import { fundsScenarios } from './funds.js';
 import { healthScenarios } from './health.js';
 import { marketScenarios } from './market.js';
@@ -22,4 +23,5 @@ export const scenarioGroups = [
   // Sets the clock to fixed instants too, so codes are computed for a known TOTP step.
   twoFactorScenarios,
   sessionScenarios,
+  dpdpScenarios,
 ] as const;

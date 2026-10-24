@@ -1,5 +1,5 @@
 import { expect } from 'vitest';
-import { DEV_OTP } from '../../auth.js';
+import { CONSENT_POLICY_VERSION, DEV_OTP } from '../../auth.js';
 import type { SearchHit } from '../../market.js';
 import {
   WATCHLIST_DEFAULT_NAME,
@@ -30,7 +30,9 @@ const expectError = async (
 
 async function login(client: ScenarioClient, mobile: string) {
   const { requestId } = await client.call('otpRequest', { body: { mobile } });
-  return client.call('otpVerify', { body: { requestId, mobile, otp: DEV_OTP } });
+  return client.call('otpVerify', {
+    body: { requestId, mobile, otp: DEV_OTP, consentVersion: CONSENT_POLICY_VERSION },
+  });
 }
 
 /** Logs in and answers with the user's only list, the default one. */

@@ -1,4 +1,9 @@
-import { DEV_CAPTCHA_TOKEN, type LoginOtpPurpose, type Session } from '@nthstock/contracts';
+import {
+  CONSENT_POLICY_VERSION,
+  DEV_CAPTCHA_TOKEN,
+  type LoginOtpPurpose,
+  type Session,
+} from '@nthstock/contracts';
 import { Button, Field, OtpInput } from '@nthstock/ui';
 import { useId, useState, type FormEvent } from 'react';
 import { useRequestOtp, useVerifyOtp } from '../hooks/useAuthMutations';
@@ -17,6 +22,8 @@ export type OtpStepProps = {
   onVerified: (session: Session) => void;
   /** Two-factor is on: the OTP was right, and the code step finishes the login. */
   onTotpRequired: (challengeId: string) => void;
+  /** The account is being deleted: no login until it is erased on `purgeAfter`. */
+  onAccountDeleted: (purgeAfter: string) => void;
   onChangeNumber: () => void;
 };
 
@@ -39,6 +46,7 @@ export function OtpStep({
   devOtp,
   onVerified,
   onTotpRequired,
+  onAccountDeleted,
   onChangeNumber,
 }: OtpStepProps) {
   const verifyOtp = useVerifyOtp();
@@ -78,12 +86,19 @@ export function OtpStep({
         otp: code,
         // The mock CAPTCHA: a real widget replaces this before launch (CLAUDE.md security baseline).
         ...(captchaNeeded && captchaDone ? { captchaToken: DEV_CAPTCHA_TOKEN } : {}),
+        // The mobile step's consent box was ticked to get here (NSTOCK-0233); a new user is created
+        // only with it.
+        ...(purpose === 'LOGIN' ? { consentVersion: CONSENT_POLICY_VERSION } : {}),
       });
       onVerified(session);
     } catch (failure) {
       const { code: errorCode, details } = authFailure(failure);
       if (errorCode === 'TOTP_REQUIRED' && details.challengeId) {
         onTotpRequired(details.challengeId);
+        return;
+      }
+      if (errorCode === 'ACCOUNT_DELETED' && details.purgeAfter) {
+        onAccountDeleted(details.purgeAfter);
         return;
       }
       if (details.captchaRequired) setCaptchaNeeded(true);
