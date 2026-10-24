@@ -60,7 +60,7 @@ Phase 1 and Phase 2 made the product work end to end, but four parts of it still
 - Web push, email or SMS notifications. In-app only (socket plus the notification centre).
 - AWS, autoscaling or the Phase 6 load test at 10 lakh users. This wave adds a local benchmark
   (§10) and a design that shards; it does not prove the D7 numbers.
-- Multi-leg orders (OCO, bracket). §13 lists them as the next spec.
+- Multi-leg orders (OCO, bracket). §16 lists them; they are the next spec after this one.
 
 ## 3. Architecture
 
@@ -179,7 +179,9 @@ newest 100 per user are kept, as today; the E16 cleanup job trims the rest daily
   notification exists exactly when its event does.
 - `notification_outbox(id, user_id, notification_id)` is written in the same transaction. After
   commit the writer publishes `notify:{userId}` and deletes its outbox row. A relay in the job
-  worker publishes rows older than 5 s every 5 s, so a crash only delays delivery.
+  worker publishes rows older than 5 s every 5 s, then deletes them, so a crash only delays
+  delivery. Delivery is therefore at least once: the message carries the notification id, and the
+  web app drops an id it already holds, so a publish repeated after a crash shows once.
 - `apps/realtime` subscribes per connected user (the pattern `orderFeed.ts` already uses) and sends
   the existing `notification` WS message. The web app stops polling in api mode; it re-reads
   `/v1/notifications` only after a reconnect.
@@ -238,7 +240,8 @@ aggregates, and 1W to 5Y ranges from `candles_1d`.
   (`POST /v1/orders/:id/trailing-stop`, `DELETE …`), the same shapes the MSW mock serves today.
 - The scenario suites gain `matcher`, `trailingStop` and `notifications` scenarios. A scenario
   pins a price through `/v1/__test/ticks`, which in worker mode writes into the stream, so the same
-  scenario drives MSW and the full stack.
+  scenario drives MSW and the full stack. Like every `/v1/__test` route it is registered only when
+  test controls are on, and never in a production build or deploy.
 
 ## 9. Security and compliance
 
