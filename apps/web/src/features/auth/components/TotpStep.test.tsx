@@ -1,5 +1,5 @@
 import type { ApiClient } from '@nthstock/apiClient';
-import { DEV_OTP } from '@nthstock/contracts';
+import { CONSENT_POLICY_VERSION, DEV_OTP } from '@nthstock/contracts';
 import { base32Decode, totpCode } from '@nthstock/utils';
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
@@ -34,7 +34,11 @@ async function twoFactorUser() {
   });
   const mobile = `97${String(browsers).padStart(8, '0')}`;
   const { requestId } = await apiClient.request('otpRequest', { body: { mobile } });
-  signIn(await apiClient.request('otpVerify', { body: { requestId, mobile, otp: DEV_OTP } }));
+  signIn(
+    await apiClient.request('otpVerify', {
+      body: { requestId, mobile, otp: DEV_OTP, consentVersion: CONSENT_POLICY_VERSION },
+    }),
+  );
   await apiClient.request('pinSet', { body: { pin: '4821', confirmPin: '4821' } });
   await apiClient.request('stepUp', { body: { pin: '4821' } });
   const { setupKey } = await apiClient.request('totpEnrol');

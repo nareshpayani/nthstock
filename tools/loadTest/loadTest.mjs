@@ -159,7 +159,13 @@ async function runWorker(config) {
     const verify = await call(user.agent, api, {
       method: 'POST',
       path: '/v1/auth/otp/verify',
-      body: { mobile: mobileOf(user.n), requestId: otp.json.requestId, otp: '123456' },
+      body: {
+        mobile: mobileOf(user.n),
+        requestId: otp.json.requestId,
+        otp: '123456',
+        // CONSENT_POLICY_VERSION in packages/contracts: a new mobile needs it (NSTOCK-0228).
+        consentVersion: '2026-09-25',
+      },
       localAddress: user.localAddress,
     });
     if (verify.status !== 200) {

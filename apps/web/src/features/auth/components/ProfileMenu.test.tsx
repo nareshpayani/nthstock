@@ -1,4 +1,4 @@
-import { DEV_OTP } from '@nthstock/contracts';
+import { CONSENT_POLICY_VERSION, DEV_OTP } from '@nthstock/contracts';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { MOCK_DEMO_USER } from '@/mocks/handlers/auth';
@@ -34,7 +34,11 @@ describe('profile menu (T-090)', () => {
     const apiClient = createSessionApiClient({ baseUrl: 'http://profile.test' });
     const { mobile } = MOCK_DEMO_USER;
     const { requestId } = await apiClient.request('otpRequest', { body: { mobile } });
-    signIn(await apiClient.request('otpVerify', { body: { requestId, mobile, otp: DEV_OTP } }));
+    signIn(
+      await apiClient.request('otpVerify', {
+        body: { requestId, mobile, otp: DEV_OTP, consentVersion: CONSENT_POLICY_VERSION },
+      }),
+    );
 
     const { router, queryClient } = renderApp('/orders', { apiClient });
     await screen.findByRole('heading', { level: 1, name: 'Orders' });

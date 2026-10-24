@@ -1,5 +1,11 @@
 // @vitest-environment node
-import { AUTH_CSRF_HEADER, AUTH_COOKIES, DEV_OTP, routes } from '@nthstock/contracts';
+import {
+  AUTH_CSRF_HEADER,
+  AUTH_COOKIES,
+  CONSENT_POLICY_VERSION,
+  DEV_OTP,
+  routes,
+} from '@nthstock/contracts';
 import { getResponse } from 'msw';
 import { describe, expect, it } from 'vitest';
 import { setMockLatency } from '../handlerKit';
@@ -55,7 +61,14 @@ describe('auth mock persistence (msw mode reloads)', () => {
     const sent = await first.call(routes.otpRequest.path, { mobile });
     const requestId = sent.json.requestId as string;
     expect(
-      (await first.call(routes.otpVerify.path, { mobile, requestId, otp: DEV_OTP })).status,
+      (
+        await first.call(routes.otpVerify.path, {
+          mobile,
+          requestId,
+          otp: DEV_OTP,
+          consentVersion: CONSENT_POLICY_VERSION,
+        })
+      ).status,
     ).toBe(200);
     expect((await first.call(routes.pinSet.path, { pin: '4821', confirmPin: '4821' })).status).toBe(
       200,

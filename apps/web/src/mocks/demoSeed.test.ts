@@ -1,5 +1,5 @@
 // @vitest-environment node
-import { DEV_OTP } from '@nthstock/contracts';
+import { CONSENT_POLICY_VERSION, DEV_OTP } from '@nthstock/contracts';
 import { createScenarioClient, fetchBackend } from '@nthstock/contracts/testing';
 import { generateSymbolMaster } from '@nthstock/marketData';
 import { DEMO_SEED_USER, buildDemoAccount, demoWatchlists } from '@nthstock/paperEngine';
@@ -52,7 +52,9 @@ async function demoPage(storage: ReturnType<typeof memoryStorage>) {
   const client = createScenarioClient(fetchBackend(TEST_API_ORIGIN, fetch));
   const mobile = DEMO_SEED_USER.mobile;
   const { requestId } = await client.call('otpRequest', { body: { mobile } });
-  await client.call('otpVerify', { body: { requestId, mobile, otp: DEV_OTP } });
+  await client.call('otpVerify', {
+    body: { requestId, mobile, otp: DEV_OTP, consentVersion: CONSENT_POLICY_VERSION },
+  });
   return client;
 }
 

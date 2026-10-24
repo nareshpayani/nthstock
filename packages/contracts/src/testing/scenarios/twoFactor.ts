@@ -2,6 +2,7 @@ import { base32Decode, totpCode } from '@nthstock/utils';
 import { expect } from 'vitest';
 import {
   AuthErrorDetails,
+  CONSENT_POLICY_VERSION,
   DEV_OTP,
   STEP_UP_WINDOW_SEC,
   TOTP_MAX_FAILURES,
@@ -34,7 +35,9 @@ async function advance(client: ScenarioClient, clock: Clock, ms: number) {
 
 async function login(client: ScenarioClient, mobile: string): Promise<Session> {
   const { requestId } = await client.call('otpRequest', { body: { mobile } });
-  return client.call('otpVerify', { body: { requestId, mobile, otp: DEV_OTP } });
+  return client.call('otpVerify', {
+    body: { requestId, mobile, otp: DEV_OTP, consentVersion: CONSENT_POLICY_VERSION },
+  });
 }
 
 /** Logs in, sets the PIN and steps up with it. */
@@ -71,7 +74,7 @@ async function challengeAfterOtp(
   await advance(client, clock, 31_000);
   const { requestId } = await client.call('otpRequest', { body: { mobile } });
   const { status, body } = await client.callError('otpVerify', {
-    body: { requestId, mobile, otp: DEV_OTP },
+    body: { requestId, mobile, otp: DEV_OTP, consentVersion: CONSENT_POLICY_VERSION },
   });
   expect(status).toBe(401);
   expect(body.error.code).toBe('TOTP_REQUIRED');
@@ -123,7 +126,7 @@ export const twoFactorScenarios = defineScenarios('step-up and two-factor', [
       const { requestId } = await client.call('stepUpOtpRequest');
       // The public OTP route cannot be used to finish it as a login.
       const asLogin = await client.callError('otpVerify', {
-        body: { requestId, mobile, otp: DEV_OTP },
+        body: { requestId, mobile, otp: DEV_OTP, consentVersion: CONSENT_POLICY_VERSION },
       });
       expect(asLogin.status).toBe(400);
       expect(asLogin.body.error.code).toBe('OTP_EXPIRED');

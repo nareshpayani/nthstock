@@ -1,4 +1,4 @@
-import { ApiError, routes } from '@nthstock/contracts';
+import { CONSENT_POLICY_VERSION, ApiError, routes } from '@nthstock/contracts';
 import { Redis } from 'ioredis';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { buildApp, type App } from '../../app.js';
@@ -54,7 +54,12 @@ describe('per-IP limits on auth routes', () => {
         url: routes.otpVerify.path,
         headers: PRE_SESSION_CSRF,
         remoteAddress: '203.0.113.9',
-        payload: { requestId: 'otp_x', mobile: mobileFor(1), otp: '000000' },
+        payload: {
+          requestId: 'otp_x',
+          mobile: mobileFor(1),
+          otp: '000000',
+          consentVersion: CONSENT_POLICY_VERSION,
+        },
       });
 
     for (let i = 0; i < AUTH_RATE_LIMITS.otpVerify; i += 1) {

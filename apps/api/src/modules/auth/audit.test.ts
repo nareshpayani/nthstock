@@ -1,4 +1,5 @@
 import {
+  CONSENT_POLICY_VERSION,
   AUTH_COOKIES,
   DEV_OTP,
   OtpRequestResponse,
@@ -60,7 +61,7 @@ async function login(mobile = MOBILE): Promise<LoggedIn & { sessionId: string }>
   });
   if (!loggedIn) throw new Error('no login');
   secrets.push(loggedIn.access, loggedIn.refresh, loggedIn.csrf);
-  const sessionId = entries[0]?.detail['sessionId'];
+  const sessionId = entries.find((entry) => entry.action === 'LOGIN_SUCCESS')?.detail['sessionId'];
   if (typeof sessionId !== 'string') throw new Error('no LOGIN_SUCCESS entry');
   return { ...loggedIn, sessionId };
 }
@@ -77,7 +78,7 @@ const verifyOtp = async (mobile: string, otp: string) => {
     method: 'POST',
     url: routes.otpVerify.path,
     headers: PRE_SESSION_CSRF,
-    payload: { requestId, mobile, otp },
+    payload: { requestId, mobile, otp, consentVersion: CONSENT_POLICY_VERSION },
   });
 };
 
@@ -114,7 +115,7 @@ const refresh = (token: string) =>
   });
 
 describe('auth audit entries (T-188)', () => {
-  it('writes one LOGIN_SUCCESS for an OTP login', async () => {
+  it('writes CONSENT_GRANTED, then one LOGIN_SUCCESS, for a first OTP login', async () => {
     let user: LoggedIn | undefined;
     const entries = await written(async () => {
       user = await loginWithOtp(app, MOBILE);
@@ -122,6 +123,14 @@ describe('auth audit entries (T-188)', () => {
 
     const { session } = user as LoggedIn;
     expect(entries).toEqual([
+      // A new user is created with the consent of the mobile step (NSTOCK-0228).
+      expect.objectContaining({
+        actor: { type: 'user', userId: session.user.id },
+        userId: session.user.id,
+        action: 'CONSENT_GRANTED',
+        outcome: 'OK',
+        detail: { purpose: 'TERMS_AND_PRIVACY', policyVersion: CONSENT_POLICY_VERSION },
+      }),
       expect.objectContaining({
         actor: { type: 'user', userId: session.user.id },
         userId: session.user.id,
@@ -167,8 +176,12 @@ describe('auth audit entries (T-188)', () => {
     });
     const { user, device } = trusted as { user: LoggedIn; device: string };
 
-    expect(set.map((entry) => entry.action)).toEqual(['LOGIN_SUCCESS', 'PIN_SET']);
-    expect(set[1]).toMatchObject({
+    expect(set.map((entry) => entry.action)).toEqual([
+      'CONSENT_GRANTED',
+      'LOGIN_SUCCESS',
+      'PIN_SET',
+    ]);
+    expect(set[2]).toMatchObject({
       actor: { type: 'user', userId: user.session.user.id },
       detail: { deviceId: user.session.device.id },
     });

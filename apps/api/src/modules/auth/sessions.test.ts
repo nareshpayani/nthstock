@@ -1,4 +1,11 @@
-import { ACCESS_TOKEN_TTL_SEC, AUTH_COOKIES, ApiError, Session, routes } from '@nthstock/contracts';
+import {
+  CONSENT_POLICY_VERSION,
+  ACCESS_TOKEN_TTL_SEC,
+  AUTH_COOKIES,
+  ApiError,
+  Session,
+  routes,
+} from '@nthstock/contracts';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { buildApp, type App } from '../../app.js';
 import {
@@ -119,7 +126,7 @@ describe('OTP login', () => {
       method: 'POST',
       url: routes.otpVerify.path,
       headers: PRE_SESSION_CSRF,
-      payload: { requestId, mobile: MOBILE, otp: lines[0] },
+      payload: { requestId, mobile: MOBILE, otp: lines[0], consentVersion: CONSENT_POLICY_VERSION },
     });
 
     expect(verified.statusCode).toBe(200);

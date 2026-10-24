@@ -83,12 +83,13 @@ describeWithPostgres('Postgres users repo (integration, T-190)', () => {
     expect(await other.findByMobile(MOBILE)).toBeNull();
   });
 
-  it('hides a deleted user from findByMobile and lets the mobile sign up again', async () => {
+  it('hides a deleted user from every read and lets the mobile sign up again', async () => {
     const first = await repo().create({ mobile: MOBILE });
     await raw.query('UPDATE users SET deleted_at = now() WHERE id = $1', [first.id]);
 
     expect(await repo().findByMobile(MOBILE)).toBeNull();
-    expect(await repo().findById(first.id)).toMatchObject({ id: first.id, mobile: MOBILE });
+    // Deleted means logged out for good (NSTOCK-0229): no read hands the user to a login.
+    expect(await repo().findById(first.id)).toBeNull();
 
     const second = await repo().create({ mobile: MOBILE });
     expect(second.id).not.toBe(first.id);

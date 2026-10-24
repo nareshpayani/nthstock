@@ -1,4 +1,5 @@
 import {
+  CONSENT_POLICY_VERSION,
   AUTH_COOKIES,
   AUTH_CSRF_HEADER,
   DEV_OTP,
@@ -66,7 +67,7 @@ export async function loginWithOtp(
     method: 'POST',
     url: routes.otpVerify.path,
     headers,
-    payload: { requestId, mobile, otp: DEV_OTP },
+    payload: { requestId, mobile, otp: DEV_OTP, consentVersion: CONSENT_POLICY_VERSION },
   });
   if (response.statusCode !== 200) throw new Error(`login failed: ${response.body}`);
   const cookies = setCookies(response);

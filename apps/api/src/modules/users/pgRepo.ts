@@ -1,12 +1,17 @@
 import { randomUUID } from 'node:crypto';
 import type { KycStatus } from '@nthstock/contracts';
 import type { Clock } from '@nthstock/utils';
-import { and, eq, isNull } from 'drizzle-orm';
+import { and, desc, eq, isNotNull, isNull } from 'drizzle-orm';
 import type { Database } from '../../db/client.js';
 import { mobileHash, type PiiCrypto } from '../../db/crypto.js';
-import { users } from '../../db/schema/users.js';
+import { consents, users } from '../../db/schema/users.js';
 import { isUniqueViolation } from '../../db/errors.js';
-import { DuplicateMobileError, type UserRecord, type UsersRepo } from './repo.js';
+import {
+  DuplicateMobileError,
+  type ConsentRecord,
+  type UserRecord,
+  type UsersRepo,
+} from './repo.js';
 
 type UserRow = typeof users.$inferSelect;
 
@@ -68,7 +73,12 @@ export function createPgUsersRepo({
 
   return {
     async findById(id) {
-      return first(await db.select().from(users).where(eq(users.id, id)));
+      return first(
+        await db
+          .select()
+          .from(users)
+          .where(and(eq(users.id, id), isNull(users.deletedAt))),
+      );
     },
 
     async findByMobile(mobile) {
@@ -80,24 +90,35 @@ export function createPgUsersRepo({
       );
     },
 
-    async create(user) {
+    async create(user, consent) {
       const now = clock.now();
       try {
-        const rows = await db
-          .insert(users)
-          .values({
-            id: newId(),
-            ...mobileColumns(user.mobile),
-            nameEnc: seal(user.name ?? null, USER_PII_CONTEXT.name),
-            emailEnc: seal(user.email ?? null, USER_PII_CONTEXT.email),
-            kycStatus: 'NOT_STARTED',
-            createdAt: now,
-            updatedAt: now,
-          })
-          .returning();
-        const created = first(rows);
-        if (!created) throw new Error('create returned no user');
-        return created;
+        // The user and its consent in one transaction: neither exists without the other.
+        return await db.transaction(async (tx) => {
+          const rows = await tx
+            .insert(users)
+            .values({
+              id: newId(),
+              ...mobileColumns(user.mobile),
+              nameEnc: seal(user.name ?? null, USER_PII_CONTEXT.name),
+              emailEnc: seal(user.email ?? null, USER_PII_CONTEXT.email),
+              kycStatus: 'NOT_STARTED',
+              createdAt: now,
+              updatedAt: now,
+            })
+            .returning();
+          const created = first(rows);
+          if (!created) throw new Error('create returned no user');
+          if (consent) {
+            await tx.insert(consents).values({
+              userId: created.id,
+              purpose: consent.purpose,
+              policyVersion: consent.policyVersion,
+              grantedAt: now,
+            });
+          }
+          return created;
+        });
       } catch (error) {
         if (isUniqueViolation(error, 'users_mobile_hash_live_idx')) {
           throw new DuplicateMobileError();
@@ -120,6 +141,47 @@ export function createPgUsersRepo({
           .where(and(eq(users.id, id), isNull(users.purgedAt)))
           .returning(),
       );
+    },
+
+    async listConsents(userId) {
+      const rows = await db
+        .select()
+        .from(consents)
+        .where(eq(consents.userId, userId))
+        .orderBy(consents.id);
+      return rows.map((row): ConsentRecord => ({
+        // The table's CHECK holds this to CONSENT_PURPOSES.
+        purpose: row.purpose as ConsentRecord['purpose'],
+        policyVersion: row.policyVersion,
+        grantedAt: row.grantedAt,
+        withdrawnAt: row.withdrawnAt,
+      }));
+    },
+
+    async findDeletedByMobile(mobile) {
+      const [row] = await db
+        .select({ id: users.id, deletedAt: users.deletedAt, purgeAfter: users.purgeAfter })
+        .from(users)
+        .where(
+          and(
+            eq(users.mobileHash, mobileHash(pii, mobile)),
+            isNotNull(users.deletedAt),
+            isNull(users.purgedAt),
+          ),
+        )
+        .orderBy(desc(users.deletedAt))
+        .limit(1);
+      if (!row?.deletedAt || !row.purgeAfter) return null;
+      return { id: row.id, deletedAt: row.deletedAt, purgeAfter: row.purgeAfter };
+    },
+
+    async markDeleted(id, at, purgeAfter) {
+      const rows = await db
+        .update(users)
+        .set({ deletedAt: at, purgeAfter, updatedAt: at })
+        .where(and(eq(users.id, id), isNull(users.deletedAt)))
+        .returning({ id: users.id });
+      return rows.length > 0;
     },
 
     async ensureSeeded(user) {

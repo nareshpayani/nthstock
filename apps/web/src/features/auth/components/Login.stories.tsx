@@ -46,6 +46,7 @@ function Demo({ step }: { step: Step }) {
           devOtp={DEV_OTP}
           onVerified={noop}
           onTotpRequired={noop}
+          onAccountDeleted={noop}
           onChangeNumber={noop}
         />
       );

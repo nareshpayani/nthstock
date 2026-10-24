@@ -1,5 +1,5 @@
 // @vitest-environment node
-import { DEV_OTP } from '@nthstock/contracts';
+import { CONSENT_POLICY_VERSION, DEV_OTP } from '@nthstock/contracts';
 import { createScenarioClient, fetchBackend } from '@nthstock/contracts/testing';
 import { fixedClock, fromIst } from '@nthstock/utils';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -46,7 +46,9 @@ describe('demo Simulator (T09)', () => {
     const { client, adapter, simulator } = pageLoad();
     const mobile = '8400000009';
     const { requestId } = await client.call('otpRequest', { body: { mobile } });
-    await client.call('otpVerify', { body: { requestId, mobile, otp: DEV_OTP } });
+    await client.call('otpVerify', {
+      body: { requestId, mobile, otp: DEV_OTP, consentVersion: CONSENT_POLICY_VERSION },
+    });
 
     const before = await adapter.getQuote('INFY');
     if (!before) throw new Error('INFY has no quote');

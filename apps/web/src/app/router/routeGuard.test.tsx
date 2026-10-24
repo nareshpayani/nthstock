@@ -1,4 +1,4 @@
-import { ACCESS_TOKEN_TTL_SEC, DEV_OTP } from '@nthstock/contracts';
+import { ACCESS_TOKEN_TTL_SEC, CONSENT_POLICY_VERSION, DEV_OTP } from '@nthstock/contracts';
 import { act, screen, waitFor } from '@testing-library/react';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { createMockServer, TEST_API_ORIGIN } from '@/mocks/node';
@@ -38,7 +38,7 @@ async function loggedIn() {
   const mobile = `96${String(mobiles).padStart(8, '0')}`;
   const { requestId } = await apiClient.request('otpRequest', { body: { mobile } });
   const session = await apiClient.request('otpVerify', {
-    body: { requestId, mobile, otp: DEV_OTP },
+    body: { requestId, mobile, otp: DEV_OTP, consentVersion: CONSENT_POLICY_VERSION },
   });
   useSessionStore.getState().setSession(session);
   paths.length = 0;

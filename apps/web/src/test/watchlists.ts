@@ -1,5 +1,10 @@
 import type { ApiClient } from '@nthstock/apiClient';
-import { DEV_OTP, type SearchHit, type Watchlist } from '@nthstock/contracts';
+import {
+  CONSENT_POLICY_VERSION,
+  DEV_OTP,
+  type SearchHit,
+  type Watchlist,
+} from '@nthstock/contracts';
 import { createSessionApiClient } from '@/shared/lib/sessionClient';
 import { signIn } from './session';
 
@@ -7,7 +12,11 @@ import { signIn } from './session';
 export async function loginOnMock(mobile: string, baseUrl = 'http://watchlists.test') {
   const apiClient = createSessionApiClient({ baseUrl });
   const { requestId } = await apiClient.request('otpRequest', { body: { mobile } });
-  signIn(await apiClient.request('otpVerify', { body: { requestId, mobile, otp: DEV_OTP } }));
+  signIn(
+    await apiClient.request('otpVerify', {
+      body: { requestId, mobile, otp: DEV_OTP, consentVersion: CONSENT_POLICY_VERSION },
+    }),
+  );
   return apiClient;
 }
 
