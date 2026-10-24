@@ -1,6 +1,7 @@
 // @vitest-environment node
 import {
   AUTH_CSRF_HEADER,
+  CONSENT_POLICY_VERSION,
   DEV_OTP,
   Session,
   Watchlist,
@@ -78,7 +79,11 @@ function pageLoad(authStorage: Storage, listStorage: Storage) {
     const sent = await call('otpRequest', { body: { mobile } });
     const { requestId } = sent.json as { requestId: string };
     const session = Session.parse(
-      (await call('otpVerify', { body: { mobile, requestId, otp: DEV_OTP } })).json,
+      (
+        await call('otpVerify', {
+          body: { mobile, requestId, otp: DEV_OTP, consentVersion: CONSENT_POLICY_VERSION },
+        })
+      ).json,
     );
     token = session.accessToken;
   }

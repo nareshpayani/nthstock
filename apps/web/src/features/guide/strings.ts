@@ -186,6 +186,10 @@ export const strings = {
               body: 'Settings, Security lists every browser and phone with a session, with This device and Trusted badges and IST times. Log out one, or all the others, behind a confirm and a step-up; the logged-out device is refused at once.',
             },
             {
+              name: 'Your data, your call (DPDP Act)',
+              body: 'Sign-up records which version of the terms and privacy notice you agreed to. Settings, Security deletes the account behind DELETE typed and a step-up: every device is logged out at once, live orders are cancelled, and the mobile cannot log in until the data is erased for good 30 days later.',
+            },
+            {
               name: 'Scalper',
               body: 'A one-tap pad: quantity chips, Sell at bid, Buy at ask, Flatten and Reverse, with an Arm switch.',
             },
@@ -518,6 +522,16 @@ export const strings = {
             'GET /v1/auth/sessions lists live sessions, most recently active first, with a device label made from the user agent (never the raw string) and no IP address.',
             'Logging out one session or all the others needs a step-up. Each revoke marks the row, writes the audit entry and publishes auth:sessionRevoked, so the device is refused on its next request and its sockets close.',
             'Turning two-factor on or off offers to log out the other devices, which still hold sessions from before the change.',
+          ],
+        },
+        { kind: 'heading', text: 'Consent and account deletion (DPDP Act 2023)' },
+        {
+          kind: 'list',
+          items: [
+            'The first OTP login sends consentVersion, the policy version the user ticked. The API refuses a sign-up without the current version (400 CONSENT_REQUIRED) and writes the user and a consents row in one transaction, then audits CONSENT_GRANTED.',
+            'POST /v1/account/deletion needs a step-up and confirm: DELETE. The user is marked deleted first, so no login can start a new session; then every session is revoked with reason ACCOUNT_DELETED (tokens refused, sockets closed), OPEN and AMO paper orders are cancelled, and ACCOUNT_DELETION_REQUESTED is audited with the purge date.',
+            'For 30 days an OTP login for that mobile answers 403 ACCOUNT_DELETED with purgeAfter, and the login page says, in IST, when the data is erased. The purge job (a BullMQ job, with the other Phase 2 jobs) then erases the PII and leaves a tombstone; audit entries never held a mobile or a name.',
+            'The web app navigates to /login?deleted=… before it clears the session, forgets the trusted browser and empties the query cache, so nothing from the account stays on the device.',
           ],
         },
         { kind: 'heading', text: 'Rules every layer follows' },
@@ -865,7 +879,7 @@ export const strings = {
         {
           kind: 'list',
           items: [
-            'DPDP Act 2023: consent at sign-up; the database already keeps a 30-day purge date for deleted accounts, and the deletion screen comes in Phase 2.',
+            'DPDP Act 2023: versioned consent recorded at sign-up, and self-service account deletion with a step-up, logout everywhere and a 30-day purge date.',
             'SEBI: real trading needs a registered broker, so v1 is paper trading only.',
             'Exchange data: real-time NSE or BSE prices need a licence, so v1 uses a simulated feed.',
           ],
@@ -1182,7 +1196,7 @@ export const strings = {
             ],
             [
               'Beyond the brief',
-              'Chart bar sizes (1, 5, 15, 30 and 60 minutes), price alerts with a notification centre, two-factor authentication with step-up, the active sessions screen',
+              'Chart bar sizes (1, 5, 15, 30 and 60 minutes), price alerts with a notification centre, two-factor authentication with step-up, the active sessions screen, DPDP consent records and self-service account deletion',
               'Done, live',
             ],
             ['6', 'AWS Mumbai, multi-AZ, warm standby in Hyderabad, Terraform', 'Planned'],

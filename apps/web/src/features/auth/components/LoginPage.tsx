@@ -1,5 +1,6 @@
 import type { LoginOtpPurpose, Session } from '@nthstock/contracts';
-import { buttonVariants, IconHelp } from '@nthstock/ui';
+import { Button, buttonVariants, IconHelp } from '@nthstock/ui';
+import { formatIstDate } from '@nthstock/utils';
 import { Link, useNavigate } from '@tanstack/react-router';
 import { useState } from 'react';
 import { safeRedirect } from '@/shared/lib/safeRedirect';
@@ -10,6 +11,7 @@ import {
   type TrustedDeviceHint,
 } from '../store/trustedDevice';
 import { strings } from '../strings';
+import { AuthCard } from './AuthCard';
 import { MobileStep, type OtpSent } from './MobileStep';
 import { OtpStep } from './OtpStep';
 import { PinEntryStep, PinLocked } from './PinEntryStep';
@@ -21,6 +23,7 @@ type Step =
   | { kind: 'mobile'; purpose: LoginOtpPurpose; notice?: string; mobile?: string }
   | { kind: 'otp'; purpose: LoginOtpPurpose; sent: OtpSent }
   | { kind: 'totp'; challengeId: string }
+  | { kind: 'deleted'; purgeAfter: string }
   | { kind: 'setPin' }
   | { kind: 'pin'; device: TrustedDeviceHint }
   | { kind: 'locked' };
@@ -30,6 +33,8 @@ export type LoginPageProps = {
   redirect?: string | undefined;
   /** The dev OTP hint; defaults to showing it outside production api-mode builds. */
   devOtp?: string | null;
+  /** Set after the user deleted their account (`?deleted=`): when its data is erased. */
+  deletedPurgeAfter?: string | undefined;
 };
 
 /**
@@ -37,9 +42,16 @@ export type LoginPageProps = {
  * then OTP, then the authenticator code when two-factor is on (NSTOCK-0220), then (first login)
  * PIN setup, then the page they came for.
  */
-export function LoginPage({ redirect, devOtp = devOtpHint }: LoginPageProps) {
+export function LoginPage({ redirect, devOtp = devOtpHint, deletedPurgeAfter }: LoginPageProps) {
   const navigate = useNavigate();
   const [step, setStep] = useState<Step>(() => {
+    if (deletedPurgeAfter) {
+      return {
+        kind: 'mobile',
+        purpose: 'LOGIN',
+        notice: strings.deleted.notice(formatIstDate(new Date(deletedPurgeAfter))),
+      };
+    }
     const device = readTrustedDevice();
     return device ? { kind: 'pin', device } : { kind: 'mobile', purpose: 'LOGIN' };
   });
@@ -72,6 +84,7 @@ export function LoginPage({ redirect, devOtp = devOtpHint }: LoginPageProps) {
           devOtp={devOtp}
           onVerified={onVerified}
           onTotpRequired={(challengeId) => setStep({ kind: 'totp', challengeId })}
+          onAccountDeleted={(purgeAfter) => setStep({ kind: 'deleted', purgeAfter })}
           onChangeNumber={() =>
             setStep({ kind: 'mobile', purpose: step.purpose, mobile: step.sent.mobile })
           }
@@ -86,6 +99,19 @@ export function LoginPage({ redirect, devOtp = devOtpHint }: LoginPageProps) {
           onVerified={onVerified}
           onRestart={() => setStep({ kind: 'mobile', purpose: 'LOGIN' })}
         />
+      );
+      break;
+    case 'deleted':
+      content = (
+        <AuthCard
+          title={strings.deleted.title}
+          description={strings.deleted.body(formatIstDate(new Date(step.purgeAfter)))}
+          focusHeading
+        >
+          <Button block onClick={() => setStep({ kind: 'mobile', purpose: 'LOGIN' })}>
+            {strings.deleted.useAnother}
+          </Button>
+        </AuthCard>
       );
       break;
     case 'setPin':

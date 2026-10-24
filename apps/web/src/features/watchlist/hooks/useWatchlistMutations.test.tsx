@@ -1,5 +1,10 @@
 import type { ApiClient } from '@nthstock/apiClient';
-import { DEV_OTP, WATCHLIST_MESSAGES, type SearchHit } from '@nthstock/contracts';
+import {
+  CONSENT_POLICY_VERSION,
+  DEV_OTP,
+  WATCHLIST_MESSAGES,
+  type SearchHit,
+} from '@nthstock/contracts';
 import { fixedClock, fromIst } from '@nthstock/utils';
 import { act, screen, waitFor, within } from '@testing-library/react';
 import { HttpResponse, http } from 'msw';
@@ -82,7 +87,11 @@ const rowTexts = () => rows().map((row) => row.textContent);
 async function login(mobile: string): Promise<ApiClient> {
   const apiClient = createSessionApiClient({ baseUrl: ORIGIN });
   const { requestId } = await apiClient.request('otpRequest', { body: { mobile } });
-  signIn(await apiClient.request('otpVerify', { body: { requestId, mobile, otp: DEV_OTP } }));
+  signIn(
+    await apiClient.request('otpVerify', {
+      body: { requestId, mobile, otp: DEV_OTP, consentVersion: CONSENT_POLICY_VERSION },
+    }),
+  );
   return apiClient;
 }
 

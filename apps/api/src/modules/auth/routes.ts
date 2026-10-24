@@ -1,8 +1,10 @@
-import { AUTH_COOKIES } from '@nthstock/contracts';
+import { AUTH_COOKIES, CONSENT_POLICY_VERSION, type AuthErrorDetails } from '@nthstock/contracts';
+import type { AuditRepo } from '../audit/index.js';
 import type { FastifyPluginAsync, FastifyReply } from 'fastify';
 import { ApiHttpError } from '../../http/apiError.js';
 import type { AppDeps } from '../../deps.js';
 import { registerRoute } from '../../http/registerRoute.js';
+import { createAccountDeletionService } from './accountDeletionService.js';
 import { createActiveSessionsService } from './activeSessionsService.js';
 import { authContextOf, createAuthenticate } from './authenticate.js';
 import { createOtpService } from './otpService.js';
@@ -19,12 +21,49 @@ import { createTwoFactorService } from './twoFactorService.js';
 import { toCurrentSession, toDevice, toSession } from './views.js';
 import { DuplicateMobileError, type UserRecord, type UsersRepo } from '../users/index.js';
 
-/** The mobile's user, created on first login; a racing sign-up for the same mobile reads theirs. */
-async function findOrCreateUser(users: UsersRepo, mobile: string): Promise<UserRecord> {
+/**
+ * The mobile's user, created on first login with the consent the mobile step recorded (NSTOCK-0228,
+ * DPDP Act 2023); a racing sign-up for the same mobile reads theirs. A new mobile without consent
+ * answers 400 CONSENT_REQUIRED, and an account being deleted 403 ACCOUNT_DELETED.
+ */
+async function findOrCreateUser(
+  users: UsersRepo,
+  audit: AuditRepo,
+  mobile: string,
+  consentVersion: string | undefined,
+): Promise<UserRecord> {
   const existing = await users.findByMobile(mobile);
   if (existing) return existing;
+  const deleted = await users.findDeletedByMobile(mobile);
+  if (deleted) {
+    throw new ApiHttpError(
+      403,
+      'ACCOUNT_DELETED',
+      'This account is being deleted. It cannot log in until its data is erased.',
+      { purgeAfter: deleted.purgeAfter.toISOString() } satisfies AuthErrorDetails,
+    );
+  }
+  if (consentVersion !== CONSENT_POLICY_VERSION) {
+    throw new ApiHttpError(
+      400,
+      'CONSENT_REQUIRED',
+      'Agree to the terms and privacy policy to create an account.',
+    );
+  }
   try {
-    return await users.create({ mobile });
+    const created = await users.create(
+      { mobile },
+      { purpose: 'TERMS_AND_PRIVACY', policyVersion: consentVersion },
+    );
+    await audit.append({
+      actor: { type: 'user', userId: created.id },
+      userId: created.id,
+      action: 'CONSENT_GRANTED',
+      orderId: null,
+      outcome: 'OK',
+      detail: { purpose: 'TERMS_AND_PRIVACY', policyVersion: consentVersion },
+    });
+    return created;
   } catch (error) {
     const winner = error instanceof DuplicateMobileError ? await users.findByMobile(mobile) : null;
     if (winner) return winner;
@@ -78,6 +117,15 @@ export const authRoutes =
       sessions,
       twoFactor,
     });
+    const accountDeletion = createAccountDeletionService({
+      clock: deps.clock,
+      repo: deps.repos.auth,
+      users: deps.repos.users,
+      audit: deps.repos.audit,
+      sessions,
+      twoFactor,
+      orders: deps.orders,
+    });
     const secure = deps.production;
 
     const answer = (reply: FastifyReply, issued: IssuedSession) => {
@@ -96,7 +144,12 @@ export const authRoutes =
         if (purpose === 'STEP_UP') {
           throw new ApiHttpError(400, 'OTP_EXPIRED', 'This OTP has expired. Request a new one.');
         }
-        const user = await findOrCreateUser(deps.repos.users, mobile);
+        const user = await findOrCreateUser(
+          deps.repos.users,
+          deps.repos.audit,
+          mobile,
+          body.consentVersion,
+        );
         const trusted = await pins.trustedDevice(requestCookies(request)[AUTH_COOKIES.device]);
         const deviceId = trusted?.userId === user.id ? trusted.id : null;
         // Two-factor on: 401 TOTP_REQUIRED with a challenge; the code step finishes the login.
@@ -198,6 +251,19 @@ export const authRoutes =
       async ({ body, request }) => ({
         codes: await twoFactor.regenerateRecoveryCodes(authContextOf(request), body.code),
       }),
+      { authenticate, ...authRateLimit('stepUp') },
+    );
+
+    // ---- Account deletion (NSTOCK-0229) -------------------------------------------------------
+
+    registerRoute(
+      app,
+      'accountDelete',
+      async ({ request, reply }) => {
+        const purgeAfter = await accountDeletion.delete(authContextOf(request));
+        clearSessionCookies(reply, { secure });
+        return { purgeAfter: purgeAfter.toISOString() };
+      },
       { authenticate, ...authRateLimit('stepUp') },
     );
 

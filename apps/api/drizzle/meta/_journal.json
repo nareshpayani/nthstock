@@ -92,6 +92,13 @@
       "when": 1792869128932,
       "tag": "0012_totp_and_step_up",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1792873183116,
+      "tag": "0013_consent_and_account_deletion",
+      "breakpoints": true
     }
   ]
 }

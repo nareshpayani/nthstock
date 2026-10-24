@@ -15,6 +15,14 @@ export type UserRecord = {
 };
 
 export type NewUser = Pick<UserRecord, 'mobile'> & Partial<Pick<UserRecord, 'name' | 'email'>>;
+
+/** A consent granted at sign-up (spec backend-core §10); stored with the user, in one write. */
+export type ConsentGrant = { purpose: 'TERMS_AND_PRIVACY'; policyVersion: string };
+
+export type ConsentRecord = ConsentGrant & { grantedAt: Date; withdrawnAt: Date | null };
+
+/** A deleted account waiting for its purge (NSTOCK-0229). */
+export type DeletedUser = { id: string; deletedAt: Date; purgeAfter: Date };
 export type UserPatch = Partial<Omit<UserRecord, 'id' | 'mobile' | 'createdAt'>>;
 
 /** Thrown by `create` when a live user already has the mobile. */
@@ -30,11 +38,20 @@ export class DuplicateMobileError extends Error {
  * in Postgres (`pgRepo.ts`, T-190), both held to one conformance suite (`repo.test.ts`).
  */
 export interface UsersRepo {
+  /** The live user with this id; a deleted (or purged) one reads as null. */
   findById(id: string): Promise<UserRecord | null>;
   /** The live (not deleted) user with this mobile. */
   findByMobile(mobile: string): Promise<UserRecord | null>;
-  /** Throws `DuplicateMobileError` when a live user already has the mobile. */
-  create(user: NewUser): Promise<UserRecord>;
+  /**
+   * Throws `DuplicateMobileError` when a live user already has the mobile. `consent` is stored with
+   * the user in the same write, so a user never exists without it.
+   */
+  create(user: NewUser, consent?: ConsentGrant): Promise<UserRecord>;
+  listConsents(userId: string): Promise<ConsentRecord[]>;
+  /** The deleted, not yet purged account of this mobile, or null. */
+  findDeletedByMobile(mobile: string): Promise<DeletedUser | null>;
+  /** Marks a live user deleted; resolves false when there is no such live user. */
+  markDeleted(id: string, at: Date, purgeAfter: Date): Promise<boolean>;
   /** Applies `patch`; resolves to `null` when the user does not exist. */
   update(id: string, patch: UserPatch): Promise<UserRecord | null>;
   /**
@@ -77,8 +94,12 @@ export function createMemoryUsersRepo({
   newId = () => `usr_${randomUUID()}`,
 }: MemoryUsersRepoOptions): UsersRepo {
   const byId = new Map<string, UserRecord>();
+  const consents = new Map<string, ConsentRecord[]>();
+  const deleted = new Map<string, DeletedUser & { mobile: string }>();
   const seed = () => {
     byId.clear();
+    consents.clear();
+    deleted.clear();
     byId.set(DEMO_USER.id, copy(DEMO_USER));
   };
   seed();
@@ -93,7 +114,7 @@ export function createMemoryUsersRepo({
       const found = [...byId.values()].find((u) => u.mobile === mobile);
       return Promise.resolve(found ? copy(found) : null);
     },
-    create: async (user) => {
+    create: async (user, consent) => {
       if ([...byId.values()].some((u) => u.mobile === user.mobile)) {
         throw new DuplicateMobileError();
       }
@@ -108,7 +129,35 @@ export function createMemoryUsersRepo({
         createdAt: clock.now(),
       };
       byId.set(record.id, record);
+      if (consent) {
+        consents.set(record.id, [{ ...consent, grantedAt: record.createdAt, withdrawnAt: null }]);
+      }
       return Promise.resolve(copy(record));
+    },
+    listConsents: (userId) =>
+      Promise.resolve(
+        (consents.get(userId) ?? []).map((c) => ({ ...c, grantedAt: new Date(c.grantedAt) })),
+      ),
+    findDeletedByMobile: (mobile) => {
+      const found = [...deleted.values()]
+        .filter((d) => d.mobile === mobile)
+        .sort((a, b) => b.deletedAt.getTime() - a.deletedAt.getTime())[0];
+      return Promise.resolve(
+        found
+          ? {
+              id: found.id,
+              deletedAt: new Date(found.deletedAt),
+              purgeAfter: new Date(found.purgeAfter),
+            }
+          : null,
+      );
+    },
+    markDeleted: (id, at, purgeAfter) => {
+      const current = byId.get(id);
+      if (!current) return Promise.resolve(false);
+      byId.delete(id);
+      deleted.set(id, { id, mobile: current.mobile, deletedAt: new Date(at), purgeAfter });
+      return Promise.resolve(true);
     },
     update: (id, patch) => {
       const current = byId.get(id);

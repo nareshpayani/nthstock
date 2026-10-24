@@ -5,7 +5,7 @@ import { ApiHttpError } from '../../http/apiError.js';
 import type { AuditActor, AuditRepo } from '../audit/index.js';
 import type { UserRecord, UsersRepo } from '../users/index.js';
 import { signAccessToken, verifyAccessToken, type SignedAccessToken } from './accessToken.js';
-import type { AuthRepo, DeviceRecord, SessionRecord } from './repo.js';
+import type { AuthRepo, DeviceRecord, SessionRecord, SessionRevokedReason } from './repo.js';
 import { createMemorySessionRevocations, type SessionRevocations } from './sessionRevocations.js';
 
 export type SessionServiceDeps = {
@@ -69,8 +69,11 @@ export type SessionService = {
   authenticate(accessToken: string, via: AuthContext['via']): Promise<AuthContext | null>;
   /** Ends the caller's own session (LOGOUT). */
   logout(context: AuthContext): Promise<void>;
-  /** Revokes a session on someone's behalf (SESSION_REVOKED); a no-op for an unknown session. */
-  revoke(sessionId: string, actor: AuditActor): Promise<void>;
+  /**
+   * Revokes a session on someone's behalf (SESSION_REVOKED); a no-op for an unknown session. The
+   * reason defaults to USER_REVOKED (the sessions screen); account deletion passes ACCOUNT_DELETED.
+   */
+  revoke(sessionId: string, actor: AuditActor, reason?: SessionRevokedReason): Promise<void>;
 };
 
 export const hashToken = (token: string) => createHash('sha256').update(token).digest('hex');
@@ -235,17 +238,17 @@ export function createSessionService({
       await revocations.revoked({ sessionId: context.session.id, userId: context.user.id });
     },
 
-    async revoke(sessionId, actor) {
+    async revoke(sessionId, actor, reason = 'USER_REVOKED') {
       const session = await repo.getSession(sessionId);
       if (!session) return;
-      await repo.revokeSession(sessionId, clock.now(), 'USER_REVOKED');
+      await repo.revokeSession(sessionId, clock.now(), reason);
       await audit.append({
         actor,
         userId: session.userId,
         action: 'SESSION_REVOKED',
         orderId: null,
         outcome: 'OK',
-        detail: { sessionId },
+        detail: { sessionId, reason },
       });
       await revocations.revoked({ sessionId, userId: session.userId });
     },

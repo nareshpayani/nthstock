@@ -1,5 +1,6 @@
 // @vitest-environment node
 import {
+  CONSENT_POLICY_VERSION,
   DEV_OTP,
   Order,
   PAPER_OPENING_BALANCE_PAISE,
@@ -60,7 +61,9 @@ function pageLoad(storages: { auth?: Storage; orders?: Storage } = {}, at = OPEN
 
 async function login(client: ScenarioClient, mobile: string) {
   const { requestId } = await client.call('otpRequest', { body: { mobile } });
-  await client.call('otpVerify', { body: { requestId, mobile, otp: DEV_OTP } });
+  await client.call('otpVerify', {
+    body: { requestId, mobile, otp: DEV_OTP, consentVersion: CONSENT_POLICY_VERSION },
+  });
 }
 
 async function infy(client: ScenarioClient): Promise<Quote> {

@@ -78,7 +78,7 @@ describe('session service', () => {
         userId: DEMO_USER.id,
         action: 'SESSION_REVOKED',
         outcome: 'OK',
-        detail: { sessionId: issued.session.id },
+        detail: { sessionId: issued.session.id, reason: 'USER_REVOKED' },
       }),
     ]);
     expect((await audit.list())[0]).toMatchObject({

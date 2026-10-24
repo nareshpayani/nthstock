@@ -184,4 +184,20 @@ describe('step-up and TOTP contracts (NSTOCK-0212)', () => {
     // An unknown field such as an address is dropped, never passed on.
     expect(ActiveSession.parse({ ...row, ipAddress: '10.0.0.1' })).toEqual(row);
   });
+
+  it('takes consent only for the current policy, and deletion only on DELETE (NSTOCK-0227)', async () => {
+    const { AccountDeletionRequest, CONSENT_POLICY_VERSION, OtpVerifyRequest } =
+      await import('./auth.js');
+    const verify = { requestId: 'otp_1', mobile: '9876543210', otp: '123456' };
+    expect(OtpVerifyRequest.safeParse(verify).success).toBe(true);
+    expect(
+      OtpVerifyRequest.parse({ ...verify, consentVersion: CONSENT_POLICY_VERSION }).consentVersion,
+    ).toBe(CONSENT_POLICY_VERSION);
+    expect(OtpVerifyRequest.safeParse({ ...verify, consentVersion: '2020-01-01' }).success).toBe(
+      false,
+    );
+    expect(AccountDeletionRequest.safeParse({ confirm: 'DELETE' }).success).toBe(true);
+    expect(AccountDeletionRequest.safeParse({ confirm: 'delete' }).success).toBe(false);
+    expect(AccountDeletionRequest.safeParse({}).success).toBe(false);
+  });
 });

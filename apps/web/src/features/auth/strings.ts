@@ -46,6 +46,15 @@ export const strings = {
     captchaRequired: 'Tick the CAPTCHA box, then enter the OTP again.',
   },
 
+  deleted: {
+    title: 'Account deletion in progress',
+    body: (date: string) =>
+      `This account is being deleted. Its data is erased for good on ${date}; until then this mobile number cannot log in. After that, it can sign up again as a new account.`,
+    useAnother: 'Use another number',
+    notice: (date: string) =>
+      `Your account is deleted and you are logged out everywhere. Its data is erased for good on ${date}.`,
+  },
+
   pinSetup: {
     title: 'Set a login PIN',
     body: 'Next time on this browser, log in with a 4-digit PIN instead of an OTP.',

@@ -1,4 +1,4 @@
-import { DEV_OTP, OtpRequestResponse, routes } from '@nthstock/contracts';
+import { CONSENT_POLICY_VERSION, DEV_OTP, OtpRequestResponse, routes } from '@nthstock/contracts';
 import { expect, it } from 'vitest';
 import { createPiiCrypto, devPiiKeys, mobileHash } from '../../db/crypto.js';
 import { PRE_SESSION_CSRF } from '../../test/authFlow.js';
@@ -40,7 +40,7 @@ describeWithPostgresAndRedis('OTPs in Redis (integration, T-193)', ({ app, redis
       method: 'POST',
       url: routes.otpVerify.path,
       headers: PRE_SESSION_CSRF,
-      payload: { requestId, mobile: MOBILE, otp: '000000' },
+      payload: { requestId, mobile: MOBILE, otp: '000000', consentVersion: CONSENT_POLICY_VERSION },
     });
     expect(wrong.json()).toMatchObject({
       error: { code: 'OTP_INVALID', details: { attemptsLeft: 4 } },
@@ -51,7 +51,7 @@ describeWithPostgresAndRedis('OTPs in Redis (integration, T-193)', ({ app, redis
       method: 'POST',
       url: routes.otpVerify.path,
       headers: PRE_SESSION_CSRF,
-      payload: { requestId, mobile: MOBILE, otp: DEV_OTP },
+      payload: { requestId, mobile: MOBILE, otp: DEV_OTP, consentVersion: CONSENT_POLICY_VERSION },
     });
     expect(verified.statusCode).toBe(200);
     // Consumed: the challenge is gone from Redis, and it cannot log in twice.
@@ -60,7 +60,7 @@ describeWithPostgresAndRedis('OTPs in Redis (integration, T-193)', ({ app, redis
       method: 'POST',
       url: routes.otpVerify.path,
       headers: PRE_SESSION_CSRF,
-      payload: { requestId, mobile: MOBILE, otp: DEV_OTP },
+      payload: { requestId, mobile: MOBILE, otp: DEV_OTP, consentVersion: CONSENT_POLICY_VERSION },
     });
     expect(again.json()).toMatchObject({ error: { code: 'OTP_EXPIRED' } });
 

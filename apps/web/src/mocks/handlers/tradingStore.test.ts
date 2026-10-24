@@ -5,7 +5,7 @@ import {
   createWsClient,
   tradingSourceOf,
 } from '@nthstock/apiClient';
-import { DEV_OTP, type Quote } from '@nthstock/contracts';
+import { CONSENT_POLICY_VERSION, DEV_OTP, type Quote } from '@nthstock/contracts';
 import {
   createScenarioClient,
   fetchBackend,
@@ -29,7 +29,9 @@ afterEach(() => {
 
 async function login(client: ScenarioClient, mobile: string) {
   const { requestId } = await client.call('otpRequest', { body: { mobile } });
-  await client.call('otpVerify', { body: { requestId, mobile, otp: DEV_OTP } });
+  await client.call('otpVerify', {
+    body: { requestId, mobile, otp: DEV_OTP, consentVersion: CONSENT_POLICY_VERSION },
+  });
 }
 
 async function infy(client: ScenarioClient): Promise<Quote> {

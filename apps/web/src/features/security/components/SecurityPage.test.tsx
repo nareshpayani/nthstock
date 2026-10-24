@@ -1,5 +1,5 @@
 import type { ApiClient } from '@nthstock/apiClient';
-import { DEV_OTP } from '@nthstock/contracts';
+import { CONSENT_POLICY_VERSION, DEV_OTP } from '@nthstock/contracts';
 import { base32Decode, totpCode } from '@nthstock/utils';
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
@@ -37,7 +37,9 @@ async function loggedIn(): Promise<{ apiClient: ApiClient; mobile: string }> {
   const mobile = `96${String(browsers).padStart(8, '0')}`;
   const { requestId } = await apiClient.request('otpRequest', { body: { mobile } });
   const session = signIn(
-    await apiClient.request('otpVerify', { body: { requestId, mobile, otp: DEV_OTP } }),
+    await apiClient.request('otpVerify', {
+      body: { requestId, mobile, otp: DEV_OTP, consentVersion: CONSENT_POLICY_VERSION },
+    }),
   );
   await apiClient.request('pinSet', { body: { pin: PIN, confirmPin: PIN } });
   signIn({ ...session, user: { ...session.user, pinSet: true } });
@@ -156,7 +158,9 @@ describe('security settings: active sessions (NSTOCK-0226)', () => {
     });
     now += 31_000;
     const { requestId } = await other.request('otpRequest', { body: { mobile } });
-    await other.request('otpVerify', { body: { requestId, mobile, otp: DEV_OTP } });
+    await other.request('otpVerify', {
+      body: { requestId, mobile, otp: DEV_OTP, consentVersion: CONSENT_POLICY_VERSION },
+    });
   }
 
   it('lists both sessions and logs the other one out behind a confirm and a step-up', async () => {
@@ -198,5 +202,36 @@ describe('security settings: active sessions (NSTOCK-0226)', () => {
     fireEvent.click(within(offer).getByRole('button', { name: 'Log out all other devices' }));
     expect(await screen.findByText('1 other device logged out')).toBeInTheDocument();
     expect(await screen.findByText('You are logged in only on this device.')).toBeInTheDocument();
+  });
+});
+
+describe('security settings: delete account (NSTOCK-0234)', () => {
+  it('needs DELETE typed and a step-up, then lands on /login with the purge date', async () => {
+    const { apiClient } = await loggedIn();
+    renderApp('/settings/security', { apiClient });
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Delete account' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Delete your nthstock account?' });
+    const confirm = within(dialog).getByRole('button', { name: 'Delete my account' });
+    expect(confirm).toBeDisabled();
+    const field = within(dialog).getByLabelText('Type DELETE to confirm');
+    fireEvent.change(field, { target: { value: 'delete' } });
+    expect(confirm).toBeDisabled();
+    fireEvent.change(field, { target: { value: 'DELETE' } });
+    fireEvent.click(confirm);
+
+    const stepUp = await screen.findByRole('dialog', { name: 'Confirm it is you' });
+    typeCode(stepUp, 'Your PIN', PIN);
+    fireEvent.click(within(stepUp).getByRole('button', { name: 'Confirm' }));
+
+    // 30 days after the mock clock's 2 Nov 2026, in IST.
+    expect(
+      await screen.findByText(
+        'Your account is deleted and you are logged out everywhere. Its data is erased for good on 2 Dec 2026.',
+        {},
+        { timeout: 5000 },
+      ),
+    ).toBeInTheDocument();
+    expect(useSessionStore.getState().session).toBeNull();
   });
 });

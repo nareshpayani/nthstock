@@ -1,5 +1,5 @@
 import { expect } from 'vitest';
-import { DEV_OTP, type Session } from '../../auth.js';
+import { CONSENT_POLICY_VERSION, DEV_OTP, type Session } from '../../auth.js';
 import { defineScenarios, type ScenarioClient } from '../harness.js';
 import type { CookieSnapshot } from '../cookieJar.js';
 
@@ -21,7 +21,9 @@ async function loginOnNewDevice(client: ScenarioClient, mobile: string): Promise
   client.cookies.restore(BLANK);
   await client.advanceTime(31_000);
   const { requestId } = await client.call('otpRequest', { body: { mobile } });
-  const session = await client.call('otpVerify', { body: { requestId, mobile, otp: DEV_OTP } });
+  const session = await client.call('otpVerify', {
+    body: { requestId, mobile, otp: DEV_OTP, consentVersion: CONSENT_POLICY_VERSION },
+  });
   return { cookies: client.cookies.snapshot(), session };
 }
 

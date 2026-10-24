@@ -35,6 +35,7 @@ function renderOtpStep() {
             expiresAt: new Date(T0 + 300_000).toISOString(),
           }}
           onTotpRequired={vi.fn()}
+          onAccountDeleted={vi.fn()}
           devOtp={null}
           onVerified={vi.fn()}
           onChangeNumber={vi.fn()}
