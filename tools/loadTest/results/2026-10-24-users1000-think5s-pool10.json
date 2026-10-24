@@ -1,0 +1,113 @@
+{
+  "at": "2026-10-24T04:31:16.852Z",
+  "machine": {
+    "cpus": 4,
+    "cpuModel": "Intel(R) Xeon(R) Processor",
+    "memoryGb": 16
+  },
+  "settings": {
+    "users": 1000,
+    "durationSec": 60,
+    "thinkMs": 5000,
+    "orderShare": 0.1,
+    "workers": 4
+  },
+  "login": {
+    "count": 1000,
+    "p50": 456.9,
+    "p95": 733.2,
+    "p99": 824.3,
+    "max": 836.2,
+    "wallMs": 2681,
+    "perSecond": 373,
+    "errors": {}
+  },
+  "api": {
+    "count": 11943,
+    "p50": 1.6,
+    "p95": 5.4,
+    "p99": 10.2,
+    "max": 48.3,
+    "perSecond": 179,
+    "errors": {},
+    "byRoute": {
+      "quotes": {
+        "count": 3592,
+        "p50": 0.8,
+        "p95": 1.4,
+        "p99": 6,
+        "max": 16.7
+      },
+      "orders": {
+        "count": 1823,
+        "p50": 1.9,
+        "p95": 3.6,
+        "p99": 8.3,
+        "max": 27
+      },
+      "placeOrder": {
+        "count": 1172,
+        "p50": 4.9,
+        "p95": 7.3,
+        "p99": 16.8,
+        "max": 48.3
+      },
+      "positions": {
+        "count": 1816,
+        "p50": 1.9,
+        "p95": 3.8,
+        "p99": 10.7,
+        "max": 24.6
+      },
+      "portfolio": {
+        "count": 1826,
+        "p50": 1.9,
+        "p95": 3.8,
+        "p99": 12.1,
+        "max": 32.5
+      },
+      "funds": {
+        "count": 581,
+        "p50": 1.9,
+        "p95": 3.4,
+        "p99": 7.8,
+        "max": 15.1
+      },
+      "depth": {
+        "count": 1133,
+        "p50": 0.7,
+        "p95": 1.5,
+        "p99": 11.5,
+        "max": 18.3
+      }
+    }
+  },
+  "ws": {
+    "opened": 1000,
+    "failed": 0,
+    "closedEarly": 0,
+    "connectMs": {
+      "count": 1000,
+      "p50": 75.3,
+      "p95": 129.1,
+      "p99": 137.6,
+      "max": 140.8
+    },
+    "framesPerSecond": 1072,
+    "tickAgeMs": {
+      "count": 6618,
+      "p50": 59,
+      "p95": 276,
+      "p99": 285,
+      "max": 301
+    },
+    "peakConnections": 1000,
+    "droppedFrames": 0
+  },
+  "servers": {
+    "apiPeakCpu": 27,
+    "apiPeakRssMb": 337,
+    "realtimePeakCpu": 8,
+    "realtimePeakRssMb": 136
+  }
+}

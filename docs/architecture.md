@@ -27,6 +27,9 @@ CDN + WAF ─► Load balancer ─► apps/api (Fastify, stateless)     apps/rea
 - CDN caches static assets and public market snapshots (1–5 s TTL); Redis caches quotes, sessions, hot lists.
 - Under overload, shed non-critical features first (promos, movers, chart history); login, prices and orders stay up.
 - Load tests with k6: 1 lakh → 10 lakh concurrent sockets, 50k logins/sec; one large test near 1 crore before launch.
+- Measured so far (2026-10-24, [runbooks/load-test.md](runbooks/load-test.md)): one API process and one
+  realtime process on a 4-core machine held 10,000 logged-in users and 10,000 sockets with zero errors;
+  the API stays inside its 200 ms p95 up to about 1,300 requests a second per process.
 
 ### Frontend stack
 - React 19 + TypeScript strict, Vite SPA, TanStack Router.

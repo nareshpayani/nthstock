@@ -77,7 +77,7 @@ describe('per-instrument random streams', () => {
       }
     }
     expect(await ltpOf(focused.adapter, A)).toBe(await ltpOf(plain.adapter, A));
-  });
+  }, 30_000); // builds two adapters over the full symbol master; CI under coverage can pass 5 s
 });
 
 describe('the focus lane (TFC-11)', () => {

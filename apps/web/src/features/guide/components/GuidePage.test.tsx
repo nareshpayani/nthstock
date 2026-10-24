@@ -5,54 +5,140 @@ import {
   RouterProvider,
 } from '@tanstack/react-router';
 import { render, screen, within } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import userEvent from '@testing-library/user-event';
+import { useState } from 'react';
+import { beforeAll, describe, expect, it, vi } from 'vitest';
 import { strings } from '../strings';
 import { GuidePage } from './GuidePage';
 
-function renderGuide() {
-  const root = createRootRoute({ component: GuidePage });
+/** The guide with its tab in local state, as the route keeps it in `?tab=`. */
+function renderGuide(initialTab?: string, onSelectTab = vi.fn()) {
+  function Harness() {
+    const [tab, setTab] = useState(initialTab);
+    return (
+      <GuidePage
+        tab={tab}
+        onSelectTab={(id) => {
+          onSelectTab(id);
+          setTab(id);
+        }}
+      />
+    );
+  }
+  const root = createRootRoute({ component: Harness });
   const router = createRouter({
     routeTree: root,
     history: createMemoryHistory({ initialEntries: ['/'] }),
   });
   render(<RouterProvider router={router} />);
+  return { onSelectTab };
 }
 
+const tabOf = (id: string) => {
+  const tab = strings.tabs.find((item) => item.id === id);
+  if (!tab) throw new Error(`no tab ${id}`);
+  return tab;
+};
+
 describe('GuidePage', () => {
-  it('has one h1, a section per contents link, and sets the tab title', async () => {
+  beforeAll(() => {
+    // jsdom has no layout, so no scrollIntoView; the pager calls it.
+    Element.prototype.scrollIntoView = vi.fn();
+  });
+
+  it('has one h1, a tab per topic with the first one open, and sets the tab title', async () => {
     renderGuide();
     expect(await screen.findByRole('heading', { level: 1, name: strings.title })).toBeVisible();
     expect(document.title).toBe('Guide · nthstock');
 
-    const toc = screen.getByRole('navigation', { name: strings.tocLabel });
-    const links = within(toc).getAllByRole('link');
-    expect(links.length).toBeGreaterThan(5);
-    for (const link of links) {
-      const id = link.getAttribute('href')?.slice(1) ?? '';
-      const section = document.getElementById(id);
-      expect(section, `section #${id}`).not.toBeNull();
-      expect(
-        within(section as HTMLElement).getByRole('heading', { level: 2, name: link.textContent }),
-      ).toBeVisible();
+    const list = screen.getByRole('tablist', { name: strings.tabsLabel });
+    const tabs = within(list).getAllByRole('tab');
+    expect(tabs.map((tab) => tab.textContent)).toEqual(strings.tabs.map((tab) => tab.label));
+    expect(tabs[0]).toHaveAttribute('aria-selected', 'true');
+    const panel = screen.getByRole('tabpanel');
+    expect(
+      within(panel).getByRole('heading', { level: 2, name: strings.tabs[0].title }),
+    ).toBeVisible();
+  });
+
+  it('opens the tab the link names, and the first one for an unknown name', async () => {
+    renderGuide('scalability');
+    expect(
+      await screen.findByRole('heading', { level: 2, name: tabOf('scalability').title }),
+    ).toBeVisible();
+    expect(screen.getByRole('tab', { name: 'Scalability' })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    );
+    expect(document.title).toBe('Scalability · Guide · nthstock');
+  });
+
+  it('falls back to the overview for a tab that does not exist', async () => {
+    renderGuide('no-such-tab');
+    expect(
+      await screen.findByRole('heading', { level: 2, name: strings.tabs[0].title }),
+    ).toBeVisible();
+  });
+
+  it('switches topics from the tab list and from the pager, and reports each choice', async () => {
+    const user = userEvent.setup();
+    const { onSelectTab } = renderGuide();
+    await user.click(await screen.findByRole('tab', { name: 'AI agent team' }));
+    expect(onSelectTab).toHaveBeenLastCalledWith('agents');
+    expect(screen.getByRole('heading', { level: 2, name: tabOf('agents').title })).toBeVisible();
+
+    const pager = screen.getByRole('navigation', { name: strings.pagerLabel });
+    await user.click(within(pager).getByRole('button', { name: /Next: Roadmap/ }));
+    expect(onSelectTab).toHaveBeenLastCalledWith('roadmap');
+    const heading = screen.getByRole('heading', { level: 2, name: tabOf('roadmap').title });
+    await vi.waitFor(() => expect(heading).toHaveFocus());
+    // The last topic has no Next button.
+    expect(
+      within(screen.getByRole('navigation', { name: strings.pagerLabel })).queryByRole('button', {
+        name: /Next/,
+      }),
+    ).toBeNull();
+  });
+
+  it('renders every topic, with its diagrams as labelled images and a text version', async () => {
+    const user = userEvent.setup();
+    renderGuide();
+    for (const tab of strings.tabs) {
+      await user.click(await screen.findByRole('tab', { name: tab.label }));
+      const panel = screen.getByRole('tabpanel');
+      expect(within(panel).getByRole('heading', { level: 2, name: tab.title })).toBeVisible();
+      const diagrams = tab.blocks.filter((block) => block.kind === 'diagram');
+      expect(within(panel).queryAllByRole('img')).toHaveLength(diagrams.length);
+      expect(within(panel).queryAllByText(strings.inWords)).toHaveLength(diagrams.length);
     }
   });
 
-  it('shows the demo login, the buy and sell steps, and the login link', async () => {
-    renderGuide();
+  it('shows the demo login and links to the login page', async () => {
+    renderGuide('demo');
     expect(await screen.findByText('9000000001')).toBeVisible();
     expect(screen.getByText('123456')).toBeVisible();
-    const buy = screen.getByRole('region', { name: strings.buy.title });
-    expect(within(buy).getAllByRole('listitem')).toHaveLength(strings.buy.steps.length);
-    const sell = screen.getByRole('region', { name: strings.sell.title });
-    expect(within(sell).getAllByRole('listitem')).toHaveLength(strings.sell.steps.length);
-    expect(screen.getByRole('link', { name: strings.tryIt.cta })).toHaveAttribute('href', '/login');
+    expect(screen.getByRole('link', { name: 'Go to login' })).toHaveAttribute('href', '/login');
   });
 
-  it('opens the source link in a new tab safely', async () => {
-    renderGuide();
-    const repo = await screen.findByRole('link', { name: strings.run.repoLabel });
-    expect(repo).toHaveAttribute('href', strings.run.repoUrl);
-    expect(repo).toHaveAttribute('target', '_blank');
-    expect(repo).toHaveAttribute('rel', 'noopener noreferrer');
+  it('opens every code link on GitHub in a new tab safely', async () => {
+    renderGuide('architecture');
+    const panel = await screen.findByRole('tabpanel');
+    const links = within(panel)
+      .getAllByRole('link')
+      .filter((link) => link.getAttribute('target') === '_blank');
+    expect(links.length).toBeGreaterThan(2);
+    for (const link of links) {
+      expect(link.getAttribute('href')).toMatch(
+        /^https:\/\/github\.com\/nareshpayani\/nthstock\/blob\/develop\//,
+      );
+      expect(link).toHaveAttribute('rel', 'noopener noreferrer');
+      expect(link).toHaveAccessibleName(/opens in a new tab/);
+    }
+  });
+
+  it('names Claude Code on the AI agent tab', async () => {
+    renderGuide('agents');
+    const panel = await screen.findByRole('tabpanel');
+    expect(within(panel).getAllByText(/Claude Code/).length).toBeGreaterThan(0);
   });
 });
