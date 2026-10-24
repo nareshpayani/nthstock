@@ -1,4 +1,4 @@
-import type { Order } from '@nthstock/contracts';
+import type { Order, WsNotification } from '@nthstock/contracts';
 import { createContext, useContext } from 'react';
 
 /**
@@ -10,6 +10,8 @@ export type OrderUpdateSource = {
   onOrderUpdate(listener: (order: Order) => void): () => void;
   /** Opens the socket even when no price is on screen, so updates can arrive. */
   connect(): void;
+  /** New notifications of the signed-in user (NSTOCK-0344); absent where the socket sends none. */
+  onNotification?(listener: (message: WsNotification) => void): () => void;
 };
 
 /** A source that never delivers: tests and Storybook without a socket. */

@@ -11,6 +11,7 @@ import { Depth, Quote } from './market.js';
 import { Order } from './orders.js';
 import { FundsSummary, Position } from './portfolio.js';
 import { TrailingStop } from './trailingStops.js';
+import { Notification, PriceAlert } from './alerts.js';
 
 /** Current WebSocket protocol version, carried as `v` on every message. */
 export const WS_PROTOCOL_VERSION = 1;
@@ -147,6 +148,19 @@ export const WsAccountDelta = z.object({
 });
 export type WsAccountDelta = z.infer<typeof WsAccountDelta>;
 
+/**
+ * A new notification for the signed-in user (NSTOCK-0344), sent the moment it is raised in either
+ * mode, with the alert that fired when it is a price alert. The client toasts it and refreshes the
+ * bell; the centre reads the list over REST.
+ */
+export const WsNotification = z.object({
+  v,
+  type: z.literal('notification'),
+  notification: Notification,
+  alert: PriceAlert.optional(),
+});
+export type WsNotification = z.infer<typeof WsNotification>;
+
 export const WsPong = z.object({
   v,
   type: z.literal('pong'),
@@ -180,6 +194,7 @@ export const WsServerMessage = z.discriminatedUnion('type', [
   WsInstruments,
   WsOrderUpdate,
   WsAccountDelta,
+  WsNotification,
   WsPong,
   WsError,
 ]);

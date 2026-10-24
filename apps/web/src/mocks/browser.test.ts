@@ -27,9 +27,10 @@ describe('startMockWorker (T-050)', () => {
     expect(info).toHaveBeenCalledWith(
       expect.stringMatching(/^\[MSW\] Mocking enabled .*forced open/),
     );
-    // 47 REST routes (health and ready, 12 market, 7 auth, 8 watchlists, 6 orders, 4 trailing
-    // stops, account state, 3 funds, 4 portfolio) plus the quote stream, and no test controls.
-    expect(setupWorker.mock.calls[0]).toHaveLength(48);
+    // 52 REST routes (health and ready, 12 market, 7 auth, 8 watchlists, 6 orders, 4 trailing
+    // stops, account state, 3 funds, 4 portfolio, 5 alerts and notifications) plus the quote
+    // stream, and no test controls.
+    expect(setupWorker.mock.calls[0]).toHaveLength(53);
     expect(paths(setupWorker.mock.calls[0])).not.toContainEqual(expect.stringContaining('__test'));
     expect(adapter.isOpen()).toBe(true);
     orders.dispose();
@@ -64,7 +65,7 @@ describe('startMockWorker (T-050)', () => {
       createTestControls(),
     );
     const registered = paths(setupWorker.mock.calls[0]);
-    expect(registered).toHaveLength(50);
+    expect(registered).toHaveLength(55);
     expect(registered.slice(0, 2)).toEqual(['*/v1/__test/clock', '*/v1/__test/price']);
     expect(info).toHaveBeenCalledWith(expect.stringContaining('Test controls on'));
     orders.dispose();
