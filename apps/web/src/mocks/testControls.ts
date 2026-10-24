@@ -8,7 +8,7 @@ import {
 import type { MarketDataAdapter } from '@nthstock/marketData';
 import { http, HttpResponse, type HttpHandler } from 'msw';
 import { errorResponse } from './handlerKit';
-import type { OrdersMock } from './handlers';
+import type { AlertsMock, OrdersMock } from './handlers';
 
 /**
  * The MSW equivalents of apps/api's `/v1/__test` routes (T-162): a clock override and scripted
@@ -22,7 +22,12 @@ export type TestControls = {
   /** Epoch ms: the page clock plus the offset `POST /v1/__test/clock` set. The mocks' clock. */
   now(): number;
   /** The two handlers, over the orders mock and the adapter the other handlers use. */
-  handlers(deps: { orders: OrdersMock; adapter: MarketDataAdapter }): HttpHandler[];
+  handlers(deps: {
+    orders: OrdersMock;
+    adapter: MarketDataAdapter;
+    /** Price alerts see the scripted price too (NSTOCK-0344). */
+    alerts?: AlertsMock;
+  }): HttpHandler[];
 };
 
 const readJson = async (request: Request): Promise<unknown> => {
@@ -40,7 +45,7 @@ export function createTestControls(): TestControls {
   const now = () => Date.now() + offset;
   return {
     now,
-    handlers: ({ orders, adapter }) => [
+    handlers: ({ orders, adapter, alerts }) => [
       http.post(`*${TEST_CONTROL_PATHS.clock}`, async ({ request }) => {
         const parsed = TestClockRequest.safeParse(await readJson(request));
         if (!parsed.success) return invalid();
@@ -57,6 +62,8 @@ export function createTestControls(): TestControls {
         const instrument = await adapter.getInstrument(symbol);
         if (!instrument) return errorResponse(404, 'NOT_FOUND', `${symbol} not found`);
         orders.pinPrice(instrument.token, ltp);
+        const quote = alerts ? await adapter.getQuote(symbol) : null;
+        if (alerts && quote) alerts.tick([{ ...quote, ltp }]);
         const body: TestPriceResponse = { symbol, token: instrument.token, ltp };
         return HttpResponse.json(body);
       }),

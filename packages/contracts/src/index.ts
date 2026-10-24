@@ -5,6 +5,7 @@ export * from './watchlist.js';
 export * from './orders.js';
 export * from './trailingStopParams.js';
 export * from './trailingStops.js';
+export * from './alerts.js';
 export * from './portfolio.js';
 export * from './account.js';
 export * from './ws.js';

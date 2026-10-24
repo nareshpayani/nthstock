@@ -42,6 +42,10 @@ export function createLiveQuotes(
     connect: () => {
       wsClient.connect();
     },
+    onNotification: (listener) =>
+      wsClient.onMessage((message) => {
+        if (message.type === 'notification') listener(message);
+      }),
   };
   const tradingStore = trading
     ? createTradingStore({

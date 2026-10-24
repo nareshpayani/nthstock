@@ -1,5 +1,6 @@
 import type { Exchange, Instrument, OrderSide, Quote } from '@nthstock/contracts';
 import { Button, SegmentedControl } from '@nthstock/ui';
+import { PriceAlertButton } from '@/features/notifications';
 import { WatchlistStar } from '@/features/watchlist';
 import { LiveChange } from '@/shared/components/LiveChange';
 import { PriceCell } from '@/shared/components/PriceCell';
@@ -43,7 +44,12 @@ export function StockHeader({
         <div className="grid gap-1">
           <div className="flex items-start gap-3">
             <h1 className="text-title min-w-0 flex-1 break-words text-ink">{instrument.name}</h1>
-            {type === 'EQUITY' ? <WatchlistStar instrument={instrument} /> : null}
+            {type === 'EQUITY' ? (
+              <div className="flex shrink-0 gap-2">
+                <PriceAlertButton symbol={symbol} exchange={exchange} />
+                <WatchlistStar instrument={instrument} />
+              </div>
+            ) : null}
           </div>
           <p className="flex flex-wrap items-center gap-2 text-body text-ink-muted">
             <span className="font-mono font-medium text-ink">{symbol}</span>

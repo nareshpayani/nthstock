@@ -5,6 +5,7 @@ import { createDeps, type AppDeps, type DepsOverrides } from './deps.js';
 import { installCsrfCheck } from './http/csrf.js';
 import { installErrorHandling } from './http/errorHandler.js';
 import { installSecurityHeaders } from './http/securityHeaders.js';
+import { alertRoutes } from './modules/alerts/index.js';
 import { authRoutes } from './modules/auth/index.js';
 import { fundsRoutes } from './modules/funds/index.js';
 import { healthRoutes, type ReadinessCheck } from './modules/health/index.js';
@@ -151,6 +152,7 @@ export function buildApp(options: AppOptions = {}): App {
   app.register(authRoutes(deps));
   app.register(watchlistRoutes(deps));
   app.register(orderRoutes(deps));
+  app.register(alertRoutes(deps));
   app.register(portfolioRoutes(deps));
   app.register(fundsRoutes(deps));
   if (options.testControls) app.register(testControlRoutes(deps, options.testControls));

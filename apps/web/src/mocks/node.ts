@@ -1,6 +1,7 @@
 import { setupServer } from 'msw/node';
 import {
   createMockHandlers,
+  type AlertsMockOptions,
   type AuthMockOptions,
   type OrdersMockOptions,
   type WatchlistMockOptions,
@@ -23,19 +24,21 @@ export function createMockServer(
     auth?: AuthMockOptions;
     watchlists?: WatchlistMockOptions;
     orders?: OrdersMockOptions;
+    alerts?: AlertsMockOptions;
   } = {},
 ) {
   setMockLatency(0);
   const adapter = createMockMarket(options);
-  const { handlers, orders } = createMockHandlers({
+  const { handlers, orders, alerts } = createMockHandlers({
     adapter,
     wsUrl: TEST_WS_URL,
     ...(options.flushMs === undefined ? {} : { stream: { flushMs: options.flushMs } }),
     ...(options.auth ? { auth: options.auth } : {}),
     ...(options.watchlists ? { watchlists: options.watchlists } : {}),
     ...(options.orders ? { orders: options.orders } : {}),
+    ...(options.alerts ? { alerts: options.alerts } : {}),
   });
   const server = setupServer(...handlers);
   // `adapter.dispose()` stays the caller's; the orders mock only holds adapter subscriptions.
-  return { server, adapter, orders };
+  return { server, adapter, orders, alerts };
 }

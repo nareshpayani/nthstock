@@ -36,3 +36,17 @@ export const positionsKeys = {
   all: ['positions'] as const,
   list: () => ['positions', 'list'] as const,
 };
+
+/**
+ * Price alerts and the notification centre (NSTOCK-0344). A `notification` message on the socket
+ * invalidates both: a fired alert changes the alerts list too.
+ */
+export const alertsKeys = {
+  all: ['alerts'] as const,
+  list: () => ['alerts', 'list'] as const,
+};
+
+export const notificationsKeys = {
+  all: ['notifications'] as const,
+  list: () => ['notifications', 'list'] as const,
+};

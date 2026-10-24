@@ -5,6 +5,7 @@ import type { DbDriver } from './config.js';
 import { createDatabase, type Database } from './db/client.js';
 import { createPiiCrypto, resolvePiiKeys, type PiiKeys } from './db/crypto.js';
 import { createMemoryAuditRepo, createPgAuditRepo, type AuditRepo } from './modules/audit/index.js';
+import { createAlertService, type AlertService } from './modules/alerts/index.js';
 import {
   createArgon2PinHasher,
   createMemoryAuthRepo,
@@ -68,6 +69,8 @@ export type AppDeps = {
   pinHasher: PinHasher;
   /** Paper orders and funds for every user, fed by `market` ticks (T-131); one per process. */
   orders: OrderService;
+  /** Price alerts and notifications (NSTOCK-0344), on the same market and orders. */
+  alerts: AlertService;
   /** `DB_DRIVER` (T-182): `memory` for unit tests, `postgres` for `npm run dev:api` and E2E. */
   dbDriver: DbDriver;
   /** The process's Postgres pool under `DB_DRIVER=postgres`; null on the memory driver. */
@@ -192,6 +195,7 @@ export function createDeps(overrides: DepsOverrides = {}): AppDeps {
     ...(overrides.onAuditError ? { onAuditError: overrides.onAuditError } : {}),
     ...(overrides.newOrderId ? { newId: overrides.newOrderId } : {}),
   });
+  const alerts = createAlertService({ clock, market, orders });
   return {
     clock,
     repos,
@@ -204,6 +208,7 @@ export function createDeps(overrides: DepsOverrides = {}): AppDeps {
     jwtSecret: overrides.jwtSecret ?? resolveJwtSecret({ value: undefined, production }),
     pinHasher: overrides.pinHasher ?? createArgon2PinHasher(),
     orders,
+    alerts,
     dbDriver,
     database,
     sessionRevocations: redisState
@@ -215,6 +220,7 @@ export function createDeps(overrides: DepsOverrides = {}): AppDeps {
     dispose: async () => {
       // Audit entries still queued are written before the pool closes.
       await orders.flushAudit();
+      alerts.dispose();
       orders.dispose();
       owned?.dispose();
       await ownedDatabase?.close();

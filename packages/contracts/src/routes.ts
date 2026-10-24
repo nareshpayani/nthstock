@@ -58,6 +58,14 @@ import {
   TrailingStopsResponse,
 } from './trailingStops.js';
 import {
+  CreatePriceAlertRequest,
+  MarkNotificationsReadRequest,
+  NotificationsResponse,
+  PriceAlert,
+  PriceAlertIdParams,
+  PriceAlertsResponse,
+} from './alerts.js';
+import {
   AddWatchlistItemRequest,
   CreateWatchlistRequest,
   RenameWatchlistRequest,
@@ -429,6 +437,41 @@ export const routes = {
     auth: 'user',
     body: ResetRequest,
     response: FundsSummary,
+  },
+
+  // Price alerts and notifications (NSTOCK-0344). Over PRICE_ALERTS_MAX_ACTIVE: 422 LIMIT_REACHED.
+  priceAlertsList: {
+    method: 'GET',
+    path: '/v1/alerts',
+    auth: 'user',
+    response: PriceAlertsResponse,
+  },
+  priceAlertCreate: {
+    method: 'POST',
+    path: '/v1/alerts',
+    auth: 'user',
+    body: CreatePriceAlertRequest,
+    response: PriceAlert,
+  },
+  priceAlertCancel: {
+    method: 'DELETE',
+    path: '/v1/alerts/:id',
+    auth: 'user',
+    params: PriceAlertIdParams,
+    response: PriceAlert,
+  },
+  notificationsList: {
+    method: 'GET',
+    path: '/v1/notifications',
+    auth: 'user',
+    response: NotificationsResponse,
+  },
+  notificationsMarkRead: {
+    method: 'POST',
+    path: '/v1/notifications/read',
+    auth: 'user',
+    body: MarkNotificationsReadRequest,
+    response: NotificationsResponse,
   },
 } as const satisfies Record<string, RouteDef>;
 

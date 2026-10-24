@@ -65,7 +65,7 @@ export async function startMockWorker(
   // E2E builds only (VITE_TEST_CONTROLS, T-162): the mocks share the test clock, so auth,
   // watchlists and orders all move when a test sets it.
   const now = testControls ? { now: testControls.now } : {};
-  const { handlers, orders } = createMockHandlers({
+  const { handlers, orders, alerts } = createMockHandlers({
     adapter,
     wsUrl,
     auth: { ...now, ...(storage ? { storage } : {}) },
@@ -78,9 +78,11 @@ export async function startMockWorker(
       marketHours: config.mockMarketOpen && !testControls ? 'alwaysOpen' : 'nse',
       ...(listStorage ? { storage: listStorage } : {}),
     },
+    // Price alerts and notifications (NSTOCK-0344), kept like the orders.
+    ...(listStorage ? { alerts: { storage: listStorage } } : {}),
   });
   const worker = setupWorker(
-    ...(testControls ? testControls.handlers({ orders, adapter }) : []),
+    ...(testControls ? testControls.handlers({ orders, adapter, alerts }) : []),
     ...handlers,
   );
   // Assets, fonts and the Vite client go to the network untouched. MSW's own logging is off
