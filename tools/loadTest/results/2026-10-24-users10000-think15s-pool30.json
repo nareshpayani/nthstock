@@ -1,0 +1,113 @@
+{
+  "at": "2026-10-24T04:41:47.203Z",
+  "machine": {
+    "cpus": 4,
+    "cpuModel": "Intel(R) Xeon(R) Processor",
+    "memoryGb": 16
+  },
+  "settings": {
+    "users": 10000,
+    "durationSec": 60,
+    "thinkMs": 15000,
+    "orderShare": 0.1,
+    "workers": 4
+  },
+  "login": {
+    "count": 10000,
+    "p50": 355.8,
+    "p95": 475.7,
+    "p99": 500.1,
+    "max": 520.3,
+    "wallMs": 18631,
+    "perSecond": 537,
+    "errors": {}
+  },
+  "api": {
+    "count": 38487,
+    "p50": 2,
+    "p95": 88.1,
+    "p99": 134.9,
+    "max": 211.4,
+    "perSecond": 484,
+    "errors": {},
+    "byRoute": {
+      "depth": {
+        "count": 3802,
+        "p50": 0.8,
+        "p95": 75.2,
+        "p99": 108.9,
+        "max": 137.7
+      },
+      "portfolio": {
+        "count": 5749,
+        "p50": 2.4,
+        "p95": 92,
+        "p99": 136,
+        "max": 179.7
+      },
+      "funds": {
+        "count": 1921,
+        "p50": 2.4,
+        "p95": 94.3,
+        "p99": 135.1,
+        "max": 170.4
+      },
+      "positions": {
+        "count": 5755,
+        "p50": 2.3,
+        "p95": 97.8,
+        "p99": 136.6,
+        "max": 176.1
+      },
+      "quotes": {
+        "count": 11440,
+        "p50": 0.8,
+        "p95": 67.4,
+        "p99": 108.3,
+        "max": 155.7
+      },
+      "orders": {
+        "count": 5921,
+        "p50": 2.4,
+        "p95": 95.7,
+        "p99": 136.3,
+        "max": 176.1
+      },
+      "placeOrder": {
+        "count": 3899,
+        "p50": 5.8,
+        "p95": 126,
+        "p99": 170.6,
+        "max": 211.4
+      }
+    }
+  },
+  "ws": {
+    "opened": 10000,
+    "failed": 0,
+    "closedEarly": 0,
+    "connectMs": {
+      "count": 10000,
+      "p50": 40.9,
+      "p95": 79.1,
+      "p99": 225.9,
+      "max": 232.1
+    },
+    "framesPerSecond": 10798,
+    "tickAgeMs": {
+      "count": 80800,
+      "p50": 303,
+      "p95": 436,
+      "p99": 469,
+      "max": 522
+    },
+    "peakConnections": 10000,
+    "droppedFrames": 0
+  },
+  "servers": {
+    "apiPeakCpu": 70,
+    "apiPeakRssMb": 903,
+    "realtimePeakCpu": 38,
+    "realtimePeakRssMb": 456
+  }
+}
