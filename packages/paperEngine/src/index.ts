@@ -133,3 +133,12 @@ export {
   type TrailingStopState,
   type TrailingStopStep,
 } from './trailingStop.js';
+export {
+  ALERT_DESK_SNAPSHOT_VERSION,
+  AlertDesk,
+  type AlertActionResult,
+  type AlertBook,
+  type AlertDeskOptions,
+  type AlertDeskSnapshot,
+  type AlertMarket,
+} from './alertDesk.js';

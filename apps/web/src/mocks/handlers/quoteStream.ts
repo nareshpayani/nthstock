@@ -4,7 +4,9 @@ import {
   WsClientMessage,
   type AccountState,
   type Exchange,
+  type Notification,
   type Order,
+  type PriceAlert,
   type Quote,
   type TrailingStop,
   type WsError,
@@ -40,6 +42,10 @@ export type OrderUpdateSource = {
   activeUserId(host: string): string | null;
   onTrailingStopUpdate?(listener: (userId: string, stop: TrailingStop) => void): () => void;
   accountState?(userId: string): Promise<AccountState>;
+  /** New notifications (NSTOCK-0344): sent to the owner's connections at once, in either mode. */
+  onNotification?(
+    listener: (userId: string, notification: Notification, alert?: PriceAlert) => void,
+  ): () => void;
 };
 
 /** The mock market's focus lane (SPEC-TFC-1 TFC-11), when the adapter has one. */
@@ -110,6 +116,16 @@ export function quoteStreamHandler(adapter: MarketDataAdapter, options: QuoteStr
       if (!deltas || signedIn() !== userId) return;
       pendingStops.set(stop.id, stop);
       accountChanged = true;
+    });
+
+    const stopNotifications = orders?.onNotification?.((userId, notification, alert) => {
+      if (signedIn() !== userId) return;
+      send({
+        v: WS_PROTOCOL_VERSION,
+        type: 'notification',
+        notification,
+        ...(alert ? { alert } : {}),
+      });
     });
 
     /** One `accountDelta` frame of everything since the last one; nothing when nothing changed. */
@@ -274,6 +290,7 @@ export function quoteStreamHandler(adapter: MarketDataAdapter, options: QuoteStr
       closed = true;
       stopOrders?.();
       stopStops?.();
+      stopNotifications?.();
       if (focused && hasFocus(adapter)) adapter.focus(null);
       timers.clearInterval(flushTimer);
       for (const stop of subscriptions.values()) stop();

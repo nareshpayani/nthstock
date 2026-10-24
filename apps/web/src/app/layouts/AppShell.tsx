@@ -1,6 +1,7 @@
 import { Sheet, cn } from '@nthstock/ui';
 import { Link } from '@tanstack/react-router';
 import { OrderTicketHost, TrailingStopSheetHost } from '@/features/orderTicket';
+import { NotificationsBridge } from '@/features/notifications';
 import { OrderUpdatesBridge } from '@/features/orders';
 import { TradingIntentTimeouts } from '../live/TradingIntentTimeouts';
 import { TrailingStopAnnouncer } from '../live/TrailingStopAnnouncer';
@@ -118,6 +119,7 @@ export function AppShell({ children, rail = true }: AppShellProps) {
       <OrderTicketHost />
       <TrailingStopSheetHost />
       <OrderUpdatesBridge />
+      <NotificationsBridge />
       <TradingIntentTimeouts />
       <TrailingStopAnnouncer />
     </div>

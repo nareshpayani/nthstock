@@ -56,6 +56,19 @@ CDN + WAF ─► Load balancer ─► apps/api (Fastify, stateless)     apps/rea
   The web chart keeps the bar size in the URL and folds live ticks into the current bar of that size.
 - From Phase 4, TimescaleDB continuous aggregates replace the in-memory grouping; the contract stays.
 
+### Price alerts and notifications
+- `AlertDesk` (`packages/paperEngine/src/alertDesk.ts`) runs in both backends beside the paper desk:
+  it subscribes to an instrument only while an active alert needs it, fires an ABOVE or BELOW alert
+  once on the first tick at or past its level (a gap fires with the LTP that crossed), and refuses a
+  level the price has already passed.
+- Fired alerts, executed orders and triggered trailing stops add notifications (newest 100 per user,
+  with a read flag). Routes: `/v1/alerts` (GET, POST), `/v1/alerts/:id` (DELETE),
+  `/v1/notifications` (GET), `/v1/notifications/read` (POST); at most 50 active alerts per user.
+- Delivery: the mock socket sends a `notification` message to the owner at once; in api mode the
+  client polls every 30 s until apps/realtime carries notifications (the notifications service of
+  Phases 3 to 5). The web app toasts a fired alert on any page and draws active alerts as dotted
+  price lines on the chart.
+
 ### Security baseline
 - Rate limits per IP and per user; OTP resend throttling; CAPTCHA after 3 failed OTP/PIN attempts; PIN lockout after 5, unlock via OTP.
 - TLS 1.2+ and HSTS; encryption at rest (KMS); phone/PII column-level encryption.

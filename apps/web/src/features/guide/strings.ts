@@ -174,6 +174,10 @@ export const strings = {
               body: 'Place, drag and cancel orders on the chart; a position line with live P&L; a trailing stop from the position chip.',
             },
             {
+              name: 'Price alerts and notifications',
+              body: 'A bell beside the star on any stock: set a level (quick ±1% and ±2%) and a note, see it as a dotted line on the chart, and get a toast the moment the price crosses it. A bell in the header counts unread alerts, fills and trailing stops.',
+            },
+            {
               name: 'Scalper',
               body: 'A one-tap pad: quantity chips, Sell at bid, Buy at ask, Flatten and Reverse, with an Arm switch.',
             },
@@ -477,6 +481,16 @@ export const strings = {
             'Drops stale sequence numbers and re-reads the account after a gap or a reconnect.',
             'Writes through to the TanStack Query caches, so the orders and positions pages agree with the chart.',
             'Tracks pending intents (place, modify, cancel, close) until a response or a frame covers them, which is how a dragged line shows “Updating…” at its new price.',
+          ],
+        },
+        { kind: 'heading', text: 'Price alerts and notifications' },
+        {
+          kind: 'list',
+          items: [
+            'AlertDesk in packages/paperEngine runs in both backends, beside the paper desk on the same market: it subscribes to an instrument only while some user has an active alert on it.',
+            'Every tick is checked: an ABOVE alert fires on the first LTP at or above its level, a BELOW alert at or below, once. A gap past the level fires with the LTP that crossed it. A level the price has already passed is refused, so nothing fires on the tick it was set.',
+            'A fired alert, an executed order and a triggered trailing stop each add a notification (the newest 100 are kept, with a read flag) and go to the owner at once as a notification message on the socket.',
+            'The web app toasts a fired alert on any page, refreshes the bell and the alerts list, and draws active alerts as dotted price lines on the chart. Routes: GET and POST /v1/alerts, DELETE /v1/alerts/:id, GET /v1/notifications, POST /v1/notifications/read.',
           ],
         },
         { kind: 'heading', text: 'Rules every layer follows' },
@@ -1138,6 +1152,11 @@ export const strings = {
               '3 to 5',
               'Order matching worker, TimescaleDB candles, notifications, hardening',
               'Planned',
+            ],
+            [
+              'Beyond the brief',
+              'Chart bar sizes (1, 5, 15, 30 and 60 minutes), price alerts with a notification centre',
+              'Done, live',
             ],
             ['6', 'AWS Mumbai, multi-AZ, warm standby in Hyderabad, Terraform', 'Planned'],
           ],

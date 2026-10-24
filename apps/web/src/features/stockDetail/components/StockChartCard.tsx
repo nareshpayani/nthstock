@@ -10,6 +10,7 @@ import { ErrorState, SegmentedControl, Skeleton } from '@nthstock/ui';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
 import { ChartTrading } from '@/features/chartTrading';
+import { AlertLines } from '@/features/notifications';
 import {
   CHART_RANGES,
   type ChartHandle,
@@ -183,7 +184,12 @@ export function StockChartCard({
             interactive={trading}
             onReady={trading ? setChart : undefined}
             overlay={
-              trading && chart ? <ChartTrading handle={chart} instrument={instrument} /> : null
+              trading && chart ? (
+                <>
+                  <ChartTrading handle={chart} instrument={instrument} />
+                  <AlertLines handle={chart} symbol={symbol} exchange={exchange} />
+                </>
+              ) : null
             }
             className={candles.isPlaceholderData ? 'opacity-60' : undefined}
           />
