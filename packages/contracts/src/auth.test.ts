@@ -168,4 +168,20 @@ describe('step-up and TOTP contracts (NSTOCK-0212)', () => {
     expect(TotpVerifyRequest.safeParse({ challengeId: 'tc_1', code: '123456' }).success).toBe(true);
     expect(TotpVerifyRequest.safeParse({ challengeId: 'tc_1' }).success).toBe(false);
   });
+
+  it('round-trips an active session, which carries no IP address (NSTOCK-0222)', async () => {
+    const { ActiveSession, SessionsResponse } = await import('./auth.js');
+    const row = {
+      id: 'ses_1',
+      deviceLabel: 'Chrome on macOS',
+      trusted: true,
+      current: true,
+      createdAt: '2026-11-02T04:00:00.000Z',
+      lastActiveAt: '2026-11-02T05:00:00.000Z',
+    };
+    expect(SessionsResponse.parse({ sessions: [row] })).toEqual({ sessions: [row] });
+    expect(Object.keys(ActiveSession.shape).some((key) => /ip/i.test(key))).toBe(false);
+    // An unknown field such as an address is dropped, never passed on.
+    expect(ActiveSession.parse({ ...row, ipAddress: '10.0.0.1' })).toEqual(row);
+  });
 });

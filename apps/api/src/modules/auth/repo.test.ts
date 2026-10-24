@@ -301,6 +301,27 @@ describeRepoConformance(
       }
     });
 
+    it('lists the live sessions of a user, most recently active first (NSTOCK-0223)', async () => {
+      await repo().createDevice(device('dev_1'));
+      await repo().createDevice(device('dev_2', 'usr_b'));
+      await repo().createSession(session('ses_old'));
+      await repo().createSession({
+        ...session('ses_new'),
+        lastSeenAt: at('2026-09-28T06:00:00.000Z'),
+      });
+      await repo().createSession({
+        ...session('ses_gone'),
+        expiresAt: at('2026-09-28T05:00:00.000Z'),
+      });
+      await repo().createSession(session('ses_out'));
+      await repo().revokeSession('ses_out', at('2026-09-28T05:00:00.000Z'), 'LOGOUT');
+      await repo().createSession(session('ses_other', 'usr_b', 'dev_2'));
+
+      const live = await repo().listActiveSessions('usr_a', at('2026-09-28T07:00:00.000Z'));
+      expect(live.map((s) => s.id)).toEqual(['ses_new', 'ses_old']);
+      expect(live[1]).toEqual(session('ses_old'));
+    });
+
     // ---- Step-up and TOTP (NSTOCK-0214, NSTOCK-0215) -----------------------------------------
     it('records a step-up on the session', async () => {
       await repo().createDevice(device('dev_1'));

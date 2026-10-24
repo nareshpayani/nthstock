@@ -3,6 +3,7 @@ import type { FastifyPluginAsync, FastifyReply } from 'fastify';
 import { ApiHttpError } from '../../http/apiError.js';
 import type { AppDeps } from '../../deps.js';
 import { registerRoute } from '../../http/registerRoute.js';
+import { createActiveSessionsService } from './activeSessionsService.js';
 import { authContextOf, createAuthenticate } from './authenticate.js';
 import { createOtpService } from './otpService.js';
 import { createPinService } from './pinService.js';
@@ -70,6 +71,12 @@ export const authRoutes =
       pins,
       sessions,
       hasher: deps.pinHasher,
+    });
+    const activeSessions = createActiveSessionsService({
+      clock: deps.clock,
+      repo: deps.repos.auth,
+      sessions,
+      twoFactor,
     });
     const secure = deps.production;
 
@@ -190,6 +197,34 @@ export const authRoutes =
       'totpRecoveryCodes',
       async ({ body, request }) => ({
         codes: await twoFactor.regenerateRecoveryCodes(authContextOf(request), body.code),
+      }),
+      { authenticate, ...authRateLimit('stepUp') },
+    );
+
+    // ---- Active sessions (NSTOCK-0223) -------------------------------------------------------
+
+    registerRoute(
+      app,
+      'sessionsList',
+      async ({ request }) => ({ sessions: await activeSessions.list(authContextOf(request)) }),
+      { authenticate },
+    );
+
+    registerRoute(
+      app,
+      'sessionRevoke',
+      async ({ params, request }) => {
+        await activeSessions.revoke(authContextOf(request), params.id);
+        return { ok: true as const };
+      },
+      { authenticate, ...authRateLimit('stepUp') },
+    );
+
+    registerRoute(
+      app,
+      'sessionsRevokeOthers',
+      async ({ request }) => ({
+        revoked: await activeSessions.revokeOthers(authContextOf(request)),
       }),
       { authenticate, ...authRateLimit('stepUp') },
     );

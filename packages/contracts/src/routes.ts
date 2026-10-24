@@ -6,7 +6,10 @@ import {
   PinSetRequest,
   PinSetResponse,
   PinVerifyRequest,
+  RevokeOthersResponse,
   Session,
+  SessionParams,
+  SessionsResponse,
   StepUpRequest,
   StepUpResponse,
   TotpCodeOrRecoveryRequest,
@@ -221,6 +224,27 @@ export const routes = {
     auth: 'public',
     body: TotpVerifyRequest,
     response: Session,
+  },
+
+  // Active sessions (NSTOCK-0222). Both revokes need a step-up; the current session logs out.
+  sessionsList: {
+    method: 'GET',
+    path: '/v1/auth/sessions',
+    auth: 'user',
+    response: SessionsResponse,
+  },
+  sessionRevoke: {
+    method: 'DELETE',
+    path: '/v1/auth/sessions/:id',
+    auth: 'user',
+    params: SessionParams,
+    response: OkResponse,
+  },
+  sessionsRevokeOthers: {
+    method: 'POST',
+    path: '/v1/auth/sessions/revoke-others',
+    auth: 'user',
+    response: RevokeOthersResponse,
   },
 
   // Market

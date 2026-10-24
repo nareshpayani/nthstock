@@ -17,6 +17,7 @@ import {
   TOTP_MAX_FAILURES,
   TOTP_RECOVERY_CODE_COUNT,
   TRUSTED_DEVICE_TTL_SEC,
+  type ActiveSession,
   type AuthErrorDetails,
   type Device,
   type KycStatus,
@@ -24,7 +25,14 @@ import {
   type Session,
   type User,
 } from '@nthstock/contracts';
-import { base32Decode, base32Encode, newTotpSecret, otpauthUri, verifyTotp } from '@nthstock/utils';
+import {
+  base32Decode,
+  base32Encode,
+  deviceLabel,
+  newTotpSecret,
+  otpauthUri,
+  verifyTotp,
+} from '@nthstock/utils';
 import type { HttpHandler } from 'msw';
 import {
   MockApiError,
@@ -99,6 +107,9 @@ type SessionRecord = {
   expiresAt: number;
   revoked: boolean;
   steppedUpAt?: number | null;
+  /** Missing in state saved before the sessions screen existed: read as the expiry minus 30 days. */
+  createdAt?: number;
+  lastSeenAt?: number;
 };
 
 type OtpChallenge = {
@@ -226,6 +237,45 @@ export function createAuthMock({
     createdAt: Date.parse('2026-01-01T00:00:00.000Z'),
   });
 
+  /**
+   * Two other sessions for the demo user, so the sessions screen has something to log out: a
+   * trusted phone active 2 hours ago and a laptop 3 days ago. They exist only in the mock; nothing
+   * can sign in with them. A revoked one stays revoked across reloads.
+   */
+  function seedDemoSessions() {
+    const at = now();
+    const hour = 3_600_000;
+    for (const [id, label, trusted, lastSeenAgo, createdAgo] of [
+      ['phone', 'Safari on iOS', true, 2 * hour, 9 * 24 * hour],
+      ['laptop', 'Chrome on Windows', false, 3 * 24 * hour, 12 * 24 * hour],
+    ] as const) {
+      const sessionId = `ses_demo_${id}`;
+      if (sessions.has(sessionId)) continue;
+      const device: DeviceRecord = {
+        id: `dev_demo_${id}`,
+        userId: MOCK_DEMO_USER.id,
+        label,
+        trusted,
+        createdAt: at - createdAgo,
+        lastSeenAt: at - lastSeenAgo,
+      };
+      devices.set(device.id, device);
+      sessions.set(sessionId, {
+        id: sessionId,
+        userId: MOCK_DEMO_USER.id,
+        deviceId: device.id,
+        csrfToken: randomToken(),
+        generation: 0,
+        accessToken: '',
+        accessExpiresAt: 0,
+        createdAt: at - createdAgo,
+        lastSeenAt: at - lastSeenAgo,
+        expiresAt: at + REFRESH_TOKEN_TTL_SEC * 1000,
+        revoked: false,
+      });
+    }
+  }
+
   // Restore what an earlier page load saved. Anything unreadable is ignored.
   try {
     const saved = storage?.getItem(AUTH_MOCK_STORAGE_KEY);
@@ -241,6 +291,8 @@ export function createAuthMock({
   } catch {
     // Start fresh.
   }
+
+  seedDemoSessions();
 
   const save = () => {
     if (!storage) return;
@@ -340,7 +392,7 @@ export function createAuthMock({
       device = {
         id: randomId('dev'),
         userId: user.id,
-        label: 'This browser',
+        label: deviceLabel(globalThis.navigator?.userAgent),
         trusted: false,
         createdAt: at,
         lastSeenAt: at,
@@ -355,6 +407,8 @@ export function createAuthMock({
       generation: 0,
       accessToken: '',
       accessExpiresAt: 0,
+      createdAt: at,
+      lastSeenAt: at,
       expiresAt: at + REFRESH_TOKEN_TTL_SEC * 1000,
       revoked: false,
     };
@@ -383,7 +437,33 @@ export function createAuthMock({
       throw fail(403, 'FORBIDDEN', 'Invalid CSRF token. Reload the page and try again.');
     }
     activeUsers.set(new URL(request.url).host, session.userId);
+    session.lastSeenAt = at;
     return session;
+  }
+
+  // ---- Active sessions (NSTOCK-0224) ---------------------------------------------------------
+
+  const createdAtOf = (s: SessionRecord) =>
+    s.createdAt ?? s.expiresAt - REFRESH_TOKEN_TTL_SEC * 1000;
+
+  /** The user's live sessions, most recently active first. */
+  function liveSessionsOf(userId: string): SessionRecord[] {
+    const at = now();
+    return [...sessions.values()]
+      .filter((s) => s.userId === userId && !s.revoked && s.expiresAt > at)
+      .sort((a, b) => (b.lastSeenAt ?? createdAtOf(b)) - (a.lastSeenAt ?? createdAtOf(a)));
+  }
+
+  function toActiveSession(s: SessionRecord, currentId: string): ActiveSession {
+    const device = devices.get(s.deviceId);
+    return {
+      id: s.id,
+      deviceLabel: device?.label ?? 'Unknown device',
+      trusted: device?.trusted ?? false,
+      current: s.id === currentId,
+      createdAt: iso(createdAtOf(s)),
+      lastActiveAt: iso(s.lastSeenAt ?? createdAtOf(s)),
+    };
   }
 
   // ---- OTP, PIN and two-factor checks shared by login and step-up ---------------------------
@@ -776,6 +856,45 @@ export function createAuthMock({
         }
         if (!(await codeIsRight(user.id, context.body.code))) throw totpInvalid();
         return { codes: await newRecoveryCodes(user.id) };
+      },
+      options,
+    ),
+
+    route(
+      'sessionsList',
+      (context) => {
+        const session = authenticate(context);
+        return {
+          sessions: liveSessionsOf(session.userId).map((s) => toActiveSession(s, session.id)),
+        };
+      },
+      options,
+    ),
+
+    route(
+      'sessionRevoke',
+      (context) => {
+        const { session, user } = signedIn(context);
+        if (context.params.id === session.id) {
+          throw fail(400, 'VALIDATION_ERROR', 'Use Log out to end this session.');
+        }
+        requireStepUp(session, user);
+        const target = liveSessionsOf(user.id).find((s) => s.id === context.params.id);
+        if (!target) throw fail(404, 'NOT_FOUND', 'That session has already ended.');
+        target.revoked = true;
+        return { ok: true as const };
+      },
+      options,
+    ),
+
+    route(
+      'sessionsRevokeOthers',
+      (context) => {
+        const { session, user } = signedIn(context);
+        requireStepUp(session, user);
+        const others = liveSessionsOf(user.id).filter((s) => s.id !== session.id);
+        for (const other of others) other.revoked = true;
+        return { revoked: others.length };
       },
       options,
     ),
