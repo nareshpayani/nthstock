@@ -1,4 +1,4 @@
-import { DEV_CAPTCHA_TOKEN, type OtpPurpose, type Session } from '@nthstock/contracts';
+import { DEV_CAPTCHA_TOKEN, type LoginOtpPurpose, type Session } from '@nthstock/contracts';
 import { Button, Field, OtpInput } from '@nthstock/ui';
 import { useId, useState, type FormEvent } from 'react';
 import { useRequestOtp, useVerifyOtp } from '../hooks/useAuthMutations';
@@ -10,11 +10,13 @@ import { AuthCard } from './AuthCard';
 import type { OtpSent } from './MobileStep';
 
 export type OtpStepProps = {
-  purpose: OtpPurpose;
+  purpose: LoginOtpPurpose;
   sent: OtpSent;
   /** The dev OTP to show in mock mode, or null. */
   devOtp: string | null;
   onVerified: (session: Session) => void;
+  /** Two-factor is on: the OTP was right, and the code step finishes the login. */
+  onTotpRequired: (challengeId: string) => void;
   onChangeNumber: () => void;
 };
 
@@ -31,7 +33,14 @@ const challengeOf = (requestId: string, resendAfterSec: number): Challenge => ({
  * its countdown ends, "Change number", and the OTP error states (wrong, burnt, expired, CAPTCHA).
  * One field with auto-submit, so plain state rather than a React Hook Form form.
  */
-export function OtpStep({ purpose, sent, devOtp, onVerified, onChangeNumber }: OtpStepProps) {
+export function OtpStep({
+  purpose,
+  sent,
+  devOtp,
+  onVerified,
+  onTotpRequired,
+  onChangeNumber,
+}: OtpStepProps) {
   const verifyOtp = useVerifyOtp();
   const requestOtp = useRequestOtp();
   const [challenge, setChallenge] = useState(() =>
@@ -73,6 +82,10 @@ export function OtpStep({ purpose, sent, devOtp, onVerified, onChangeNumber }: O
       onVerified(session);
     } catch (failure) {
       const { code: errorCode, details } = authFailure(failure);
+      if (errorCode === 'TOTP_REQUIRED' && details.challengeId) {
+        onTotpRequired(details.challengeId);
+        return;
+      }
       if (details.captchaRequired) setCaptchaNeeded(true);
       if (errorCode === 'OTP_INVALID' && details.attemptsLeft === 0) {
         setBurnt(true);

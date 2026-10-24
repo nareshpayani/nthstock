@@ -13,12 +13,19 @@ export type Otp = z.infer<typeof Otp>;
 export const Pin = z.string().regex(/^\d{4,6}$/, { error: 'PIN must be 4 to 6 digits' });
 export type Pin = z.infer<typeof Pin>;
 
-export const OtpPurpose = z.enum(['LOGIN', 'UNLOCK_PIN']);
+/**
+ * What an OTP is for. `STEP_UP` re-confirms a signed-in user before a sensitive action; it is
+ * requested with `stepUpOtpRequest`, which sends it to the session's own mobile.
+ */
+export const OtpPurpose = z.enum(['LOGIN', 'UNLOCK_PIN', 'STEP_UP']);
 export type OtpPurpose = z.infer<typeof OtpPurpose>;
+/** The purposes the public OTP request takes (`OtpRequest`). */
+export type LoginOtpPurpose = Exclude<OtpPurpose, 'STEP_UP'>;
 
 export const OtpRequest = z.object({
   mobile: Mobile,
-  purpose: OtpPurpose.default('LOGIN'),
+  // A step-up OTP goes only to the signed-in user's own mobile (`stepUpOtpRequest`).
+  purpose: OtpPurpose.exclude(['STEP_UP']).default('LOGIN'),
 });
 export type OtpRequest = z.infer<typeof OtpRequest>;
 
@@ -134,6 +141,10 @@ export const AuthErrorDetails = z.object({
   attemptsLeft: z.number().int().min(0).optional(),
   retryAfterSec: z.number().int().min(0).optional(),
   unlockWith: z.literal('OTP').optional(),
+  /** TOTP_REQUIRED: the login challenge to send back to `totpVerify` with a code. */
+  challengeId: Id.optional(),
+  /** STEP_UP_REQUIRED: whether the step-up must also carry a TOTP code. */
+  totpRequired: z.boolean().optional(),
 });
 export type AuthErrorDetails = z.infer<typeof AuthErrorDetails>;
 
@@ -179,3 +190,90 @@ export type AccessTokenClaims = z.infer<typeof AccessTokenClaims>;
 export const PIN_MAX_FAILURES = 5;
 /** How long a device stays trusted for PIN login. */
 export const TRUSTED_DEVICE_TTL_SEC = 180 * 24 * 60 * 60;
+
+// ---- Step-up re-authentication (NSTOCK-0212, spec backend-core §7.3) -------------------------
+
+/** How long a step-up lasts: sensitive actions within this window need no new proof. */
+export const STEP_UP_WINDOW_SEC = 10 * 60;
+
+/** A code from an authenticator app. */
+export const TotpCode = z.string().regex(/^\d{6}$/, { error: 'Enter the 6-digit code' });
+export type TotpCode = z.infer<typeof TotpCode>;
+
+/**
+ * A recovery code: 16 base32 characters, shown in groups of four (`ABCD-EFGH-JKLM-NPQR`). Case,
+ * spaces and dashes are ignored, so the user can type it any way they read it.
+ */
+export const RecoveryCode = z
+  .string()
+  .transform((value) => value.toUpperCase().replace(/[\s-]/g, ''))
+  .pipe(z.string().regex(/^[A-Z2-7]{16}$/, { error: 'Enter a 16-character recovery code' }));
+export type RecoveryCode = z.infer<typeof RecoveryCode>;
+
+/**
+ * Proof for a step-up: the PIN, or a `STEP_UP` OTP; plus a TOTP code when the user has two-factor
+ * on (`AuthErrorDetails.totpRequired`).
+ */
+export const StepUpRequest = z
+  .object({
+    pin: Pin.optional(),
+    requestId: Id.optional(),
+    otp: Otp.optional(),
+    totpCode: TotpCode.optional(),
+  })
+  .refine((v) => (v.pin !== undefined) !== (v.requestId !== undefined && v.otp !== undefined), {
+    error: 'Send either the PIN or the OTP',
+  });
+export type StepUpRequest = z.infer<typeof StepUpRequest>;
+
+export const StepUpResponse = z.object({ steppedUpUntil: IsoUtc });
+export type StepUpResponse = z.infer<typeof StepUpResponse>;
+
+// ---- TOTP two-factor (NSTOCK-0212, spec backend-core §7.4) ------------------------------------
+
+/** The issuer authenticator apps show. */
+export const TOTP_ISSUER = 'nthstock';
+/** Seconds a pending enrolment can be confirmed. */
+export const TOTP_ENROL_TTL_SEC = 10 * 60;
+/** Seconds the login challenge after a PIN or OTP lives, waiting for the code. */
+export const TOTP_CHALLENGE_TTL_SEC = 5 * 60;
+/** Wrong codes after which the login challenge ends and the user starts again. */
+export const TOTP_MAX_FAILURES = 5;
+/** Recovery codes issued at a time, each usable once. */
+export const TOTP_RECOVERY_CODE_COUNT = 10;
+
+export const TotpEnrolResponse = z.object({
+  /** The base32 secret, for typing into an app that cannot scan. */
+  setupKey: z.string().regex(/^[A-Z2-7]{32}$/),
+  /** `otpauth://totp/nthstock:******3210?…`; the QR code encodes it. */
+  otpauthUri: z.string().startsWith('otpauth://totp/'),
+  expiresAt: IsoUtc,
+});
+export type TotpEnrolResponse = z.infer<typeof TotpEnrolResponse>;
+
+export const TotpCodeRequest = z.object({ code: TotpCode });
+export type TotpCodeRequest = z.infer<typeof TotpCodeRequest>;
+
+/** A current code or, when the phone is lost, one recovery code. */
+export const TotpCodeOrRecoveryRequest = z
+  .object({ code: TotpCode.optional(), recoveryCode: RecoveryCode.optional() })
+  .refine((v) => (v.code === undefined) !== (v.recoveryCode === undefined), {
+    error: 'Send a code or a recovery code',
+  });
+export type TotpCodeOrRecoveryRequest = z.infer<typeof TotpCodeOrRecoveryRequest>;
+
+/** Recovery codes in display form (`ABCD-EFGH-JKLM-NPQR`). Shown once; only hashes are kept. */
+export const TotpRecoveryCodesResponse = z.object({
+  codes: z
+    .array(z.string().regex(/^[A-Z2-7]{4}(-[A-Z2-7]{4}){3}$/))
+    .length(TOTP_RECOVERY_CODE_COUNT),
+});
+export type TotpRecoveryCodesResponse = z.infer<typeof TotpRecoveryCodesResponse>;
+
+/** The login step after a PIN or OTP for a user with two-factor on. */
+export const TotpVerifyRequest = z
+  .object({ challengeId: Id, code: TotpCode.optional(), recoveryCode: RecoveryCode.optional() })
+  .refine((v) => (v.code === undefined) !== (v.recoveryCode === undefined), {
+    error: 'Send a code or a recovery code',
+  });
+export type TotpVerifyRequest = z.infer<typeof TotpVerifyRequest>;

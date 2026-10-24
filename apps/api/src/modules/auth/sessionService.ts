@@ -52,7 +52,7 @@ export type AuthContext = {
 };
 
 /** How the user proved who they are; recorded on LOGIN_SUCCESS. */
-export type LoginMethod = 'OTP' | 'PIN';
+export type LoginMethod = 'OTP' | 'PIN' | 'TOTP';
 
 export type StartSessionInput = {
   user: UserRecord;
@@ -152,6 +152,7 @@ export function createSessionService({
         lastSeenAt: now,
         expiresAt: new Date(now.getTime() + REFRESH_TOKEN_TTL_SEC * 1000),
         revokedAt: null,
+        steppedUpAt: null,
         revokedReason: null,
       };
       await repo.createSession(session);

@@ -13,6 +13,7 @@ import { manualClock } from '../../test/manualClock.js';
 import { describeWithPostgresAndRedis } from '../../test/postgresRedisApp.js';
 import { createPgAuthRepo } from './pgRepo.js';
 import { createMemoryOtpStore } from './repo.js';
+import { createPiiCrypto, devPiiKeys } from '../../db/crypto.js';
 
 // The session-revocation cache and event (T-194): two apps/api instances sharing Redis and
 // Postgres, as behind a load balancer.
@@ -84,6 +85,7 @@ describeWithPostgresAndRedis(
       const counted = createPgAuthRepo({
         database: database(),
         clock,
+        pii: createPiiCrypto(devPiiKeys()),
         otp: createMemoryOtpStore(),
       });
       const b = app({

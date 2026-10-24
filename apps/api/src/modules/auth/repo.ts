@@ -11,6 +11,37 @@ export type OtpChallenge = {
   expiresAt: Date;
 };
 
+/**
+ * A login waiting for its TOTP code (NSTOCK-0216): the PIN or OTP was right, the user has
+ * two-factor on. It lives `TOTP_CHALLENGE_TTL_SEC` and dies after `TOTP_MAX_FAILURES` wrong codes.
+ */
+export type TotpChallenge = {
+  challengeId: string;
+  userId: string;
+  /** How the first factor was proved (the session's LOGIN_SUCCESS records `TOTP` after it). */
+  method: 'OTP' | 'PIN';
+  /** The trusted device the first factor came from, kept for the session. */
+  deviceId: string | null;
+  failures: number;
+  createdAt: Date;
+  expiresAt: Date;
+};
+
+/** A user's TOTP factor (NSTOCK-0215): `PENDING` from enrol until a code confirms it. */
+export type TotpFactorRecord = {
+  userId: string;
+  /** The raw 20-byte secret; Postgres stores it encrypted (`db/crypto.ts`). */
+  secret: Uint8Array;
+  status: 'PENDING' | 'ACTIVE';
+  /** The last TOTP step accepted; a code for this step or an earlier one is a replay. */
+  lastUsedStep: number;
+  createdAt: Date;
+  confirmedAt: Date | null;
+};
+
+/** One unused recovery code: an Argon2id hash, never the code. */
+export type RecoveryCodeRecord = { id: string; hash: string };
+
 /** A device a user logged in from. */
 export type DeviceRecord = {
   id: string;
@@ -54,6 +85,8 @@ export type SessionRecord = {
   /** Last authenticated request or refresh, written at most about once a minute. */
   lastSeenAt: Date;
   expiresAt: Date;
+  /** The last step-up re-authentication (spec backend-core §7.3), or null. */
+  steppedUpAt: Date | null;
   revokedAt: Date | null;
   /** Set together with `revokedAt`. */
   revokedReason: SessionRevokedReason | null;
@@ -97,6 +130,13 @@ export interface AuthRepo {
   getLastOtpRequestAt(mobile: string): Promise<Date | null>;
   setLastOtpRequestAt(mobile: string, at: Date): Promise<void>;
 
+  putTotpChallenge(challenge: TotpChallenge): Promise<void>;
+  getTotpChallenge(challengeId: string): Promise<TotpChallenge | null>;
+  /** Adds one wrong code; resolves to the new count, or null when the challenge is gone. */
+  recordTotpFailure(challengeId: string): Promise<number | null>;
+  /** Removes the challenge; resolves true when this call removed it (one login per challenge). */
+  consumeTotpChallenge(challengeId: string): Promise<boolean>;
+
   createDevice(device: DeviceRecord): Promise<void>;
   getDevice(id: string): Promise<DeviceRecord | null>;
   updateDevice(
@@ -115,6 +155,30 @@ export interface AuthRepo {
   /** Clears the wrong-attempt count, which also lifts the lock. */
   clearPinFailures(userId: string): Promise<void>;
 
+  getTotpFactor(userId: string): Promise<TotpFactorRecord | null>;
+  /** Stores a new PENDING factor, replacing a pending one; resolves false if one is ACTIVE. */
+  putPendingTotpFactor(factor: TotpFactorRecord): Promise<boolean>;
+  /**
+   * PENDING → ACTIVE with the confirming code's step and new recovery codes, in one step;
+   * resolves false when there was no pending factor.
+   */
+  activateTotpFactor(
+    userId: string,
+    input: { at: Date; step: number; recoveryCodeHashes: readonly string[] },
+  ): Promise<boolean>;
+  /** Deletes the factor and every recovery code. */
+  deleteTotpFactor(userId: string): Promise<void>;
+  /**
+   * Accepts `step` for the active factor only if it is after the last one accepted, in one
+   * conditional write, so a code replayed (even concurrently) is accepted once.
+   */
+  useTotpStep(userId: string, step: number): Promise<boolean>;
+  listRecoveryCodes(userId: string): Promise<RecoveryCodeRecord[]>;
+  /** Marks a recovery code used; resolves true for the one caller that did. */
+  useRecoveryCode(userId: string, id: string, at: Date): Promise<boolean>;
+  /** Replaces every unused recovery code. */
+  replaceRecoveryCodes(userId: string, hashes: readonly string[]): Promise<void>;
+
   createSession(session: SessionRecord): Promise<void>;
   getSession(id: string): Promise<SessionRecord | null>;
   /**
@@ -127,6 +191,8 @@ export interface AuthRepo {
    * conditional write, so instances racing on one session write it once.
    */
   touchSession(id: string, at: Date, staleBefore: Date): Promise<void>;
+  /** Records a step-up on the session. */
+  stepUpSession(id: string, at: Date): Promise<void>;
 
   /** `hash` is the SHA-256 of the token in hex. */
   putRefreshToken(hash: string, token: RefreshTokenRecord): Promise<void>;
@@ -150,6 +216,10 @@ export type OtpStore = Pick<
   | 'consumeOtpChallenge'
   | 'getLastOtpRequestAt'
   | 'setLastOtpRequestAt'
+  | 'putTotpChallenge'
+  | 'getTotpChallenge'
+  | 'recordTotpFailure'
+  | 'consumeTotpChallenge'
 > &
   Resettable;
 
@@ -164,6 +234,14 @@ export type DeviceStore = Pick<
   | 'getPin'
   | 'recordPinFailure'
   | 'clearPinFailures'
+  | 'getTotpFactor'
+  | 'putPendingTotpFactor'
+  | 'activateTotpFactor'
+  | 'deleteTotpFactor'
+  | 'useTotpStep'
+  | 'listRecoveryCodes'
+  | 'useRecoveryCode'
+  | 'replaceRecoveryCodes'
 > &
   Resettable;
 
@@ -173,6 +251,7 @@ export type SessionStore = Pick<
   | 'getSession'
   | 'revokeSession'
   | 'touchSession'
+  | 'stepUpSession'
   | 'putRefreshToken'
   | 'useRefreshToken'
 > &
@@ -192,6 +271,10 @@ export function composeAuthRepo(stores: {
     consumeOtpChallenge: (mobile, requestId) => otp.consumeOtpChallenge(mobile, requestId),
     getLastOtpRequestAt: (mobile) => otp.getLastOtpRequestAt(mobile),
     setLastOtpRequestAt: (mobile, at) => otp.setLastOtpRequestAt(mobile, at),
+    putTotpChallenge: (challenge) => otp.putTotpChallenge(challenge),
+    getTotpChallenge: (id) => otp.getTotpChallenge(id),
+    recordTotpFailure: (id) => otp.recordTotpFailure(id),
+    consumeTotpChallenge: (id) => otp.consumeTotpChallenge(id),
     createDevice: (device) => devices.createDevice(device),
     getDevice: (id) => devices.getDevice(id),
     updateDevice: (id, patch) => devices.updateDevice(id, patch),
@@ -201,10 +284,19 @@ export function composeAuthRepo(stores: {
     getPin: (userId) => devices.getPin(userId),
     recordPinFailure: (userId) => devices.recordPinFailure(userId),
     clearPinFailures: (userId) => devices.clearPinFailures(userId),
+    getTotpFactor: (userId) => devices.getTotpFactor(userId),
+    putPendingTotpFactor: (factor) => devices.putPendingTotpFactor(factor),
+    activateTotpFactor: (userId, input) => devices.activateTotpFactor(userId, input),
+    deleteTotpFactor: (userId) => devices.deleteTotpFactor(userId),
+    useTotpStep: (userId, step) => devices.useTotpStep(userId, step),
+    listRecoveryCodes: (userId) => devices.listRecoveryCodes(userId),
+    useRecoveryCode: (userId, id, at) => devices.useRecoveryCode(userId, id, at),
+    replaceRecoveryCodes: (userId, hashes) => devices.replaceRecoveryCodes(userId, hashes),
     createSession: (session) => sessions.createSession(session),
     getSession: (id) => sessions.getSession(id),
     revokeSession: (id, at, reason) => sessions.revokeSession(id, at, reason),
     touchSession: (id, at, staleBefore) => sessions.touchSession(id, at, staleBefore),
+    stepUpSession: (id, at) => sessions.stepUpSession(id, at),
     putRefreshToken: (hash, token) => sessions.putRefreshToken(hash, token),
     useRefreshToken: (hash, at) => sessions.useRefreshToken(hash, at),
     reset: async () => {
@@ -230,7 +322,21 @@ const copySession = (s: SessionRecord): SessionRecord => ({
   createdAt: new Date(s.createdAt),
   lastSeenAt: new Date(s.lastSeenAt),
   expiresAt: new Date(s.expiresAt),
+  steppedUpAt: s.steppedUpAt ? new Date(s.steppedUpAt) : null,
   revokedAt: s.revokedAt ? new Date(s.revokedAt) : null,
+});
+
+const copyTotpChallenge = (c: TotpChallenge): TotpChallenge => ({
+  ...c,
+  createdAt: new Date(c.createdAt),
+  expiresAt: new Date(c.expiresAt),
+});
+
+const copyFactor = (f: TotpFactorRecord): TotpFactorRecord => ({
+  ...f,
+  secret: Uint8Array.from(f.secret),
+  createdAt: new Date(f.createdAt),
+  confirmedAt: f.confirmedAt ? new Date(f.confirmedAt) : null,
 });
 
 const copyRefresh = (r: RefreshTokenRecord): RefreshTokenRecord => ({
@@ -242,7 +348,23 @@ const copyRefresh = (r: RefreshTokenRecord): RefreshTokenRecord => ({
 export function createMemoryOtpStore(): OtpStore {
   const challenges = new Map<string, OtpChallenge>();
   const lastRequest = new Map<string, Date>();
+  const totpChallenges = new Map<string, TotpChallenge>();
   return {
+    putTotpChallenge: (challenge) => {
+      totpChallenges.set(challenge.challengeId, copyTotpChallenge(challenge));
+      return Promise.resolve();
+    },
+    getTotpChallenge: (id) => {
+      const found = totpChallenges.get(id);
+      return Promise.resolve(found ? copyTotpChallenge(found) : null);
+    },
+    recordTotpFailure: (id) => {
+      const found = totpChallenges.get(id);
+      if (!found) return Promise.resolve(null);
+      found.failures += 1;
+      return Promise.resolve(found.failures);
+    },
+    consumeTotpChallenge: (id) => Promise.resolve(totpChallenges.delete(id)),
     putOtpChallenge: (challenge) => {
       challenges.set(challenge.mobile, copyChallenge(challenge));
       return Promise.resolve();
@@ -274,6 +396,7 @@ export function createMemoryOtpStore(): OtpStore {
     reset: () => {
       challenges.clear();
       lastRequest.clear();
+      totpChallenges.clear();
       return Promise.resolve();
     },
   };
@@ -283,7 +406,60 @@ export function createMemoryDeviceStore(): DeviceStore {
   const devices = new Map<string, DeviceRecord>();
   const deviceTokens = new Map<string, DeviceTokenRecord>();
   const pins = new Map<string, PinRecord>();
+  const factors = new Map<string, TotpFactorRecord>();
+  const recoveryCodes = new Map<string, RecoveryCodeRecord[]>();
+  let recoveryCodeSeq = 0;
+  const newRecoveryCodes = (hashes: readonly string[]) =>
+    hashes.map((hash) => {
+      recoveryCodeSeq += 1;
+      return { id: String(recoveryCodeSeq), hash };
+    });
   return {
+    getTotpFactor: (userId) => {
+      const found = factors.get(userId);
+      return Promise.resolve(found ? copyFactor(found) : null);
+    },
+    putPendingTotpFactor: (factor) => {
+      if (factors.get(factor.userId)?.status === 'ACTIVE') return Promise.resolve(false);
+      factors.set(factor.userId, copyFactor({ ...factor, status: 'PENDING' }));
+      return Promise.resolve(true);
+    },
+    activateTotpFactor: (userId, { at, step, recoveryCodeHashes }) => {
+      const found = factors.get(userId);
+      if (found?.status !== 'PENDING') return Promise.resolve(false);
+      factors.set(userId, {
+        ...found,
+        status: 'ACTIVE',
+        lastUsedStep: step,
+        confirmedAt: new Date(at),
+      });
+      recoveryCodes.set(userId, newRecoveryCodes(recoveryCodeHashes));
+      return Promise.resolve(true);
+    },
+    deleteTotpFactor: (userId) => {
+      factors.delete(userId);
+      recoveryCodes.delete(userId);
+      return Promise.resolve();
+    },
+    useTotpStep: (userId, step) => {
+      const found = factors.get(userId);
+      if (found?.status !== 'ACTIVE' || step <= found.lastUsedStep) return Promise.resolve(false);
+      found.lastUsedStep = step;
+      return Promise.resolve(true);
+    },
+    listRecoveryCodes: (userId) =>
+      Promise.resolve((recoveryCodes.get(userId) ?? []).map((code) => ({ ...code }))),
+    useRecoveryCode: (userId, id) => {
+      const codes = recoveryCodes.get(userId) ?? [];
+      const index = codes.findIndex((code) => code.id === id);
+      if (index < 0) return Promise.resolve(false);
+      codes.splice(index, 1);
+      return Promise.resolve(true);
+    },
+    replaceRecoveryCodes: (userId, hashes) => {
+      recoveryCodes.set(userId, newRecoveryCodes(hashes));
+      return Promise.resolve();
+    },
     createDevice: (device) => {
       devices.set(device.id, copyDevice(device));
       return Promise.resolve();
@@ -333,6 +509,8 @@ export function createMemoryDeviceStore(): DeviceStore {
       devices.clear();
       deviceTokens.clear();
       pins.clear();
+      factors.clear();
+      recoveryCodes.clear();
       return Promise.resolve();
     },
   };
@@ -361,6 +539,11 @@ export function createMemorySessionStore(): SessionStore {
     touchSession: (id, at, staleBefore) => {
       const found = sessions.get(id);
       if (found && found.lastSeenAt <= staleBefore) found.lastSeenAt = new Date(at);
+      return Promise.resolve();
+    },
+    stepUpSession: (id, at) => {
+      const found = sessions.get(id);
+      if (found) found.steppedUpAt = new Date(at);
       return Promise.resolve();
     },
     putRefreshToken: (hash, token) => {

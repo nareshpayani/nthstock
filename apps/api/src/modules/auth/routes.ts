@@ -1,5 +1,6 @@
 import { AUTH_COOKIES } from '@nthstock/contracts';
 import type { FastifyPluginAsync, FastifyReply } from 'fastify';
+import { ApiHttpError } from '../../http/apiError.js';
 import type { AppDeps } from '../../deps.js';
 import { registerRoute } from '../../http/registerRoute.js';
 import { authContextOf, createAuthenticate } from './authenticate.js';
@@ -13,6 +14,7 @@ import {
 } from './sessionCookies.js';
 import { authRateLimit } from './rateLimits.js';
 import { createSessionService, sessionEnded, type IssuedSession } from './sessionService.js';
+import { createTwoFactorService } from './twoFactorService.js';
 import { toCurrentSession, toDevice, toSession } from './views.js';
 import { DuplicateMobileError, type UserRecord, type UsersRepo } from '../users/index.js';
 
@@ -59,6 +61,16 @@ export const authRoutes =
       hasher: deps.pinHasher,
       audit: deps.repos.audit,
     });
+    const twoFactor = createTwoFactorService({
+      clock: deps.clock,
+      repo: deps.repos.auth,
+      users: deps.repos.users,
+      audit: deps.repos.audit,
+      otp,
+      pins,
+      sessions,
+      hasher: deps.pinHasher,
+    });
     const secure = deps.production;
 
     const answer = (reply: FastifyReply, issued: IssuedSession) => {
@@ -72,16 +84,23 @@ export const authRoutes =
       app,
       'otpVerify',
       async ({ body, request, reply }) => {
-        const { mobile } = await otp.verify(body);
+        const { mobile, purpose } = await otp.verify(body);
+        // A step-up OTP only ever confirms a signed-in user (`stepUp`); it never logs anyone in.
+        if (purpose === 'STEP_UP') {
+          throw new ApiHttpError(400, 'OTP_EXPIRED', 'This OTP has expired. Request a new one.');
+        }
         const user = await findOrCreateUser(deps.repos.users, mobile);
+        const trusted = await pins.trustedDevice(requestCookies(request)[AUTH_COOKIES.device]);
+        const deviceId = trusted?.userId === user.id ? trusted.id : null;
+        // Two-factor on: 401 TOTP_REQUIRED with a challenge; the code step finishes the login.
+        await twoFactor.requireCodeIfEnabled(user, 'OTP', deviceId);
         // A verified OTP proves the owner: it lifts a PIN lock, and a trusted device stays trusted.
         await pins.unlock(user.id);
-        const trusted = await pins.trustedDevice(requestCookies(request)[AUTH_COOKIES.device]);
         const issued = await sessions.start({
           user,
           method: 'OTP',
           userAgent: request.headers['user-agent'],
-          deviceId: trusted?.userId === user.id ? trusted.id : null,
+          deviceId,
         });
         return answer(reply, issued);
       },
@@ -103,14 +122,76 @@ export const authRoutes =
       app,
       'pinVerify',
       async ({ body, request, reply }) => {
-        const issued = await pins.verify({
+        const { user, device } = await pins.check({
           deviceToken: requestCookies(request)[AUTH_COOKIES.device],
           pin: body.pin,
+        });
+        await twoFactor.requireCodeIfEnabled(user, 'PIN', device.id);
+        const issued = await sessions.start({
+          user,
+          method: 'PIN',
           userAgent: request.headers['user-agent'],
+          deviceId: device.id,
         });
         return answer(reply, issued);
       },
       authRateLimit('pinVerify'),
+    );
+
+    // ---- Step-up and two-factor (NSTOCK-0214 to NSTOCK-0216) --------------------------------
+
+    registerRoute(
+      app,
+      'totpVerify',
+      async ({ body, request, reply }) =>
+        answer(reply, await twoFactor.verifyLogin(body, request.headers['user-agent'])),
+      authRateLimit('totpVerify'),
+    );
+
+    registerRoute(
+      app,
+      'stepUpOtpRequest',
+      ({ request }) => twoFactor.requestStepUpOtp(authContextOf(request)),
+      { authenticate, ...authRateLimit('otpRequest') },
+    );
+
+    registerRoute(
+      app,
+      'stepUp',
+      ({ body, request }) => twoFactor.stepUp(authContextOf(request), body),
+      { authenticate, ...authRateLimit('stepUp') },
+    );
+
+    registerRoute(app, 'totpEnrol', ({ request }) => twoFactor.enrol(authContextOf(request)), {
+      authenticate,
+    });
+
+    registerRoute(
+      app,
+      'totpEnrolConfirm',
+      async ({ body, request }) => ({
+        codes: await twoFactor.confirm(authContextOf(request), body.code),
+      }),
+      { authenticate, ...authRateLimit('stepUp') },
+    );
+
+    registerRoute(
+      app,
+      'totpDisable',
+      async ({ body, request }) => {
+        await twoFactor.disable(authContextOf(request), body);
+        return { ok: true as const };
+      },
+      { authenticate, ...authRateLimit('stepUp') },
+    );
+
+    registerRoute(
+      app,
+      'totpRecoveryCodes',
+      async ({ body, request }) => ({
+        codes: await twoFactor.regenerateRecoveryCodes(authContextOf(request), body.code),
+      }),
+      { authenticate, ...authRateLimit('stepUp') },
     );
 
     registerRoute(

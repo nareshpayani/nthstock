@@ -1,5 +1,5 @@
 import { zodResolver } from '@hookform/resolvers/zod';
-import { Mobile, type OtpPurpose, type OtpRequestResponse } from '@nthstock/contracts';
+import { Mobile, type LoginOtpPurpose, type OtpRequestResponse } from '@nthstock/contracts';
 import { Button, Field, Input } from '@nthstock/ui';
 import { useId } from 'react';
 import { useForm } from 'react-hook-form';
@@ -19,7 +19,7 @@ const mobileForm = z.object({
 export type OtpSent = OtpRequestResponse & { mobile: string };
 
 export type MobileStepProps = {
-  purpose: OtpPurpose;
+  purpose: LoginOtpPurpose;
   /** Shown above the form, e.g. why PIN login is no longer offered. */
   notice?: string | undefined;
   defaultMobile?: string | undefined;

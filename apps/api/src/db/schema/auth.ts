@@ -1,5 +1,14 @@
 import { sql } from 'drizzle-orm';
-import { boolean, check, index, pgTable, smallint, text } from 'drizzle-orm/pg-core';
+import {
+  bigint,
+  bigserial,
+  boolean,
+  check,
+  index,
+  pgTable,
+  smallint,
+  text,
+} from 'drizzle-orm/pg-core';
 import { SESSION_REVOKED_REASONS } from '../../modules/auth/repo.js';
 import { bytea, instant, sqlList } from './columns.js';
 import { users } from './users.js';
@@ -123,4 +132,50 @@ export const refreshTokens = pgTable(
     index('refresh_tokens_expires_at_idx').on(table.expiresAt),
     check('refresh_tokens_token_hash_check', sql`octet_length(${table.tokenHash}) = 32`),
   ],
+);
+
+/** `TotpFactorRecord.status`; repeated here for the CHECK. */
+export const TOTP_FACTOR_STATUSES = ['PENDING', 'ACTIVE'] as const;
+
+/**
+ * TOTP factors (NSTOCK-0215, spec backend-core §7.4): at most one per user, `PENDING` from enrol
+ * until a code confirms it. The secret is AES-256-GCM ciphertext (`db/crypto.ts`), never plain.
+ * `last_used_step` only moves forward, in one conditional `UPDATE`, which refuses a replayed code.
+ */
+export const totpFactors = pgTable(
+  'totp_factors',
+  {
+    userId: text('user_id')
+      .primaryKey()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    secretEnc: bytea('secret_enc').notNull(),
+    status: text('status').notNull(),
+    lastUsedStep: bigint('last_used_step', { mode: 'number' }).notNull().default(0),
+    createdAt: instant('created_at').notNull(),
+    confirmedAt: instant('confirmed_at'),
+  },
+  (table) => [
+    check('totp_factors_status_check', sql`${table.status} IN (${sqlList(TOTP_FACTOR_STATUSES)})`),
+    check(
+      'totp_factors_confirmed_check',
+      sql`(${table.status} = 'ACTIVE') = (${table.confirmedAt} IS NOT NULL)`,
+    ),
+  ],
+);
+
+/**
+ * Recovery codes (NSTOCK-0215): Argon2id hashes of the codes shown once at confirm. A used code is
+ * deleted (not flagged), so only usable codes are ever read.
+ */
+export const totpRecoveryCodes = pgTable(
+  'totp_recovery_codes',
+  {
+    id: bigserial('id', { mode: 'number' }).primaryKey(),
+    userId: text('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    hash: text('hash').notNull(),
+    createdAt: instant('created_at').notNull(),
+  },
+  (table) => [index('totp_recovery_codes_user_id_idx').on(table.userId)],
 );

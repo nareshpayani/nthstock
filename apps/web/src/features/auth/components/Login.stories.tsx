@@ -6,6 +6,7 @@ import { LoginPage } from './LoginPage';
 import { OtpStep } from './OtpStep';
 import { PinEntryStep, PinLocked } from './PinEntryStep';
 import { PinSetupStep } from './PinSetupStep';
+import { TotpStep } from './TotpStep';
 
 /** The login card frame, as LoginPage draws it, for stories of a single step. */
 function Card({ children }: { children: ReactNode }) {
@@ -18,7 +19,7 @@ function Card({ children }: { children: ReactNode }) {
   );
 }
 
-type Step = 'mobile' | 'otp' | 'pinSetup' | 'pinEntry' | 'locked';
+type Step = 'mobile' | 'otp' | 'totp' | 'pinSetup' | 'pinEntry' | 'locked';
 
 const noop = () => undefined;
 
@@ -44,9 +45,13 @@ function Demo({ step }: { step: Step }) {
           }}
           devOtp={DEV_OTP}
           onVerified={noop}
+          onTotpRequired={noop}
           onChangeNumber={noop}
         />
       );
+      break;
+    case 'totp':
+      content = <TotpStep challengeId="tc_story" onVerified={noop} onRestart={noop} />;
       break;
     case 'pinSetup':
       content = <PinSetupStep onDone={noop} />;
@@ -56,6 +61,7 @@ function Demo({ step }: { step: Step }) {
         <PinEntryStep
           device={{ name: 'Asha Rao', mobileMasked: '******3210' }}
           onSuccess={noop}
+          onTotpRequired={noop}
           onLocked={noop}
           onUntrusted={noop}
           onUseOtp={noop}
@@ -87,6 +93,8 @@ type Story = StoryObj<typeof meta>;
 export const MobileNumber: Story = {};
 /** Six boxes, the dev OTP hint and the resend countdown (T-087). */
 export const Otp: Story = { args: { step: 'otp' } };
+/** Two-factor on: the authenticator code, or a recovery code instead (NSTOCK-0220). */
+export const TotpCode: Story = { args: { step: 'totp' } };
 /** First login: choose a 4-digit PIN for this browser (T-088). */
 export const PinSetup: Story = { args: { step: 'pinSetup' } };
 /** A trusted browser opens on PIN entry (T-088). */
