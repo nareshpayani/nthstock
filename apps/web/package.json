@@ -43,7 +43,7 @@
     "vitest": "5.0.2"
   },
   "dependencies": {
-    "@hookform/resolvers": "5.9.1",
+    "@hookform/resolvers": "6.0.0",
     "@nthstock/apiClient": "0.0.0",
     "@nthstock/contracts": "0.0.0",
     "@nthstock/marketData": "0.0.0",
