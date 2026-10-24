@@ -40,6 +40,7 @@ const session = (id: string, userId: string = 'usr_a', deviceId = 'dev_1'): Sess
   createdAt: at('2026-09-28T04:30:00.000Z'),
   lastSeenAt: at('2026-09-28T04:30:00.000Z'),
   expiresAt: at('2026-10-28T04:30:00.000Z'),
+  steppedUpAt: null,
   revokedAt: null,
   revokedReason: null,
 });
@@ -54,7 +55,12 @@ describeRepoConformance(
       for (const [index, id] of USERS.entries()) {
         await users.ensureSeeded({ ...DEMO_USER, id, mobile: `900000010${String(index)}` });
       }
-      return createPgAuthRepo({ database, clock, otp: createMemoryOtpStore() });
+      return createPgAuthRepo({
+        database,
+        clock,
+        pii: createPiiCrypto(devPiiKeys()),
+        otp: createMemoryOtpStore(),
+      });
     },
   },
   ({ driver, repo }) => {
@@ -293,6 +299,106 @@ describeRepoConformance(
       for (const result of results) {
         if (result?.usedAt) expect(result.usedAt).toEqual(firstUse);
       }
+    });
+
+    // ---- Step-up and TOTP (NSTOCK-0214, NSTOCK-0215) -----------------------------------------
+    it('records a step-up on the session', async () => {
+      await repo().createDevice(device('dev_1'));
+      await repo().createSession(session('ses_1'));
+      await repo().stepUpSession('ses_1', at('2026-09-28T05:00:00.000Z'));
+      expect((await repo().getSession('ses_1'))?.steppedUpAt).toEqual(
+        at('2026-09-28T05:00:00.000Z'),
+      );
+    });
+
+    const secret = Uint8Array.from({ length: 20 }, (_, i) => i + 1);
+    const pending = (userId: string = 'usr_a') => ({
+      userId,
+      secret,
+      status: 'PENDING' as const,
+      lastUsedStep: 0,
+      createdAt: at('2026-09-28T04:30:00.000Z'),
+      confirmedAt: null,
+    });
+
+    it('keeps a pending factor until a code activates it, with its recovery codes', async () => {
+      expect(await repo().getTotpFactor('usr_a')).toBeNull();
+      expect(await repo().putPendingTotpFactor(pending())).toBe(true);
+      expect(await repo().getTotpFactor('usr_a')).toEqual(pending());
+
+      expect(
+        await repo().activateTotpFactor('usr_a', {
+          at: at('2026-09-28T04:31:00.000Z'),
+          step: 100,
+          recoveryCodeHashes: ['h1', 'h2'],
+        }),
+      ).toBe(true);
+      expect(await repo().getTotpFactor('usr_a')).toEqual({
+        ...pending(),
+        status: 'ACTIVE',
+        lastUsedStep: 100,
+        confirmedAt: at('2026-09-28T04:31:00.000Z'),
+      });
+      expect((await repo().listRecoveryCodes('usr_a')).map((c) => c.hash).sort()).toEqual([
+        'h1',
+        'h2',
+      ]);
+      // Active: a new enrolment cannot replace it, and it cannot be activated twice.
+      expect(await repo().putPendingTotpFactor(pending())).toBe(false);
+      expect(
+        await repo().activateTotpFactor('usr_a', {
+          at: at('2026-09-28T04:32:00.000Z'),
+          step: 101,
+          recoveryCodeHashes: [],
+        }),
+      ).toBe(false);
+    });
+
+    it('accepts each TOTP step once, even when 10 uses race', async () => {
+      await repo().putPendingTotpFactor(pending());
+      await repo().activateTotpFactor('usr_a', {
+        at: at('2026-09-28T04:31:00.000Z'),
+        step: 100,
+        recoveryCodeHashes: [],
+      });
+      expect(await repo().useTotpStep('usr_a', 100)).toBe(false);
+      const results = await Promise.all(
+        Array.from({ length: 10 }, () => repo().useTotpStep('usr_a', 101)),
+      );
+      expect(results.filter(Boolean)).toHaveLength(1);
+      expect(await repo().useTotpStep('usr_a', 100)).toBe(false);
+      expect(await repo().useTotpStep('usr_b', 200)).toBe(false);
+    });
+
+    it('uses a recovery code once, replaces them, and deletes them with the factor', async () => {
+      await repo().putPendingTotpFactor(pending());
+      await repo().activateTotpFactor('usr_a', {
+        at: at('2026-09-28T04:31:00.000Z'),
+        step: 100,
+        recoveryCodeHashes: ['h1', 'h2'],
+      });
+      const [first] = await repo().listRecoveryCodes('usr_a');
+      if (!first) throw new Error('no recovery codes');
+      const uses = await Promise.all([
+        repo().useRecoveryCode('usr_a', first.id, at('2026-09-28T05:00:00.000Z')),
+        repo().useRecoveryCode('usr_a', first.id, at('2026-09-28T05:00:00.000Z')),
+      ]);
+      expect(uses.filter(Boolean)).toHaveLength(1);
+      expect(await repo().useRecoveryCode('usr_b', first.id, at('2026-09-28T05:00:00.000Z'))).toBe(
+        false,
+      );
+      expect(await repo().listRecoveryCodes('usr_a')).toHaveLength(1);
+
+      await repo().replaceRecoveryCodes('usr_a', ['h3', 'h4', 'h5']);
+      expect((await repo().listRecoveryCodes('usr_a')).map((c) => c.hash).sort()).toEqual([
+        'h3',
+        'h4',
+        'h5',
+      ]);
+
+      await repo().deleteTotpFactor('usr_a');
+      expect(await repo().getTotpFactor('usr_a')).toBeNull();
+      expect(await repo().listRecoveryCodes('usr_a')).toEqual([]);
     });
 
     if (driver === 'postgres') {

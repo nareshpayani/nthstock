@@ -85,6 +85,13 @@
       "when": 1791535477287,
       "tag": "0011_orders_partitioned",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1792869128932,
+      "tag": "0012_totp_and_step_up",
+      "breakpoints": true
     }
   ]
 }

@@ -21,6 +21,7 @@ import { Route as AppAuthedOrdersRouteImport } from './routes/_app/_authed/order
 import { Route as AppAuthedPortfolioRouteImport } from './routes/_app/_authed/portfolio'
 import { Route as AppAuthedPositionsRouteImport } from './routes/_app/_authed/positions'
 import { Route as AppStocksSymbolRouteImport } from './routes/_app/stocks/$symbol'
+import { Route as AppAuthedSettingsSecurityRouteImport } from './routes/_app/_authed/settings/security'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -80,6 +81,12 @@ const AppStocksSymbolRoute = AppStocksSymbolRouteImport.update({
   path: '/stocks/$symbol',
   getParentRoute: () => AppRoute,
 } as any)
+const AppAuthedSettingsSecurityRoute =
+  AppAuthedSettingsSecurityRouteImport.update({
+    id: '/settings/security',
+    path: '/settings/security',
+    getParentRoute: () => AppAuthedRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -92,6 +99,7 @@ export interface FileRoutesByFullPath {
   '/portfolio': typeof AppAuthedPortfolioRoute
   '/positions': typeof AppAuthedPositionsRoute
   '/stocks/$symbol': typeof AppStocksSymbolRoute
+  '/settings/security': typeof AppAuthedSettingsSecurityRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -104,6 +112,7 @@ export interface FileRoutesByTo {
   '/portfolio': typeof AppAuthedPortfolioRoute
   '/positions': typeof AppAuthedPositionsRoute
   '/stocks/$symbol': typeof AppStocksSymbolRoute
+  '/settings/security': typeof AppAuthedSettingsSecurityRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -119,6 +128,7 @@ export interface FileRoutesById {
   '/_app/_authed/portfolio': typeof AppAuthedPortfolioRoute
   '/_app/_authed/positions': typeof AppAuthedPositionsRoute
   '/_app/stocks/$symbol': typeof AppStocksSymbolRoute
+  '/_app/_authed/settings/security': typeof AppAuthedSettingsSecurityRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -133,6 +143,7 @@ export interface FileRouteTypes {
     | '/portfolio'
     | '/positions'
     | '/stocks/$symbol'
+    | '/settings/security'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -145,6 +156,7 @@ export interface FileRouteTypes {
     | '/portfolio'
     | '/positions'
     | '/stocks/$symbol'
+    | '/settings/security'
   id:
     | '__root__'
     | '/'
@@ -159,6 +171,7 @@ export interface FileRouteTypes {
     | '/_app/_authed/portfolio'
     | '/_app/_authed/positions'
     | '/_app/stocks/$symbol'
+    | '/_app/_authed/settings/security'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -254,6 +267,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppStocksSymbolRouteImport
       parentRoute: typeof AppRoute
     }
+    '/_app/_authed/settings/security': {
+      id: '/_app/_authed/settings/security'
+      path: '/settings/security'
+      fullPath: '/settings/security'
+      preLoaderRoute: typeof AppAuthedSettingsSecurityRouteImport
+      parentRoute: typeof AppAuthedRoute
+    }
   }
 }
 
@@ -262,6 +282,7 @@ interface AppAuthedRouteChildren {
   AppAuthedOrdersRoute: typeof AppAuthedOrdersRoute
   AppAuthedPortfolioRoute: typeof AppAuthedPortfolioRoute
   AppAuthedPositionsRoute: typeof AppAuthedPositionsRoute
+  AppAuthedSettingsSecurityRoute: typeof AppAuthedSettingsSecurityRoute
 }
 
 const AppAuthedRouteChildren: AppAuthedRouteChildren = {
@@ -269,6 +290,7 @@ const AppAuthedRouteChildren: AppAuthedRouteChildren = {
   AppAuthedOrdersRoute: AppAuthedOrdersRoute,
   AppAuthedPortfolioRoute: AppAuthedPortfolioRoute,
   AppAuthedPositionsRoute: AppAuthedPositionsRoute,
+  AppAuthedSettingsSecurityRoute: AppAuthedSettingsSecurityRoute,
 }
 
 const AppAuthedRouteWithChildren = AppAuthedRoute._addFileChildren(

@@ -1,4 +1,4 @@
-import type { OtpPurpose, Session } from '@nthstock/contracts';
+import type { LoginOtpPurpose, Session } from '@nthstock/contracts';
 import { buttonVariants, IconHelp } from '@nthstock/ui';
 import { Link, useNavigate } from '@tanstack/react-router';
 import { useState } from 'react';
@@ -14,11 +14,13 @@ import { MobileStep, type OtpSent } from './MobileStep';
 import { OtpStep } from './OtpStep';
 import { PinEntryStep, PinLocked } from './PinEntryStep';
 import { PinSetupStep } from './PinSetupStep';
+import { TotpStep } from './TotpStep';
 import { TryDemo } from './TryDemo';
 
 type Step =
-  | { kind: 'mobile'; purpose: OtpPurpose; notice?: string; mobile?: string }
-  | { kind: 'otp'; purpose: OtpPurpose; sent: OtpSent }
+  | { kind: 'mobile'; purpose: LoginOtpPurpose; notice?: string; mobile?: string }
+  | { kind: 'otp'; purpose: LoginOtpPurpose; sent: OtpSent }
+  | { kind: 'totp'; challengeId: string }
   | { kind: 'setPin' }
   | { kind: 'pin'; device: TrustedDeviceHint }
   | { kind: 'locked' };
@@ -32,7 +34,8 @@ export type LoginPageProps = {
 
 /**
  * The login flow (E3): a trusted browser starts at PIN entry, everyone else at the mobile number;
- * then OTP, then (first login) PIN setup, then the page they came for.
+ * then OTP, then the authenticator code when two-factor is on (NSTOCK-0220), then (first login)
+ * PIN setup, then the page they came for.
  */
 export function LoginPage({ redirect, devOtp = devOtpHint }: LoginPageProps) {
   const navigate = useNavigate();
@@ -68,9 +71,20 @@ export function LoginPage({ redirect, devOtp = devOtpHint }: LoginPageProps) {
           sent={step.sent}
           devOtp={devOtp}
           onVerified={onVerified}
+          onTotpRequired={(challengeId) => setStep({ kind: 'totp', challengeId })}
           onChangeNumber={() =>
             setStep({ kind: 'mobile', purpose: step.purpose, mobile: step.sent.mobile })
           }
+        />
+      );
+      break;
+    case 'totp':
+      content = (
+        <TotpStep
+          key={step.challengeId}
+          challengeId={step.challengeId}
+          onVerified={onVerified}
+          onRestart={() => setStep({ kind: 'mobile', purpose: 'LOGIN' })}
         />
       );
       break;
@@ -82,6 +96,7 @@ export function LoginPage({ redirect, devOtp = devOtpHint }: LoginPageProps) {
         <PinEntryStep
           device={step.device}
           onSuccess={finish}
+          onTotpRequired={(challengeId) => setStep({ kind: 'totp', challengeId })}
           onLocked={() => setStep({ kind: 'locked' })}
           onUntrusted={() => {
             forgetTrustedDevice();

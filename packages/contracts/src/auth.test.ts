@@ -148,3 +148,24 @@ describe('AccessTokenClaims', () => {
     expect(AccessTokenClaims.safeParse({ ...claims, sid: undefined }).success).toBe(false);
   });
 });
+
+describe('step-up and TOTP contracts (NSTOCK-0212)', () => {
+  it('takes a PIN or an OTP for a step-up, not both or neither', async () => {
+    const { StepUpRequest } = await import('./auth.js');
+    expect(StepUpRequest.safeParse({ pin: '1234' }).success).toBe(true);
+    expect(StepUpRequest.safeParse({ requestId: 'otp_1', otp: '123456' }).success).toBe(true);
+    expect(StepUpRequest.safeParse({ pin: '1234', totpCode: '000000' }).success).toBe(true);
+    expect(StepUpRequest.safeParse({}).success).toBe(false);
+    expect(StepUpRequest.safeParse({ pin: '1234', requestId: 'otp_1', otp: '1' }).success).toBe(
+      false,
+    );
+  });
+
+  it('normalises a typed recovery code and needs a code or a recovery code', async () => {
+    const { RecoveryCode, TotpVerifyRequest } = await import('./auth.js');
+    expect(RecoveryCode.parse('abcd-efgh jklm-npqr')).toBe('ABCDEFGHJKLMNPQR');
+    expect(RecoveryCode.safeParse('ABCD-EFGH').success).toBe(false);
+    expect(TotpVerifyRequest.safeParse({ challengeId: 'tc_1', code: '123456' }).success).toBe(true);
+    expect(TotpVerifyRequest.safeParse({ challengeId: 'tc_1' }).success).toBe(false);
+  });
+});

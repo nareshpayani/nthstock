@@ -44,7 +44,12 @@ describeWithPostgres('auth services on Postgres (integration)', () => {
   function services() {
     const clock = manualClock();
     const users = createPgUsersRepo({ database, clock, pii: createPiiCrypto(devPiiKeys()) });
-    const repo = createPgAuthRepo({ database, clock, otp: createMemoryOtpStore() });
+    const repo = createPgAuthRepo({
+      database,
+      clock,
+      pii: createPiiCrypto(devPiiKeys()),
+      otp: createMemoryOtpStore(),
+    });
     const audit = createMemoryAuditRepo({ clock });
     const sessions = createSessionService({
       clock,

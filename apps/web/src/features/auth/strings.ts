@@ -69,6 +69,50 @@ export const strings = {
     useOtp: 'Log in with OTP instead',
   },
 
+  totp: {
+    title: 'Two-factor authentication',
+    body: 'Enter the 6-digit code from your authenticator app.',
+    label: 'Authentication code',
+    recoveryTitle: 'Use a recovery code',
+    recoveryBody: 'Enter one of the recovery codes you saved when you turned on two-factor.',
+    recoveryLabel: 'Recovery code',
+    recoveryPlaceholder: 'ABCD-EFGH-JKLM-NPQR',
+    verify: 'Verify',
+    useRecovery: 'Use a recovery code instead',
+    useCode: 'Use the authenticator app instead',
+    wrong: (attemptsLeft: number | undefined) =>
+      attemptsLeft === undefined
+        ? 'That code is not right. Try again.'
+        : `That code is not right. ${plural(attemptsLeft, 'attempt', 'attempts')} left.`,
+    ended: 'This sign-in has ended after too many wrong codes, or it expired. Log in again.',
+    startAgain: 'Log in again',
+    recoveryInvalid: 'Enter the 16-character code, for example ABCD-EFGH-JKLM-NPQR.',
+  },
+
+  stepUp: {
+    title: 'Confirm it is you',
+    body: 'For your security, confirm your identity before changing security settings.',
+    pinLabel: 'Your PIN',
+    otpLabel: 'One-time password',
+    otpSent: (masked: string) => `We sent an OTP to +91 ${masked}.`,
+    totpLabel: 'Code from your authenticator app',
+    useOtp: 'Use an OTP instead',
+    usePin: 'Use your PIN instead',
+    sendOtp: 'Send OTP',
+    confirm: 'Confirm',
+    cancel: 'Cancel',
+    devHint: (otp: string) => `Mock mode: the OTP is always ${otp}.`,
+    wrongPin: (attemptsLeft: number | undefined) =>
+      attemptsLeft === undefined
+        ? 'Incorrect PIN. Please try again.'
+        : `Incorrect PIN. ${plural(attemptsLeft, 'attempt', 'attempts')} left.`,
+    pinLocked: 'Too many wrong PINs. Use an OTP instead.',
+    wrongOtp: 'Incorrect OTP. Please try again.',
+    otpExpired: 'This OTP has expired. Send a new one.',
+    wrongTotp: 'That authenticator code is not right. Wait for the next code and try again.',
+    totpRequired: 'Enter the code from your authenticator app too.',
+  },
+
   locked: {
     title: 'PIN locked',
     body: 'Too many wrong PINs. Unlock with an OTP sent to your mobile number to continue.',
@@ -87,6 +131,7 @@ export const strings = {
       VERIFIED: 'KYC verified',
     },
     kycNote: 'Mock KYC for paper trading',
+    security: 'Security',
     logOut: 'Log out',
     logIn: 'Log in',
     loading: 'Checking your session',

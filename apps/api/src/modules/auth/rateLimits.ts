@@ -10,6 +10,8 @@ export const AUTH_RATE_LIMITS = {
   pinVerify: 30,
   pinSet: 10,
   sessionRefresh: 60,
+  totpVerify: 30,
+  stepUp: 20,
 } as const satisfies Partial<Record<RouteName, number>>;
 
 export const authRateLimit = (route: keyof typeof AUTH_RATE_LIMITS) => ({

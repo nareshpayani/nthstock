@@ -1,7 +1,16 @@
-import type { Clock } from '@nthstock/utils';
-import { and, eq, isNull, lte, sql } from 'drizzle-orm';
+import { base32Decode, base32Encode, type Clock } from '@nthstock/utils';
+import { and, eq, isNull, lt, lte, sql } from 'drizzle-orm';
 import type { Database } from '../../db/client.js';
-import { deviceTokens, devices, pins, refreshTokens, sessions } from '../../db/schema/auth.js';
+import type { PiiCrypto } from '../../db/crypto.js';
+import {
+  deviceTokens,
+  devices,
+  pins,
+  refreshTokens,
+  sessions,
+  totpFactors,
+  totpRecoveryCodes,
+} from '../../db/schema/auth.js';
 import {
   composeAuthRepo,
   type AuthRepo,
@@ -11,6 +20,7 @@ import {
   type SessionRecord,
   type SessionRevokedReason,
   type SessionStore,
+  type TotpFactorRecord,
 } from './repo.js';
 
 type DeviceRow = typeof devices.$inferSelect;
@@ -47,11 +57,36 @@ const toDevice = (row: DeviceRow): DeviceRecord => ({
 export function createPgDeviceStore({
   database,
   clock,
+  pii,
 }: {
   database: Database;
   clock: Clock;
+  /** Encrypts TOTP secrets at rest (NSTOCK-0215). */
+  pii: PiiCrypto;
 }): DeviceStore {
   const { db } = database;
+  // The user id binds each ciphertext to its row: a secret copied to another user fails to decrypt.
+  const secretContext = (userId: string) => `totp_factors.secret:${userId}`;
+  const toFactor = (row: typeof totpFactors.$inferSelect): TotpFactorRecord => ({
+    userId: row.userId,
+    secret: base32Decode(pii.decrypt(row.secretEnc, secretContext(row.userId))),
+    // The table's CHECK holds this to TOTP_FACTOR_STATUSES.
+    status: row.status as TotpFactorRecord['status'],
+    lastUsedStep: row.lastUsedStep,
+    createdAt: row.createdAt,
+    confirmedAt: row.confirmedAt,
+  });
+  const insertRecoveryCodes = (
+    tx: Pick<Database['db'], 'insert'>,
+    userId: string,
+    hashes: readonly string[],
+  ) =>
+    hashes.length === 0
+      ? Promise.resolve()
+      : tx
+          .insert(totpRecoveryCodes)
+          .values(hashes.map((hash) => ({ userId, hash, createdAt: clock.now() })))
+          .then(() => undefined);
   const getDevice = async (id: string) => {
     const [row] = await db.select().from(devices).where(eq(devices.id, id));
     return row ? toDevice(row) : null;
@@ -130,6 +165,96 @@ export function createPgDeviceStore({
         .where(eq(pins.userId, userId));
     },
 
+    async getTotpFactor(userId) {
+      const [row] = await db.select().from(totpFactors).where(eq(totpFactors.userId, userId));
+      return row ? toFactor(row) : null;
+    },
+
+    async putPendingTotpFactor(factor) {
+      // One statement: insert, or replace only a PENDING factor; an ACTIVE one stays.
+      const rows = await db
+        .insert(totpFactors)
+        .values({
+          userId: factor.userId,
+          secretEnc: pii.encrypt(base32Encode(factor.secret), secretContext(factor.userId)),
+          status: 'PENDING',
+          lastUsedStep: factor.lastUsedStep,
+          createdAt: factor.createdAt,
+          confirmedAt: null,
+        })
+        .onConflictDoUpdate({
+          target: totpFactors.userId,
+          set: {
+            secretEnc: sql`excluded.secret_enc`,
+            lastUsedStep: sql`excluded.last_used_step`,
+            createdAt: sql`excluded.created_at`,
+          },
+          setWhere: eq(totpFactors.status, 'PENDING'),
+        })
+        .returning({ userId: totpFactors.userId });
+      return rows.length === 1;
+    },
+
+    async activateTotpFactor(userId, { at, step, recoveryCodeHashes }) {
+      return db.transaction(async (tx) => {
+        const rows = await tx
+          .update(totpFactors)
+          .set({ status: 'ACTIVE', lastUsedStep: step, confirmedAt: at })
+          .where(and(eq(totpFactors.userId, userId), eq(totpFactors.status, 'PENDING')))
+          .returning({ userId: totpFactors.userId });
+        if (rows.length === 0) return false;
+        await tx.delete(totpRecoveryCodes).where(eq(totpRecoveryCodes.userId, userId));
+        await insertRecoveryCodes(tx, userId, recoveryCodeHashes);
+        return true;
+      });
+    },
+
+    async deleteTotpFactor(userId) {
+      await db.transaction(async (tx) => {
+        await tx.delete(totpRecoveryCodes).where(eq(totpRecoveryCodes.userId, userId));
+        await tx.delete(totpFactors).where(eq(totpFactors.userId, userId));
+      });
+    },
+
+    async useTotpStep(userId, step) {
+      const rows = await db
+        .update(totpFactors)
+        .set({ lastUsedStep: step })
+        .where(
+          and(
+            eq(totpFactors.userId, userId),
+            eq(totpFactors.status, 'ACTIVE'),
+            lt(totpFactors.lastUsedStep, step),
+          ),
+        )
+        .returning({ userId: totpFactors.userId });
+      return rows.length === 1;
+    },
+
+    async listRecoveryCodes(userId) {
+      const rows = await db
+        .select({ id: totpRecoveryCodes.id, hash: totpRecoveryCodes.hash })
+        .from(totpRecoveryCodes)
+        .where(eq(totpRecoveryCodes.userId, userId));
+      return rows.map((row) => ({ id: String(row.id), hash: row.hash }));
+    },
+
+    async useRecoveryCode(userId, id) {
+      if (!/^\d+$/.test(id)) return false;
+      const rows = await db
+        .delete(totpRecoveryCodes)
+        .where(and(eq(totpRecoveryCodes.id, Number(id)), eq(totpRecoveryCodes.userId, userId)))
+        .returning({ id: totpRecoveryCodes.id });
+      return rows.length === 1;
+    },
+
+    async replaceRecoveryCodes(userId, hashes) {
+      await db.transaction(async (tx) => {
+        await tx.delete(totpRecoveryCodes).where(eq(totpRecoveryCodes.userId, userId));
+        await insertRecoveryCodes(tx, userId, hashes);
+      });
+    },
+
     reset: refuseReset('device store'),
   };
 }
@@ -142,6 +267,7 @@ const toSession = (row: SessionRow): SessionRecord => ({
   createdAt: row.createdAt,
   lastSeenAt: row.lastSeenAt,
   expiresAt: row.expiresAt,
+  steppedUpAt: row.steppedUpAt,
   revokedAt: row.revokedAt,
   // The table's CHECK holds this to SESSION_REVOKED_REASONS.
   revokedReason: row.revokedReason as SessionRevokedReason | null,
@@ -164,6 +290,7 @@ export function createPgSessionStore({ database }: { database: Database }): Sess
         createdAt: session.createdAt,
         lastSeenAt: session.lastSeenAt,
         expiresAt: session.expiresAt,
+        steppedUpAt: session.steppedUpAt,
         revokedAt: session.revokedAt,
         revokedReason: session.revokedReason,
       });
@@ -187,6 +314,10 @@ export function createPgSessionStore({ database }: { database: Database }): Sess
         .update(sessions)
         .set({ lastSeenAt: at })
         .where(and(eq(sessions.id, id), lte(sessions.lastSeenAt, staleBefore)));
+    },
+
+    async stepUpSession(id, at) {
+      await db.update(sessions).set({ steppedUpAt: at }).where(eq(sessions.id, id));
     },
 
     async putRefreshToken(hash, token) {
@@ -233,6 +364,8 @@ export function createPgSessionStore({ database }: { database: Database }): Sess
 export type PgAuthRepoOptions = {
   database: Database;
   clock: Clock;
+  /** Encrypts TOTP secrets at rest. */
+  pii: PiiCrypto;
   /** Where OTP challenges and the resend throttle live (Redis in apps/api, T-193). */
   otp: OtpStore;
 };
@@ -241,10 +374,10 @@ export type PgAuthRepoOptions = {
  * AuthRepo for `DB_DRIVER=postgres`: devices, device tokens and PINs (T-191) and sessions and
  * refresh tokens (T-192) in Postgres; OTPs in the given store.
  */
-export function createPgAuthRepo({ database, clock, otp }: PgAuthRepoOptions): AuthRepo {
+export function createPgAuthRepo({ database, clock, pii, otp }: PgAuthRepoOptions): AuthRepo {
   return composeAuthRepo({
     otp,
-    devices: createPgDeviceStore({ database, clock }),
+    devices: createPgDeviceStore({ database, clock, pii }),
     sessions: createPgSessionStore({ database }),
   });
 }

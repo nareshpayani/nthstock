@@ -177,6 +177,7 @@ export function createDeps(overrides: DepsOverrides = {}): AppDeps {
         ? createPgAuthRepo({
             database,
             clock,
+            pii,
             otp: redisState
               ? createRedisOtpStore({ redis: redisState, pii, ...redisPrefix })
               : createMemoryOtpStore(),

@@ -25,5 +25,6 @@ export { healthScenarios } from './scenarios/health.js';
 export { marketScenarios } from './scenarios/market.js';
 export { orderScenarios } from './scenarios/orders.js';
 export { portfolioScenarios } from './scenarios/portfolio.js';
+export { twoFactorScenarios } from './scenarios/twoFactor.js';
 export { watchlistScenarios } from './scenarios/watchlists.js';
 export { scenarioGroups } from './scenarios/all.js';

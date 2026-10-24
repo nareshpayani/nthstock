@@ -69,6 +69,24 @@ CDN + WAF ─► Load balancer ─► apps/api (Fastify, stateless)     apps/rea
   Phases 3 to 5). The web app toasts a fired alert on any page and draws active alerts as dotted
   price lines on the chart.
 
+### Two-factor authentication and step-up
+- TOTP is RFC 6238 (HMAC-SHA1, 6 digits, 30 s step, ±1 step) in `packages/utils/src/totp.ts`, on
+  Web Crypto, so apps/api and the MSW mock compute the same codes with no library. Any authenticator
+  app reads the `otpauth://` URI (a QR code drawn as one SVG path; `qrcode` is loaded only on the
+  Security page) or the grouped setup key.
+- Secrets are stored encrypted (`totp_factors.secret_enc`, PII envelope keyed per user);
+  `last_used_step` refuses a replayed code. Ten single-use recovery codes are stored only as hashes
+  (`totp_recovery_codes`) and shown once, with Copy and Download.
+- Login: an OTP or PIN login for a user with two-factor on answers 401 `TOTP_REQUIRED` with a
+  5-minute challenge (Redis in api mode); `POST /v1/auth/totp/verify` takes the code or a recovery
+  code and issues the session. Five wrong codes end the challenge.
+- Step-up: sensitive routes (turning two-factor on or off, new recovery codes) answer 403
+  `STEP_UP_REQUIRED` unless the session re-proved the user in the last 10 minutes with the PIN or
+  a `STEP_UP` OTP to the own mobile (`/v1/auth/step-up/otp`, never usable as a login), plus the
+  code when two-factor is on. The web app's `useStepUp` opens one shared dialog and retries the
+  action once. Every change is in the audit log (`STEP_UP`, `TOTP_ENABLED`, `TOTP_DISABLED`,
+  `RECOVERY_CODE_USED`, `RECOVERY_CODES_REGENERATED`).
+
 ### Security baseline
 - Rate limits per IP and per user; OTP resend throttling; CAPTCHA after 3 failed OTP/PIN attempts; PIN lockout after 5, unlock via OTP.
 - TLS 1.2+ and HSTS; encryption at rest (KMS); phone/PII column-level encryption.

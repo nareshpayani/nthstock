@@ -7,6 +7,13 @@ import {
   PinSetResponse,
   PinVerifyRequest,
   Session,
+  StepUpRequest,
+  StepUpResponse,
+  TotpCodeOrRecoveryRequest,
+  TotpCodeRequest,
+  TotpEnrolResponse,
+  TotpRecoveryCodesResponse,
+  TotpVerifyRequest,
 } from './auth.js';
 import {
   BatchQuotesQuery,
@@ -165,6 +172,56 @@ export const routes = {
   sessionGet: { method: 'GET', path: '/v1/auth/session', auth: 'user', response: Session },
   sessionRefresh: { method: 'POST', path: '/v1/auth/refresh', auth: 'public', response: Session },
   logout: { method: 'POST', path: '/v1/auth/logout', auth: 'user', response: OkResponse },
+
+  // Step-up and TOTP (NSTOCK-0212). Routes marked step-up answer 403 STEP_UP_REQUIRED when the
+  // session's last step-up is older than STEP_UP_WINDOW_SEC.
+  stepUpOtpRequest: {
+    method: 'POST',
+    path: '/v1/auth/step-up/otp',
+    auth: 'user',
+    response: OtpRequestResponse,
+  },
+  stepUp: {
+    method: 'POST',
+    path: '/v1/auth/step-up',
+    auth: 'user',
+    body: StepUpRequest,
+    response: StepUpResponse,
+  },
+  totpEnrol: {
+    method: 'POST',
+    path: '/v1/auth/totp/enrol',
+    auth: 'user',
+    response: TotpEnrolResponse,
+  },
+  totpEnrolConfirm: {
+    method: 'POST',
+    path: '/v1/auth/totp/enrol/confirm',
+    auth: 'user',
+    body: TotpCodeRequest,
+    response: TotpRecoveryCodesResponse,
+  },
+  totpDisable: {
+    method: 'POST',
+    path: '/v1/auth/totp/disable',
+    auth: 'user',
+    body: TotpCodeOrRecoveryRequest,
+    response: OkResponse,
+  },
+  totpRecoveryCodes: {
+    method: 'POST',
+    path: '/v1/auth/totp/recovery-codes',
+    auth: 'user',
+    body: TotpCodeRequest,
+    response: TotpRecoveryCodesResponse,
+  },
+  totpVerify: {
+    method: 'POST',
+    path: '/v1/auth/totp/verify',
+    auth: 'public',
+    body: TotpVerifyRequest,
+    response: Session,
+  },
 
   // Market
   marketIndices: {

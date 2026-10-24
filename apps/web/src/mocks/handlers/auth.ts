@@ -9,6 +9,13 @@ import {
   OTP_TTL_SEC,
   PIN_MAX_FAILURES,
   REFRESH_TOKEN_TTL_SEC,
+  RecoveryCode,
+  STEP_UP_WINDOW_SEC,
+  TOTP_CHALLENGE_TTL_SEC,
+  TOTP_ENROL_TTL_SEC,
+  TOTP_ISSUER,
+  TOTP_MAX_FAILURES,
+  TOTP_RECOVERY_CODE_COUNT,
   TRUSTED_DEVICE_TTL_SEC,
   type AuthErrorDetails,
   type Device,
@@ -17,6 +24,7 @@ import {
   type Session,
   type User,
 } from '@nthstock/contracts';
+import { base32Decode, base32Encode, newTotpSecret, otpauthUri, verifyTotp } from '@nthstock/utils';
 import type { HttpHandler } from 'msw';
 import {
   MockApiError,
@@ -42,6 +50,11 @@ import {
  *
  * Dev login: any mobile starting 6 to 9, then the fixed dev OTP `123456` (`DEV_OTP`). It is not a
  * secret; apps/api uses it outside production too.
+ *
+ * Step-up and two-factor (NSTOCK-0217) follow apps/api too, on the same RFC 6238 code from
+ * packages/utils, so a real authenticator app works against the mock: scan the QR code on
+ * /settings/security, and the app's codes log you in. Recovery codes are kept as SHA-256 hashes
+ * (apps/api uses Argon2id); the dev OTP also confirms a step-up.
  */
 
 /** The one cookie that stands in for apps/api's access and refresh cookies. */
@@ -61,6 +74,8 @@ type UserRecord = {
   email: string | null;
   kycStatus: KycStatus;
   pinSet: boolean;
+  /** Missing in state saved before two-factor existed: read as off. */
+  totpEnabled?: boolean;
   createdAt: number;
 };
 
@@ -83,9 +98,29 @@ type SessionRecord = {
   accessExpiresAt: number;
   expiresAt: number;
   revoked: boolean;
+  steppedUpAt?: number | null;
 };
 
-type OtpChallenge = { requestId: string; failures: number; expiresAt: number };
+type OtpChallenge = {
+  requestId: string;
+  failures: number;
+  expiresAt: number;
+  purpose?: 'LOGIN' | 'UNLOCK_PIN' | 'STEP_UP';
+};
+type TotpFactor = {
+  /** Base32, as the setup key shows it. */
+  secret: string;
+  status: 'PENDING' | 'ACTIVE';
+  lastUsedStep: number;
+  createdAt: number;
+};
+type TotpChallenge = {
+  userId: string;
+  method: 'OTP' | 'PIN';
+  deviceId: string | null;
+  failures: number;
+  expiresAt: number;
+};
 type PinRecord = { salt: string; hash: string; failures: number };
 
 export type AuthMockOptions = {
@@ -164,7 +199,22 @@ export function createAuthMock({
   const deviceTokens = new Map<string, { deviceId: string; expiresAt: number }>();
   const pins = new Map<string, PinRecord>();
   const sessions = new Map<string, SessionRecord>();
-  const tables = { users, otps, lastOtpAt, devices, deviceTokens, pins, sessions };
+  const totpFactors = new Map<string, TotpFactor>();
+  /** SHA-256 hashes of each user's unused recovery codes. */
+  const recoveryCodes = new Map<string, string[]>();
+  const totpChallenges = new Map<string, TotpChallenge>();
+  const tables = {
+    users,
+    otps,
+    lastOtpAt,
+    devices,
+    deviceTokens,
+    pins,
+    sessions,
+    totpFactors,
+    recoveryCodes,
+    totpChallenges,
+  };
   /** The signed-in user per host (see `activeUserId`); not persisted, the next request sets it. */
   const activeUsers = new Map<string, string>();
 
@@ -224,7 +274,7 @@ export function createAuthMock({
     email: u.email,
     kycStatus: u.kycStatus,
     pinSet: u.pinSet,
-    totpEnabled: false,
+    totpEnabled: u.totpEnabled ?? false,
     createdAt: iso(u.createdAt),
   });
 
@@ -336,6 +386,174 @@ export function createAuthMock({
     return session;
   }
 
+  // ---- OTP, PIN and two-factor checks shared by login and step-up ---------------------------
+
+  /** Issues an OTP challenge for the mobile, with the 30 s resend throttle. */
+  function requestOtp(mobile: string, purpose: NonNullable<OtpChallenge['purpose']>) {
+    const at = now();
+    const last = lastOtpAt.get(mobile);
+    if (last !== undefined && at < last + OTP_RESEND_AFTER_SEC * 1000) {
+      const retryAfterSec = Math.ceil((last + OTP_RESEND_AFTER_SEC * 1000 - at) / 1000);
+      throw fail(
+        429,
+        'RATE_LIMITED',
+        `Please wait ${String(retryAfterSec)} seconds before requesting another OTP.`,
+        { retryAfterSec },
+      );
+    }
+    lastOtpAt.set(mobile, at);
+    const challenge = {
+      requestId: randomId('otp'),
+      failures: 0,
+      expiresAt: at + OTP_TTL_SEC * 1000,
+      purpose,
+    };
+    otps.set(mobile, challenge);
+    return {
+      requestId: challenge.requestId,
+      resendAfterSec: OTP_RESEND_AFTER_SEC,
+      expiresAt: iso(challenge.expiresAt),
+    };
+  }
+
+  /** Checks and consumes an OTP; resolves to its purpose. */
+  function checkOtp(body: {
+    mobile: string;
+    requestId: string;
+    otp: string;
+    captchaToken?: string | undefined;
+  }) {
+    const challenge = otps.get(body.mobile);
+    if (!challenge || challenge.requestId !== body.requestId) throw otpExpired();
+    if (challenge.expiresAt <= now()) {
+      otps.delete(body.mobile);
+      throw otpExpired();
+    }
+    if (
+      challenge.failures >= OTP_CAPTCHA_AFTER_FAILURES &&
+      body.captchaToken !== DEV_CAPTCHA_TOKEN
+    ) {
+      throw fail(400, 'CAPTCHA_REQUIRED', 'Complete the CAPTCHA to continue.', {
+        captchaRequired: true,
+        attemptsLeft: OTP_MAX_FAILURES - challenge.failures,
+      });
+    }
+    if (body.otp !== DEV_OTP) {
+      challenge.failures += 1;
+      if (challenge.failures >= OTP_MAX_FAILURES) {
+        otps.delete(body.mobile);
+        throw fail(400, 'OTP_INVALID', 'Too many wrong attempts. Request a new OTP.', {
+          attemptsLeft: 0,
+          captchaRequired: true,
+        });
+      }
+      throw fail(400, 'OTP_INVALID', 'Incorrect OTP. Please try again.', {
+        attemptsLeft: OTP_MAX_FAILURES - challenge.failures,
+        captchaRequired: challenge.failures >= OTP_CAPTCHA_AFTER_FAILURES,
+      });
+    }
+    otps.delete(body.mobile);
+    return challenge.purpose ?? 'LOGIN';
+  }
+
+  /** Compares the PIN with the 5-strike lock. */
+  async function checkPin(pin: PinRecord, value: string) {
+    if (pin.failures >= PIN_MAX_FAILURES) throw pinLocked();
+    if ((await sha256(`${pin.salt}:${value}`)) !== pin.hash) {
+      pin.failures += 1;
+      if (pin.failures >= PIN_MAX_FAILURES) throw pinLocked();
+      throw fail(400, 'PIN_INVALID', 'Incorrect PIN. Please try again.', {
+        attemptsLeft: PIN_MAX_FAILURES - pin.failures,
+      });
+    }
+    pin.failures = 0;
+  }
+
+  const totpInvalid = (attemptsLeft?: number) =>
+    fail(
+      400,
+      'TOTP_INVALID',
+      attemptsLeft === 0
+        ? 'Too many wrong codes. Log in again.'
+        : 'That code is not right. Check your authenticator app and try again.',
+      attemptsLeft === undefined ? undefined : { attemptsLeft },
+    );
+  const conflict = (message: string) => fail(409, 'CONFLICT', message);
+
+  /** A current code for the user's active factor, accepted once (a replayed step fails). */
+  async function codeIsRight(userId: string, code: string) {
+    const factor = totpFactors.get(userId);
+    if (factor?.status !== 'ACTIVE') return false;
+    const step = await verifyTotp(base32Decode(factor.secret), code, now(), {
+      afterStep: factor.lastUsedStep,
+    });
+    if (step === null) return false;
+    factor.lastUsedStep = step;
+    return true;
+  }
+
+  async function recoveryCodeIsRight(userId: string, typed: string) {
+    const parsed = RecoveryCode.safeParse(typed);
+    if (!parsed.success) return false;
+    const hash = await sha256(parsed.data);
+    const codes = recoveryCodes.get(userId) ?? [];
+    const index = codes.indexOf(hash);
+    if (index < 0) return false;
+    codes.splice(index, 1);
+    return true;
+  }
+
+  const secondFactorIsRight = (
+    userId: string,
+    proof: { code?: string | undefined; recoveryCode?: string | undefined },
+  ) =>
+    proof.code !== undefined
+      ? codeIsRight(userId, proof.code)
+      : proof.recoveryCode !== undefined
+        ? recoveryCodeIsRight(userId, proof.recoveryCode)
+        : Promise.resolve(false);
+
+  /** Ten new recovery codes: stores their hashes, resolves to them in display form. */
+  async function newRecoveryCodes(userId: string) {
+    const codes = Array.from({ length: TOTP_RECOVERY_CODE_COUNT }, () =>
+      base32Encode(crypto.getRandomValues(new Uint8Array(10))),
+    );
+    recoveryCodes.set(userId, await Promise.all(codes.map((code) => sha256(code))));
+    return codes.map((code) => code.replace(/(.{4})(?=.)/g, '$1-'));
+  }
+
+  function requireStepUp(session: SessionRecord, user: UserRecord) {
+    const at = session.steppedUpAt;
+    if (at && now() - at < STEP_UP_WINDOW_SEC * 1000) return;
+    throw fail(403, 'STEP_UP_REQUIRED', 'Confirm it is you to continue.', {
+      totpRequired: user.totpEnabled ?? false,
+    });
+  }
+
+  /** The login gate after a right PIN or OTP: 401 TOTP_REQUIRED for a user with two-factor on. */
+  function requireCodeIfEnabled(user: UserRecord, method: 'OTP' | 'PIN', deviceId: string | null) {
+    if (!user.totpEnabled) return;
+    const challengeId = randomId('tc');
+    totpChallenges.set(challengeId, {
+      userId: user.id,
+      method,
+      deviceId,
+      failures: 0,
+      expiresAt: now() + TOTP_CHALLENGE_TTL_SEC * 1000,
+    });
+    throw fail(401, 'TOTP_REQUIRED', 'Enter the code from your authenticator app.', {
+      challengeId,
+    });
+  }
+
+  /** The signed-in user and session for a two-factor route. */
+  function signedIn(context: Pick<ResolverContext<'health'>, 'request' | 'cookies'>) {
+    const session = authenticate(context);
+    const user = userById(session.userId);
+    if (!user) throw unauthorized();
+    return { session, user };
+  }
+
   const route = <N extends RouteName>(
     name: N,
     resolver: RouteResolver<N>,
@@ -343,69 +561,13 @@ export function createAuthMock({
   ) => defineRoute(name, persisted(resolver), options);
 
   const handlers = (options: RouteHandlerOptions = {}): HttpHandler[] => [
-    route(
-      'otpRequest',
-      ({ body }) => {
-        const at = now();
-        const last = lastOtpAt.get(body.mobile);
-        if (last !== undefined && at < last + OTP_RESEND_AFTER_SEC * 1000) {
-          const retryAfterSec = Math.ceil((last + OTP_RESEND_AFTER_SEC * 1000 - at) / 1000);
-          throw fail(
-            429,
-            'RATE_LIMITED',
-            `Please wait ${String(retryAfterSec)} seconds before requesting another OTP.`,
-            { retryAfterSec },
-          );
-        }
-        lastOtpAt.set(body.mobile, at);
-        const challenge = {
-          requestId: randomId('otp'),
-          failures: 0,
-          expiresAt: at + OTP_TTL_SEC * 1000,
-        };
-        otps.set(body.mobile, challenge);
-        return {
-          requestId: challenge.requestId,
-          resendAfterSec: OTP_RESEND_AFTER_SEC,
-          expiresAt: iso(challenge.expiresAt),
-        };
-      },
-      options,
-    ),
+    route('otpRequest', ({ body }) => requestOtp(body.mobile, body.purpose), options),
 
     route(
       'otpVerify',
       ({ body, cookies, headers }) => {
-        const challenge = otps.get(body.mobile);
-        if (!challenge || challenge.requestId !== body.requestId) throw otpExpired();
-        if (challenge.expiresAt <= now()) {
-          otps.delete(body.mobile);
-          throw otpExpired();
-        }
-        if (
-          challenge.failures >= OTP_CAPTCHA_AFTER_FAILURES &&
-          body.captchaToken !== DEV_CAPTCHA_TOKEN
-        ) {
-          throw fail(400, 'CAPTCHA_REQUIRED', 'Complete the CAPTCHA to continue.', {
-            captchaRequired: true,
-            attemptsLeft: OTP_MAX_FAILURES - challenge.failures,
-          });
-        }
-        if (body.otp !== DEV_OTP) {
-          challenge.failures += 1;
-          if (challenge.failures >= OTP_MAX_FAILURES) {
-            otps.delete(body.mobile);
-            throw fail(400, 'OTP_INVALID', 'Too many wrong attempts. Request a new OTP.', {
-              attemptsLeft: 0,
-              captchaRequired: true,
-            });
-          }
-          throw fail(400, 'OTP_INVALID', 'Incorrect OTP. Please try again.', {
-            attemptsLeft: OTP_MAX_FAILURES - challenge.failures,
-            captchaRequired: challenge.failures >= OTP_CAPTCHA_AFTER_FAILURES,
-          });
-        }
-        otps.delete(body.mobile);
+        // A step-up OTP only ever confirms a signed-in user; it never logs anyone in.
+        if (checkOtp(body) === 'STEP_UP') throw otpExpired();
 
         let user = users.get(body.mobile);
         if (!user) {
@@ -416,14 +578,17 @@ export function createAuthMock({
             email: null,
             kycStatus: 'NOT_STARTED',
             pinSet: false,
+            totpEnabled: false,
             createdAt: now(),
           };
           users.set(user.mobile, user);
         }
+        const trusted = trustedDevice(cookies);
+        const deviceId = trusted?.userId === user.id ? trusted.id : null;
+        requireCodeIfEnabled(user, 'OTP', deviceId);
         const pin = pins.get(user.id);
         if (pin) pin.failures = 0; // a verified OTP lifts the PIN lock
-        const trusted = trustedDevice(cookies);
-        return startSession(user, trusted?.userId === user.id ? trusted.id : null, headers);
+        return startSession(user, deviceId, headers);
       },
       options,
     ),
@@ -463,16 +628,154 @@ export function createAuthMock({
         const user = device ? userById(device.userId) : null;
         const pin = user ? pins.get(user.id) : undefined;
         if (!device || !user || !pin) throw untrusted();
-        if (pin.failures >= PIN_MAX_FAILURES) throw pinLocked();
-        if ((await sha256(`${pin.salt}:${body.pin}`)) !== pin.hash) {
-          pin.failures += 1;
-          if (pin.failures >= PIN_MAX_FAILURES) throw pinLocked();
-          throw fail(400, 'PIN_INVALID', 'Incorrect PIN. Please try again.', {
-            attemptsLeft: PIN_MAX_FAILURES - pin.failures,
-          });
-        }
-        pin.failures = 0;
+        await checkPin(pin, body.pin);
+        requireCodeIfEnabled(user, 'PIN', device.id);
         return startSession(user, device.id, headers);
+      },
+      options,
+    ),
+
+    // ---- Step-up and two-factor (NSTOCK-0217) ------------------------------------------------
+
+    route(
+      'totpVerify',
+      async ({ body, headers }) => {
+        const challenge = totpChallenges.get(body.challengeId);
+        const user = challenge ? userById(challenge.userId) : null;
+        if (!challenge || !user || challenge.expiresAt <= now()) {
+          totpChallenges.delete(body.challengeId);
+          throw fail(401, 'UNAUTHORIZED', 'This sign-in has expired. Log in again.');
+        }
+        if (!(await secondFactorIsRight(user.id, body))) {
+          challenge.failures += 1;
+          const attemptsLeft = Math.max(0, TOTP_MAX_FAILURES - challenge.failures);
+          if (attemptsLeft === 0) totpChallenges.delete(body.challengeId);
+          throw totpInvalid(attemptsLeft);
+        }
+        totpChallenges.delete(body.challengeId);
+        if (challenge.method === 'OTP') {
+          const pin = pins.get(user.id);
+          if (pin) pin.failures = 0;
+        }
+        return startSession(user, challenge.deviceId, headers);
+      },
+      options,
+    ),
+
+    route(
+      'stepUpOtpRequest',
+      (context) => requestOtp(signedIn(context).user.mobile, 'STEP_UP'),
+      options,
+    ),
+
+    route(
+      'stepUp',
+      async (context) => {
+        const { session, user } = signedIn(context);
+        const { body } = context;
+        if (body.pin !== undefined) {
+          const pin = pins.get(user.id);
+          if (!pin) throw fail(400, 'PIN_INVALID', 'Set a PIN first, or confirm with an OTP.');
+          await checkPin(pin, body.pin);
+        } else {
+          const purpose = checkOtp({
+            mobile: user.mobile,
+            requestId: body.requestId ?? '',
+            otp: body.otp ?? '',
+          });
+          if (purpose !== 'STEP_UP') throw otpExpired();
+        }
+        if (user.totpEnabled) {
+          const right = body.totpCode ? await codeIsRight(user.id, body.totpCode) : false;
+          if (!right) {
+            throw fail(
+              400,
+              'TOTP_INVALID',
+              body.totpCode
+                ? 'That code is not right. Check your authenticator app and try again.'
+                : 'Enter the code from your authenticator app.',
+              { totpRequired: true },
+            );
+          }
+        }
+        session.steppedUpAt = now();
+        return { steppedUpUntil: iso(session.steppedUpAt + STEP_UP_WINDOW_SEC * 1000) };
+      },
+      options,
+    ),
+
+    route(
+      'totpEnrol',
+      (context) => {
+        const { session, user } = signedIn(context);
+        requireStepUp(session, user);
+        if (totpFactors.get(user.id)?.status === 'ACTIVE') {
+          throw conflict('Two-factor authentication is already on.');
+        }
+        const secret = newTotpSecret();
+        const at = now();
+        totpFactors.set(user.id, {
+          secret: base32Encode(secret),
+          status: 'PENDING',
+          lastUsedStep: 0,
+          createdAt: at,
+        });
+        return {
+          setupKey: base32Encode(secret),
+          otpauthUri: otpauthUri({ issuer: TOTP_ISSUER, label: mask(user.mobile), secret }),
+          expiresAt: iso(at + TOTP_ENROL_TTL_SEC * 1000),
+        };
+      },
+      options,
+    ),
+
+    route(
+      'totpEnrolConfirm',
+      async (context) => {
+        const { session, user } = signedIn(context);
+        requireStepUp(session, user);
+        const factor = totpFactors.get(user.id);
+        if (factor?.status === 'ACTIVE') throw conflict('Two-factor authentication is already on.');
+        if (!factor || now() - factor.createdAt > TOTP_ENROL_TTL_SEC * 1000) {
+          throw conflict('This setup has expired. Start again.');
+        }
+        const step = await verifyTotp(base32Decode(factor.secret), context.body.code, now());
+        if (step === null) throw totpInvalid();
+        factor.status = 'ACTIVE';
+        factor.lastUsedStep = step;
+        user.totpEnabled = true;
+        return { codes: await newRecoveryCodes(user.id) };
+      },
+      options,
+    ),
+
+    route(
+      'totpDisable',
+      async (context) => {
+        const { session, user } = signedIn(context);
+        requireStepUp(session, user);
+        if (totpFactors.get(user.id)?.status !== 'ACTIVE') {
+          throw conflict('Two-factor authentication is not turned on.');
+        }
+        if (!(await secondFactorIsRight(user.id, context.body))) throw totpInvalid();
+        totpFactors.delete(user.id);
+        recoveryCodes.delete(user.id);
+        user.totpEnabled = false;
+        return { ok: true as const };
+      },
+      options,
+    ),
+
+    route(
+      'totpRecoveryCodes',
+      async (context) => {
+        const { session, user } = signedIn(context);
+        requireStepUp(session, user);
+        if (totpFactors.get(user.id)?.status !== 'ACTIVE') {
+          throw conflict('Two-factor authentication is not turned on.');
+        }
+        if (!(await codeIsRight(user.id, context.body.code))) throw totpInvalid();
+        return { codes: await newRecoveryCodes(user.id) };
       },
       options,
     ),
