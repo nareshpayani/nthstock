@@ -1,0 +1,113 @@
+{
+  "at": "2026-10-24T04:37:22.737Z",
+  "machine": {
+    "cpus": 4,
+    "cpuModel": "Intel(R) Xeon(R) Processor",
+    "memoryGb": 16
+  },
+  "settings": {
+    "users": 10000,
+    "durationSec": 60,
+    "thinkMs": 5000,
+    "orderShare": 0.1,
+    "workers": 4
+  },
+  "login": {
+    "count": 10000,
+    "p50": 309.4,
+    "p95": 437.4,
+    "p99": 523.4,
+    "max": 595.6,
+    "wallMs": 16747,
+    "perSecond": 597,
+    "errors": {}
+  },
+  "api": {
+    "count": 93182,
+    "p50": 1129.6,
+    "p95": 3395.2,
+    "p99": 6568.1,
+    "max": 7630.2,
+    "perSecond": 1427,
+    "errors": {},
+    "byRoute": {
+      "quotes": {
+        "count": 27808,
+        "p50": 18.3,
+        "p95": 43.3,
+        "p99": 67,
+        "max": 147.7
+      },
+      "funds": {
+        "count": 4709,
+        "p50": 1348,
+        "p95": 3128,
+        "p99": 3362.5,
+        "max": 3455.1
+      },
+      "portfolio": {
+        "count": 13925,
+        "p50": 1343.8,
+        "p95": 3116.7,
+        "p99": 3365.4,
+        "max": 3461.2
+      },
+      "orders": {
+        "count": 13977,
+        "p50": 1377.6,
+        "p95": 3117.2,
+        "p99": 3360.6,
+        "max": 3457
+      },
+      "placeOrder": {
+        "count": 9436,
+        "p50": 3231.3,
+        "p95": 7349.1,
+        "p99": 7561.9,
+        "max": 7630.2
+      },
+      "depth": {
+        "count": 9193,
+        "p50": 18.3,
+        "p95": 42.6,
+        "p99": 66,
+        "max": 149
+      },
+      "positions": {
+        "count": 14134,
+        "p50": 1343.5,
+        "p95": 3108.1,
+        "p99": 3367.1,
+        "max": 3456.4
+      }
+    }
+  },
+  "ws": {
+    "opened": 10000,
+    "failed": 0,
+    "closedEarly": 0,
+    "connectMs": {
+      "count": 10000,
+      "p50": 43,
+      "p95": 81.6,
+      "p99": 259,
+      "max": 267.1
+    },
+    "framesPerSecond": 10866,
+    "tickAgeMs": {
+      "count": 66390,
+      "p50": 260,
+      "p95": 405,
+      "p99": 444,
+      "max": 489
+    },
+    "peakConnections": 10000,
+    "droppedFrames": 0
+  },
+  "servers": {
+    "apiPeakCpu": 114,
+    "apiPeakRssMb": 844,
+    "realtimePeakCpu": 36,
+    "realtimePeakRssMb": 450
+  }
+}
