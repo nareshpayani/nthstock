@@ -1,5 +1,5 @@
 import type { Candle, CandleInterval, CandleRange } from '@nthstock/contracts';
-import { TICK_SIZE_PAISE } from '@nthstock/contracts';
+import { INTRADAY_INTERVAL_MINUTES, TICK_SIZE_PAISE } from '@nthstock/contracts';
 import {
   MARKET_CLOSE,
   MARKET_OPEN,
@@ -8,6 +8,7 @@ import {
   isTradingDay,
   istDateKey,
   nseHolidays2026,
+  sessionBarStart,
   toIstParts,
   type Clock,
   type HolidayTable,
@@ -183,4 +184,40 @@ export function generateCandles(input: CandleInput): CandleOutput {
     prevClose = c;
   }
   return { interval: spec.interval, candles };
+}
+
+/** Which bar of `interval` a bar opening at `t` belongs to, and when that bar opens. */
+function bucketOf(t: string, interval: CandleInterval): { key: string; start: string } {
+  const minutes = INTRADAY_INTERVAL_MINUTES[interval];
+  if (minutes !== null) {
+    const start = new Date(sessionBarStart(Date.parse(t), minutes)).toISOString();
+    return { key: start, start };
+  }
+  const date = new Date(t);
+  return { key: interval === '1w' ? weekKey(date) : istDateKey(date), start: t };
+}
+
+/**
+ * Groups bars into longer ones (NSTOCK-0343): 1-minute bars into 5, 15, 30 or 60-minute bars
+ * counted from the 9:15 open, hourly bars into days, daily bars into weeks. Open is the first
+ * bar's, close the last's, high and low the extremes and volume the sum. A daily or weekly bar
+ * opens at its first source bar. `candles` must be oldest first and no longer than `interval`.
+ */
+export function resampleCandles(candles: readonly Candle[], interval: CandleInterval): Candle[] {
+  const out: Candle[] = [];
+  let key: string | null = null;
+  for (const bar of candles) {
+    const bucket = bucketOf(bar.t, interval);
+    const last = out[out.length - 1];
+    if (last && bucket.key === key) {
+      last.h = Math.max(last.h, bar.h);
+      last.l = Math.min(last.l, bar.l);
+      last.c = bar.c;
+      last.v += bar.v;
+    } else {
+      out.push({ ...bar, t: bucket.start });
+      key = bucket.key;
+    }
+  }
+  return out;
 }

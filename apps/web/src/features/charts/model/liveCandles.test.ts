@@ -61,6 +61,31 @@ describe('live 1-minute bars (T-108)', () => {
     expect(applyTick(bars, { price: 1, at: Number.NaN, volumeDelta: 0 })).toBe(bars);
   });
 
+  it('folds ticks into longer bars counted from the 9:15 open (NSTOCK-0343)', () => {
+    // 9:15 IST is 03:45 UTC, so 30-minute bars open at 9:15 and 9:45, not on the half hour.
+    const first = applyTick(
+      [],
+      { price: 100, at: at('2026-09-25T04:10:00.000Z'), volumeDelta: 1 },
+      30,
+    );
+    expect(first[0]?.t).toBe('2026-09-25T03:45:00.000Z');
+    const same = applyTick(
+      first,
+      { price: 90, at: at('2026-09-25T04:14:59.000Z'), volumeDelta: 2 },
+      30,
+    );
+    expect(same).toEqual([{ t: '2026-09-25T03:45:00.000Z', o: 100, h: 100, l: 90, c: 90, v: 3 }]);
+    const next = applyTick(
+      same,
+      { price: 95, at: at('2026-09-25T04:15:00.000Z'), volumeDelta: 1 },
+      30,
+    );
+    expect(next.map((bar) => bar.t)).toEqual([
+      '2026-09-25T03:45:00.000Z',
+      '2026-09-25T04:15:00.000Z',
+    ]);
+  });
+
   it('starts a series from the first tick when there are no bars yet', () => {
     expect(
       applyTick([], { price: 150000, at: at('2026-09-25T03:45:30.000Z'), volumeDelta: 0 }),

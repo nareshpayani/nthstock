@@ -1,4 +1,11 @@
-import type { Candle, CandleRange, Instrument } from '@nthstock/contracts';
+import {
+  CANDLE_INTERVALS,
+  INTRADAY_INTERVAL_MINUTES,
+  type Candle,
+  type CandleInterval,
+  type CandleRange,
+  type Instrument,
+} from '@nthstock/contracts';
 import { ErrorState, SegmentedControl, Skeleton } from '@nthstock/ui';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
@@ -9,8 +16,10 @@ import {
   LiveBadge,
   PriceChart,
   candlesQuery,
+  intervalLabel,
   isIntraday,
   rangeLabel,
+  resolveInterval,
   useLiveCandles,
 } from '@/features/charts';
 import { Card } from '@/shared/components/Card';
@@ -22,8 +31,11 @@ import { strings } from '../strings';
 export type StockChartCardProps = {
   instrument: Instrument;
   range: CandleRange;
+  /** Bar size from the URL (NSTOCK-0343); the range's own when absent or not offered. */
+  interval?: CandleInterval | undefined;
   chartType: ChartType;
   onRangeChange: (range: CandleRange) => void;
+  onIntervalChange?: (interval: CandleInterval) => void;
   onChartTypeChange: (type: ChartType) => void;
   /** Chart height in px; the phone layout sizes it to the screen (T12). */
   height?: number;
@@ -37,16 +49,18 @@ export const CHART_HEIGHT = 320;
 const NO_CANDLES: readonly Candle[] = [];
 
 /**
- * Stock price chart (T-107): 1D to 5Y range tabs and an area/candle toggle, both kept in the URL
- * by the page, and a crosshair tooltip with the hovered bar's IST time and ₹ values. The previous
+ * Stock price chart (T-107): 1D to 5Y range tabs, a bar size picker (1, 5, 15, 30 or 60-minute
+ * bars on 1D; NSTOCK-0343) and an area/candle toggle, all kept in the URL by the page, and a crosshair tooltip with the hovered bar's IST time and ₹ values. The previous
  * range stays on screen, dimmed, while the next one loads. On 1D while the market is open, the
  * last bar moves with every live quote and a new bar starts each minute (T-108).
  */
 export function StockChartCard({
   instrument,
   range,
+  interval: requestedInterval,
   chartType,
   onRangeChange,
+  onIntervalChange,
   onChartTypeChange,
   height = CHART_HEIGHT,
   controls = 'sm',
@@ -56,15 +70,28 @@ export function StockChartCard({
   const api = useApiClient();
   const marketOpen = useMarketOpen();
   const { symbol, exchange } = instrument;
+  const interval = resolveInterval(range, requestedInterval);
+  const intervals = CANDLE_INTERVALS[range];
   const candles = useQuery({
-    ...candlesQuery(api, { symbol, exchange, range }),
+    ...candlesQuery(api, { symbol, exchange, range, interval }),
     placeholderData: keepPreviousData,
   });
   const format = instrument.type === 'INDEX' ? 'index' : 'inr';
-  // T-108: while NSE is open, today's 1-minute bars follow the quote store.
+  // T-108: while NSE is open, today's bars follow the quote store, whatever their size.
+  const barMinutes = INTRADAY_INTERVAL_MINUTES[interval];
   const live =
-    marketOpen && range === '1D' && candles.data?.interval === '1m' && !candles.isPlaceholderData;
-  const bars = useLiveCandles(symbol, exchange, candles.data?.candles ?? NO_CANDLES, live);
+    marketOpen &&
+    range === '1D' &&
+    barMinutes !== null &&
+    candles.data?.interval === interval &&
+    !candles.isPlaceholderData;
+  const bars = useLiveCandles(
+    symbol,
+    exchange,
+    candles.data?.candles ?? NO_CANDLES,
+    live,
+    barMinutes ?? 1,
+  );
 
   return (
     <Card
@@ -87,6 +114,19 @@ export function StockChartCard({
             onValueChange={onRangeChange}
             options={CHART_RANGES.map((value) => ({ value, label: value }))}
           />
+          {intervals.length > 1 && onIntervalChange && controls !== 'touch' ? (
+            <SegmentedControl
+              label={strings.chart.intervalLabel}
+              size={controls}
+              value={interval}
+              onValueChange={onIntervalChange}
+              options={intervals.map((value) => ({
+                value,
+                label: value,
+                ariaLabel: strings.chart.intervalOption(intervalLabel(value)),
+              }))}
+            />
+          ) : null}
           <SegmentedControl
             label={strings.chart.typeLabel}
             size={controls}
@@ -94,6 +134,25 @@ export function StockChartCard({
             onValueChange={onChartTypeChange}
             options={CHART_TYPES.map((value) => ({ value, label: strings.chart.types[value] }))}
           />
+          {intervals.length > 1 && onIntervalChange && controls === 'touch' ? (
+            // On a phone five more segments would push the chart under the trade bar, so the bar
+            // size is a native select beside the chart type: one row, and the OS picker.
+            <select
+              aria-label={strings.chart.intervalLabel}
+              value={interval}
+              onChange={(event) => {
+                const next = intervals.find((value) => value === event.target.value);
+                if (next) onIntervalChange(next);
+              }}
+              className="h-11 rounded-md border border-line bg-canvas px-3 text-body font-medium text-ink focus-visible:border-brand focus-visible:ring-3 focus-visible:ring-brand-soft focus-visible:outline-none"
+            >
+              {intervals.map((value) => (
+                <option key={value} value={value}>
+                  {value}
+                </option>
+              ))}
+            </select>
+          ) : null}
         </div>
       }
     >
@@ -114,6 +173,7 @@ export function StockChartCard({
               symbol,
               strings.chart.typeNames[chartType],
               rangeLabel(range),
+              interval === intervals[0] ? undefined : intervalLabel(interval),
             )}
             type={chartType}
             format={format}

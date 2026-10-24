@@ -7,7 +7,7 @@ type Track = { base: readonly Candle[]; bars: readonly Candle[]; quote: Quote | 
 
 /**
  * The 1D series kept live from the quote store (T-108): each committed quote (at most one per
- * animation frame) is folded into 1-minute bars with `applyTick`. When `candles` changes (a
+ * animation frame) is folded into the series' bars, `minutes` long, with `applyTick`. When `candles` changes (a
  * refetch), the live bars start again from it. With `enabled` false it returns `candles` as is.
  */
 export function useLiveCandles(
@@ -15,6 +15,7 @@ export function useLiveCandles(
   exchange: Exchange,
   candles: readonly Candle[],
   enabled: boolean,
+  minutes = 1,
 ): readonly Candle[] {
   const quote = useQuote(symbol, exchange)?.quote;
   const [track, setTrack] = useState<Track>(() => ({
@@ -27,7 +28,7 @@ export function useLiveCandles(
   // chart never draws a frame behind the price cell.
   let next = track.base === candles ? track : { base: candles, bars: candles, quote: undefined };
   if (enabled && quote && quote !== next.quote) {
-    next = { ...next, bars: applyTick(next.bars, quoteToTick(quote, next.quote)), quote };
+    next = { ...next, bars: applyTick(next.bars, quoteToTick(quote, next.quote), minutes), quote };
   }
   if (next !== track) setTrack(next);
   return enabled ? next.bars : candles;

@@ -52,7 +52,7 @@ export const marketRoutes =
       app,
       'instrumentCandles',
       async ({ params, query }) =>
-        (await market.getCandles(params.symbol, query.range, query.exchange)) ??
+        (await market.getCandles(params.symbol, query.range, query.exchange, query.interval)) ??
         notFound(`Symbol ${params.symbol}`),
     );
 

@@ -1,4 +1,5 @@
 import type {
+  CandleInterval,
   CandleRange,
   CandleSeries,
   Depth,
@@ -29,7 +30,13 @@ import {
   type HolidayTable,
 } from '@nthstock/utils';
 import type { MarketDataAdapter, QuoteListener, Unsubscribe } from './adapter.js';
-import { CANDLE_SPECS, RANGE_YEARS, generateCandles, latestSessionOpen } from './candles.js';
+import {
+  CANDLE_SPECS,
+  RANGE_YEARS,
+  generateCandles,
+  latestSessionOpen,
+  resampleCandles,
+} from './candles.js';
 import { generateDepth } from './depth.js';
 import { MinuteBars, mergeMinuteBars } from './minuteBars.js';
 import { aggregateValue, computeIndexLevel } from './indexLevels.js';
@@ -289,16 +296,20 @@ export class MockMarketDataAdapter implements MarketDataAdapter {
     symbol: string,
     range: CandleRange,
     exchange?: Exchange,
+    interval?: CandleInterval,
   ): Promise<CandleSeries | null> {
     const entry = this.resolve(symbol, exchange);
     if (!entry) return Promise.resolve(null);
-    const { interval, candles } = this.candlesOf(entry, range);
+    const own = this.candlesOf(entry, range);
+    // A longer bar is built from the range's own bars, the live ones included (NSTOCK-0343).
+    const wanted = interval ?? own.interval;
+    const candles = wanted === own.interval ? own.candles : resampleCandles(own.candles, wanted);
     const { instrument } = entry.master;
     return Promise.resolve({
       symbol: instrument.symbol,
       exchange: instrument.exchange,
       range,
-      interval,
+      interval: wanted,
       candles,
     });
   }

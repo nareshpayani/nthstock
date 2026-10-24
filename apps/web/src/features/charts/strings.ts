@@ -20,6 +20,16 @@ export const strings = {
     low: 'Low',
     close: 'Close',
   },
+  /** Bar sizes spelled out for accessible names (NSTOCK-0343). */
+  intervals: {
+    '1m': '1-minute',
+    '5m': '5-minute',
+    '15m': '15-minute',
+    '30m': '30-minute',
+    '1h': '1-hour',
+    '1d': 'daily',
+    '1w': 'weekly',
+  },
   ranges: {
     '1D': '1 day',
     '1W': '1 week',

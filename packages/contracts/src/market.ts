@@ -125,8 +125,33 @@ export type InstrumentStats = z.infer<typeof InstrumentStats>;
 export const CandleRange = z.enum(['1D', '1W', '1M', '1Y', '5Y']);
 export type CandleRange = z.infer<typeof CandleRange>;
 
-export const CandleInterval = z.enum(['1m', '5m', '15m', '1h', '1d', '1w']);
+export const CandleInterval = z.enum(['1m', '5m', '15m', '30m', '1h', '1d', '1w']);
 export type CandleInterval = z.infer<typeof CandleInterval>;
+
+/**
+ * Bar sizes a chart may ask for on each range (NSTOCK-0343), finest first. The first is the
+ * range's own bar size and the default; the others are built by grouping those bars.
+ */
+export const CANDLE_INTERVALS: Readonly<
+  Record<CandleRange, readonly [CandleInterval, ...CandleInterval[]]>
+> = {
+  '1D': ['1m', '5m', '15m', '30m', '1h'],
+  '1W': ['5m', '15m', '30m', '1h'],
+  '1M': ['1h', '1d'],
+  '1Y': ['1d', '1w'],
+  '5Y': ['1w'],
+};
+
+/** Minutes in an intraday bar; null for daily and weekly bars, which follow the calendar. */
+export const INTRADAY_INTERVAL_MINUTES: Readonly<Record<CandleInterval, number | null>> = {
+  '1m': 1,
+  '5m': 5,
+  '15m': 15,
+  '30m': 30,
+  '1h': 60,
+  '1d': null,
+  '1w': null,
+};
 
 /** One OHLCV bar; `t` is the bar's open time. */
 export const Candle = z
@@ -143,7 +168,17 @@ export const Candle = z
   });
 export type Candle = z.infer<typeof Candle>;
 
-export const CandlesQuery = z.object({ range: CandleRange, exchange: Exchange.optional() });
+export const CandlesQuery = z
+  .object({
+    range: CandleRange,
+    /** Bar size; one of `CANDLE_INTERVALS[range]`, the range's own when left out. */
+    interval: CandleInterval.optional(),
+    exchange: Exchange.optional(),
+  })
+  .refine((q) => q.interval === undefined || CANDLE_INTERVALS[q.range].includes(q.interval), {
+    error: 'This bar size is not available for the range',
+    path: ['interval'],
+  });
 export type CandlesQuery = z.infer<typeof CandlesQuery>;
 
 export const CandleSeries = z.object({

@@ -1,8 +1,5 @@
 import type { Candle, Quote } from '@nthstock/contracts';
-import { istDateKey } from '@nthstock/utils';
-
-/** Live 1D bars are one minute long, like the 1D series the API returns (`interval: 1m`). */
-export const LIVE_BUCKET_MS = 60_000;
+import { istDateKey, sessionBarStart } from '@nthstock/utils';
 
 /** One trade as the chart needs it: price (paise), time (epoch ms) and volume since the last. */
 export type LiveTick = { price: number; at: number; volumeDelta: number };
@@ -14,19 +11,19 @@ export function quoteToTick(quote: Quote, previous: Quote | undefined): LiveTick
 }
 
 /**
- * Folds one tick into minute bars (T-108). A tick in the last bar's minute updates that bar
- * (close, high, low, volume); a tick in a later minute of the same IST day appends a bar opening
- * at the tick's price. An older tick, or one from another day (the series refetches then), leaves
+ * Folds one tick into `minutes`-long bars (T-108; any intraday bar size since NSTOCK-0343, counted
+ * from the 9:15 open like the API's). A tick in the last bar updates that bar (close, high, low,
+ * volume); a tick in a later bar of the same IST day appends a bar opening at the tick's price. An older tick, or one from another day (the series refetches then), leaves
  * the bars untouched and returns the same array. Every unchanged bar keeps its identity, which is
  * what lets the chart update just the last bar instead of redrawing.
  */
 export function applyTick(
   candles: readonly Candle[],
   tick: LiveTick,
-  bucketMs: number = LIVE_BUCKET_MS,
+  minutes = 1,
 ): readonly Candle[] {
   if (!Number.isFinite(tick.at)) return candles;
-  const start = tick.at - (tick.at % bucketMs);
+  const start = sessionBarStart(tick.at, minutes);
   const { price, volumeDelta } = tick;
   const last = candles[candles.length - 1];
   const fresh = (): Candle => ({

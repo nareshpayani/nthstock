@@ -5,6 +5,8 @@ import { useTouchTargets } from '../lib/touchTargets.js';
 export type SegmentOption<T extends string> = {
   value: T;
   label: string;
+  /** Accessible name when the visible label is terse or clashes with another, e.g. "1m" vs "1M". */
+  ariaLabel?: string;
   /** Colour of the selected segment: brand by default, up for Buy, down for Sell. */
   tone?: 'brand' | 'up' | 'down';
   /** Unavailable option (e.g. an exchange the stock is not listed on): skipped by arrow keys. */
@@ -74,6 +76,7 @@ export function SegmentedControl<T extends string>({
           key={option.value}
           value={option.value}
           {...(option.disabled ? { disabled: true } : {})}
+          {...(option.ariaLabel ? { 'aria-label': option.ariaLabel } : {})}
           className={cn(
             'rounded-[6px] font-medium text-ink-muted transition-colors duration-(--nth-duration-flash) hover:text-ink disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:text-ink-muted',
             SIZES[touch ? 'touch' : size],

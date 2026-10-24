@@ -1,4 +1,4 @@
-import { CandleRange, Exchange } from '@nthstock/contracts';
+import { CandleInterval, CandleRange, Exchange } from '@nthstock/contracts';
 import { createFileRoute, notFound, redirect } from '@tanstack/react-router';
 import { z } from 'zod';
 import {
@@ -8,11 +8,12 @@ import {
   type StockDetailSearch,
 } from '@/features/stockDetail';
 
-// Stock detail URL state (ADR 0005): chart range, exchange and chart type. An invalid value is
+// Stock detail URL state (ADR 0005): chart range and bar size, exchange and chart type. An invalid value is
 // dropped rather than failing the route. Kept here, not imported from the feature, so the
 // feature's code stays out of the initial chunk.
 const stockSearch = z.object({
   range: CandleRange.optional().catch(undefined),
+  interval: CandleInterval.optional().catch(undefined),
   exchange: Exchange.optional().catch(undefined),
   chart: z.enum(['area', 'candle']).optional().catch(undefined),
 });
@@ -26,7 +27,11 @@ export const Route = createFileRoute('/_app/stocks/$symbol')({
       throw redirect({ to: '/stocks/$symbol', params: { symbol }, search, replace: true });
     }
   },
-  loaderDeps: ({ search }) => ({ exchange: search.exchange, range: search.range }),
+  loaderDeps: ({ search }) => ({
+    exchange: search.exchange,
+    range: search.range,
+    interval: search.interval,
+  }),
   // Waits for the instrument only (T-105); quote, stats and candles load in parallel.
   loader: async ({ context, params, deps }) => {
     const instrument = await loadStockDetail(context.queryClient, context.apiClient, {

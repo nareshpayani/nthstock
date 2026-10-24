@@ -1,4 +1,4 @@
-import type { CandleRange, Exchange } from '@nthstock/contracts';
+import type { CandleInterval, CandleRange, Exchange } from '@nthstock/contracts';
 
 export type ChartType = 'area' | 'candle';
 export const CHART_TYPES = ['area', 'candle'] as const satisfies readonly ChartType[];
@@ -10,6 +10,8 @@ export const DEFAULT_STOCK_RANGE: CandleRange = '1D';
 export type StockDetailSearch = {
   /** Chart range; the chart's default when absent. */
   range?: CandleRange | undefined;
+  /** Bar size (NSTOCK-0343); the range's own when absent or not offered on the range. */
+  interval?: CandleInterval | undefined;
   /** Exchange to show; the instrument's own listing when absent. */
   exchange?: Exchange | undefined;
   /** Area or candle chart. */
