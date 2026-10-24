@@ -3,25 +3,25 @@ import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './Table.js';
 import { VirtualCell, VirtualHeaderCell, VirtualList } from './VirtualList.js';
 
-// jsdom has no layout; give every element a 400×320 box so the virtualizer can measure.
-const original = {
-  height: Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'offsetHeight'),
-  width: Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'offsetWidth'),
-};
+// jsdom has no layout; give every element a 400×320 box so the virtualizer can measure
+// (TanStack Virtual reads clientHeight/clientWidth, older versions offset*).
+const sizes = [
+  { proto: HTMLElement.prototype, key: 'offsetHeight', value: 320 },
+  { proto: HTMLElement.prototype, key: 'offsetWidth', value: 400 },
+  { proto: Element.prototype, key: 'clientHeight', value: 320 },
+  { proto: Element.prototype, key: 'clientWidth', value: 400 },
+] as const;
+const originals = sizes.map(({ proto, key }) => Object.getOwnPropertyDescriptor(proto, key));
 beforeAll(() => {
-  Object.defineProperty(HTMLElement.prototype, 'offsetHeight', {
-    configurable: true,
-    get: () => 320,
-  });
-  Object.defineProperty(HTMLElement.prototype, 'offsetWidth', {
-    configurable: true,
-    get: () => 400,
-  });
+  for (const { proto, key, value } of sizes) {
+    Object.defineProperty(proto, key, { configurable: true, get: () => value });
+  }
 });
 afterAll(() => {
-  if (original.height)
-    Object.defineProperty(HTMLElement.prototype, 'offsetHeight', original.height);
-  if (original.width) Object.defineProperty(HTMLElement.prototype, 'offsetWidth', original.width);
+  sizes.forEach(({ proto, key }, index) => {
+    const descriptor = originals[index];
+    if (descriptor) Object.defineProperty(proto, key, descriptor);
+  });
 });
 
 const rows = Array.from({ length: 5000 }, (_, index) => ({ symbol: `SYM${String(index)}`, index }));
