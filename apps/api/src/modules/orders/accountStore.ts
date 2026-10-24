@@ -24,7 +24,24 @@ export type LoadedAccount = { workingSet: PaperEngineWorkingSet; version: number
 export type AccountChange = {
   before: PaperEngineWorkingSet | null;
   after: PaperEngineWorkingSet;
+  /**
+   * `after` is a whole account (every order and ledger entry) taking the place of the stored one:
+   * its orders and their history replace the stored ones, and its ledger entries are added where
+   * the ledger does not have them yet (the ledger is append-only).
+   */
+  replace?: boolean;
 };
+
+/**
+ * Whether the change clears the stored orders and their history: a replacing change, or an account
+ * reset (T-155), which adds a `RESET` ledger entry (the engine's orders do not survive it either).
+ * The ledger keeps every row and the audit log keeps every order action.
+ */
+export function clearsOrders({ before, after, replace = false }: AccountChange): boolean {
+  if (replace) return true;
+  const known = new Set(before?.ledger.entries.map((entry) => entry.id));
+  return after.ledger.entries.some((entry) => entry.type === 'RESET' && !known.has(entry.id));
+}
 
 export type OrdersPageQuery = { status?: OrderStatus; cursor?: string; limit?: number };
 export type LedgerPageQuery = { cursor?: string; limit?: number };

@@ -458,12 +458,13 @@ export class PaperEngine {
   /**
    * The working set (v2); `new PaperEngine({ ..., snapshot })` carries on from it like a full
    * snapshot. It is apps/api's store format, which keeps no trailing stops and no `seq` yet, so
-   * orders leave `seq` out.
+   * orders leave `seq` out. With `whole`, it keeps every order and ledger entry instead of only
+   * today's and the live ones (a store taking over a whole account, such as the demo seed).
    */
-  workingSet(): PaperEngineWorkingSet {
+  workingSet({ whole = false }: { whole?: boolean } = {}): PaperEngineWorkingSet {
     const syncedTo = this.#syncedTo;
     const day = toIstParts(syncedTo);
-    const since = fromIst(day.year, day.month, day.day, 0).toISOString();
+    const since = whole ? '' : fromIst(day.year, day.month, day.day, 0).toISOString();
     const kept = new Set<string>();
     for (const order of this.#orders.values()) {
       if (LIVE_STATUSES.has(order.status) || order.updatedAt >= since) kept.add(order.id);

@@ -101,7 +101,7 @@ describe('orders audit writes', () => {
     expect(flushed).toBe(true);
   });
 
-  it("fails the request when its own entry cannot be written, and reports the fill's", async () => {
+  it('fails the request when the order and its audit entries cannot be committed, and reports it', async () => {
     const memory = createMemoryAuditRepo({ clock: manualClock() });
     const broken: AuditRepo = {
       ...memory,
@@ -116,8 +116,9 @@ describe('orders audit writes', () => {
     const response = await place();
 
     expect(response.statusCode).toBe(500);
-    // The order's own updates and fund movements went to onAuditError; so did the request's.
-    expect(reported.length).toBeGreaterThan(1);
+    // The change commits with its audit entries or not at all (spec backend-core §5.3): the failed
+    // commit went to onAuditError, and the request answers 500 instead of an order nobody stored.
+    expect(reported.length).toBeGreaterThan(0);
     expect(new Set(reported)).toEqual(new Set(['audit_log is down']));
   });
 });

@@ -19,12 +19,13 @@ export type FundsService = ReturnType<typeof createFundsService>;
  */
 export function createFundsService({ orders }: FundsServiceDeps) {
   return {
-    summary: (userId: FundsUserId): FundsSummary => orders.funds(userId),
+    summary: (userId: FundsUserId): Promise<FundsSummary> => orders.funds(userId),
 
-    ledger: (userId: FundsUserId, query: CursorQuery): LedgerPage => orders.ledger(userId, query),
+    ledger: (userId: FundsUserId, query: CursorQuery): Promise<LedgerPage> =>
+      orders.ledger(userId, query),
 
     async reset(userId: FundsUserId, request: ResetRequest): Promise<FundsSummary> {
-      const funds = orders.reset(userId);
+      const funds = await orders.reset(userId);
       await orders.audit(userId, [
         {
           actor: { type: 'user', userId },
