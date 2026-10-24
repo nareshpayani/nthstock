@@ -151,7 +151,8 @@ so the browser mock and the matcher run the same code.
   `CANCEL`, `STOP_ADD`, `STOP_CANCEL` with the order's new version. The matcher applies a command
   only if its version is newer than the entry it holds.
 - **Start-up and repair.** On start, and every 60 s, the matcher reads the live orders of its shard
-  from Postgres (`orders WHERE status IN ('OPEN','AMO') AND shard = $1`, with a partial index) and
+  from Postgres (`orders WHERE status IN ('OPEN','AMO') AND shard = $1`; E23 adds the `shard
+  smallint` column, set on insert, and a partial index on `(shard) WHERE status IN ('OPEN','AMO')`) and
   reconciles the book. A lost command is therefore repaired in at most a minute, and every fill is
   still checked against Postgres before it is written.
 - **Session events** (AMO release 09:15, square-off 15:20, day close 15:30) stay E16 jobs. The
