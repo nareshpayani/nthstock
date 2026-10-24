@@ -85,7 +85,7 @@ export async function startMockWorker(
   );
   // Assets, fonts and the Vite client go to the network untouched. MSW's own logging is off
   // because it would print every WebSocket frame (4 a second per symbol); one line says it is on.
-  await worker.start({ onUnhandledRequest: 'bypass', quiet: true });
+  await worker.start({ onUnhandledFrame: 'bypass', quiet: true });
   console.info(
     `[MSW] Mocking enabled (VITE_API_MODE=msw): REST /v1 and ${wsUrl}, mock market ${
       config.mockMarketOpen ? 'forced open (VITE_MOCK_MARKET_OPEN)' : 'on NSE hours'

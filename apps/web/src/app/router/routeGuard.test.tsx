@@ -16,7 +16,7 @@ server.events.on('request:start', ({ request }) => {
 });
 
 beforeAll(() => {
-  server.listen({ onUnhandledRequest: 'error' });
+  server.listen({ onUnhandledFrame: 'error' });
 });
 afterEach(() => {
   resetSession();

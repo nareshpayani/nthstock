@@ -93,7 +93,7 @@ afterEach(() => {
 
 describe('order ticket with the market open', () => {
   const mock = mockAt(OPEN_MS);
-  beforeAll(() => mock.server.listen({ onUnhandledRequest: 'error' }));
+  beforeAll(() => mock.server.listen({ onUnhandledFrame: 'error' }));
   afterEach(() => mock.server.resetHandlers());
   afterAll(() => {
     mock.server.close();
@@ -372,7 +372,7 @@ describe('order ticket with the market open', () => {
 
 describe('order ticket with the market closed (T-138)', () => {
   const mock = mockAt(CLOSED_MS);
-  beforeAll(() => mock.server.listen({ onUnhandledRequest: 'error' }));
+  beforeAll(() => mock.server.listen({ onUnhandledFrame: 'error' }));
   afterEach(() => mock.server.resetHandlers());
   afterAll(() => {
     mock.server.close();
@@ -430,7 +430,7 @@ describe('order ticket load states', () => {
     'has no order form for an index',
     async () => {
       const mock = mockAt(OPEN_MS);
-      mock.server.listen({ onUnhandledRequest: 'error' });
+      mock.server.listen({ onUnhandledFrame: 'error' });
       try {
         // The instrument is public: no login needed.
         const apiClient = createApiClient({ baseUrl: 'http://ticket.test' });

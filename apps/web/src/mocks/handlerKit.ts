@@ -136,6 +136,37 @@ async function readJson(request: Request): Promise<unknown> {
   }
 }
 
+// ---- Cookies in tests ------------------------------------------------------------------------
+
+/**
+ * MSW 3 keeps its cookie store only in the browser; in Node (Vitest) a mocked `Set-Cookie` is not
+ * sent back. Tests therefore get a name → value jar here, filled from the cookies the resolvers set
+ * and merged under the request's own cookies. The browser keeps using MSW's store.
+ */
+const testCookieJars = new Map<string, Map<string, string>>(); // origin → name → value
+const useTestCookieJar = import.meta.env.MODE === 'test';
+
+/** Forgets the cookies the mocked responses set; the test setup calls it after every test. */
+export function resetTestCookies(): void {
+  testCookieJars.clear();
+}
+
+function rememberSetCookies(request: Request, headers: Headers): void {
+  if (!useTestCookieJar) return;
+  const origin = new URL(request.url).origin;
+  const jar = testCookieJars.get(origin) ?? new Map<string, string>();
+  testCookieJars.set(origin, jar);
+  for (const line of headers.getSetCookie()) {
+    const [pair = '', ...attributes] = line.split(';').map((part) => part.trim());
+    const separator = pair.indexOf('=');
+    if (separator <= 0) continue;
+    const name = pair.slice(0, separator);
+    const expired = attributes.some((attribute) => /^max-age=0$/i.test(attribute));
+    if (expired || separator === pair.length - 1) jar.delete(name);
+    else jar.set(name, pair.slice(separator + 1));
+  }
+}
+
 /** One MSW handler for route `name`, typed end to end from the route map. */
 export function defineRoute<N extends RouteName>(
   name: N,
@@ -153,7 +184,13 @@ export function defineRoute<N extends RouteName>(
 
   return http[method](
     `${options.origin ?? '*'}${route.path}`,
-    async ({ request, params, cookies }) => {
+    async ({ request, params, cookies: requestCookies }) => {
+      const cookies = useTestCookieJar
+        ? {
+            ...Object.fromEntries(testCookieJars.get(new URL(request.url).origin) ?? []),
+            ...requestCookies,
+          }
+        : requestCookies;
       const wait = pickLatency();
       if (wait > 0) await delay(wait);
 
@@ -193,6 +230,7 @@ export function defineRoute<N extends RouteName>(
         } as ResolverContext<N>);
       } catch (error) {
         if (error instanceof MockApiError) {
+          rememberSetCookies(request, headers);
           return errorResponse(error.status, error.code, error.message, error.details, headers);
         }
         throw error;
@@ -205,6 +243,7 @@ export function defineRoute<N extends RouteName>(
           issues: checked.error.issues,
         });
       }
+      rememberSetCookies(request, headers);
       return HttpResponse.json(body as Record<string, unknown>, { headers });
     },
   );

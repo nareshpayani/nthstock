@@ -128,7 +128,7 @@ const setVisibility = (state: DocumentVisibilityState) => {
 const ordersOf = async (api: Awaited<ReturnType<typeof loginOnMock>>) =>
   (await api.request('ordersList', {})).items;
 
-beforeAll(() => mock.server.listen({ onUnhandledRequest: 'error' }));
+beforeAll(() => mock.server.listen({ onUnhandledFrame: 'error' }));
 beforeEach(() => {
   resetScalperPrefs();
   resetFillToasts();

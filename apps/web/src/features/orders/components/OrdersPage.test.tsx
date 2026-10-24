@@ -107,7 +107,7 @@ const rows = (label: string) =>
     .slice(1);
 
 beforeAll(() => {
-  mock.server.listen({ onUnhandledRequest: 'error' });
+  mock.server.listen({ onUnhandledFrame: 'error' });
 });
 beforeEach(() => {
   installResizeObserver();

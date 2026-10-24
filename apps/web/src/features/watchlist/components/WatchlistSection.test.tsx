@@ -14,7 +14,7 @@ const { server, adapter } = createMockServer({ clock: fixedClock(fromIst(2026, 9
 let restoreLayout: () => void = () => undefined;
 
 beforeAll(() => {
-  server.listen({ onUnhandledRequest: 'error' });
+  server.listen({ onUnhandledFrame: 'error' });
   restoreLayout = fakeLayout(448);
 });
 afterEach(() => {
