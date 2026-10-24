@@ -2,6 +2,7 @@ import type { Instrument } from '@nthstock/contracts';
 import { cn } from '@nthstock/ui';
 import { useQuery } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
+import { keepInterval } from '@/features/charts';
 import { SectionBoundary } from '@/shared/components/SectionBoundary';
 import { useDocumentTitle } from '@/shared/hooks/useDocumentTitle';
 import { usePhoneLayout } from '@/shared/hooks/usePhoneLayout';
@@ -100,7 +101,11 @@ export function StockDetailPage({
               instrument={instrument}
               range={search.range ?? DEFAULT_STOCK_RANGE}
               chartType={search.chart ?? DEFAULT_CHART_TYPE}
-              onRangeChange={(range) => onSearchChange({ range })}
+              interval={search.interval}
+              onRangeChange={(range) =>
+                onSearchChange({ range, interval: keepInterval(range, search.interval) })
+              }
+              onIntervalChange={(interval) => onSearchChange({ interval })}
               onChartTypeChange={(chart) => onSearchChange({ chart })}
               trading={equity}
             />

@@ -207,6 +207,22 @@ describe('GET /v1/market/instruments/:symbol/candles', () => {
     }
     expect((await get('/v1/market/instruments/NOPE/candles?range=1D')).status).toBe(404);
   });
+
+  it('groups bars into the asked bar size and refuses one the range does not offer (NSTOCK-0343)', async () => {
+    const own = CandleSeries.parse(
+      (await get('/v1/market/instruments/INFY/candles?range=1D')).body,
+    );
+    const { status, body } = await get('/v1/market/instruments/INFY/candles?range=1D&interval=15m');
+    expect(status).toBe(200);
+    const series = CandleSeries.parse(body);
+    expect(series.interval).toBe('15m');
+    expect(series.candles.length).toBe(Math.ceil(own.candles.length / 15));
+    expect(series.candles.at(-1)?.c).toBe(own.candles.at(-1)?.c);
+
+    const wrong = await get('/v1/market/instruments/INFY/candles?range=1D&interval=1w');
+    expect(wrong.status).toBe(400);
+    expect(ApiError.parse(wrong.body).error.code).toBe('VALIDATION_ERROR');
+  });
 });
 
 describe('GET /v1/market/instruments/:symbol/depth', () => {

@@ -27,7 +27,7 @@ export function createMockApi() {
       return requests.filter((url) => url.pathname.endsWith(suffix));
     },
     listen() {
-      server.listen({ onUnhandledRequest: 'error' });
+      server.listen({ onUnhandledFrame: 'error' });
     },
     reset() {
       server.resetHandlers();

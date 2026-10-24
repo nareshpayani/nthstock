@@ -1,5 +1,5 @@
 import { fixedClock, fromIst } from '@nthstock/utils';
-import { act, fireEvent, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { chartsMock } from '@/test/chartsMock';
 import { createMockApi } from '@/test/mockApi';
@@ -59,6 +59,50 @@ describe('stock price chart (T-107)', () => {
       await screen.findByRole('figure', { name: 'INFY candlestick chart over 1 day' }),
     ).toBeInTheDocument();
     await waitFor(() => expect(chartsMock.active()[0]?.series[0]?.type).toBe('Candlestick'));
+  });
+
+  it('offers 1m to 1h bars on 1D, keeps the choice in the URL and fetches those bars (NSTOCK-0343)', async () => {
+    const { router } = renderApp('/stocks/INFY', { apiClient: api.apiClient });
+    await screen.findByTestId('chart-host');
+    const bars = screen.getByRole('radiogroup', { name: 'Bar size' });
+    expect(
+      within(bars)
+        .getAllByRole('radio')
+        .map((radio) => radio.textContent),
+    ).toEqual(['1m', '5m', '15m', '30m', '1h']);
+    expect(within(bars).getByRole('radio', { name: '1-minute bars' })).toHaveAttribute(
+      'aria-checked',
+      'true',
+    );
+
+    fireEvent.click(within(bars).getByRole('radio', { name: '15-minute bars' }));
+    await waitFor(() => expect(router.state.location.search).toEqual({ interval: '15m' }));
+    expect(
+      await screen.findByRole('figure', { name: 'INFY area chart over 1 day, 15-minute bars' }),
+    ).toBeInTheDocument();
+    const intervals = api
+      .requestsTo('/INFY/candles')
+      .map((url) => url.searchParams.get('interval'));
+    expect(intervals).toContain('15m');
+
+    // 1W offers 15-minute bars too, so the choice stays; 1Y does not, so it falls back to days.
+    fireEvent.click(screen.getByRole('radio', { name: '1W' }));
+    await waitFor(() =>
+      expect(router.state.location.search).toEqual({ range: '1W', interval: '15m' }),
+    );
+    fireEvent.click(screen.getByRole('radio', { name: '1Y' }));
+    await waitFor(() => expect(router.state.location.search).toEqual({ range: '1Y' }));
+    expect(
+      within(screen.getByRole('radiogroup', { name: 'Bar size' })).getByRole('radio', {
+        name: 'daily bars',
+      }),
+    ).toHaveAttribute('aria-checked', 'true');
+  });
+
+  it('hides the bar size picker on 5Y, which has weekly bars only', async () => {
+    renderApp('/stocks/INFY?range=5Y', { apiClient: api.apiClient });
+    await screen.findByTestId('chart-host');
+    expect(screen.queryByRole('radiogroup', { name: 'Bar size' })).not.toBeInTheDocument();
   });
 
   it('the crosshair tooltip shows the IST time and en-IN grouped rupees', async () => {

@@ -66,7 +66,7 @@ async function openBuyTicket(withStore: boolean) {
   return { dialog, api, tradingStore };
 }
 
-beforeAll(() => mock.server.listen({ onUnhandledRequest: 'error' }));
+beforeAll(() => mock.server.listen({ onUnhandledFrame: 'error' }));
 beforeEach(() => {
   installResizeObserver();
 });

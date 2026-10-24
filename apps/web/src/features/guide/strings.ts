@@ -8,12 +8,12 @@ import { defineTabs, repoLink } from './model/guideContent';
  * 2026-10-24).
  */
 export const strings = {
-  pageTitle: 'Guide',
-  title: 'nthstock guide',
+  pageTitle: 'Documentation',
+  title: 'nthstock documentation',
   description:
     'Everything about nthstock in one place, from what it does down to how each part is built, tested, scaled and shipped.',
   headerCta: 'Log in to start',
-  tabsLabel: 'Guide topics',
+  tabsLabel: 'Documentation topics',
   previous: 'Previous',
   next: 'Next',
   inWords: 'The diagram in words',
@@ -50,7 +50,7 @@ export const strings = {
             { term: 'Built', value: 'September to October 2026, in phases' },
           ],
         },
-        { kind: 'heading', text: 'How to read this guide' },
+        { kind: 'heading', text: 'How to read this documentation' },
         {
           kind: 'text',
           text: 'The tabs go from high level to low level. Start with the demo and the features, then the architecture, then the design of each part, and finish with how it is tested, scaled and shipped. Every tab links to the code it describes.',
@@ -163,7 +163,7 @@ export const strings = {
             },
             {
               name: 'Stock detail',
-              body: 'Area and candle charts, key stats, live market depth and a company overview.',
+              body: 'Area and candle charts from 1 day to 5 years, with 1, 5, 15, 30 and 60-minute bars on intraday ranges, key stats, live market depth and a company overview.',
             },
             {
               name: 'Order ticket',
@@ -198,7 +198,7 @@ export const strings = {
               body: 'NSE hours (9:15 AM to 3:30 PM IST) and holidays, tick size of 5 paise, ±20% circuit bands, intraday cut-off at 3:20 PM.',
             },
             {
-              name: 'Reviewer guide',
+              name: 'Documentation',
               body: 'This page: public, deep-linkable tabs, also linked from the login page.',
             },
           ],
@@ -526,6 +526,7 @@ export const strings = {
             'Company names, profiles and fundamentals from @faker-js/faker, also seeded.',
             'Prices from a geometric Brownian motion (GBM) per instrument, with drift and volatility by sector, for example Financial Services 12% and 28%, FMCG 9% and 18%.',
             'Index levels computed from their constituents, candles from 1 minute to 5 years, five levels of market depth, curated lists and movers.',
+            'Bar sizes: the API groups a range’s own bars into 1, 5, 15, 30 or 60-minute, daily or weekly bars (GET /v1/market/instruments/:symbol/candles?range=1D&interval=15m). Intraday bars are counted from the 9:15 open, as NSE charts do, so hourly bars open at 9:15, 10:15 and so on; live ticks extend the current bar of the chosen size.',
             'NSE rules: the 9:15 AM to 3:30 PM session and holidays, 5-paise ticks and ±20% circuit bands.',
           ],
         },
@@ -983,7 +984,7 @@ export const strings = {
             'The owner asks for a release.',
             'An agent runs Promote to production. It refuses unless develop’s head commit has green CI and passed the development smoke test.',
             'It moves the production branch to that commit. CI runs on production.',
-            'Green CI deploys the live site, which is smoke-tested as a reviewer would use it: login, a buy, the guide and an accessibility check.',
+            'Green CI deploys the live site, which is smoke-tested as a reviewer would use it: login, a buy, the documentation and an accessibility check.',
             'If the smoke test fails, the agent rolls back by redeploying the previous production commit.',
           ],
         },

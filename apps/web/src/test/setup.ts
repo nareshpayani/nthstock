@@ -2,9 +2,11 @@ import '@testing-library/jest-dom/vitest';
 import { cleanup } from '@testing-library/react';
 import { afterAll, afterEach } from 'vitest';
 import { configure } from '@testing-library/react';
+import { resetTestCookies } from '@/mocks/handlerKit';
 
 afterEach(() => {
   cleanup();
+  resetTestCookies();
 });
 
 // The router shows a pending page after `defaultPendingMs` (150 ms) by timer. If a file's last

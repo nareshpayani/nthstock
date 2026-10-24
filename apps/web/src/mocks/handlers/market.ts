@@ -61,7 +61,7 @@ export function marketHandlers(
     defineRoute(
       'instrumentCandles',
       async ({ params, query }) =>
-        (await adapter.getCandles(params.symbol, query.range, query.exchange)) ??
+        (await adapter.getCandles(params.symbol, query.range, query.exchange, query.interval)) ??
         notFound(`Symbol ${params.symbol}`),
       options,
     ),

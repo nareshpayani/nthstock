@@ -32,6 +32,22 @@ describe('SegmentedControl', () => {
     expect(screen.getByRole('radio', { name: 'Buy' })).toHaveAttribute('aria-checked', 'true');
   });
 
+  it('uses the option accessible name over its visible label when given', () => {
+    render(
+      <SegmentedControl
+        label="Bar size"
+        value="1m"
+        onValueChange={() => undefined}
+        options={[
+          { value: '1m', label: '1m', ariaLabel: '1-minute bars' },
+          { value: '1M', label: '1M' },
+        ]}
+      />,
+    );
+    expect(screen.getByRole('radio', { name: '1-minute bars' })).toHaveTextContent('1m');
+    expect(screen.getByRole('radio', { name: '1M' })).toBeInTheDocument();
+  });
+
   it('arrow keys move the selection', async () => {
     const onChange = vi.fn();
     render(<SideControl onChange={onChange} />);

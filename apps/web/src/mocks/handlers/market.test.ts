@@ -18,7 +18,7 @@ async function valid<N extends RouteName>(name: N, call: Promise<unknown>) {
 }
 
 beforeAll(() => {
-  server.listen({ onUnhandledRequest: 'error' });
+  server.listen({ onUnhandledFrame: 'error' });
 });
 afterAll(() => {
   server.close();

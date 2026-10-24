@@ -1,5 +1,5 @@
 import { isApiError, type ApiClient } from '@nthstock/apiClient';
-import type { CandleRange, Exchange, Instrument } from '@nthstock/contracts';
+import type { CandleInterval, CandleRange, Exchange, Instrument } from '@nthstock/contracts';
 import type { QueryClient } from '@tanstack/react-query';
 import { candlesQuery } from '@/features/charts';
 import {
@@ -15,6 +15,7 @@ export type LoadStockDetailParams = {
   symbol: string;
   exchange?: Exchange | undefined;
   range?: CandleRange | undefined;
+  interval?: CandleInterval | undefined;
 };
 
 /** A symbol the API does not know (404) or cannot be a symbol at all (400). */
@@ -32,7 +33,7 @@ const isMissing = (error: unknown) =>
 export async function loadStockDetail(
   queryClient: QueryClient,
   api: ApiClient,
-  { symbol, exchange, range }: LoadStockDetailParams,
+  { symbol, exchange, range, interval }: LoadStockDetailParams,
 ): Promise<Instrument | null> {
   let instrument: Instrument;
   try {
@@ -44,7 +45,7 @@ export async function loadStockDetail(
   const listed = { symbol: instrument.symbol, exchange: instrument.exchange };
   void queryClient.prefetchQuery(quoteSnapshotQuery(api, listed));
   void queryClient.prefetchQuery(
-    candlesQuery(api, { ...listed, range: range ?? DEFAULT_STOCK_RANGE }),
+    candlesQuery(api, { ...listed, range: range ?? DEFAULT_STOCK_RANGE, interval }),
   );
   if (instrument.type === 'EQUITY') {
     void queryClient.prefetchQuery(statsQuery(api, listed));

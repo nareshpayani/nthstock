@@ -1,7 +1,13 @@
 import { Candle, CandleRange } from '@nthstock/contracts';
 import { fixedClock, fromIst, istDateKey, nseHolidays2026, toIstParts } from '@nthstock/utils';
 import { describe, expect, it } from 'vitest';
-import { CANDLE_SPECS, candleTimes, generateCandles, latestSessionOpen } from './candles.js';
+import {
+  CANDLE_SPECS,
+  candleTimes,
+  generateCandles,
+  latestSessionOpen,
+  resampleCandles,
+} from './candles.js';
 
 // Wednesday 21 Oct 2026, 11:00 IST: the day after Dussehra (Tue 20 Oct, a holiday).
 const inSession = fixedClock(fromIst(2026, 10, 21, 11 * 60));
@@ -156,5 +162,47 @@ describe('candleTimes', () => {
     const holidays = { ...nseHolidays2026, '2026-03-02': 'Test closure' };
     const times = candleTimes('5Y', fixedClock(fromIst(2026, 3, 7, 600)), holidays);
     expect(istDateKey(times.at(-1) as Date)).toBe('2026-03-04');
+  });
+});
+
+describe('resampleCandles (NSTOCK-0343)', () => {
+  const closed = fixedClock(fromIst(2026, 10, 21, 16 * 60));
+  const minutes = generate('1D', closed).candles;
+
+  it('groups a full session of minute bars into 15, 30 and 60-minute bars from 9:15', () => {
+    expect(minutes).toHaveLength(375);
+    expect(resampleCandles(minutes, '5m')).toHaveLength(75);
+    expect(resampleCandles(minutes, '15m')).toHaveLength(25);
+    const halfHours = resampleCandles(minutes, '30m');
+    expect(halfHours).toHaveLength(13);
+    const hours = resampleCandles(minutes, '1h');
+    expect(hours).toHaveLength(7);
+    expect(hours.map((bar) => toIstParts(new Date(bar.t)).minuteOfDay % 60)).toEqual(
+      Array(7).fill(15),
+    );
+    expect(toIstParts(new Date((halfHours[1] as Candle).t)).minuteOfDay).toBe(9 * 60 + 45);
+  });
+
+  it('keeps open, close, the extremes and the volume of the bars it groups', () => {
+    const hours = resampleCandles(minutes, '1h');
+    const first = minutes.slice(0, 60);
+    const bar = hours[0] as Candle;
+    expect(bar.o).toBe((first[0] as Candle).o);
+    expect(bar.c).toBe((first[59] as Candle).c);
+    expect(bar.h).toBe(Math.max(...first.map((m) => m.h)));
+    expect(bar.l).toBe(Math.min(...first.map((m) => m.l)));
+    expect(bar.v).toBe(first.reduce((sum, m) => sum + m.v, 0));
+    expect((hours[hours.length - 1] as Candle).c).toBe((minutes[minutes.length - 1] as Candle).c);
+    for (const candle of hours) expect(Candle.safeParse(candle).success).toBe(true);
+  });
+
+  it('groups hourly bars into days and daily bars into weeks', () => {
+    const month = generate('1M', closed).candles;
+    const days = resampleCandles(month, '1d');
+    expect(days).toHaveLength(22);
+    expect(new Set(days.map((d) => istDateKey(new Date(d.t)))).size).toBe(22);
+    const weeks = resampleCandles(generate('1Y', closed).candles, '1w');
+    expect(weeks.length).toBeGreaterThan(50);
+    expect(weeks.length).toBeLessThan(55);
   });
 });

@@ -1,4 +1,4 @@
-import { Sheet } from '@nthstock/ui';
+import { Sheet, cn } from '@nthstock/ui';
 import { Link } from '@tanstack/react-router';
 import { OrderTicketHost, TrailingStopSheetHost } from '@/features/orderTicket';
 import { OrderUpdatesBridge } from '@/features/orders';
@@ -16,6 +16,11 @@ import { ShortcutHelpDialog } from './ShortcutHelpDialog';
 
 export type AppShellProps = {
   children: ReactNode;
+  /**
+   * Show the watchlist rail beside the page (the default). A page with its own side navigation,
+   * the guide (NSTOCK-0342), turns it off and gets the full width with no padding at 1024 px and up.
+   */
+  rail?: boolean;
 };
 
 /**
@@ -25,7 +30,7 @@ export type AppShellProps = {
  * The order ticket slide-over (T-135) is mounted here, so it opens over any page, and so is the
  * order-update listener (T-147), so fills refresh the book and toast on any page.
  */
-export function AppShell({ children }: AppShellProps) {
+export function AppShell({ children, rail = true }: AppShellProps) {
   const drawerOpen = useShellStore((s) => s.drawerOpen);
   const helpOpen = useShellStore((s) => s.helpOpen);
   const setDrawerOpen = useShellStore((s) => s.setDrawerOpen);
@@ -63,15 +68,21 @@ export function AppShell({ children }: AppShellProps) {
       </a>
       <Header onOpenMenu={() => setDrawerOpen(true)} onOpenHelp={() => setHelpOpen(true)} />
       <div className="flex">
-        <aside
-          aria-label={strings.rail.label}
-          className="hidden w-80 shrink-0 border-r border-line bg-surface lg:block"
+        {rail ? (
+          <aside
+            aria-label={strings.rail.label}
+            className="hidden w-80 shrink-0 border-r border-line bg-surface lg:block"
+          >
+            <div className="sticky top-(--header-h) h-[calc(100dvh-var(--header-h))] overflow-y-auto">
+              <LeftRail searchRef={railSearch} onAddStock={focusSearch} />
+            </div>
+          </aside>
+        ) : null}
+        <main
+          id="main"
+          tabIndex={-1}
+          className={cn('min-w-0 flex-1 p-4 outline-none', rail ? 'lg:p-6' : 'lg:p-0')}
         >
-          <div className="sticky top-(--header-h) h-[calc(100dvh-var(--header-h))] overflow-y-auto">
-            <LeftRail searchRef={railSearch} onAddStock={focusSearch} />
-          </div>
-        </aside>
-        <main id="main" tabIndex={-1} className="min-w-0 flex-1 p-4 outline-none lg:p-6">
           {children}
         </main>
       </div>

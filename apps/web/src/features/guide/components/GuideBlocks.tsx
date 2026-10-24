@@ -106,7 +106,9 @@ function Block({ block }: { block: GuideBlock }) {
           {block.items.map((item) => (
             <div key={item.term} className="grid content-start gap-0.5">
               <dt className="text-label text-ink-muted">{item.term}</dt>
-              <dd className="text-body font-semibold break-words text-ink">{item.value}</dd>
+              <dd className="text-body font-semibold [overflow-wrap:anywhere] text-ink">
+                {item.value}
+              </dd>
             </div>
           ))}
         </dl>

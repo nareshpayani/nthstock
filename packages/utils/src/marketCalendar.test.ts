@@ -6,6 +6,7 @@ import {
   getMarketStatus,
   isTradingDay,
   nextSessionOpen,
+  sessionBarStart,
 } from './marketCalendar.js';
 import { nseHolidays2026 } from './nseHolidays2026.js';
 import { fixedClock, fromIst, toIstParts } from './time.js';
@@ -95,5 +96,22 @@ describe('session times', () => {
     expect(INTRADAY_SQUARE_OFF).toBe(15 * 60 + 20);
     expect(INTRADAY_SQUARE_OFF).toBeGreaterThan(MARKET_OPEN);
     expect(INTRADAY_SQUARE_OFF).toBeLessThan(MARKET_CLOSE);
+  });
+});
+
+describe('sessionBarStart (NSTOCK-0343)', () => {
+  const ms = (hour: number, minute: number) => fromIst(2026, 9, 25, hour * 60 + minute).getTime();
+
+  it('counts bars from the 9:15 open, as NSE charts do', () => {
+    expect(sessionBarStart(ms(9, 15), 15)).toBe(ms(9, 15));
+    expect(sessionBarStart(ms(9, 44), 30)).toBe(ms(9, 15));
+    expect(sessionBarStart(ms(9, 45), 30)).toBe(ms(9, 45));
+    expect(sessionBarStart(ms(10, 14), 60)).toBe(ms(9, 15));
+    expect(sessionBarStart(ms(15, 29), 60)).toBe(ms(15, 15));
+    expect(sessionBarStart(ms(11, 7), 5)).toBe(ms(11, 5));
+  });
+
+  it('puts a tick before the open into the first bar', () => {
+    expect(sessionBarStart(ms(9, 8), 15)).toBe(ms(9, 15));
   });
 });

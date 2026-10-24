@@ -9,7 +9,7 @@ runScenarioSuite('MSW node server', scenarioGroups, () => {
   const { server, adapter, orders } = createMockServer({
     auth: { now: () => Date.now() + offset },
   });
-  server.listen({ onUnhandledRequest: 'error' });
+  server.listen({ onUnhandledFrame: 'error' });
   const { hostname } = new URL(TEST_API_ORIGIN);
   return fetchBackend(TEST_API_ORIGIN, fetch, {
     onClose: () => {

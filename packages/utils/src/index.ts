@@ -22,6 +22,7 @@ export {
   getMarketStatus,
   isTradingDay,
   nextSessionOpen,
+  sessionBarStart,
   type ClosedReason,
   type HolidayTable,
   type MarketState,

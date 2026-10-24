@@ -19,7 +19,7 @@ const server = setupServer(...controls.handlers({ orders, adapter }), ...handler
 
 beforeAll(() => {
   setMockLatency(0);
-  server.listen({ onUnhandledRequest: 'error' });
+  server.listen({ onUnhandledFrame: 'error' });
 });
 
 afterAll(() => {

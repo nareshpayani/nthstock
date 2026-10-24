@@ -9,7 +9,7 @@ const { server, adapter } = createMockServer({ alwaysOpen: true, tickIntervalMs:
 const sockets: WebSocket[] = [];
 
 beforeAll(() => {
-  server.listen({ onUnhandledRequest: 'error' });
+  server.listen({ onUnhandledFrame: 'error' });
 });
 afterEach(() => {
   for (const socket of sockets.splice(0)) socket.close();
@@ -75,7 +75,7 @@ describe('MSW quote stream (T-055)', () => {
   it('sends the current quote on subscribe even when the market is closed', async () => {
     const closed = createMockServer({ alwaysOpen: false });
     server.close();
-    closed.server.listen({ onUnhandledRequest: 'error' });
+    closed.server.listen({ onUnhandledFrame: 'error' });
     try {
       const { frames, send } = await connect();
       send({ v: 1, type: 'subscribe', symbols: ['SENSEX'], exchange: 'BSE' });
@@ -85,7 +85,7 @@ describe('MSW quote stream (T-055)', () => {
     } finally {
       closed.server.close();
       closed.adapter.dispose();
-      server.listen({ onUnhandledRequest: 'error' });
+      server.listen({ onUnhandledFrame: 'error' });
     }
   });
 

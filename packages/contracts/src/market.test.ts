@@ -17,6 +17,8 @@ import {
   BatchQuotesQuery,
   BatchQuotesResponse,
   Candle,
+  CANDLE_INTERVALS,
+  CandleInterval,
   CandleRange,
   CandleSeries,
   CandlesQuery,
@@ -76,6 +78,19 @@ describe('market rules', () => {
   it('has the five chart ranges', () => {
     expect(CandleRange.options).toEqual(['1D', '1W', '1M', '1Y', '5Y']);
     expect(CandlesQuery.safeParse({ range: '3M' }).success).toBe(false);
+  });
+
+  it('allows each range only its own bar sizes, the range default first (NSTOCK-0343)', () => {
+    expect(CANDLE_INTERVALS['1D']).toEqual(['1m', '5m', '15m', '30m', '1h']);
+    expect(CandlesQuery.safeParse({ range: '1D', interval: '15m' }).success).toBe(true);
+    expect(CandlesQuery.safeParse({ range: '1D' }).success).toBe(true);
+    expect(CandlesQuery.safeParse({ range: '1D', interval: '1d' }).success).toBe(false);
+    expect(CandlesQuery.safeParse({ range: '5Y', interval: '1m' }).success).toBe(false);
+    for (const range of CandleRange.options) {
+      for (const interval of CANDLE_INTERVALS[range]) {
+        expect(CandleInterval.options).toContain(interval);
+      }
+    }
   });
 
   it('rejects a candle whose high is below its close', () => {

@@ -23,7 +23,7 @@ describe('startMockWorker (T-050)', () => {
       mockMarketOpen: true,
       testControls: false,
     });
-    expect(start).toHaveBeenCalledWith({ onUnhandledRequest: 'bypass', quiet: true });
+    expect(start).toHaveBeenCalledWith({ onUnhandledFrame: 'bypass', quiet: true });
     expect(info).toHaveBeenCalledWith(
       expect.stringMatching(/^\[MSW\] Mocking enabled .*forced open/),
     );

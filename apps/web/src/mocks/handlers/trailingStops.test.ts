@@ -76,7 +76,7 @@ function pageLoad(
       ...(timeouts ? { timeouts } : {}),
     },
   });
-  mock.server.listen({ onUnhandledRequest: 'error' });
+  mock.server.listen({ onUnhandledFrame: 'error' });
   cleanups.push(() => {
     mock.server.close();
     mock.orders.dispose();
