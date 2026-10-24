@@ -33,7 +33,8 @@ describe('stock price chart (T-107)', () => {
       await screen.findByRole('figure', { name: 'INFY area chart over 1 day' }),
     ).toBeInTheDocument();
     await screen.findByTestId('chart-host');
-    expect(chartsMock.active()[0]?.series[0]?.type).toBe('Area');
+    // The charts library loads lazily, so the series can come a moment after the host.
+    await waitFor(() => expect(chartsMock.active()[0]?.series[0]?.type).toBe('Area'));
     expect(candleRanges()).toEqual(['1D']);
   });
 
