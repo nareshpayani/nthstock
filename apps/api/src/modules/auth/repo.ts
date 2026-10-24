@@ -181,6 +181,8 @@ export interface AuthRepo {
 
   createSession(session: SessionRecord): Promise<void>;
   getSession(id: string): Promise<SessionRecord | null>;
+  /** The user's sessions neither revoked nor expired at `at`, most recently active first. */
+  listActiveSessions(userId: string, at: Date): Promise<SessionRecord[]>;
   /**
    * Marks the session (the whole refresh token family) revoked, for `reason`. A session already
    * revoked keeps its first time and reason.
@@ -249,6 +251,7 @@ export type SessionStore = Pick<
   AuthRepo,
   | 'createSession'
   | 'getSession'
+  | 'listActiveSessions'
   | 'revokeSession'
   | 'touchSession'
   | 'stepUpSession'
@@ -294,6 +297,7 @@ export function composeAuthRepo(stores: {
     replaceRecoveryCodes: (userId, hashes) => devices.replaceRecoveryCodes(userId, hashes),
     createSession: (session) => sessions.createSession(session),
     getSession: (id) => sessions.getSession(id),
+    listActiveSessions: (userId, at) => sessions.listActiveSessions(userId, at),
     revokeSession: (id, at, reason) => sessions.revokeSession(id, at, reason),
     touchSession: (id, at, staleBefore) => sessions.touchSession(id, at, staleBefore),
     stepUpSession: (id, at) => sessions.stepUpSession(id, at),
@@ -528,6 +532,13 @@ export function createMemorySessionStore(): SessionStore {
       const found = sessions.get(id);
       return Promise.resolve(found ? copySession(found) : null);
     },
+    listActiveSessions: (userId, at) =>
+      Promise.resolve(
+        [...sessions.values()]
+          .filter((s) => s.userId === userId && !s.revokedAt && s.expiresAt > at)
+          .sort((a, b) => b.lastSeenAt.getTime() - a.lastSeenAt.getTime())
+          .map(copySession),
+      ),
     revokeSession: (id, at, reason) => {
       const found = sessions.get(id);
       if (found && !found.revokedAt) {

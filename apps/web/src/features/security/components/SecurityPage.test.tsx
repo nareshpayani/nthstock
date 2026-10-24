@@ -79,7 +79,11 @@ async function turnOn(): Promise<{ secret: Uint8Array; codes: string[] }> {
   expect(done).toBeDisabled();
   fireEvent.click(within(setup).getByRole('checkbox', { name: 'I have saved these codes' }));
   fireEvent.click(done);
-  await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+  await waitFor(() =>
+    expect(
+      screen.queryByRole('dialog', { name: 'Turn on two-factor authentication' }),
+    ).not.toBeInTheDocument(),
+  );
   return { secret, codes };
 }
 
@@ -140,5 +144,59 @@ describe('security settings: two-factor (NSTOCK-0221)', () => {
 
     expect(await screen.findByLabelText('Two-factor authentication is off')).toBeInTheDocument();
     expect(useSessionStore.getState().session?.user.totpEnabled).toBe(false);
+  });
+});
+
+describe('security settings: active sessions (NSTOCK-0226)', () => {
+  /** The same mobile logged in from another browser, after the OTP resend throttle. */
+  async function alsoLoggedInElsewhere(mobile: string) {
+    browsers += 1;
+    const other = createSessionApiClient({
+      baseUrl: `http://b${String(browsers)}.security.test`,
+    });
+    now += 31_000;
+    const { requestId } = await other.request('otpRequest', { body: { mobile } });
+    await other.request('otpVerify', { body: { requestId, mobile, otp: DEV_OTP } });
+  }
+
+  it('lists both sessions and logs the other one out behind a confirm and a step-up', async () => {
+    const { apiClient, mobile } = await loggedIn();
+    await alsoLoggedInElsewhere(mobile);
+    renderApp('/settings/security', { apiClient });
+
+    const list = await screen.findByRole('list', { name: 'Where you are logged in' });
+    const rows = await within(list).findAllByRole('listitem');
+    expect(rows).toHaveLength(2);
+    const current = rows.find((row) => within(row).queryByText('This device'));
+    if (!current) throw new Error('no current row');
+    // The current session logs out from the profile menu, not here.
+    expect(within(current).queryByRole('button', { name: /^Log out/ })).not.toBeInTheDocument();
+    expect(within(current).getByText('Trusted')).toBeInTheDocument();
+
+    const other = rows.find((row) => row !== current);
+    fireEvent.click(within(other as HTMLElement).getByRole('button', { name: /^Log out / }));
+    const confirm = await screen.findByRole('dialog', { name: 'Log out this device?' });
+    fireEvent.click(within(confirm).getByRole('button', { name: 'Log out' }));
+
+    const stepUp = await screen.findByRole('dialog', { name: 'Confirm it is you' });
+    typeCode(stepUp, 'Your PIN', PIN);
+    fireEvent.click(within(stepUp).getByRole('button', { name: 'Confirm' }));
+
+    await waitFor(() => expect(within(list).getAllByRole('listitem')).toHaveLength(1));
+    expect(await screen.findByText('You are logged in only on this device.')).toBeInTheDocument();
+  });
+
+  it('offers to log out the other devices after two-factor is turned on', async () => {
+    const { apiClient, mobile } = await loggedIn();
+    await alsoLoggedInElsewhere(mobile);
+    renderApp('/settings/security', { apiClient });
+    await screen.findByRole('list', { name: 'Where you are logged in' });
+
+    await turnOn();
+
+    const offer = await screen.findByRole('dialog', { name: 'Log out your other devices too?' });
+    fireEvent.click(within(offer).getByRole('button', { name: 'Log out all other devices' }));
+    expect(await screen.findByText('1 other device logged out')).toBeInTheDocument();
+    expect(await screen.findByText('You are logged in only on this device.')).toBeInTheDocument();
   });
 });

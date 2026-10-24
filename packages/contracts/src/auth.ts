@@ -277,3 +277,30 @@ export const TotpVerifyRequest = z
     error: 'Send a code or a recovery code',
   });
 export type TotpVerifyRequest = z.infer<typeof TotpVerifyRequest>;
+
+// ---- Active sessions (NSTOCK-0222, spec backend-core §7.5) --------------------------------------
+
+/**
+ * One signed-in session of the user: the device it runs on, whether that device is trusted for
+ * PIN login, and when it signed in and was last active. No IP address is stored or shown in v1.
+ */
+export const ActiveSession = z.object({
+  id: Id,
+  deviceLabel: z.string().min(1).max(120),
+  trusted: z.boolean(),
+  /** The session making this request ("This device"). */
+  current: z.boolean(),
+  createdAt: IsoUtc,
+  lastActiveAt: IsoUtc,
+});
+export type ActiveSession = z.infer<typeof ActiveSession>;
+
+/** Most recently active first. */
+export const SessionsResponse = z.object({ sessions: z.array(ActiveSession) });
+export type SessionsResponse = z.infer<typeof SessionsResponse>;
+
+export const SessionParams = z.object({ id: Id });
+export type SessionParams = z.infer<typeof SessionParams>;
+
+export const RevokeOthersResponse = z.object({ revoked: z.number().int().min(0) });
+export type RevokeOthersResponse = z.infer<typeof RevokeOthersResponse>;

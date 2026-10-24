@@ -87,6 +87,18 @@ CDN + WAF ─► Load balancer ─► apps/api (Fastify, stateless)     apps/rea
   action once. Every change is in the audit log (`STEP_UP`, `TOTP_ENABLED`, `TOTP_DISABLED`,
   `RECOVERY_CODE_USED`, `RECOVERY_CODES_REGENERATED`).
 
+### Active sessions
+- `GET /v1/auth/sessions` lists the user's live sessions (neither revoked nor expired), most
+  recently active first, each with its device label (`deviceLabel` in `packages/utils`, shared by
+  both backends, never the raw user agent), the trusted flag and `current`. No IP address is stored
+  or shown.
+- `DELETE /v1/auth/sessions/:id` and `POST /v1/auth/sessions/revoke-others` need a step-up. Each
+  revoke goes through `SessionService.revoke`: the row is marked `USER_REVOKED`, audited as
+  `SESSION_REVOKED` and published on `auth:sessionRevoked`, so that session's access and refresh
+  tokens answer 401 at once and apps/realtime closes its sockets. The current session is refused
+  (400); it logs out from the profile menu.
+- Turning two-factor on or off offers "Log out all other devices" (ASVS 3.3.3).
+
 ### Security baseline
 - Rate limits per IP and per user; OTP resend throttling; CAPTCHA after 3 failed OTP/PIN attempts; PIN lockout after 5, unlock via OTP.
 - TLS 1.2+ and HSTS; encryption at rest (KMS); phone/PII column-level encryption.

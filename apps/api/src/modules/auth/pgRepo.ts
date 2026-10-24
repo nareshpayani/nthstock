@@ -1,5 +1,5 @@
 import { base32Decode, base32Encode, type Clock } from '@nthstock/utils';
-import { and, eq, isNull, lt, lte, sql } from 'drizzle-orm';
+import { and, desc, eq, gt, isNull, lt, lte, sql } from 'drizzle-orm';
 import type { Database } from '../../db/client.js';
 import type { PiiCrypto } from '../../db/crypto.js';
 import {
@@ -299,6 +299,17 @@ export function createPgSessionStore({ database }: { database: Database }): Sess
     async getSession(id) {
       const [row] = await db.select().from(sessions).where(eq(sessions.id, id));
       return row ? toSession(row) : null;
+    },
+
+    async listActiveSessions(userId, at) {
+      const rows = await db
+        .select()
+        .from(sessions)
+        .where(
+          and(eq(sessions.userId, userId), isNull(sessions.revokedAt), gt(sessions.expiresAt, at)),
+        )
+        .orderBy(desc(sessions.lastSeenAt));
+      return rows.map(toSession);
     },
 
     async revokeSession(id, at, reason) {
