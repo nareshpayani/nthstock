@@ -2,6 +2,7 @@ import { formatInr, parseRupeesToPaise } from '@nthstock/utils';
 import { useState, type KeyboardEvent } from 'react';
 import { IconMinus, IconPlus } from '../icons/icons.js';
 import { cn } from '../lib/cn.js';
+import { useTouchTargets } from '../lib/touchTargets.js';
 import { useFieldControl } from './Field.js';
 import { inputFrameClass } from './Input.js';
 
@@ -21,6 +22,8 @@ export type NumberInputProps = {
   disabled?: boolean;
   className?: string;
   'aria-label'?: string;
+  /** What the − / + buttons change, for their names ("Decrease trail"); rupees or quantity by default. */
+  stepLabel?: string;
 };
 
 function toText(mode: NumberInputProps['mode'], value: number | null): string {
@@ -46,6 +49,7 @@ export function NumberInput({
   max = Number.MAX_SAFE_INTEGER,
   disabled,
   className,
+  stepLabel,
   ...rest
 }: NumberInputProps) {
   const [draft, setDraft] = useState<string | null>(null);
@@ -65,17 +69,22 @@ export function NumberInput({
     }
   };
 
-  const unit = mode === 'price' ? 'rupees' : 'quantity';
+  const touch = useTouchTargets();
+  const unit = stepLabel ?? (mode === 'price' ? 'rupees' : 'quantity');
+  const stepperClass = cn(
+    'flex shrink-0 items-center justify-center rounded-sm text-ink-muted hover:bg-canvas disabled:opacity-40',
+    touch ? 'size-11' : 'size-8',
+  );
 
   return (
-    <div className={cn(inputFrameClass, 'px-1', className)}>
+    <div className={cn(inputFrameClass, 'px-1', touch && 'h-12', className)}>
       <button
         type="button"
         tabIndex={-1}
         aria-label={`Decrease ${unit}`}
         disabled={disabled || (value !== null && value <= min)}
         onClick={() => stepBy(-1)}
-        className="flex size-8 items-center justify-center rounded-sm text-ink-muted hover:bg-canvas disabled:opacity-40"
+        className={stepperClass}
       >
         <IconMinus size={16} />
       </button>
@@ -99,7 +108,7 @@ export function NumberInput({
           }
         }}
         onKeyDown={onKeyDown}
-        className="min-w-0 flex-1 bg-transparent text-center font-mono tabular-nums outline-none"
+        className="min-w-0 flex-1 self-stretch bg-transparent text-center font-mono tabular-nums outline-none"
       />
       <button
         type="button"
@@ -107,7 +116,7 @@ export function NumberInput({
         aria-label={`Increase ${unit}`}
         disabled={disabled || (value !== null && value >= max)}
         onClick={() => stepBy(1)}
-        className="flex size-8 items-center justify-center rounded-sm text-ink-muted hover:bg-canvas disabled:opacity-40"
+        className={stepperClass}
       >
         <IconPlus size={16} />
       </button>

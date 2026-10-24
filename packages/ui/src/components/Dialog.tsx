@@ -2,6 +2,7 @@ import { Dialog as DialogPrimitive } from 'radix-ui';
 import type { ReactNode, RefObject } from 'react';
 import { IconClose } from '../icons/icons.js';
 import { cn } from '../lib/cn.js';
+import { TouchTargets } from '../lib/touchTargets.js';
 
 export type DialogProps = {
   open?: boolean;
@@ -130,7 +131,10 @@ const SHEET_SIDE: Record<NonNullable<SheetProps['side']>, string> = {
     'inset-x-0 bottom-0 max-h-[90dvh] rounded-t-lg pb-[env(safe-area-inset-bottom)] data-[state=open]:animate-sheet-up',
 };
 
-/** Slide-over panel (order ticket, mobile drawer) with the same focus and Esc behaviour. */
+/**
+ * Slide-over panel (order ticket, mobile drawer) with the same focus and Esc behaviour. From the
+ * bottom it is the phone form: every control in it is at least 44 × 44 px.
+ */
 export function Sheet({
   trigger,
   title,
@@ -144,6 +148,8 @@ export function Sheet({
   overlay = 'dim',
   ...root
 }: SheetProps) {
+  // A bottom sheet is the phone form, so its controls take their touch size (SPEC-TFC-1 §9.4).
+  const touch = side === 'bottom';
   return (
     <DialogPrimitive.Root {...root}>
       {trigger ? <DialogPrimitive.Trigger asChild>{trigger}</DialogPrimitive.Trigger> : null}
@@ -181,12 +187,17 @@ export function Sheet({
                 </DialogPrimitive.Description>
               ) : null}
             </div>
-            <DialogPrimitive.Close className={closeButtonClass} aria-label="Close">
+            <DialogPrimitive.Close
+              className={cn(closeButtonClass, touch && 'size-11 shrink-0')}
+              aria-label="Close"
+            >
               <IconClose />
             </DialogPrimitive.Close>
           </div>
-          <div className="min-h-0 flex-1 overflow-y-auto">{children}</div>
-          {footer ? <div className="flex gap-2 border-t border-line p-4">{footer}</div> : null}
+          <TouchTargets enabled={touch}>
+            <div className="min-h-0 flex-1 overflow-y-auto">{children}</div>
+            {footer ? <div className="flex gap-2 border-t border-line p-4">{footer}</div> : null}
+          </TouchTargets>
         </DialogPrimitive.Content>
       </DialogPrimitive.Portal>
     </DialogPrimitive.Root>
