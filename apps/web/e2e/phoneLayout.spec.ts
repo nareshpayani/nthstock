@@ -3,7 +3,8 @@ import { logIn, uniqueMobile } from './support/auth';
 
 // T12 (SPEC-TFC-1 §9.4, REQ-MOB-04, REQ-MOB-06): the instrument page on a phone is its own layout.
 // At 360, 390 and 414 px: no sideways scroll, every control on it at least 44 px, Sell and Buy in
-// the lower 40% of the screen, depth in its own tab; and the ticket rises as a bottom sheet.
+// the lower 40% of the screen, depth in its own tab; and the ticket and the trailing-stop options
+// rise as bottom sheets, and the scalper pad sits at the bottom with the same 44 px targets.
 //
 // The page clock is fixed at Monday 28 Sep 2026, 10:00 IST, so the in-browser paper engine sees
 // NSE open and a market buy fills.
@@ -25,8 +26,9 @@ async function expectTargets(locators: Locator[]) {
   for (const locator of locators) {
     for (const item of await locator.all()) {
       const rect = await box(item);
-      expect(rect.height, await item.innerText()).toBeGreaterThanOrEqual(MIN_TARGET);
-      expect(rect.width, await item.innerText()).toBeGreaterThanOrEqual(MIN_TARGET);
+      const name = (await item.getAttribute('aria-label')) ?? (await item.innerText());
+      expect(rect.height, name).toBeGreaterThanOrEqual(MIN_TARGET);
+      expect(rect.width, name).toBeGreaterThanOrEqual(MIN_TARGET);
     }
   }
 }
@@ -112,6 +114,14 @@ test('on a phone the ticket is a bottom sheet and a fill shows in the position s
       return [sheet.width, Math.round(sheet.y + sheet.height)];
     })
     .toEqual([390, 844]);
+  // Every control in the sheet is a thumb-sized target: steppers, segments, switch, depth prices.
+  await expect(ticket.getByRole('button', { name: /use as limit price$/ }).first()).toBeVisible();
+  await expectTargets([
+    ticket.getByRole('button'),
+    ticket.getByRole('radio'),
+    ticket.getByRole('switch'),
+    ticket.getByRole('textbox'),
+  ]);
 
   await ticket.getByRole('textbox', { name: 'Quantity' }).fill('2');
   await ticket.getByRole('button', { name: 'Buy INFY' }).click();
@@ -130,4 +140,29 @@ test('on a phone the ticket is a bottom sheet and a fill shows in the position s
   await expect(page.getByRole('list', { name: "Today's INFY orders" })).toContainText(
     /Buy 2 \/ 2 · Market/,
   );
+
+  // Tapping the strip raises the trailing-stop options as a bottom sheet, every control in reach.
+  await strip.getByRole('button').click();
+  const sheet = page.getByRole('dialog', { name: 'Trailing stop · INFY' });
+  await expect(sheet).toHaveAttribute('data-side', 'bottom');
+  await expect
+    .poll(async () => {
+      const rect = await box(sheet);
+      return [rect.width, Math.round(rect.y + rect.height)];
+    })
+    .toEqual([390, 844]);
+  await expectTargets([
+    sheet.getByRole('button'),
+    sheet.getByRole('radio'),
+    sheet.getByRole('textbox'),
+  ]);
+  await page.keyboard.press('Escape');
+  await expect(sheet).toBeHidden();
+
+  // The scalper pad takes the place of Sell and Buy at the bottom, with the same 44 px targets.
+  await page.getByRole('switch', { name: 'Scalp' }).click();
+  const pad = page.getByRole('region', { name: 'Scalper for INFY' });
+  await expect(pad).toBeVisible();
+  expect((await box(pad.getByTestId('scalp-buy'))).y).toBeGreaterThanOrEqual(844 * 0.6);
+  await expectTargets([pad.getByRole('button'), pad.getByRole('radio'), pad.getByRole('switch')]);
 });
