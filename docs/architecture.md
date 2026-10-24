@@ -47,6 +47,15 @@ CDN + WAF ─► Load balancer ─► apps/api (Fastify, stateless)     apps/rea
 - Auth: OTP (mock SMS provider until launch) + device PIN (Argon2id) + optional TOTP; 15-min JWT access token + rotating refresh token in httpOnly SameSite=Strict cookie, revocable in Redis.
 - Testing: Vitest, Supertest, Testcontainers, contract tests.
 
+### Market data and chart bars
+- `packages/marketData` generates each range's own bars (1D: 1-minute, 1W: 5-minute, 1M: hourly,
+  1Y: daily, 5Y: weekly) and `resampleCandles` groups them into a coarser bar size on request
+  (`?interval=1m|5m|15m|30m|1h|1d|1w`, the allowed sizes per range are `CANDLE_INTERVALS` in
+  `packages/contracts`). An unknown pair, such as 1D with weekly bars, is a 400.
+- Intraday bars start at the 9:15 IST open (`sessionBarStart` in `packages/utils`), as NSE charts do.
+  The web chart keeps the bar size in the URL and folds live ticks into the current bar of that size.
+- From Phase 4, TimescaleDB continuous aggregates replace the in-memory grouping; the contract stays.
+
 ### Security baseline
 - Rate limits per IP and per user; OTP resend throttling; CAPTCHA after 3 failed OTP/PIN attempts; PIN lockout after 5, unlock via OTP.
 - TLS 1.2+ and HSTS; encryption at rest (KMS); phone/PII column-level encryption.

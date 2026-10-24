@@ -8,6 +8,20 @@ export const MARKET_CLOSE = 15 * 60 + 30;
 /** Open intraday (MIS) positions are squared off at 15:20 IST, ten minutes before the close. */
 export const INTRADAY_SQUARE_OFF = 15 * 60 + 20;
 
+const MINUTE_MS = 60_000;
+
+/**
+ * Start (epoch ms) of the `minutes`-long bar that holds `ms`, counted from that IST day's 9:15
+ * open, as NSE charts count them: 30-minute bars start 9:15, 9:45, …; hourly bars 9:15, 10:15, …,
+ * and the day's last bar is shorter (NSTOCK-0343). Times before 9:15 fall in the 9:15 bar.
+ */
+export function sessionBarStart(ms: number, minutes: number): number {
+  const { year, month, day } = toIstParts(new Date(ms));
+  const open = fromIst(year, month, day, MARKET_OPEN).getTime();
+  const size = minutes * MINUTE_MS;
+  return open + Math.max(0, Math.floor((ms - open) / size)) * size;
+}
+
 export type MarketState = 'preOpen' | 'open' | 'closed';
 export type ClosedReason = 'beforeHours' | 'afterHours' | 'weekend' | 'holiday';
 

@@ -163,7 +163,7 @@ export const strings = {
             },
             {
               name: 'Stock detail',
-              body: 'Area and candle charts, key stats, live market depth and a company overview.',
+              body: 'Area and candle charts from 1 day to 5 years, with 1, 5, 15, 30 and 60-minute bars on intraday ranges, key stats, live market depth and a company overview.',
             },
             {
               name: 'Order ticket',
@@ -526,6 +526,7 @@ export const strings = {
             'Company names, profiles and fundamentals from @faker-js/faker, also seeded.',
             'Prices from a geometric Brownian motion (GBM) per instrument, with drift and volatility by sector, for example Financial Services 12% and 28%, FMCG 9% and 18%.',
             'Index levels computed from their constituents, candles from 1 minute to 5 years, five levels of market depth, curated lists and movers.',
+            'Bar sizes: the API groups a range’s own bars into 1, 5, 15, 30 or 60-minute, daily or weekly bars (GET /v1/market/instruments/:symbol/candles?range=1D&interval=15m). Intraday bars are counted from the 9:15 open, as NSE charts do, so hourly bars open at 9:15, 10:15 and so on; live ticks extend the current bar of the chosen size.',
             'NSE rules: the 9:15 AM to 3:30 PM session and holidays, 5-paise ticks and ±20% circuit bands.',
           ],
         },

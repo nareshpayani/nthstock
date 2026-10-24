@@ -26,8 +26,12 @@ export const strings = {
     title: 'Price chart',
     rangeLabel: 'Chart range',
     typeLabel: 'Chart type',
+    intervalLabel: 'Bar size',
+    intervalOption: (bars: string) => `${bars} bars`,
     types: { area: 'Area', candle: 'Candles' },
-    label: (symbol: string, type: string, range: string) => `${symbol} ${type} chart over ${range}`,
+    /** `bars` only when the reader picked a bar size other than the range's own. */
+    label: (symbol: string, type: string, range: string, bars?: string) =>
+      `${symbol} ${type} chart over ${range}${bars ? `, ${bars} bars` : ''}`,
     typeNames: { area: 'area', candle: 'candlestick' },
     loading: 'Loading chart',
     errorTitle: 'Chart unavailable',

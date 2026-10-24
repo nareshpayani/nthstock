@@ -1,6 +1,7 @@
 import type { Instrument, OrderSide, Quote } from '@nthstock/contracts';
 import { Button, Tabs, TabsContent, TabsList, TabsTrigger, cn } from '@nthstock/ui';
 import { useId, useState, useSyncExternalStore, type ReactNode } from 'react';
+import { keepInterval } from '@/features/charts';
 import { ScalperPad } from '@/features/scalper';
 import { useOpenTicket } from '@/shared/hooks/useOpenTicket';
 import {
@@ -101,7 +102,11 @@ export function PhoneStockDetail({
           instrument={instrument}
           range={search.range ?? DEFAULT_STOCK_RANGE}
           chartType={search.chart ?? DEFAULT_CHART_TYPE}
-          onRangeChange={(range) => onSearchChange({ range })}
+          interval={search.interval}
+          onRangeChange={(range) =>
+            onSearchChange({ range, interval: keepInterval(range, search.interval) })
+          }
+          onIntervalChange={(interval) => onSearchChange({ interval })}
           onChartTypeChange={(chart) => onSearchChange({ chart })}
           height={height > 0 ? phoneChartHeight(height) : CHART_HEIGHT}
           controls="touch"

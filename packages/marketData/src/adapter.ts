@@ -1,4 +1,5 @@
 import type {
+  CandleInterval,
   CandleRange,
   CandleSeries,
   Depth,
@@ -48,8 +49,16 @@ export interface MarketDataAdapter {
   /** Quotes in request order; unknown symbols are skipped. */
   getQuotes(symbols: readonly string[], exchange?: Exchange): Promise<Quote[]>;
 
-  /** Candle history ending at the current price (last close equals LTP). */
-  getCandles(symbol: string, range: CandleRange, exchange?: Exchange): Promise<CandleSeries | null>;
+  /**
+   * Candle history ending at the current price (last close equals LTP): bars for `range`, `interval` long (one of `CANDLE_INTERVALS[range]`; the range's own when left
+   * out). Null for an unknown symbol.
+   */
+  getCandles(
+    symbol: string,
+    range: CandleRange,
+    exchange?: Exchange,
+    interval?: CandleInterval,
+  ): Promise<CandleSeries | null>;
 
   /** Top-5 depth; `null` for unknown symbols and for indices, which do not trade. */
   getDepth(symbol: string, exchange?: Exchange): Promise<Depth | null>;
