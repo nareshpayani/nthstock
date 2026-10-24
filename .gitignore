@@ -21,3 +21,6 @@ lighthouse-report/
 # Claude Code: agent worktrees and personal settings stay local
 .claude/worktrees/
 .claude/settings.local.json
+
+# Redis snapshots written by local test runs
+dump.rdb
