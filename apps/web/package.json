@@ -56,8 +56,8 @@
     "@tanstack/react-virtual": "3.14.21",
     "lightweight-charts": "5.2.1",
     "msw": "3.0.3",
-    "react": "19.3.0",
-    "react-dom": "19.3.0",
+    "react": "19.3.1",
+    "react-dom": "19.3.1",
     "react-hook-form": "7.90.0",
     "zod": "4.6.7",
     "zustand": "5.0.15"
