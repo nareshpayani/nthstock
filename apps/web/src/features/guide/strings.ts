@@ -182,6 +182,10 @@ export const strings = {
               body: 'Settings, Security: scan a QR code into any authenticator app, confirm with its code and save ten one-time recovery codes. The next login asks for the code after the OTP or PIN; sensitive changes ask you to confirm it is you first.',
             },
             {
+              name: 'Where you are logged in',
+              body: 'Settings, Security lists every browser and phone with a session, with This device and Trusted badges and IST times. Log out one, or all the others, behind a confirm and a step-up; the logged-out device is refused at once.',
+            },
+            {
               name: 'Scalper',
               body: 'A one-tap pad: quantity chips, Sell at bid, Buy at ask, Flatten and Reverse, with an Arm switch.',
             },
@@ -505,6 +509,15 @@ export const strings = {
             'The secret is stored encrypted per user, and the last step used is kept so a code cannot be replayed. Ten recovery codes are stored only as hashes, shown once, and each works once.',
             'A login for a user with two-factor on stops after the OTP or PIN with a 5-minute challenge; the code or a recovery code finishes it. Five wrong codes end the challenge.',
             'Sensitive routes answer 403 STEP_UP_REQUIRED until the session re-proves the user (PIN, or a step-up OTP that can never log anyone in, plus the code when two-factor is on) for 10 minutes. One shared dialog asks and retries the action. Every change is in the audit log.',
+          ],
+        },
+        { kind: 'heading', text: 'Active sessions' },
+        {
+          kind: 'list',
+          items: [
+            'GET /v1/auth/sessions lists live sessions, most recently active first, with a device label made from the user agent (never the raw string) and no IP address.',
+            'Logging out one session or all the others needs a step-up. Each revoke marks the row, writes the audit entry and publishes auth:sessionRevoked, so the device is refused on its next request and its sockets close.',
+            'Turning two-factor on or off offers to log out the other devices, which still hold sessions from before the change.',
           ],
         },
         { kind: 'heading', text: 'Rules every layer follows' },
@@ -1169,7 +1182,7 @@ export const strings = {
             ],
             [
               'Beyond the brief',
-              'Chart bar sizes (1, 5, 15, 30 and 60 minutes), price alerts with a notification centre, two-factor authentication with step-up',
+              'Chart bar sizes (1, 5, 15, 30 and 60 minutes), price alerts with a notification centre, two-factor authentication with step-up, the active sessions screen',
               'Done, live',
             ],
             ['6', 'AWS Mumbai, multi-AZ, warm standby in Hyderabad, Terraform', 'Planned'],

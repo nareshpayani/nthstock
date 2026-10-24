@@ -18,7 +18,10 @@ const SYSTEMS: readonly [RegExp, string][] = [
 const first = (ua: string, table: readonly [RegExp, string][]) =>
   table.find(([pattern]) => pattern.test(ua))?.[1];
 
-/** A short human label for the sessions screen, e.g. `Chrome on macOS`. Never echoes the raw UA. */
+/**
+ * A short human label for the sessions screen, e.g. `Chrome on macOS`, shared by apps/api and the
+ * MSW mock (NSTOCK-0224). Never echoes the raw user agent.
+ */
 export function deviceLabel(userAgent: string | undefined): string {
   const ua = userAgent ?? '';
   const browser = first(ua, BROWSERS) ?? 'Unknown browser';

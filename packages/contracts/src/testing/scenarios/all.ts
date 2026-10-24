@@ -4,6 +4,7 @@ import { healthScenarios } from './health.js';
 import { marketScenarios } from './market.js';
 import { orderScenarios } from './orders.js';
 import { portfolioScenarios } from './portfolio.js';
+import { sessionScenarios } from './sessions.js';
 import { twoFactorScenarios } from './twoFactor.js';
 import { watchlistScenarios } from './watchlists.js';
 
@@ -20,4 +21,5 @@ export const scenarioGroups = [
   fundsScenarios,
   // Sets the clock to fixed instants too, so codes are computed for a known TOTP step.
   twoFactorScenarios,
+  sessionScenarios,
 ] as const;

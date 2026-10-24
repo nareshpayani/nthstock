@@ -30,9 +30,10 @@ function StatusBadge({ on }: { on: boolean }) {
 
 /**
  * The two-factor card (NSTOCK-0221): its status, Turn on (the setup wizard), and when on, New
- * recovery codes and Turn off. Every action is behind a step-up.
+ * recovery codes and Turn off. Every action is behind a step-up; `onFactorChanged` follows turning
+ * it on or off.
  */
-export function TwoFactorCard() {
+export function TwoFactorCard({ onFactorChanged }: { onFactorChanged?: () => void }) {
   const { session } = useSession();
   const toast = useToast();
   const twoFactor = useTwoFactor();
@@ -83,6 +84,7 @@ export function TwoFactorCard() {
         onClose={() => setEnrol(null)}
         onDone={() => {
           setEnrol(null);
+          onFactorChanged?.();
           toast.show({
             title: strings.twoFactor.turnedOn,
             description: strings.twoFactor.turnedOnBody,
@@ -96,6 +98,7 @@ export function TwoFactorCard() {
         disable={twoFactor.disable}
         onDone={() => {
           setDialog(null);
+          onFactorChanged?.();
           toast.show({
             title: strings.twoFactor.turnedOff,
             description: strings.twoFactor.turnedOffBody,

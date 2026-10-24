@@ -46,6 +46,11 @@ export const alertsKeys = {
   list: () => ['alerts', 'list'] as const,
 };
 
+export const activeSessionsKeys = {
+  all: ['activeSessions'] as const,
+  list: () => ['activeSessions', 'list'] as const,
+};
+
 export const notificationsKeys = {
   all: ['notifications'] as const,
   list: () => ['notifications', 'list'] as const,

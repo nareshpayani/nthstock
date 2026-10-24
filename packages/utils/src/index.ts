@@ -44,3 +44,4 @@ export {
   totpStep,
   verifyTotp,
 } from './totp.js';
+export { deviceLabel } from './deviceLabel.js';

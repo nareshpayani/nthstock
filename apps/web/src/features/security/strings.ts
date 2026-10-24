@@ -1,6 +1,7 @@
 export const strings = {
   title: 'Security',
-  description: 'Protect your nthstock account with two-factor authentication.',
+  description:
+    'Protect your nthstock account with two-factor authentication, and see where you are logged in.',
 
   twoFactor: {
     title: 'Two-factor authentication',
@@ -68,6 +69,41 @@ export const strings = {
     codeLabel: 'Code from your authenticator app',
     confirm: 'Get new codes',
     cancel: 'Cancel',
+  },
+
+  sessions: {
+    title: 'Where you are logged in',
+    body: 'Every browser and phone with a session on your account. Log out any you do not recognise.',
+    loading: 'Loading your sessions',
+    loadFailed: 'Could not load your sessions.',
+    retry: 'Try again',
+    thisDevice: 'This device',
+    trusted: 'Trusted',
+    trustedHint: 'Can log in with your PIN',
+    signedIn: (when: string) => `Logged in ${when}`,
+    lastActive: (when: string) => `Last active ${when}`,
+    activeNow: 'Active now',
+    logOut: 'Log out',
+    logOutLabel: (device: string) => `Log out ${device}`,
+    logOutOthers: 'Log out all other devices',
+    onlyThis: 'You are logged in only on this device.',
+    confirmOneTitle: 'Log out this device?',
+    confirmOneBody: (device: string) =>
+      `${device} is logged out at once. Anyone using it has to log in again with an OTP.`,
+    confirmOthersTitle: 'Log out all other devices?',
+    confirmOthersBody: (count: number) =>
+      `${String(count)} other ${count === 1 ? 'device is' : 'devices are'} logged out at once. This device stays logged in.`,
+    offerTitle: 'Log out your other devices too?',
+    offerBody: (count: number) =>
+      `Your security settings changed. ${String(count)} other ${count === 1 ? 'device is' : 'devices are'} still logged in with the old settings.`,
+    notNow: 'Not now',
+    cancel: 'Cancel',
+    loggedOutOne: (device: string) => `${device} is logged out`,
+    loggedOutOthers: (count: number) =>
+      count === 0
+        ? 'No other devices were logged in'
+        : `${String(count)} other ${count === 1 ? 'device' : 'devices'} logged out`,
+    gone: 'That session had already ended.',
   },
 
   errors: {
