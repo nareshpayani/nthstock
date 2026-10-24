@@ -82,6 +82,8 @@ type AccountCache = {
   conflicted: boolean;
   /** A commit failed for another reason: reload before the next use. */
   stale: boolean;
+  /** The entry that closes the change being made (the funds reset's), from the funds after it. */
+  closing: ((funds: FundsSummary) => NewAuditRecord) | null;
 };
 
 /**
@@ -176,6 +178,7 @@ export function createOrderService({
       updates: [],
       conflicted: false,
       stale: false,
+      closing: null,
     });
   }
 
@@ -204,6 +207,8 @@ export function createOrderService({
     if (!replace && key === account.committedKey && account.pending.length === 0) return;
     account.committedKey = key;
     const entries = [...account.pending.splice(0), ...fundMovements(userId, engine)];
+    if (account.closing) entries.push(account.closing(engine.fundsSummary()));
+    account.closing = null;
     const updates = account.updates.splice(0);
     void enqueue(userId, async () => {
       // A reload since this change replaced the engine: the change is gone with it.
@@ -401,11 +406,30 @@ export function createOrderService({
     },
 
     /**
-     * Resets the user's paper account (T-155): cancels open orders (each audited and pushed as an
-     * order update), clears positions and holdings, and restores the opening balance with a
-     * `RESET` ledger entry (audited as a fund movement), committed as one change.
+     * Resets the user's paper account (T-155, T-205): cancels open orders (each audited and pushed
+     * as an order update), clears positions and holdings, restores the opening balance with a
+     * `RESET` ledger entry (audited as a fund movement) and writes `audited`, the reset's own
+     * entry, all in one commit: a failure leaves the stored account as it was. Losing to another
+     * writer reloads and resets once more, then answers 409 CONFLICT.
      */
-    reset: (userId: string): Promise<FundsSummary> => read(userId, () => desk.reset(userId)),
+    async reset(
+      userId: string,
+      audited: (funds: FundsSummary) => NewAuditRecord,
+    ): Promise<FundsSummary> {
+      await ensure(userId);
+      await settle(userId);
+      const run = () => {
+        const account = cache.get(userId);
+        if (account) account.closing = audited;
+        return desk.reset(userId);
+      };
+      let funds = run();
+      if (await settle(userId)) {
+        funds = run();
+        if (await settle(userId)) accountMoved();
+      }
+      return funds;
+    },
 
     /**
      * Queues the user's entries behind their audit writes already queued (the funds reset,

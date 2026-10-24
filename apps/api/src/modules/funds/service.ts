@@ -5,9 +5,9 @@ import type { FundsUserId } from './schema.js';
 export type FundsServiceDeps = {
   /**
    * The paper accounts: funds live in each user's engine on the orders module's desk, and the
-   * reset's audit entry goes through the same ordered audit queue as the changes it caused.
+   * reset's audit entry is committed with the changes it caused.
    */
-  orders: Pick<OrderService, 'funds' | 'ledger' | 'reset' | 'audit'>;
+  orders: Pick<OrderService, 'funds' | 'ledger' | 'reset'>;
 };
 
 export type FundsService = ReturnType<typeof createFundsService>;
@@ -24,19 +24,15 @@ export function createFundsService({ orders }: FundsServiceDeps) {
     ledger: (userId: FundsUserId, query: CursorQuery): Promise<LedgerPage> =>
       orders.ledger(userId, query),
 
-    async reset(userId: FundsUserId, request: ResetRequest): Promise<FundsSummary> {
-      const funds = await orders.reset(userId);
-      await orders.audit(userId, [
-        {
-          actor: { type: 'user', userId },
-          userId,
-          action: 'FUNDS_RESET',
-          orderId: null,
-          outcome: 'OK',
-          detail: { request, balance: funds.balance, available: funds.available },
-        },
-      ]);
-      return funds;
-    },
+    /** One commit: the cancellations, the RESET movement and the FUNDS_RESET entry (T-205). */
+    reset: (userId: FundsUserId, request: ResetRequest): Promise<FundsSummary> =>
+      orders.reset(userId, (funds) => ({
+        actor: { type: 'user', userId },
+        userId,
+        action: 'FUNDS_RESET',
+        orderId: null,
+        outcome: 'OK',
+        detail: { request, balance: funds.balance, available: funds.available },
+      })),
   };
 }
