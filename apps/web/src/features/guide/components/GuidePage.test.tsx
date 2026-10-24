@@ -49,7 +49,7 @@ describe('GuidePage', () => {
   it('has one h1, a tab per topic with the first one open, and sets the tab title', async () => {
     renderGuide();
     expect(await screen.findByRole('heading', { level: 1, name: strings.title })).toBeVisible();
-    expect(document.title).toBe('Guide · nthstock');
+    expect(document.title).toBe('Documentation · nthstock');
 
     const list = screen.getByRole('tablist', { name: strings.tabsLabel });
     const tabs = within(list).getAllByRole('tab');
@@ -70,7 +70,7 @@ describe('GuidePage', () => {
       'aria-selected',
       'true',
     );
-    expect(document.title).toBe('Scalability · Guide · nthstock');
+    expect(document.title).toBe('Scalability · Documentation · nthstock');
   });
 
   it('falls back to the overview for a tab that does not exist', async () => {

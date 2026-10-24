@@ -10,8 +10,8 @@ import { GuideBlocks } from './GuideBlocks';
 
 const TABS = strings.tabs;
 
-/** Tailwind's `xl`: from here the tab list is a column beside the content. */
-const SIDE_TABS_QUERY = '(min-width: 1280px)';
+/** Tailwind's `lg`: from here the tab list is the left column, where the app's rail sits. */
+const SIDE_TABS_QUERY = '(min-width: 1024px)';
 
 export type GuidePageProps = {
   /** The `?tab=` value; a missing or unknown one shows the first tab. */
@@ -54,40 +54,45 @@ export function GuidePage({ tab, onSelectTab }: GuidePageProps) {
   };
 
   return (
-    <div className="mx-auto grid max-w-6xl gap-6">
-      <PageHeader
-        title={strings.title}
-        description={strings.description}
-        actions={
-          <Link to="/login" className={buttonVariants({ variant: 'primary' })}>
-            {strings.headerCta}
-          </Link>
-        }
-      />
+    <Tabs
+      ref={top}
+      value={current.id}
+      onValueChange={onSelectTab}
+      orientation={sideTabs ? 'vertical' : 'horizontal'}
+      // Phones and tablets: title, a sticky strip of topics, then the topic. From 1024 px the
+      // topics are the page's left column, in the place of the app's watchlist rail, and the
+      // topic fills the rest of the screen.
+      className="grid scroll-mt-[calc(var(--header-h)+1rem)] gap-4 [grid-template-areas:'header'_'tabs'_'body'] lg:grid-cols-[20rem_minmax(0,1fr)] lg:gap-x-0 lg:gap-y-6 lg:[grid-template-areas:'tabs_header'_'tabs_body']"
+    >
+      <div className="[grid-area:header] lg:px-8 lg:pt-6">
+        <PageHeader
+          title={strings.title}
+          description={strings.description}
+          actions={
+            <Link to="/login" className={buttonVariants({ variant: 'primary' })}>
+              {strings.headerCta}
+            </Link>
+          }
+        />
+      </div>
 
-      <div ref={top} className="scroll-mt-[calc(var(--header-h)+1rem)]" />
-      <Tabs
-        value={current.id}
-        onValueChange={onSelectTab}
-        orientation={sideTabs ? 'vertical' : 'horizontal'}
-        className="grid gap-4 xl:grid-cols-[13rem_minmax(0,1fr)] xl:items-start xl:gap-6"
+      <TabsList
+        ref={list}
+        aria-label={strings.tabsLabel}
+        className="sticky top-(--header-h) z-10 bg-canvas [grid-area:tabs] lg:h-[calc(100dvh-var(--header-h))] lg:flex-col lg:gap-0.5 lg:self-start lg:overflow-y-auto lg:border-r lg:border-b-0 lg:bg-surface lg:p-3"
       >
-        <TabsList
-          ref={list}
-          aria-label={strings.tabsLabel}
-          className="sticky top-(--header-h) z-10 bg-canvas xl:top-[calc(var(--header-h)+1.5rem)] xl:flex-col xl:gap-0 xl:border-b-0 xl:border-l"
-        >
-          {TABS.map((item) => (
-            <TabsTrigger
-              key={item.id}
-              value={item.id}
-              className="min-h-11 xl:mb-0 xl:-ml-px xl:border-b-0 xl:border-l-2 xl:px-3 xl:py-2 xl:text-left xl:whitespace-normal"
-            >
-              {item.label}
-            </TabsTrigger>
-          ))}
-        </TabsList>
+        {TABS.map((item) => (
+          <TabsTrigger
+            key={item.id}
+            value={item.id}
+            className="min-h-11 lg:mb-0 lg:rounded-md lg:border-b-0 lg:px-3 lg:py-2 lg:text-left lg:whitespace-normal lg:hover:bg-canvas lg:data-[state=active]:bg-brand-soft"
+          >
+            {item.label}
+          </TabsTrigger>
+        ))}
+      </TabsList>
 
+      <div className="min-w-0 [grid-area:body] lg:px-8 lg:pb-8">
         {TABS.map((item) => (
           <TabsContent key={item.id} value={item.id} className="min-w-0 pt-0">
             <article className="grid gap-5 rounded-lg border border-line bg-surface p-4 lg:p-6">
@@ -122,7 +127,7 @@ export function GuidePage({ tab, onSelectTab }: GuidePageProps) {
             </article>
           </TabsContent>
         ))}
-      </Tabs>
-    </div>
+      </div>
+    </Tabs>
   );
 }
