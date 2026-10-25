@@ -20,6 +20,7 @@ const tick = (crossed: BookOrder[], triggeredBy: string[] = []): MatcherTick => 
   read: crossed.length,
   crossed,
   moved: [],
+  alerts: [],
   triggered: triggeredBy.map((userId, i) => ({
     stopId: `s${String(i)}`,
     userId,
@@ -118,7 +119,7 @@ describe('createFillWriter (NSTOCK-0367)', () => {
     book.upsertOrder(order('o1', 'u1'));
     const acted = book.tick(99_95);
     expect(acted.triggered.map((s) => s.state.status)).toEqual(['TRIGGERED']);
-    expect(book.size).toEqual({ orders: 0, stops: 0 });
+    expect(book.size).toEqual({ orders: 0, stops: 0, alerts: 0 });
 
     const warnings: { message: string; fields?: Record<string, unknown> }[] = [];
     const info: { message: string; fields?: Record<string, unknown> }[] = [];

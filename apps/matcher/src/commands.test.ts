@@ -77,6 +77,29 @@ function scriptedClient(answers: (() => unknown)[]) {
 
 const entry = (id: string, command: unknown) => [id, ['command', JSON.stringify(command)]];
 
+describe('applyCommand: price alerts (NSTOCK-0383)', () => {
+  it('adds an alert once and cancels it', () => {
+    const book = new OrderBook();
+    const alertAdd: MatcherCommand = {
+      v,
+      type: 'ALERT_ADD',
+      token: 1,
+      version: 0,
+      alertId: 'a1',
+      userId: 'u1',
+      condition: 'BELOW',
+      price: 90_00,
+    };
+    expect(applyCommand(book, alertAdd)).toBe(true);
+    expect(applyCommand(book, alertAdd)).toBe(false);
+    expect(book.hasAlert('a1')).toBe(true);
+    const cancel: MatcherCommand = { v, type: 'ALERT_CANCEL', token: 1, version: 0, alertId: 'a1' };
+    expect(applyCommand(book, cancel)).toBe(true);
+    expect(applyCommand(book, cancel)).toBe(false);
+    expect(book.hasAlert('a1')).toBe(false);
+  });
+});
+
 describe('readMatcherCommands (NSTOCK-0365)', () => {
   it('reads from the newest entry on, drops malformed entries and moves its cursor', async () => {
     const { client, calls } = scriptedClient([

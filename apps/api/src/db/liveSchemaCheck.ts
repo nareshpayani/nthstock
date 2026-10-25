@@ -1,5 +1,6 @@
 import { getTableConfig, PgTable } from 'drizzle-orm/pg-core';
 import { Client } from 'pg';
+import * as alerts from './schema/alerts.js';
 import * as audit from './schema/audit.js';
 import * as auth from './schema/auth.js';
 import * as notifications from './schema/notifications.js';
@@ -24,7 +25,7 @@ export const HAND_WRITTEN_RELATIONS: Readonly<Record<string, 'table' | 'view'>> 
 
 /** Every table the Drizzle schema files declare. */
 export function schemaTableNames(): string[] {
-  const modules = [audit, auth, notifications, paper, users, watchlists];
+  const modules = [alerts, audit, auth, notifications, paper, users, watchlists];
   return modules
     .flatMap((module) => Object.values(module))
     .filter((value): value is PgTable => value instanceof PgTable)

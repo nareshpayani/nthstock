@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { OrderSide } from './orders.js';
 import { Id, InstrumentToken, IsoUtc, Paise, TickPrice } from './primitives.js';
 import { Trail } from './trailingStopParams.js';
+import { PriceAlertCondition } from './alerts.js';
 import { PositionDirection, TrailingStopStatus } from './trailingStops.js';
 
 /**
@@ -52,6 +53,17 @@ export const MatcherCommand = z.discriminatedUnion('type', [
     state: MatcherStopState,
   }),
   z.object({ ...base, type: z.literal('STOP_CANCEL'), stopId: Id }),
+  // Price alerts (NSTOCK-0383): an alert is added once and fires or is cancelled once, so its
+  // `version` is 0; firing is made exactly-once by the store, not by the book.
+  z.object({
+    ...base,
+    type: z.literal('ALERT_ADD'),
+    alertId: Id,
+    userId: Id,
+    condition: PriceAlertCondition,
+    price: TickPrice,
+  }),
+  z.object({ ...base, type: z.literal('ALERT_CANCEL'), alertId: Id }),
 ]);
 export type MatcherCommand = z.infer<typeof MatcherCommand>;
 

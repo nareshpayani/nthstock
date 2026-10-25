@@ -119,6 +119,10 @@ export function buildApp(options: AppOptions = {}): App {
     await deps.orders.hydrateLive().catch((error: unknown) => {
       app.log.error({ err: error }, 'loading accounts with live orders failed');
     });
+    // Active price alerts are watched again after a restart (NSTOCK-0383).
+    await deps.alerts.ready().catch((error: unknown) => {
+      app.log.error({ err: error }, 'loading active price alerts failed');
+    });
   });
   // On the quote service the prices start from its snapshots (NSTOCK-0354). With Redis down the
   // API still starts, on the adapter's opening prices, and the follower keeps retrying in the

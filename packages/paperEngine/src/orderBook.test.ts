@@ -56,7 +56,7 @@ describe('OrderBook (NSTOCK-0363)', () => {
     // It pops only the entry it crossed; the next one is only looked at.
     expect(tick.read).toBe(1);
     expect(ids(book.tick(102_00).crossed)).toEqual(['s1', 's2']);
-    expect(book.size).toEqual({ orders: 1, stops: 0 });
+    expect(book.size).toEqual({ orders: 1, stops: 0, alerts: 0 });
   });
 
   it('applies a change only when its version is newer', () => {
@@ -294,9 +294,48 @@ describe('OrderBook (NSTOCK-0363)', () => {
             expect(moved.state).toEqual(stops.get(moved.stopId)?.state);
         }
       }
-      expect(book.size).toEqual({ orders: orders.size, stops: stops.size });
+      expect(book.size).toEqual({ orders: orders.size, stops: stops.size, alerts: 0 });
     },
   );
+});
+
+describe('OrderBook price alerts (NSTOCK-0383)', () => {
+  const alert = (alertId: string, condition: 'ABOVE' | 'BELOW', price: number) => ({
+    alertId,
+    userId: 'usr_a',
+    condition,
+    price,
+  });
+
+  it('fires exactly the alerts a tick crosses, once each, gaps included', () => {
+    const book = new OrderBook();
+    book.addAlert(alert('a1', 'ABOVE', 1_530_00));
+    book.addAlert(alert('a2', 'ABOVE', 1_540_00));
+    book.addAlert(alert('b1', 'BELOW', 1_480_00));
+    book.addAlert(alert('b2', 'BELOW', 1_470_00));
+    expect(book.addAlert(alert('a1', 'ABOVE', 1_530_00))).toBe(false);
+
+    expect(book.tick(1_500_00).alerts).toEqual([]);
+    expect(book.tick(1_535_00).alerts.map((a) => a.alertId)).toEqual(['a1']);
+    expect(book.tick(1_535_00).alerts).toEqual([]);
+    // A gap past both BELOW levels fires both, in price order.
+    expect(book.tick(1_460_00).alerts.map((a) => a.alertId)).toEqual(['b1', 'b2']);
+    expect(book.size.alerts).toBe(1);
+    expect([...book.alerts()].map((a) => a.alertId)).toEqual(['a2']);
+  });
+
+  it('reads only what it fires: a removed alert is dropped as a stale entry', () => {
+    const book = new OrderBook();
+    book.addAlert(alert('a1', 'ABOVE', 1_530_00));
+    book.addAlert(alert('a2', 'ABOVE', 1_900_00));
+    expect(book.removeAlert('a1')).toBe(true);
+    expect(book.removeAlert('a1')).toBe(false);
+    expect(book.hasAlert('a1')).toBe(false);
+
+    const tick = book.tick(1_600_00);
+    expect(tick.alerts).toEqual([]);
+    expect(tick.read).toBe(1); // the stale a1 entry, then a2 stays put unread
+  });
 });
 
 const sameState = (a: TrailingStopState, b: TrailingStopState) =>

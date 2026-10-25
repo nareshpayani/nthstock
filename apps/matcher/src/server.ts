@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { startLease } from '@nthstock/marketData';
 import { Redis } from 'ioredis';
 import { Pool } from 'pg';
+import { createPgAlertStore, startAlertDesk, type AlertDesk } from './alerts.js';
 import { loadConfig } from './config.js';
 import { jsonLogger } from './logger.js';
 import { createFillWriter } from './fills.js';
@@ -31,11 +32,11 @@ commands.on('error', (error: Error) => {
   jsonLogger.warn('matcher command redis error', { error: error.message });
 });
 
-// One connection is enough: the reconcile loop reads once a minute.
+// The reconcile loop reads once a minute; the second connection stores fired price alerts.
 const pool = config.databaseUrl
   ? new Pool({
       connectionString: config.databaseUrl,
-      max: 1,
+      max: 2,
       application_name: 'apps/matcher',
       connectionTimeoutMillis: CONNECTION_TIMEOUT_MS,
       query_timeout: QUERY_TIMEOUT_MS,
@@ -54,6 +55,8 @@ const lease = startLease({
   renewMs: config.leaseRenewMs,
   log: jsonLogger,
 });
+// Bound once the books exist: the alert desk puts the shard's active alerts on them.
+let alerts: AlertDesk | null = null;
 // Built before the matcher, so no tick can find it missing: a failed send puts the crossed orders
 // and triggered stops back on the matcher's books, which exist by the time a tick acts.
 const sendFills = createFillWriter({
@@ -72,6 +75,7 @@ const matcher = startMatcher({
     ? { reconcile: { source: createPgLiveOrderSource(pool, jsonLogger), shards: config.shards } }
     : {}),
   log: jsonLogger,
+  onAlerts: (fired) => alerts?.onAlerts(fired),
   onTick: (tick) => {
     jsonLogger.info('tick acted', {
       symbol: tick.symbol,
@@ -90,12 +94,24 @@ const matcher = startMatcher({
     });
   },
 });
-await matcher.ready();
+alerts = pool
+  ? startAlertDesk({
+      store: createPgAlertStore(pool),
+      publisher: redis,
+      shard: config.shard,
+      shards: config.shards,
+      books: matcher.books,
+      book: matcher.book,
+      log: jsonLogger,
+    })
+  : null;
+await Promise.all([matcher.ready(), alerts?.ready()]);
 jsonLogger.info('matcher started', { shard: config.shard, shards: config.shards });
 
 const shutdown = () => {
   void matcher
     .close()
+    .then(() => alerts?.stop())
     .then(() => lease.stop())
     .then(() => pool?.end())
     .then(() => redis.quit())

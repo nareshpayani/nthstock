@@ -134,6 +134,13 @@
       "when": 1792912541686,
       "tag": "0018_ledger_entries_created_at",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1792914123089,
+      "tag": "0019_price_alerts",
+      "breakpoints": true
     }
   ]
 }

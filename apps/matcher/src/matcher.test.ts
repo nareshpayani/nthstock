@@ -1,13 +1,14 @@
 import type { Quote } from '@nthstock/contracts';
 import type { TickStreamClient, TickStreamFollowerOptions } from '@nthstock/marketData';
 import { describe, expect, it } from 'vitest';
-import { startMatcher, type MatcherTick } from './matcher.js';
+import { startMatcher, type FiredAlerts, type MatcherTick } from './matcher.js';
 import { CLOSED_TS, quote } from './test/quotes.js';
 
 const silent = { info: () => undefined, warn: () => undefined };
 
 /** A matcher whose tick stream the test drives by hand. */
 function harness(options: { leader?: boolean; alwaysOpen?: boolean } = {}) {
+  const fired: FiredAlerts[] = [];
   let push: (quotes: readonly Quote[]) => void = () => undefined;
   let followed: TickStreamFollowerOptions | undefined;
   let closed = false;
@@ -19,6 +20,7 @@ function harness(options: { leader?: boolean; alwaysOpen?: boolean } = {}) {
     holdsLease: () => state.leader,
     alwaysOpen: options.alwaysOpen ?? false,
     onTick: (tick) => ticks.push(tick),
+    onAlerts: (alerts) => fired.push(alerts),
     log: silent,
     follow: (followOptions) => {
       followed = followOptions;
@@ -35,6 +37,7 @@ function harness(options: { leader?: boolean; alwaysOpen?: boolean } = {}) {
   return {
     matcher,
     ticks,
+    fired,
     state,
     push: (...quotes: Quote[]) => push(quotes),
     followed: () => followed,
@@ -51,6 +54,22 @@ describe('startMatcher (NSTOCK-0364)', () => {
     expect(followed()?.snapshotKey?.(0)).toBe('nthstock:quotes:last:v1:3');
     await matcher.close();
     expect(closed()).toBe(true);
+  });
+
+  it('reports the alerts a tick fires, apart from the orders it crossed (NSTOCK-0383)', () => {
+    const { matcher, ticks, fired, push } = harness();
+    const alert = { alertId: 'a1', userId: 'u1', condition: 'ABOVE' as const, price: 101_00 };
+    matcher.book(7).addAlert(alert);
+    push(quote(7, 100_00));
+    expect(fired).toEqual([]);
+    push(quote(7, 101_50));
+    expect(fired).toEqual([
+      { token: 7, symbol: 'SYM7', ltp: 101_50, ts: expect.any(String) as string, alerts: [alert] },
+    ]);
+    // Nothing crossed, triggered or moved: no tick report.
+    expect(ticks).toEqual([]);
+    push(quote(7, 102_00));
+    expect(fired).toHaveLength(1);
   });
 
   it('runs a tick through the instrument book and reports what it crossed', () => {

@@ -5,7 +5,7 @@ import {
   type TickStreamFollower,
   type TickStreamFollowerOptions,
 } from '@nthstock/marketData';
-import { OrderBook, type BookTick } from '@nthstock/paperEngine';
+import { OrderBook, type BookAlert, type BookTick } from '@nthstock/paperEngine';
 import { getMarketStatus } from '@nthstock/utils';
 import { applyCommand, readMatcherCommands, type CommandStreamClient } from './commands.js';
 import { startReconcileLoop, type LiveOrderSource, type ReconcileLoop } from './reconcile.js';
@@ -18,6 +18,15 @@ export type MatcherLog = {
 /** What one tick did to one instrument's book; only ticks that acted are reported. */
 export type MatcherTick = BookTick & { token: number; symbol: string; ltp: number; ts: string };
 
+/** The alerts one tick fired on one instrument, and the tick that fired them. */
+export type FiredAlerts = {
+  token: number;
+  symbol: string;
+  ltp: number;
+  ts: string;
+  alerts: BookAlert[];
+};
+
 export type MatcherOptions = {
   /** A Redis client of its own: the follower blocks on `XREAD`. */
   client: TickStreamClient;
@@ -29,6 +38,11 @@ export type MatcherOptions = {
   alwaysOpen: boolean;
   /** Called with every tick that crossed, triggered or moved something. */
   onTick: (tick: MatcherTick) => void;
+  /**
+   * Called with the price alerts a tick fired (NSTOCK-0383), already off the book. The server
+   * stores each as TRIGGERED with its notification, exactly once whoever fires it first.
+   */
+  onAlerts?: (fired: FiredAlerts) => void;
   log: MatcherLog;
   /** Tests pass shorter reads and their own keys. */
   blockMs?: number;
@@ -96,6 +110,10 @@ export function startMatcher(options: MatcherOptions): Matcher {
       if (!book || !holdsLease() || !open(quote.ts)) continue;
       acted += 1;
       const result = book.tick(quote.ltp);
+      if (result.alerts.length > 0) {
+        const { token, symbol, ltp, ts } = quote;
+        options.onAlerts?.({ token, symbol, ltp, ts, alerts: result.alerts });
+      }
       if (result.crossed.length + result.triggered.length + result.moved.length === 0) continue;
       onTick({ ...result, token: quote.token, symbol: quote.symbol, ltp: quote.ltp, ts: quote.ts });
     }
@@ -134,7 +152,10 @@ export function startMatcher(options: MatcherOptions): Matcher {
       log,
       onCommand: (command) => {
         // A cancel for an instrument with no book has nothing to take off.
-        const removes = command.type === 'CANCEL' || command.type === 'STOP_CANCEL';
+        const removes =
+          command.type === 'CANCEL' ||
+          command.type === 'STOP_CANCEL' ||
+          command.type === 'ALERT_CANCEL';
         const target = removes ? books.get(command.token) : book(command.token);
         if (target && applyCommand(target, command)) commands += 1;
       },
