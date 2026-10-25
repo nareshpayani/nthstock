@@ -1,6 +1,7 @@
 import {
   MATCHER_FILLS_GROUP,
   routes,
+  TICK_BATCH_VERSION,
   type MatcherFill,
   type Order,
   type OrderHistoryResponse,
@@ -9,7 +10,7 @@ import {
 import { MockMarketDataAdapter, generateSymbolMaster } from '@nthstock/marketData';
 import { shardOf } from '@nthstock/utils';
 import { Redis } from 'ioredis';
-import { afterAll, afterEach, beforeAll, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, expect, it, vi } from 'vitest';
 import { buildApp, type App } from '../../app.js';
 import { loginWithOtp } from '../../test/authFlow.js';
 import { manualClock } from '../../test/manualClock.js';
@@ -50,9 +51,13 @@ describeWithRedis('matcher fills into apps/api (integration, NSTOCK-0367)', () =
     await redis?.stop();
   });
 
-  async function boot(prefix: string, fillClaimIdleMs = 30_000) {
+  async function boot(
+    prefix: string,
+    { fillClaimIdleMs = 30_000, matcherMode = 'inline' as 'inline' | 'worker' } = {},
+  ) {
     const clock = manualClock(AT);
     const market = new MockMarketDataAdapter({ master, clock, externalTicks: true });
+    const subscribe = vi.spyOn(market, 'subscribe');
     const base = (await new MockMarketDataAdapter({ master }).getQuote(
       EQUITY?.symbol ?? '',
     )) as Quote;
@@ -77,8 +82,9 @@ describeWithRedis('matcher fills into apps/api (integration, NSTOCK-0367)', () =
           blockMs: 100,
           log: silent,
         },
+        matcherMode,
       },
-      orderSweepMs: null,
+      ...(matcherMode === 'inline' ? { orderSweepMs: null } : {}),
     });
     app.addHook('onClose', () => market.dispose());
     apps.push(app);
@@ -107,7 +113,7 @@ describeWithRedis('matcher fills into apps/api (integration, NSTOCK-0367)', () =
       (
         await app.inject({ method: 'GET', url: `/v1/orders/${order.id}/history`, headers })
       ).json() as OrderHistoryResponse;
-    return { app, user, headers, order, get, history };
+    return { app, user, headers, order, get, history, subscribe, base, market };
   }
 
   const fill = (userId: string, orderId: string, ltp: number): MatcherFill => ({
@@ -169,7 +175,7 @@ describeWithRedis('matcher fills into apps/api (integration, NSTOCK-0367)', () =
   it('takes over a request a crashed process read and never acked', async () => {
     const prefix = uniqueChannel('fills');
     const key = `${prefix}:fills:${String(SHARD)}`;
-    const { user, order, get } = await boot(prefix, 200);
+    const { user, order, get } = await boot(prefix, { fillClaimIdleMs: 200 });
     // Another process reads the request in the same transaction that writes it, so it is the one
     // that holds it, and then dies before it commits.
     const results = await client
@@ -182,5 +188,33 @@ describeWithRedis('matcher fills into apps/api (integration, NSTOCK-0367)', () =
     // This process claims it once it has been idle for the claim time, and commits it.
     await expect.poll(async () => (await get()).status, { timeout: 10_000 }).toBe('EXECUTED');
     await expect.poll(() => pending(prefix), { timeout: 10_000 }).toBe(0);
+  }, 60_000);
+
+  it('follows no ticks with MATCHER_MODE=worker, and fills from the matcher alone (NSTOCK-0369)', async () => {
+    const prefix = uniqueChannel('fills');
+    const { app, user, headers, order, get, subscribe, base, market } = await boot(prefix, {
+      matcherMode: 'worker',
+    });
+    // A MARKET order still fills at the quote service's last price.
+    const bought = await app.inject({
+      method: 'POST',
+      url: routes.orderPlace.path,
+      headers,
+      payload: { token: TOKEN, side: 'BUY', type: 'MARKET', product: 'DELIVERY', qty: 1 },
+    });
+    expect(bought.json()).toMatchObject({ status: 'EXECUTED', avgFillPrice: 1_400_00 });
+
+    // A crossing tick on the quote stream reaches no engine here: the resting order waits.
+    const crossing = { ...base, ltp: 1_380_00, ts: AT };
+    const batch = { v: TICK_BATCH_VERSION, shard: SHARD, seq: 1, quotes: [crossing] };
+    await client.xadd(`${prefix}:ticks:${String(SHARD)}`, '*', 'batch', JSON.stringify(batch));
+    await expect
+      .poll(async () => (await market.getQuote(EQUITY?.symbol ?? ''))?.ltp, { timeout: 10_000 })
+      .toBe(1_380_00);
+    expect((await get()).status).toBe('OPEN');
+
+    await send(prefix, fill(user.session.user.id, order.id, 1_385_00));
+    await expect.poll(async () => (await get()).status, { timeout: 10_000 }).toBe('EXECUTED');
+    expect(subscribe).not.toHaveBeenCalled();
   }, 60_000);
 });

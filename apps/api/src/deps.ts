@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { MockMarketDataAdapter, type MarketDataAdapter } from '@nthstock/marketData';
 import { Redis } from 'ioredis';
 import { systemClock, type Clock } from '@nthstock/utils';
-import type { DbDriver } from './config.js';
+import type { DbDriver, MatcherMode } from './config.js';
 import { createDatabase, type Database } from './db/client.js';
 import { createPiiCrypto, resolvePiiKeys, type PiiKeys } from './db/crypto.js';
 import { createMemoryAuditRepo, createPgAuditRepo, type AuditRepo } from './modules/audit/index.js';
@@ -119,6 +119,8 @@ export type AppDeps = {
    * adapter ticks on its own, as before.
    */
   quoteStreams: QuoteStreams | null;
+  /** `MATCHER_MODE`: in `worker`, apps/matcher matches and this process runs no order sweep. */
+  matcherMode: MatcherMode;
   /**
    * Stored candles on TimescaleDB (NSTOCK-0375) under `DB_DRIVER=postgres`: the candles route reads
    * them and falls back to the adapter's generated bars where the store has none. Null on the
@@ -146,6 +148,11 @@ export type DepsOverrides = {
   quoteStreams?: QuoteStreamsOptions;
   /** Use this candle store (tests); null turns stored candles off under `postgres`. */
   candleStore?: CandleStore | null;
+  /**
+   * `MATCHER_MODE` (NSTOCK-0369); default `inline`. `worker` needs `quoteStreams`: the orders
+   * desk then follows no ticks, and fills come only from apps/matcher's fill stream.
+   */
+  matcherMode?: MatcherMode;
   production?: boolean;
   sms?: SmsProvider;
   /** Where the default mock SMS provider writes its dev log line; default: nowhere. */
@@ -208,6 +215,10 @@ function openDatabase(overrides: DepsOverrides, driver: DbDriver): Database | nu
 
 /** Builds a fresh set of dependencies; each app (and each test app) gets its own in-memory state. */
 export function createDeps(overrides: DepsOverrides = {}): AppDeps {
+  const matcherMode = overrides.matcherMode ?? 'inline';
+  if (matcherMode === 'worker' && !overrides.quoteStreams) {
+    throw new Error('MATCHER_MODE=worker needs quoteStreams, which carry the matcher streams');
+  }
   const clock = overrides.clock ?? systemClock;
   const market =
     overrides.market ??
@@ -288,6 +299,7 @@ export function createDeps(overrides: DepsOverrides = {}): AppDeps {
     market,
     audit: repos.audit,
     accounts: repos.accounts,
+    followTicks: matcherMode === 'inline',
     ...(overrides.onAuditError ? { onAuditError: overrides.onAuditError } : {}),
     ...(overrides.newOrderId ? { newId: overrides.newOrderId } : {}),
   });
@@ -355,6 +367,7 @@ export function createDeps(overrides: DepsOverrides = {}): AppDeps {
         : database
           ? createPgCandleStore({ database })
           : null,
+    matcherMode,
     sessionRevocations: redisState
       ? createRedisSessionRevocations({
           redis: redisState,

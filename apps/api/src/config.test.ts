@@ -20,6 +20,7 @@ describe('loadConfig', () => {
       dbDriver: 'memory',
       jobsMode: 'inline',
       quoteShards: null,
+      matcherMode: 'inline',
       testControls: false,
       demoSeed: false,
       pii: { keys: devPiiKeys(), devKeys: true },
@@ -42,6 +43,7 @@ describe('loadConfig', () => {
         DB_DRIVER: 'postgres',
         JOBS_MODE: 'bullmq',
         QUOTE_SHARDS: '4',
+        MATCHER_MODE: 'worker',
         PII_ENC_KEYS: `2:${ENC_KEY}`,
         PII_HMAC_KEY: HMAC_KEY,
       }),
@@ -57,6 +59,7 @@ describe('loadConfig', () => {
       dbDriver: 'postgres',
       jobsMode: 'bullmq',
       quoteShards: 4,
+      matcherMode: 'worker',
       testControls: false,
       demoSeed: false,
       pii: {
@@ -88,6 +91,13 @@ describe('loadConfig', () => {
     expect(() => loadConfig({ QUOTE_SHARDS: '0', REDIS_URL: 'redis://x:6379' })).toThrow(
       /QUOTE_SHARDS/,
     );
+  });
+
+  it('needs QUOTE_SHARDS to leave matching to the matcher worker (NSTOCK-0369)', () => {
+    expect(() => loadConfig({ MATCHER_MODE: 'worker', REDIS_URL: 'redis://x:6379' })).toThrow(
+      /MATCHER_MODE=worker needs QUOTE_SHARDS/,
+    );
+    expect(() => loadConfig({ MATCHER_MODE: 'both' })).toThrow(/MATCHER_MODE/);
   });
 
   it('turns the test controls on only with NODE_ENV=test and the explicit flag (T-162)', () => {

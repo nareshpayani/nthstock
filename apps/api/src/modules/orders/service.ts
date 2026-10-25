@@ -50,6 +50,11 @@ export type OrderServiceDeps = {
   onAuditError?: (error: Error) => void;
   /** Ids for orders and ledger entries; default `pe_<uuid>`. */
   newId?: () => string;
+  /**
+   * False (`MATCHER_MODE=worker`, NSTOCK-0369): the desk subscribes to no ticks and fills come
+   * only through `applyMatcherFill`. Default true.
+   */
+  followTicks?: boolean;
 };
 
 /**
@@ -149,6 +154,7 @@ export function createOrderService({
     process.stderr.write(`audit write failed: ${error.message}\n`);
   },
   newId = () => `pe_${randomUUID().replaceAll('-', '')}`,
+  followTicks = true,
 }: OrderServiceDeps) {
   const listeners = new Set<OrderUpdateListener>();
   const deltaListeners = new Set<AccountDeltaListener>();
@@ -394,6 +400,7 @@ export function createOrderService({
       });
       account.stopUpdates.push(stop);
     },
+    followTicks,
     onOrderUpdate: (userId, order) => {
       const account = cache.get(userId);
       if (!account) return;

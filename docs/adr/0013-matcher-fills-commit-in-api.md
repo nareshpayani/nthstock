@@ -57,6 +57,7 @@ the rule that the trading rules live in one place.
   fills at once, and the shard count stays a matcher concern.
 - A fill takes one extra hop, matcher → Redis → apps/api, of about a millisecond on one host. The
   NSTOCK-0370 benchmark measures tick to fill commit end to end against the 100 ms p95 target.
-- In inline mode (`MATCHER_MODE=inline`, the default until NSTOCK-0369) apps/api still fills
-  orders on its own ticks too. A request that arrives after such a fill finds nothing to fill.
+- In inline mode (`MATCHER_MODE=inline`, the default) apps/api still fills orders on its own ticks
+  too. A request that arrives after such a fill finds nothing to fill. With `MATCHER_MODE=worker`
+  (NSTOCK-0369) apps/api follows no ticks, and the matcher's requests are the only fills.
 - Triggered trailing stops follow the same path once apps/api keeps trailing stops (NSTOCK-0368).

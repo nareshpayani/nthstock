@@ -186,11 +186,14 @@ export function buildApp(options: AppOptions = {}): App {
   for (const owned of new Set([publisher, orderPublisher])) {
     if (owned) app.addHook('onClose', () => owned.close());
   }
-  const sweepMs = !runsOrderSweep(options.jobsMode ?? 'inline')
-    ? null
-    : options.orderSweepMs === undefined
-      ? DEFAULT_ORDER_SWEEP_MS
-      : options.orderSweepMs;
+  // With the matcher worker, no API process sweeps every account (spec market-data-and-matching
+  // §5.4): fills come from the matcher, and a user's engine syncs on their next request.
+  const sweepMs =
+    deps.matcherMode === 'worker' || !runsOrderSweep(options.jobsMode ?? 'inline')
+      ? null
+      : options.orderSweepMs === undefined
+        ? DEFAULT_ORDER_SWEEP_MS
+        : options.orderSweepMs;
   if (sweepMs !== null) {
     let sweeper: ReturnType<typeof setInterval> | null = null;
     app.addHook('onReady', async () => {

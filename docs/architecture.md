@@ -129,10 +129,16 @@ streams, so apps/api stops matching in process.
   store with the expected version, publishes the order update and only then acks. The engine re-checks every
   order, so a replayed request fills nothing twice and a request for an order modified since fills only what still
   crosses. A request a crashed process held is claimed after 30 s; an unsent one puts its orders back on the book.
-- **Status:** the book, the worker, the order and stop commands, the reconcile loop (orders only) and fills are
-  built, and so are server-side trailing stops (NSTOCK-0368). Reconciling stops (#573), `MATCHER_MODE` and the
-  benchmark are NSTOCK-0369 and 0370; until `MATCHER_MODE=worker` apps/api also fills on its own ticks, and a
-  request that arrives after such a fill finds nothing to do.
+- **`MATCHER_MODE`** (NSTOCK-0369, spec §5.4): `inline`, the default, keeps today's in-process desk (unit tests, the
+  `/v1/__test` scripted ticks, the E2E suites); a request that arrives after an inline fill finds nothing to do.
+  `worker` (needs `QUOTE_SHARDS`) builds the desk with `followTicks: false`: it subscribes to no ticks, reads the
+  adapter's current quote whenever an order action or a valuation needs a price (so a MARKET order fills at the live
+  price), and fills resting orders only from the matcher's requests. apps/api then runs no 15 s sweep, so AMO
+  release, square-off and day close run on each user's next request or fill until the E16 session jobs take them
+  over. Try it with `MATCHER_MODE=worker npm run dev:api`.
+- **Status:** the book, the worker, the order and stop commands, the reconcile loop (orders, and trailing stops
+  with NSTOCK-0387), fills and `MATCHER_MODE` are built, and so are server-side trailing stops (NSTOCK-0368). The
+  benchmark is NSTOCK-0370.
 
 ### Server-side trailing stops (NSTOCK-0368)
 In api mode trailing stops run on the server with the same engine rules as the browser mock (SPEC-TFC-1 §6, §10.6).

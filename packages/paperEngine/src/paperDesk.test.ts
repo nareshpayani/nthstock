@@ -106,7 +106,7 @@ function fakeMarket() {
   return market;
 }
 
-function setup(at = ist(25, 10, 0)) {
+function setup(at = ist(25, 10, 0), options: { followTicks?: boolean } = {}) {
   const clock = createManualClock(at);
   const market = fakeMarket();
   const updates: { userId: string; order: Order }[] = [];
@@ -117,6 +117,7 @@ function setup(at = ist(25, 10, 0)) {
     newId: createSequentialIds('o'),
     onOrderUpdate: (userId, order) => updates.push({ userId, order: Order.parse(order) }),
     onChange: (userId) => changes.push(userId),
+    ...options,
   });
   return { desk, clock, market, updates, changes };
 }
@@ -178,6 +179,27 @@ describe('PaperDesk', () => {
     });
     await desk.ingestFor(['bob'], { token: INFY.token, ltp: 0, ts: AT });
     expect(changes).toEqual(['alice', 'alice']);
+  });
+
+  it('follows no ticks when told not to, and reads the live quote for each action (NSTOCK-0369)', async () => {
+    const { desk, market } = setup(ist(25, 10, 0), { followTicks: false });
+    const resting = await desk.place('u1', limitBuy(1_490_00));
+    if (!resting.ok) throw new Error('place failed');
+    expect(market.subscribers()).toBe(0);
+    expect(market.calls.subscribes).toBe(0);
+
+    // A crossing tick reaches no engine: the matcher worker finds that fill instead.
+    market.tick('INFY', 1_480_00);
+    expect(desk.getOrder('u1', resting.order.id)?.status).toBe('OPEN');
+    // The next action reads the adapter again, so a MARKET order fills at the live price.
+    const bought = await desk.place('u2', marketBuy(1));
+    expect(bought).toMatchObject({ ok: true, order: { avgFillPrice: 1_480_00 } });
+    expect(market.calls.stats).toBe(1);
+
+    // And the matcher's fill request fills the resting order.
+    await desk.ingestFor(['u1'], { token: INFY.token, ltp: 1_485_00, ts: AT });
+    expect(desk.getOrder('u1', resting.order.id)?.status).toBe('EXECUTED');
+    expect(market.subscribers()).toBe(0);
   });
 
   it('a pinned price wins over the feed and syncs live orders at once', async () => {

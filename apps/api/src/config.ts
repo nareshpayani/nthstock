@@ -39,6 +39,7 @@ const EnvSchema = z.object({
   DB_DRIVER: z.enum(['memory', 'postgres']).default('memory'),
   JOBS_MODE: z.enum(['bullmq', 'inline', 'off']).default('inline'),
   QUOTE_SHARDS: z.coerce.number().int().min(1).max(64).optional(),
+  MATCHER_MODE: z.enum(['inline', 'worker']).default('inline'),
   PII_ENC_KEYS: z.string().optional(),
   PII_HMAC_KEY: z.string().optional(),
 });
@@ -53,6 +54,9 @@ export type JobsMode = 'bullmq' | 'inline' | 'off';
 export function runsOrderSweep(mode: JobsMode): boolean {
   return mode === 'inline';
 }
+
+/** Who matches resting orders against ticks (spec market-data-and-matching §5.4). */
+export type MatcherMode = 'inline' | 'worker';
 
 export type ApiConfig = {
   /** `NODE_ENV=production`: random OTPs, no dev OTP or dev CAPTCHA. */
@@ -89,6 +93,13 @@ export type ApiConfig = {
    * the in-process adapter ticks and the tick pump publishes, as before.
    */
   quoteShards: number | null;
+  /**
+   * `MATCHER_MODE` (NSTOCK-0369): `inline` (default) matches in this process on its own ticks and
+   * sweeps every account every 15 s; `worker` leaves matching to apps/matcher, so this process
+   * follows no ticks and runs no sweep. `worker` needs QUOTE_SHARDS, whose streams carry the
+   * matcher's commands and fills.
+   */
+  matcherMode: MatcherMode;
   /**
    * `ENABLE_TEST_CONTROLS=true` with `NODE_ENV=test`: registers the `/v1/__test` clock and price
    * routes for E2E suites (T-162). Off by default; refused in any other NODE_ENV.
@@ -167,6 +178,9 @@ export function loadConfig(env: Readonly<Record<string, string | undefined>>): A
   if (parsed.data.QUOTE_SHARDS !== undefined && !parsed.data.REDIS_URL) {
     throw new Error('Invalid apps/api environment: QUOTE_SHARDS needs REDIS_URL');
   }
+  if (parsed.data.MATCHER_MODE === 'worker' && parsed.data.QUOTE_SHARDS === undefined) {
+    throw new Error('Invalid apps/api environment: MATCHER_MODE=worker needs QUOTE_SHARDS');
+  }
   if (production && parsed.data.DEMO_SEED) {
     throw new Error('Invalid apps/api environment: DEMO_SEED is for local demos, not production');
   }
@@ -198,6 +212,7 @@ export function loadConfig(env: Readonly<Record<string, string | undefined>>): A
     dbDriver: parsed.data.DB_DRIVER,
     jobsMode: parsed.data.JOBS_MODE,
     quoteShards: parsed.data.QUOTE_SHARDS ?? null,
+    matcherMode: parsed.data.MATCHER_MODE,
     testControls: parsed.data.ENABLE_TEST_CONTROLS,
     demoSeed: parsed.data.DEMO_SEED,
     pii: { keys: piiKeys, devKeys },
