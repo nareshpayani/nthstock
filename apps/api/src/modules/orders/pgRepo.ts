@@ -205,7 +205,11 @@ export type PgAccountStoreOptions = {
  * events, all holdings, the ledger as a carried balance plus today's entries, and the active and
  * today's trailing stops.
  */
-/** How far ahead an AMO's trade date can be from the day it was placed (a long holiday run). */
+/**
+ * How far past day D an order changed on D can trade: an AMO placed on D after the close trades
+ * on the next session, which a long holiday run can push a week out. Every other order changed on
+ * D trades on D (day orders end at the close).
+ */
 const AMO_TRADE_DATE_DAYS = 8;
 
 export function createPgAccountStore({

@@ -2,11 +2,14 @@ import { istDateKey } from '@nthstock/utils';
 import type { AccountStore, OrderService } from '../orders/index.js';
 import type { PnlSnapshot, PnlSnapshotRepo } from '../portfolio/index.js';
 import type { JobResult } from './definitions.js';
+import { PricesNotLive } from './sessionJobs.js';
 
 export type PnlSnapshotDeps = {
   orders: Pick<OrderService, 'syncAccounts' | 'portfolioSummary' | 'funds'>;
   accounts: Pick<AccountStore, 'accountsTouchedOn' | 'accountsWithHoldings'>;
   pnlSnapshots: Pick<PnlSnapshotRepo, 'upsert'>;
+  /** As for the session jobs: values at stale prices would be wrong, so the run waits. */
+  pricesLive?: () => boolean;
 };
 
 /**
@@ -49,6 +52,9 @@ async function snapshotOf(
  * rewritten unchanged).
  */
 export async function runPnlSnapshot(at: Date, deps: PnlSnapshotDeps): Promise<JobResult> {
+  if (deps.pricesLive && !deps.pricesLive()) {
+    throw new PricesNotLive('The quote snapshots are not loaded yet');
+  }
   const [touched, holding] = await Promise.all([
     deps.accounts.accountsTouchedOn(istDateKey(at)),
     deps.accounts.accountsWithHoldings(),

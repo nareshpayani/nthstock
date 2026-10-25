@@ -141,6 +141,9 @@ export function createMemoryAccountStore({
       ),
 
     accountsTouchedOn: (tradeDate) => {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(tradeDate)) {
+        return Promise.reject(new RangeError(`Not a YYYY-MM-DD date: ${tradeDate}`));
+      }
       const on = (iso: string) => istDateKey(new Date(iso)) === tradeDate;
       return Promise.resolve(
         [...accounts]

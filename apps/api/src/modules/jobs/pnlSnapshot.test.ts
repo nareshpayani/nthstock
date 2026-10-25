@@ -6,6 +6,7 @@ import { createDeps, type AppDeps } from '../../deps.js';
 import { manualClock, type ManualClock } from '../../test/manualClock.js';
 import { seedDemo } from '../demo/index.js';
 import { createJobs } from './jobs.js';
+import { PricesNotLive } from './sessionJobs.js';
 import { runPnlSnapshot, type PnlSnapshotDeps } from './pnlSnapshot.js';
 
 // T-209: the 15:45 job writes one pnl_snapshots row per account touched today or holding stock,
@@ -138,6 +139,22 @@ describe('pnl.snapshot (T-209)', () => {
     );
     expect(await deps.repos.pnlSnapshots.find(DEMO_SEED_USER.id, TRADE_DATE)).not.toBeNull();
     expect(await deps.repos.pnlSnapshots.find(TRADER, TRADE_DATE)).toBeNull();
+  });
+
+  it('waits for live prices: no row is written at stale prices', async () => {
+    clock.advance(MONDAY_15_45.getTime() - MONDAY_10_00.getTime());
+    let writes = 0;
+    const deps = jobDeps({
+      pricesLive: () => false,
+      pnlSnapshots: {
+        upsert: () => {
+          writes += 1;
+          return Promise.resolve();
+        },
+      },
+    });
+    await expect(runPnlSnapshot(MONDAY_15_45, deps)).rejects.toBeInstanceOf(PricesNotLive);
+    expect(writes).toBe(0);
   });
 
   it('fails the run without naming the account when a write fails', async () => {

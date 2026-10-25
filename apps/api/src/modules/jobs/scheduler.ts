@@ -101,8 +101,9 @@ export async function startJobScheduler(options: JobSchedulerOptions): Promise<J
       error: safeErrorMessage(error),
     };
     // The last attempt is an error: with JOBS_MODE=bullmq nothing else runs that event.
-    if (attempt >= JOB_ATTEMPTS) log.error('job gave up', fields);
-    else log.warn('job failed', fields);
+    if (attempt >= JOB_ATTEMPTS || error instanceof UnrecoverableError) {
+      log.error('job gave up', fields);
+    } else log.warn('job failed', fields);
   });
   // A worker that died mid-run leaves its job stalled; BullMQ hands it to a live worker.
   worker.on('stalled', (jobId) => log.warn('job stalled', { jobId }));

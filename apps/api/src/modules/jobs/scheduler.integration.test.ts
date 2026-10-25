@@ -185,6 +185,21 @@ describeWithRedis('BullMQ job scheduler (T-207, T-211)', () => {
     });
   }, 20_000);
 
+  it('fails a job it does not know once, without retrying it', async () => {
+    const prefix = uniqueChannel('jobs-unknown');
+    const log = memoryLog();
+    const scheduler = await start({ jobs: [], log, prefix });
+    await scheduler.queue.add('nightly.removed', null, { attempts: 3 });
+    await waitFor(() => log.lines.some((line) => line.level === 'error'));
+    expect(log.lines.filter((line) => line.message.startsWith('job '))).toEqual([
+      {
+        level: 'error',
+        message: 'job gave up',
+        fields: { job: 'nightly.removed', attempt: 1, attempts: 3, error: 'UnrecoverableError' },
+      },
+    ]);
+  }, 20_000);
+
   it('stops cleanly: close waits for the running job to finish', async () => {
     const prefix = uniqueChannel('jobs-close');
     let running = false;
