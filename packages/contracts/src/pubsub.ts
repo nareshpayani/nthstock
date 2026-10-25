@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { Quote } from './market.js';
 import { Order } from './orders.js';
 import { Id } from './primitives.js';
+import { WsAccountDelta } from './ws.js';
 
 /**
  * Server-to-server messages on Redis pub/sub (ADR 0004 §4). Browsers never see these; they get the
@@ -61,8 +62,8 @@ export function tickStreamStep(lastSeq: number | null, entry: Pick<TickStreamEnt
 }
 
 /**
- * Per-user order updates (T-133): apps/api publishes every change to a user's orders on that
- * user's own channel, and each apps/realtime node subscribes only to the channels of users it has
+ * Per-user order updates (T-133): apps/api publishes every change to a user's orders (and, since
+ * NSTOCK-0368, each committed account delta) on that user's own channel, and each apps/realtime node subscribes only to the channels of users it has
  * a connection for. So an update only ever reaches the nodes, and then the connections, of the
  * user it belongs to.
  */
@@ -84,6 +85,33 @@ export const OrderUpdateEvent = z.object({
   order: Order,
 });
 export type OrderUpdateEvent = z.infer<typeof OrderUpdateEvent>;
+
+export const ACCOUNT_DELTA_EVENT_VERSION = 1;
+
+/**
+ * One committed account change (NSTOCK-0368, ADR 0012), published on the same per-user channel as
+ * the order updates, after them: the orders and trailing stops it changed at engine `seq`, the
+ * positions and the funds after it. apps/realtime sends it on as an `accountDelta` frame with no
+ * quotes (the tick stream carries those), which the trading store applies like the mock's frames.
+ */
+export const AccountDeltaEvent = z.object({
+  v: z.literal(ACCOUNT_DELTA_EVENT_VERSION),
+  type: z.literal('accountDelta'),
+  userId: Id,
+  delta: WsAccountDelta.pick({
+    seq: true,
+    at: true,
+    orders: true,
+    positions: true,
+    trailingStops: true,
+    funds: true,
+  }),
+});
+export type AccountDeltaEvent = z.infer<typeof AccountDeltaEvent>;
+
+/** Anything on `orderUpdatesChannel(userId)`: an order update or an account delta. */
+export const UserChannelEvent = z.union([AccountDeltaEvent, OrderUpdateEvent]);
+export type UserChannelEvent = z.infer<typeof UserChannelEvent>;
 
 /**
  * Session revocation (T-194, spec backend-core §7.2). When apps/api revokes a session (logout,

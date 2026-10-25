@@ -1,4 +1,4 @@
-import { OrderUpdateEvent, orderUpdatesChannel } from '@nthstock/contracts';
+import { UserChannelEvent, orderUpdatesChannel } from '@nthstock/contracts';
 import { MockMarketDataAdapter, generateSymbolMaster } from '@nthstock/marketData';
 import { Redis } from 'ioredis';
 import { afterAll, beforeAll, expect, it } from 'vitest';
@@ -19,7 +19,7 @@ describeWithRedis('order updates to real Redis (T-133 integration)', () => {
     await redis?.stop();
   });
 
-  it("publishes a user's fill on that user's channel only", async () => {
+  it("publishes a user's fill, then its account delta, on that user's channel only", async () => {
     const url = redis?.url ?? '';
     const clock = manualClock('2026-09-28T04:30:00.000Z');
     const master = generateSymbolMaster({ equityCount: 20 });
@@ -40,9 +40,9 @@ describeWithRedis('order updates to real Redis (T-133 integration)', () => {
     const bob = await loginWithOtp(app, '9876500002');
 
     const subscriber = new Redis(url);
-    const received: { channel: string; event: OrderUpdateEvent }[] = [];
+    const received: { channel: string; event: UserChannelEvent }[] = [];
     subscriber.on('message', (channel: string, message: string) => {
-      received.push({ channel, event: OrderUpdateEvent.parse(JSON.parse(message)) });
+      received.push({ channel, event: UserChannelEvent.parse(JSON.parse(message)) });
     });
     await subscriber.subscribe(orderUpdatesChannel(alice.session.user.id));
 
@@ -57,11 +57,24 @@ describeWithRedis('order updates to real Redis (T-133 integration)', () => {
       expect(response.statusCode).toBe(200);
     }
 
-    await expect.poll(() => received.length, { timeout: 10_000 }).toBe(2);
-    expect(received.map((r) => [r.event.userId, r.event.order.status])).toEqual([
+    await expect.poll(() => received.length, { timeout: 10_000 }).toBe(3);
+    expect(
+      received.map(({ event }) =>
+        'order' in event
+          ? [event.userId, event.order.status]
+          : [event.userId, event.delta.orders.map((order) => order.status).join()],
+      ),
+    ).toEqual([
       [alice.session.user.id, 'OPEN'],
       [alice.session.user.id, 'EXECUTED'],
+      // The delta carries the order's latest copy, at its seq, with the position it opened.
+      [alice.session.user.id, 'EXECUTED'],
     ]);
+    const delta = received[2]?.event;
+    if (!delta || !('delta' in delta)) throw new Error('expected an account delta');
+    expect(delta.delta.seq).toBe(delta.delta.orders[0]?.seq);
+    expect(delta.delta.positions.map((p) => p.netQty)).toEqual([1]);
+    expect(delta.delta.funds).toBeDefined();
     expect(new Set(received.map((r) => r.channel))).toEqual(
       new Set([orderUpdatesChannel(alice.session.user.id)]),
     );

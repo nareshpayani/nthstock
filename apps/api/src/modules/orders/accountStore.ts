@@ -80,7 +80,10 @@ export interface AccountStore {
   orderHistory(userId: string, orderId: string): Promise<OrderHistoryResponse | null>;
   /** One page of the user's funds ledger, newest first; null when the cursor is not an entry. */
   ledgerPage(userId: string, query?: LedgerPageQuery): Promise<LedgerPage | null>;
-  /** Users with an AMO or OPEN order (loaded at boot so resting orders still fill). */
+  /**
+   * Users with an AMO or OPEN order or an active trailing stop (loaded at boot so resting orders
+   * still fill and stops keep stepping on ticks alone, NSTOCK-0368).
+   */
   liveAccountIds(): Promise<string[]>;
   /** Users with an order change or a ledger entry on the IST trade date `YYYY-MM-DD`. */
   accountsTouchedOn(tradeDate: string): Promise<string[]>;

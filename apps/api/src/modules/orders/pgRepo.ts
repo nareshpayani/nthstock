@@ -11,7 +11,11 @@ import type {
   OrderStatus,
   OrderType,
   OrdersPage,
+  PositionDirection,
   ProductType,
+  TrailingStop,
+  TrailingStopExitType,
+  TrailingStopStatus,
 } from '@nthstock/contracts';
 import { PAGE_LIMIT_DEFAULT } from '@nthstock/contracts';
 import {
@@ -34,6 +38,7 @@ import {
   ledgerEntries,
   paperAccounts,
   positions,
+  trailingStops,
 } from '../../db/schema/paper.js';
 import type { AuditRepo } from '../audit/index.js';
 import {
@@ -49,8 +54,16 @@ import {
 type OrderRow = typeof orders.$inferSelect;
 type EventRow = typeof orderEvents.$inferSelect;
 type LedgerRow = typeof ledgerEntries.$inferSelect;
+type StopRow = typeof trailingStops.$inferSelect;
 
 const LIVE_STATUSES = ['AMO', 'OPEN'] satisfies OrderStatus[];
+/** Stops that still act, kept in the working set whatever their age (as the engine keeps them). */
+const ACTIVE_STOP_STATUSES = [
+  'PENDING_ENTRY',
+  'ARMED',
+  'TRAILING',
+  'TRIGGERED',
+] satisfies TrailingStopStatus[];
 /** Rows per multi-row INSERT, well under Postgres' 65,535 bind parameters. */
 const INSERT_CHUNK = 500;
 /** `load` rereads when a commit lands between its reads; a few rounds always settle. */
@@ -117,6 +130,42 @@ const toLedgerEntry = (row: LedgerRow): LedgerEntry => ({
   createdAt: row.createdAt.toISOString(),
 });
 
+/** The row's trail; the CHECK holds exactly one value to its unit, so a missing one is damage. */
+function trailOf(row: StopRow): TrailingStop['trail'] {
+  if (row.trailUnit === 'PERCENT' && row.trailBasisPoints !== null) {
+    return { unit: 'PERCENT', basisPoints: row.trailBasisPoints };
+  }
+  if (row.trailUnit === 'AMOUNT' && row.trailAmount !== null) {
+    return { unit: 'AMOUNT', amount: row.trailAmount };
+  }
+  throw new Error(`Trailing stop ${row.id} has no trail value for its unit`);
+}
+
+const toTrailingStop = (row: StopRow): TrailingStop => ({
+  id: row.id,
+  token: row.token,
+  symbol: row.symbol,
+  // The table's CHECK constraints hold these columns to the contract's lists and the trail to
+  // exactly one of its two values.
+  exchange: row.exchange as Exchange,
+  product: row.product as ProductType,
+  direction: row.direction as PositionDirection,
+  trail: trailOf(row),
+  activationPrice: row.activationPrice,
+  exitOrderType: row.exitOrderType as TrailingStopExitType,
+  exitLimitOffset: row.exitLimitOffset,
+  status: row.status as TrailingStopStatus,
+  statusReason: row.statusReason,
+  watermarkPrice: row.watermarkPrice,
+  stopPrice: row.stopPrice,
+  protectedQty: row.protectedQty,
+  entryOrderId: row.entryOrderId,
+  exitOrderId: row.exitOrderId,
+  seq: row.seq,
+  createdAt: row.createdAt.toISOString(),
+  updatedAt: row.updatedAt.toISOString(),
+});
+
 /** A page of `rows` fetched with one extra row: the extra row only says there is a next page. */
 function pageOf<T extends { id: string }>(rows: readonly T[], limit: number) {
   const items = rows.slice(0, limit);
@@ -134,10 +183,12 @@ export type PgAccountStoreOptions = { database: Database; audit: AuditRepo };
  * the first and then finds the version moved, so exactly one of two racing commits wins and the
  * loser writes nothing. With the row held it diffs `change` into order upserts, new order events,
  * new ledger rows (numbered after the account's highest `seq`, so a user's sequence has no gaps),
- * the replaced position and holding-sale rows, changed holdings, and the audit entries.
+ * the replaced position and holding-sale rows, changed holdings, new or changed trailing stops,
+ * and the audit entries. The account row carries the engine `seq` and the exit order ids.
  *
  * `load` rebuilds the engine's working set from those rows: today's and live orders with their
- * events, all holdings, and the ledger as a carried balance plus today's entries.
+ * events, all holdings, the ledger as a carried balance plus today's entries, and the active and
+ * today's trailing stops.
  */
 export function createPgAccountStore({ database, audit }: PgAccountStoreOptions): AccountStore {
   /** Takes the account row at `expected` and moves it to the next version; AccountConflict if not. */
@@ -156,6 +207,8 @@ export function createPgAccountStore({ database, audit }: PgAccountStoreOptions)
               userId,
               openingBalance: after.openingBalance,
               version: 1,
+              seq: after.seq,
+              exitOrderIds: after.exitOrderIds,
               syncedTo,
               createdAt: syncedTo,
               updatedAt: syncedTo,
@@ -164,7 +217,13 @@ export function createPgAccountStore({ database, audit }: PgAccountStoreOptions)
             .returning({ version: paperAccounts.version })
         : await tx
             .update(paperAccounts)
-            .set({ version: sql`${paperAccounts.version} + 1`, syncedTo, updatedAt: syncedTo })
+            .set({
+              version: sql`${paperAccounts.version} + 1`,
+              seq: after.seq,
+              exitOrderIds: after.exitOrderIds,
+              syncedTo,
+              updatedAt: syncedTo,
+            })
             .where(and(eq(paperAccounts.userId, userId), eq(paperAccounts.version, expected)))
             .returning({ version: paperAccounts.version });
     const [row] = claimed;
@@ -176,10 +235,85 @@ export function createPgAccountStore({ database, audit }: PgAccountStoreOptions)
     throw new AccountConflict(userId, expected, current?.version ?? 0);
   }
 
-  /** A reset or a replacing change clears the account's orders and their events; the ledger stays. */
+  /**
+   * A reset or a replacing change clears the account's orders, their events and its trailing
+   * stops (the engine keeps none of them across a reset); the ledger stays.
+   */
   async function clearOrders(tx: Tx, userId: string) {
     await tx.delete(orderEvents).where(eq(orderEvents.userId, userId));
     await tx.delete(orders).where(eq(orders.userId, userId));
+    await tx.delete(trailingStops).where(eq(trailingStops.userId, userId));
+  }
+
+  /** Upserts the trailing stops that are new or changed since `before` (all after a clear). */
+  async function writeTrailingStops(tx: Tx, userId: string, change: AccountChange) {
+    const { before, after } = change;
+    const stored = new Map(
+      clearsOrders(change) ? [] : before?.trailingStops.map((stop) => [stop.id, stop]),
+    );
+    const requestIds = new Map(after.trailingStopRequestIds.map(([key, id]) => [id, key]));
+    const changed = after.trailingStops.filter(
+      (stop) => !isDeepStrictEqual(stored.get(stop.id), stop),
+    );
+    await inChunks(
+      changed.map((stop): StopRow => ({
+        id: stop.id,
+        userId,
+        token: stop.token,
+        symbol: stop.symbol,
+        exchange: stop.exchange,
+        product: stop.product,
+        direction: stop.direction,
+        trailUnit: stop.trail.unit,
+        trailAmount: stop.trail.unit === 'AMOUNT' ? stop.trail.amount : null,
+        trailBasisPoints: stop.trail.unit === 'PERCENT' ? stop.trail.basisPoints : null,
+        activationPrice: stop.activationPrice,
+        exitOrderType: stop.exitOrderType,
+        exitLimitOffset: stop.exitLimitOffset,
+        status: stop.status,
+        statusReason: stop.statusReason,
+        watermarkPrice: stop.watermarkPrice,
+        stopPrice: stop.stopPrice,
+        protectedQty: stop.protectedQty,
+        entryOrderId: stop.entryOrderId,
+        exitOrderId: stop.exitOrderId,
+        clientRequestId: requestIds.get(stop.id) ?? null,
+        seq: stop.seq,
+        createdAt: new Date(stop.createdAt),
+        updatedAt: new Date(stop.updatedAt),
+      })),
+      async (chunk) => {
+        const written = await tx
+          .insert(trailingStops)
+          .values(chunk)
+          .onConflictDoUpdate({
+            target: trailingStops.id,
+            // The engine changes these as a stop arms, ratchets, is modified and ends.
+            set: {
+              trailUnit: excluded('trail_unit'),
+              trailAmount: excluded('trail_amount'),
+              trailBasisPoints: excluded('trail_basis_points'),
+              activationPrice: excluded('activation_price'),
+              exitOrderType: excluded('exit_order_type'),
+              exitLimitOffset: excluded('exit_limit_offset'),
+              status: excluded('status'),
+              statusReason: excluded('status_reason'),
+              watermarkPrice: excluded('watermark_price'),
+              stopPrice: excluded('stop_price'),
+              protectedQty: excluded('protected_qty'),
+              exitOrderId: excluded('exit_order_id'),
+              seq: excluded('seq'),
+              updatedAt: excluded('updated_at'),
+            },
+            // Only the account's own row; an id another account holds writes nothing and fails.
+            setWhere: eq(trailingStops.userId, userId),
+          })
+          .returning({ id: trailingStops.id });
+        if (written.length !== chunk.length) {
+          throw new Error('A trailing stop id already belongs to another account');
+        }
+      },
+    );
   }
 
   async function writeOrders(tx: Tx, userId: string, { before, after }: AccountChange) {
@@ -470,9 +604,25 @@ export function createPgAccountStore({ database, audit }: PgAccountStoreOptions)
         .from(holdingSales)
         .where(eq(holdingSales.userId, userId))
         .orderBy(holdingSales.token);
+      // Active stops and today's finished ones, in the order they were placed (the engine's).
+      const stopRows = await tx
+        .select()
+        .from(trailingStops)
+        .where(
+          and(
+            eq(trailingStops.userId, userId),
+            or(
+              inArray(trailingStops.status, ACTIVE_STOP_STATUSES),
+              gte(trailingStops.updatedAt, since),
+            ),
+          ),
+        )
+        .orderBy(trailingStops.createdAt, trailingStops.id);
+      const loadedIds = new Set(orderIds);
 
       const workingSet: PaperEngineWorkingSet = {
         v: PAPER_ENGINE_WORKING_SET_VERSION,
+        seq: account.seq,
         syncedTo: account.syncedTo.toISOString(),
         orders: orderRows.map(toOrder),
         rejectCodes: orderRows.flatMap((row) =>
@@ -511,6 +661,11 @@ export function createPgAccountStore({ database, audit }: PgAccountStoreOptions)
           const entries = eventsByOrder.get(row.id);
           return entries ? [[row.id, entries] as [string, OrderHistoryEntry[]]] : [];
         }),
+        trailingStops: stopRows.map(toTrailingStop),
+        exitOrderIds: account.exitOrderIds.filter((id) => loadedIds.has(id)),
+        trailingStopRequestIds: stopRows.flatMap((row) =>
+          row.clientRequestId === null ? [] : [[row.clientRequestId, row.id] as [string, string]],
+        ),
       };
       return { workingSet, version: account.version };
     });
@@ -540,6 +695,7 @@ export function createPgAccountStore({ database, audit }: PgAccountStoreOptions)
         await writeLedger(tx, userId, change);
         await writeDay(tx, userId, change);
         await writeHoldings(tx, userId, change);
+        await writeTrailingStops(tx, userId, change);
         // The audit entries commit or roll back with the change they record.
         await audit.appendMany(auditEntries, tx);
         return version;
@@ -598,11 +754,17 @@ export function createPgAccountStore({ database, audit }: PgAccountStoreOptions)
     },
 
     async liveAccountIds() {
-      const rows = await database.db
-        .selectDistinct({ userId: orders.userId })
-        .from(orders)
-        .where(inArray(orders.status, LIVE_STATUSES));
-      return rows.map((row) => row.userId).sort();
+      const [withOrders, withStops] = await Promise.all([
+        database.db
+          .selectDistinct({ userId: orders.userId })
+          .from(orders)
+          .where(inArray(orders.status, LIVE_STATUSES)),
+        database.db
+          .selectDistinct({ userId: trailingStops.userId })
+          .from(trailingStops)
+          .where(inArray(trailingStops.status, ACTIVE_STOP_STATUSES)),
+      ]);
+      return [...new Set([...withOrders, ...withStops].map((row) => row.userId))].sort();
     },
 
     async accountsTouchedOn(tradeDate) {

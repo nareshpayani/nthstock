@@ -1,6 +1,17 @@
-import { Exchange, KycStatus, LedgerEntryType } from '@nthstock/contracts';
+import {
+  Exchange,
+  KycStatus,
+  LedgerEntryType,
+  TrailingStopExitType,
+  TrailingStopStatus,
+} from '@nthstock/contracts';
 import { describe, expect, it } from 'vitest';
-import { LEDGER_ENTRY_TYPES } from './schema/paper.js';
+import {
+  LEDGER_ENTRY_TYPES,
+  TRAIL_UNITS,
+  TRAILING_STOP_EXIT_TYPES,
+  TRAILING_STOP_STATUSES,
+} from './schema/paper.js';
 import { KYC_STATUSES } from './schema/users.js';
 import { EXCHANGES } from './schema/watchlists.js';
 
@@ -12,6 +23,12 @@ describe('schema enums', () => {
 
   it('checks ledger_entries.type against the contract LedgerEntryType', () => {
     expect([...LEDGER_ENTRY_TYPES]).toEqual(LedgerEntryType.options);
+  });
+
+  it('checks the trailing_stops lists against the contract', () => {
+    expect([...TRAILING_STOP_STATUSES]).toEqual(TrailingStopStatus.options);
+    expect([...TRAILING_STOP_EXIT_TYPES]).toEqual(TrailingStopExitType.options);
+    expect([...TRAIL_UNITS]).toEqual(['AMOUNT', 'PERCENT']);
   });
 
   it('checks watchlist_items.exchange against the contract Exchange', () => {

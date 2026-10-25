@@ -95,10 +95,7 @@ export type PaperEngineOptions = {
   onOrderUpdate?: (order: Order) => void;
   /** Called with a copy of the trailing stop every time one is stored or changes. */
   onTrailingStopUpdate?: (stop: TrailingStop) => void;
-  /**
-   * False refuses trailing stops, standalone and attached, as `NOT_SUPPORTED` (apps/api, whose
-   * store does not keep them yet). Default true.
-   */
+  /** False refuses trailing stops, standalone and attached, as `NOT_SUPPORTED`. Default true. */
   trailingStops?: boolean;
   /**
    * The most shares a LIMIT order in `token` may fill per tick, or null for no cap (SPEC-TFC-1
@@ -114,11 +111,13 @@ export type PaperEngineOptions = {
 
 /**
  * The full snapshot's version. Version 1 had no trailing stops and no `seq`; it still restores
- * (SPEC-TFC-1 §10.3). Version 2 is the working set, so trailing stops arrived as version 3.
+ * (SPEC-TFC-1 §10.3). Version 2 is the working set, so trailing stops arrived as version 3. The
+ * working set took trailing stops and `seq` as version 4 (NSTOCK-0368); version 2 still restores.
  */
 export const PAPER_ENGINE_SNAPSHOT_VERSION = 3;
 export const PAPER_ENGINE_LEGACY_SNAPSHOT_VERSION = 1;
-export const PAPER_ENGINE_WORKING_SET_VERSION = 2;
+export const PAPER_ENGINE_WORKING_SET_VERSION = 4;
+export const PAPER_ENGINE_LEGACY_WORKING_SET_VERSION = 2;
 
 /**
  * An engine's whole state as plain JSON-safe data, for keeping it between page loads (MSW keeps
@@ -159,14 +158,30 @@ export type PaperEngineSnapshotV3 = Omit<PaperEngineSnapshotV1, 'v' | 'history'>
 };
 
 /**
- * The working set (v2, T-199): what a store needs to carry an account on without loading its whole
+ * The working set (T-199): what a store needs to carry an account on without loading its whole
  * history. Orders are today's (placed or changed since the start of the IST day of `syncedTo`) and
  * the live ones (AMO, OPEN); positions and holding sales are today's anyway; all holdings; and the
  * ledger is a carried balance plus today's entries. Older orders stay in the store; the engine
  * only needs them for idempotent client order ids, which then no longer match.
+ *
+ * Version 4 (NSTOCK-0368) adds the engine `seq` and the trailing stops on the same rule as orders
+ * (today's and the active ones), with the exit orders and idempotency keys that belong to what it
+ * keeps. Orders still leave their own `seq` out: a store keeps the account's.
  */
-export type PaperEngineWorkingSet = {
+export type PaperEngineWorkingSet = Omit<PaperEngineWorkingSetV2, 'v'> & {
   v: typeof PAPER_ENGINE_WORKING_SET_VERSION;
+  /** The engine sequence number of the last change. */
+  seq: number;
+  trailingStops: TrailingStop[];
+  /** Kept orders the engine placed to close a position (see the full snapshot). */
+  exitOrderIds: string[];
+  /** Idempotency keys of the kept trailing stops. */
+  trailingStopRequestIds: [clientRequestId: string, trailingStopId: string][];
+};
+
+/** The working set before trailing stops (v2): it restores with none and `seq` from its records. */
+export type PaperEngineWorkingSetV2 = {
+  v: typeof PAPER_ENGINE_LEGACY_WORKING_SET_VERSION;
   syncedTo: string;
   orders: Order[];
   rejectCodes: [orderId: string, code: OrderRejectionCode][];
@@ -179,12 +194,11 @@ export type PaperEngineWorkingSet = {
 };
 
 /**
- * What an engine restores from: a full snapshot (v3, or a v1 saved before trailing stops) or a v2
- * working set. The working set is apps/api's store format: it has no trailing stops and no `seq`
- * until apps/api adopts them (ADR 0012).
+ * What an engine restores from: a full snapshot (v3, or a v1 saved before trailing stops) or a
+ * working set (v4, or a v2 saved before trailing stops). The working set is apps/api's store format.
  */
 export type PaperEngineSnapshot =
-  PaperEngineSnapshotV1 | PaperEngineSnapshotV3 | PaperEngineWorkingSet;
+  PaperEngineSnapshotV1 | PaperEngineSnapshotV3 | PaperEngineWorkingSet | PaperEngineWorkingSetV2;
 
 export type OrderActionErrorCode =
   | OrderRejectionCode
@@ -456,10 +470,10 @@ export class PaperEngine {
   }
 
   /**
-   * The working set (v2); `new PaperEngine({ ..., snapshot })` carries on from it like a full
-   * snapshot. It is apps/api's store format, which keeps no trailing stops and no `seq` yet, so
-   * orders leave `seq` out. With `whole`, it keeps every order and ledger entry instead of only
-   * today's and the live ones (a store taking over a whole account, such as the demo seed).
+   * The working set (v4); `new PaperEngine({ ..., snapshot })` carries on from it like a full
+   * snapshot. It is apps/api's store format: the account keeps `seq`, so orders leave theirs out.
+   * With `whole`, it keeps every order, trailing stop and ledger entry instead of only today's and
+   * the live ones (a store taking over a whole account, such as the demo seed).
    */
   workingSet({ whole = false }: { whole?: boolean } = {}): PaperEngineWorkingSet {
     const syncedTo = this.#syncedTo;
@@ -469,8 +483,13 @@ export class PaperEngine {
     for (const order of this.#orders.values()) {
       if (LIVE_STATUSES.has(order.status) || order.updatedAt >= since) kept.add(order.id);
     }
+    const stops = [...this.#stops.values()].filter(
+      (stop) => ACTIVE_STOP_STATUSES.has(stop.status) || stop.updatedAt >= since,
+    );
+    const keptStops = new Set(stops.map((stop) => stop.id));
     return {
       v: PAPER_ENGINE_WORKING_SET_VERSION,
+      seq: this.#seq,
       syncedTo: syncedTo.toISOString(),
       orders: [...this.#orders.values()].filter((o) => kept.has(o.id)).map(withoutSeq),
       rejectCodes: [...this.#rejectCodes].filter(([id]) => kept.has(id)),
@@ -482,6 +501,9 @@ export class PaperEngine {
       history: [...this.#history]
         .filter(([id]) => kept.has(id))
         .map(([id, entries]) => [id, entries.map((e) => ({ ...e }))]),
+      trailingStops: stops.map(copyStop),
+      exitOrderIds: [...this.#exits].filter((id) => kept.has(id)),
+      trailingStopRequestIds: [...this.#stopByRequestId].filter(([, id]) => keptStops.has(id)),
     };
   }
 
@@ -948,7 +970,8 @@ export class PaperEngine {
     if (
       snapshot.v !== PAPER_ENGINE_SNAPSHOT_VERSION &&
       snapshot.v !== PAPER_ENGINE_LEGACY_SNAPSHOT_VERSION &&
-      snapshot.v !== PAPER_ENGINE_WORKING_SET_VERSION
+      snapshot.v !== PAPER_ENGINE_WORKING_SET_VERSION &&
+      snapshot.v !== PAPER_ENGINE_LEGACY_WORKING_SET_VERSION
     ) {
       throw new Error(
         `Unsupported engine snapshot version ${String((snapshot as { v: unknown }).v)}`,
@@ -991,8 +1014,11 @@ export class PaperEngine {
       assertPaise(sale.realisedPnl, 'Sale P&L');
       this.#holdingSales.set(sale.token, { ...sale });
     }
-    // Version 1 and the working set predate trailing stops: they restore with none (§10.3).
-    if (snapshot.v === PAPER_ENGINE_SNAPSHOT_VERSION) {
+    // Version 1 and the v2 working set predate trailing stops: they restore with none (§10.3).
+    if (
+      snapshot.v === PAPER_ENGINE_SNAPSHOT_VERSION ||
+      snapshot.v === PAPER_ENGINE_WORKING_SET_VERSION
+    ) {
       for (const raw of snapshot.trailingStops) {
         const stop = TrailingStopSchema.parse(raw);
         this.#stops.set(stop.id, stop);
@@ -1006,7 +1032,11 @@ export class PaperEngine {
       }
     }
     // `seq` never goes back: at least the newest change any record carries.
-    let seq = snapshot.v === PAPER_ENGINE_SNAPSHOT_VERSION ? snapshot.seq : 0;
+    let seq =
+      snapshot.v === PAPER_ENGINE_SNAPSHOT_VERSION ||
+      snapshot.v === PAPER_ENGINE_WORKING_SET_VERSION
+        ? snapshot.seq
+        : 0;
     for (const order of this.#orders.values()) seq = Math.max(seq, order.seq ?? 0);
     for (const stop of this.#stops.values()) seq = Math.max(seq, stop.seq);
     if (!Number.isSafeInteger(seq) || seq < 0) throw new RangeError('Invalid snapshot seq');
@@ -1741,7 +1771,10 @@ function onTick(paise: number): number {
 
 /** The ledger part of a snapshot: whole (v1) or a carried balance plus entries (v2). */
 function ledgerOptions(snapshot: PaperEngineSnapshot): FundsLedgerOptions {
-  if (snapshot.v === PAPER_ENGINE_WORKING_SET_VERSION) {
+  if (
+    snapshot.v === PAPER_ENGINE_WORKING_SET_VERSION ||
+    snapshot.v === PAPER_ENGINE_LEGACY_WORKING_SET_VERSION
+  ) {
     return {
       openingBalance: snapshot.openingBalance,
       entries: snapshot.ledger.entries,

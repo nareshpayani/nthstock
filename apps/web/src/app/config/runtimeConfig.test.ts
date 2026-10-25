@@ -6,7 +6,6 @@ import {
   parseRuntimeConfig,
   resolveWsUrl,
   runtimeEnvSchema,
-  tradingCapabilities,
 } from './runtimeConfig';
 
 describe('parseRuntimeConfig', () => {
@@ -99,12 +98,5 @@ describe('.env.example', () => {
   it('holds only defaults, no secret values, and parses', () => {
     for (const [, value] of entries) expect(value).toMatch(/^(msw|api|true|false|)$/);
     expect(() => parseRuntimeConfig(Object.fromEntries(entries))).not.toThrow();
-  });
-});
-
-describe('tradingCapabilities', () => {
-  it('offers trailing stops on the in-browser engine only (SPEC-TFC-1 §10.6)', () => {
-    expect(tradingCapabilities({ apiMode: 'msw' })).toEqual({ trailingStops: true });
-    expect(tradingCapabilities({ apiMode: 'api' })).toEqual({ trailingStops: false });
   });
 });

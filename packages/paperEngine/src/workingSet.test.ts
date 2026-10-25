@@ -12,6 +12,7 @@ import {
   type PaperEngineSnapshot,
   type PaperEngineSnapshotV1,
   type PaperEngineWorkingSet,
+  type PaperEngineWorkingSetV2,
 } from './paperEngine.js';
 import {
   INFY,
@@ -136,7 +137,7 @@ function perform(harness: Harness, engine: PaperEngine, action: Action): unknown
   }
 }
 
-describe('engine working set (v2, T-199)', () => {
+describe('engine working set (v4, T-199, NSTOCK-0368)', () => {
   it.each([3, 11, 42, 2026, 777])(
     'an engine restored from the working set acts like one restored from the full snapshot (seed %i)',
     (seed) => {
@@ -194,7 +195,7 @@ describe('engine working set (v2, T-199)', () => {
     engine.place(order({ qty: 1, price: 1_300_00 }));
 
     const set = engine.workingSet();
-    expect(set.v).toBe(2);
+    expect(set.v).toBe(4);
     expect(set.orders.map((o) => o.qty)).toEqual([4, 1]);
     expect(set.ledger.entries.every((e) => e.createdAt >= ist(28, 0, 0).toISOString())).toBe(true);
     expect(set.ledger.carried.blocks).toEqual([[amo.order.id, 4 * 1_400_00]]);
@@ -219,6 +220,95 @@ describe('engine working set (v2, T-199)', () => {
     fromWorking.reset();
     harness.engine.reset();
     expect(fromWorking.fundsSummary()).toEqual(harness.engine.fundsSummary());
+  });
+
+  it('carries trailing stops, their exits, idempotency keys and seq (NSTOCK-0368)', () => {
+    const harness = createHarness({ at: ist(25, 10, 0) });
+    const { engine, prices } = harness;
+    engine.place(marketOrder({ qty: 10 }));
+    const placed = engine.placeTrailingStop({
+      token: INFY.token,
+      product: 'DELIVERY',
+      trail: { unit: 'AMOUNT', amount: 10_00 },
+      activationPrice: null,
+      exitOrderType: 'LIMIT',
+      exitLimitOffset: 0,
+      clientRequestId: 'ts-key-1',
+    });
+    if (!placed.ok) throw new Error(placed.reason);
+    prices.set(INFY.token, 1_520_00);
+    engine.sync();
+    // Down through the stop: the LIMIT exit at the stop, above the market, rests OPEN as an exit.
+    prices.set(INFY.token, 1_509_00);
+    engine.sync();
+    const triggered = engine.getTrailingStop(placed.trailingStop.id);
+    expect(triggered?.status).toBe('TRIGGERED');
+
+    const set = engine.workingSet();
+    expect(set.seq).toBe(engine.seq);
+    expect(set.trailingStops.map((s) => s.id)).toEqual([placed.trailingStop.id]);
+    expect(set.exitOrderIds).toEqual([triggered?.exitOrderId]);
+    expect(set.trailingStopRequestIds).toEqual([['ts-key-1', placed.trailingStop.id]]);
+
+    const restored = restoreFrom(harness, set).engine;
+    expect(restored.seq).toBe(engine.seq);
+    expect(restored.getTrailingStop(placed.trailingStop.id)).toEqual(triggered);
+    expect(restored.workingSet()).toEqual(set);
+    // The idempotency key still answers with the same stop.
+    const again = restored.placeTrailingStop({
+      token: INFY.token,
+      product: 'DELIVERY',
+      trail: { unit: 'AMOUNT', amount: 10_00 },
+      activationPrice: null,
+      exitOrderType: 'MARKET',
+      exitLimitOffset: null,
+      clientRequestId: 'ts-key-1',
+    });
+    expect(again.ok && again.trailingStop.id).toBe(placed.trailingStop.id);
+  });
+
+  it('keeps today’s stops and drops finished ones from earlier days', () => {
+    const harness = createHarness({ at: ist(25, 10, 0) });
+    const { engine, clock } = harness;
+    engine.place(marketOrder({ qty: 10 }));
+    const request = {
+      token: INFY.token,
+      product: 'DELIVERY' as const,
+      trail: { unit: 'AMOUNT' as const, amount: 10_00 },
+      activationPrice: null,
+      exitOrderType: 'MARKET' as const,
+      exitLimitOffset: null,
+    };
+    const first = engine.placeTrailingStop(request);
+    if (!first.ok) throw new Error(first.reason);
+    // Replacing the stop cancels the first one.
+    const second = engine.placeTrailingStop({
+      ...request,
+      trail: { unit: 'AMOUNT', amount: 20_00 },
+    });
+    if (!second.ok) throw new Error(second.reason);
+    expect(engine.workingSet().trailingStops.map((s) => s.status)).toEqual([
+      'CANCELLED',
+      'TRAILING',
+    ]);
+
+    // The day ends the stops with it (§6.4); on Monday neither is kept, unless whole.
+    clock.set(ist(28, 10, 0));
+    engine.sync();
+    expect(engine.workingSet().trailingStops).toEqual([]);
+    expect(engine.workingSet({ whole: true }).trailingStops).toHaveLength(2);
+  });
+
+  it('still restores a v2 working set, with no stops and seq from its records', () => {
+    const harness = createHarness({ at: ist(25, 10, 0) });
+    harness.engine.place(marketOrder({ qty: 10 }));
+    const { seq, trailingStops, exitOrderIds, trailingStopRequestIds, ...rest } =
+      harness.engine.workingSet();
+    void [seq, trailingStops, exitOrderIds, trailingStopRequestIds];
+    const v2: PaperEngineWorkingSetV2 = { ...rest, v: 2 };
+    const restored = restoreFrom(harness, v2).engine;
+    expect(restored.trailingStops()).toEqual([]);
+    expect(restored.fundsSummary()).toEqual(harness.engine.fundsSummary());
   });
 
   it('refuses a working set whose carried balance or entries are corrupt', () => {
