@@ -75,7 +75,8 @@ export function createPgNotificationsRepo({
     await tx
       .insert(notificationOutbox)
       .values(sorted.map((row) => ({ userId: row.userId, notificationId: row.id, createdAt })));
-    for (const userId of new Set(sorted.map((row) => row.userId))) {
+    // In user id order, so two writers trimming the same users cannot deadlock.
+    for (const userId of [...new Set(sorted.map((row) => row.userId))].sort()) {
       // The newest NOTIFICATIONS_KEPT stay; the index walks them, so this reads at most that many.
       await tx.execute(sql`
         DELETE FROM ${notifications}
@@ -88,7 +89,7 @@ export function createPgNotificationsRepo({
           )`);
     }
     return sorted.map((row, index): StoredNotification => {
-      // Ids follow the VALUES order, so the sorted rows line up with the entries.
+      // The bigserial ids are drawn in VALUES order, so the rows sorted by id line up with the entries.
       const alert = entries[index]?.alert;
       return { userId: row.userId, notification: toNotification(row), ...(alert ? { alert } : {}) };
     });

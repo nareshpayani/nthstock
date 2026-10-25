@@ -17,15 +17,23 @@ export type Notifier = {
   onCommitted(listener: NotificationListener): () => void;
 };
 
-export function createNotifier({ repo }: { repo: NotificationsRepo }): Notifier {
+export function createNotifier({
+  repo,
+  onListenerError = () => undefined,
+}: {
+  repo: NotificationsRepo;
+  /** A listener that threw; the notification stays in the outbox for the relay. */
+  onListenerError?: (error: unknown, stored: StoredNotification) => void;
+}): Notifier {
   const listeners = new Set<NotificationListener>();
   const committed = (stored: readonly StoredNotification[]) => {
     for (const item of stored) {
       for (const listener of [...listeners]) {
         try {
           listener(item);
-        } catch {
+        } catch (error) {
           // The outbox row stays, so the relay publishes it later.
+          onListenerError(error, item);
         }
       }
     }

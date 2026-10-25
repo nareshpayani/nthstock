@@ -171,6 +171,16 @@ export type DepsOverrides = {
   piiKeys?: PiiKeys;
   /** Where a failed background audit write (fills, fund movements) is reported; default stderr. */
   onAuditError?: (error: Error) => void;
+  /**
+   * Where a notification that could not be stored or announced is reported, with whose it was
+   * (NSTOCK-0379); default stderr.
+   */
+  onNotifyError?: (error: unknown, context: Record<string, string | null>) => void;
+};
+
+const notifyErrorToStderr = (error: unknown, context: Record<string, string | null>) => {
+  const message = error instanceof Error ? error.message : String(error);
+  process.stderr.write(`notification failed: ${message} ${JSON.stringify(context)}\n`);
 };
 
 function openDatabase(overrides: DepsOverrides, driver: DbDriver): Database | null {
@@ -219,7 +229,13 @@ export function createDeps(overrides: DepsOverrides = {}): AppDeps {
     (database
       ? createPgNotificationsRepo({ database, clock })
       : createMemoryNotificationsRepo({ clock }));
-  const notifier = createNotifier({ repo: notificationsRepo });
+  const onNotifyError = overrides.onNotifyError ?? notifyErrorToStderr;
+  const notifier = createNotifier({
+    repo: notificationsRepo,
+    onListenerError: (error, stored) => {
+      onNotifyError(error, { userId: stored.userId, notificationId: stored.notification.id });
+    },
+  });
   const repos: Repos = {
     users:
       overrides.repos?.users ??
@@ -262,7 +278,7 @@ export function createDeps(overrides: DepsOverrides = {}): AppDeps {
     ...(overrides.onAuditError ? { onAuditError: overrides.onAuditError } : {}),
     ...(overrides.newOrderId ? { newId: overrides.newOrderId } : {}),
   });
-  const alerts = createAlertService({ clock, market, notifier });
+  const alerts = createAlertService({ clock, market, notifier, onNotifyError });
   // Last, so nothing above can throw after the Redis connections are open.
   const quoteStreams =
     overrides.quoteStreams && market instanceof MockMarketDataAdapter

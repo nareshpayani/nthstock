@@ -15,8 +15,11 @@ export type AlertServiceOptions = {
   market: MarketDataAdapter;
   /** The notification centre: fired alerts are stored and published through it (NSTOCK-0379). */
   notifier: Notifier;
-  /** Logs a fired alert whose notification could not be stored. */
-  onNotifyError?: (error: unknown) => void;
+  /**
+   * Reports a fired alert whose notification could not be stored (no row, so the relay cannot
+   * deliver it either); apps/api logs it with the user and alert ids.
+   */
+  onNotifyError: (error: unknown, context: { userId: string; alertId: string | null }) => void;
   newId?: () => string;
 };
 
@@ -32,7 +35,7 @@ export function createAlertService({
   clock,
   market,
   notifier,
-  onNotifyError = () => undefined,
+  onNotifyError,
   newId = () => `al_${randomUUID().replaceAll('-', '')}`,
 }: AlertServiceOptions) {
   const desk = new AlertDesk({
@@ -54,7 +57,9 @@ export function createAlertService({
             ...(alert ? { alert } : {}),
           },
         ])
-        .catch(onNotifyError);
+        .catch((error: unknown) => {
+          onNotifyError(error, { userId, alertId: alert?.id ?? null });
+        });
     },
   });
 

@@ -24,4 +24,6 @@ ALTER TABLE "notification_outbox" ADD CONSTRAINT "notification_outbox_user_id_us
 ALTER TABLE "notification_outbox" ADD CONSTRAINT "notification_outbox_notification_id_notifications_id_fk" FOREIGN KEY ("notification_id") REFERENCES "public"."notifications"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "notifications" ADD CONSTRAINT "notifications_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 CREATE INDEX "notification_outbox_created_at_idx" ON "notification_outbox" USING btree ("created_at");--> statement-breakpoint
+CREATE INDEX "notification_outbox_notification_id_idx" ON "notification_outbox" USING btree ("notification_id");--> statement-breakpoint
+CREATE INDEX "notification_outbox_user_id_idx" ON "notification_outbox" USING btree ("user_id");--> statement-breakpoint
 CREATE INDEX "notifications_user_id_id_idx" ON "notifications" USING btree ("user_id","id" DESC NULLS LAST);

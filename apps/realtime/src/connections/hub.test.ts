@@ -443,3 +443,18 @@ describe('hub notifications (NSTOCK-0381)', () => {
     });
   });
 });
+
+describe('hub notifications with an alert (NSTOCK-0381)', () => {
+  it('sends the alert that fired with its notification', () => {
+    const hub = createHub({ timers: manualTimers() });
+    const alice = fakeSocket();
+    hub.open(alice, { userId: 'usr_alice' });
+    const alert = { id: 'al_1' } as never;
+
+    hub.deliverNotification('usr_alice', { notification: testNotification('9'), alert });
+
+    expect(alice.json()).toEqual([
+      { v: WS_PROTOCOL_VERSION, type: 'notification', notification: testNotification('9'), alert },
+    ]);
+  });
+});

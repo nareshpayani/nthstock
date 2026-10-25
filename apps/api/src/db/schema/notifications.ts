@@ -68,5 +68,10 @@ export const notificationOutbox = pgTable(
       .references(() => notifications.id, { onDelete: 'cascade' }),
     createdAt: instant('created_at').notNull(),
   },
-  (table) => [index('notification_outbox_created_at_idx').on(table.createdAt)],
+  (table) => [
+    index('notification_outbox_created_at_idx').on(table.createdAt),
+    // The trim's cascade, `clearOutbox` and the account purge find rows by these.
+    index('notification_outbox_notification_id_idx').on(table.notificationId),
+    index('notification_outbox_user_id_idx').on(table.userId),
+  ],
 );
