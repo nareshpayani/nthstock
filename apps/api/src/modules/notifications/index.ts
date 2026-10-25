@@ -10,3 +10,9 @@ export {
 } from './publisher.js';
 export { createMemoryNotificationsRepo, type NotificationsRepo } from './repo.js';
 export type { NewNotification, StoredNotification } from './schema.js';
+export {
+  raiseSecurityNotice,
+  securityNotification,
+  type SecurityEvent,
+  type SecurityNotices,
+} from './security.js';
