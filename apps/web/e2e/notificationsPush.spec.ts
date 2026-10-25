@@ -33,15 +33,20 @@ test(`a fill notification arrives live without a reload ${API_TAG}`, async ({ pa
   await ticket.getByRole('button', { name: 'Buy INFY' }).click();
   await ticket.getByRole('button', { name: 'Confirm' }).click();
   await expect(ticket).toBeHidden();
-  await expect(page.getByRole('button', { name: 'Notifications', exact: true })).toBeVisible();
+  // Signing in can raise its own notice (a new-device sign-in), so count from what is unread now.
+  const bell = page.getByRole('button', { name: /^Notifications(, \d+ unread)?$/ });
+  await expect(bell).toBeVisible();
+  const unreadBefore = Number(
+    (await bell.getAttribute('aria-label'))?.match(/(\d+) unread/)?.[1] ?? 0,
+  );
 
   // A marker on window: a reload would lose it.
   await page.evaluate(() => Object.assign(window, { noReloadMarker: true }));
 
   await setPrice(page, 'INFY', below - TICK_SIZE_PAISE);
-  await expect(page.getByRole('button', { name: 'Notifications, 1 unread' })).toBeVisible({
-    timeout: 15_000,
-  });
+  await expect(
+    page.getByRole('button', { name: `Notifications, ${String(unreadBefore + 1)} unread` }),
+  ).toBeVisible({ timeout: 15_000 });
   await expect(page.getByText('Order executed').first()).toBeVisible();
   expect(await page.evaluate(() => 'noReloadMarker' in window)).toBe(true);
 });
