@@ -47,9 +47,21 @@ describeWithPostgres('candle history seed and stored candles (integration)', () 
   let owner: Client;
   const apps: { app: App; market: MockMarketDataAdapter }[] = [];
 
-  /** Empties candles_1m and drops what the aggregates materialised, so other suites see none. */
+  /**
+   * Empties candles_1m and drops what the aggregates materialised, so other suites see none.
+   * TimescaleDB's policy jobs (compression, aggregate refresh) lock the same chunk metadata, so a
+   * TRUNCATE can lose a deadlock to one that is mid-run: Postgres aborts it and a rerun succeeds.
+   */
   const clearCandles = async () => {
-    await owner.query('TRUNCATE candles_1m');
+    for (let attempt = 1; ; attempt += 1) {
+      try {
+        await owner.query('TRUNCATE candles_1m');
+        break;
+      } catch (error) {
+        const deadlock = (error as { code?: string }).code === '40P01';
+        if (!deadlock || attempt === 3) throw error;
+      }
+    }
     for (const aggregate of CANDLE_AGGREGATES) {
       await owner.query(`CALL refresh_continuous_aggregate($1::regclass, NULL, NULL)`, [aggregate]);
     }
@@ -68,6 +80,18 @@ describeWithPostgres('candle history seed and stored candles (integration)', () 
     pg = await useTestPostgres();
     owner = new Client({ connectionString: pg.ownerUrl });
     await owner.connect();
+    // The suite refreshes the aggregates itself; keep the scheduled policy jobs out of its way.
+    // The migration's superuser owns the jobs, so only the admin role may alter them.
+    const admin = new Client({ connectionString: pg.adminUrl });
+    await admin.connect();
+    try {
+      await admin.query(
+        `SELECT alter_job(job_id, scheduled => false) FROM timescaledb_information.jobs
+          WHERE proc_name LIKE 'policy_%'`,
+      );
+    } finally {
+      await admin.end();
+    }
     await clearCandles();
     database = createDatabase({ url: pg.appUrl, poolMax: 4, statementTimeoutMs: 30_000 });
     store = createPgCandleStore({ database });
