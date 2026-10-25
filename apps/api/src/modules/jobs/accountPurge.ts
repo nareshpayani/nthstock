@@ -48,9 +48,13 @@ const PURGE_TIMEOUT_MS = 30_000;
 
 /** Purges one account in one transaction; false when another run purged it first. */
 async function purgeAccount(tx: Tx, userId: string, at: Date): Promise<boolean> {
-  // Locks the row, so two overlapping runs purge it once.
+  // FOR UPDATE, so two overlapping runs purge it once and no insert that names the user (a
+  // foreign key takes KEY SHARE on the row) can commit between the deletes and the tombstone.
   const locked = await tx.execute(
-    sql`select id from users where id = ${userId} and purged_at is null for no key update`,
+    sql`select id from users
+         where id = ${userId} and deleted_at is not null and purged_at is null
+           and purge_after <= ${at}
+         for update`,
   );
   if (locked.rows.length === 0) return false;
   for (const table of PURGED_TABLES) {
