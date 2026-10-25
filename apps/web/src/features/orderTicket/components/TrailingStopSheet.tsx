@@ -122,16 +122,18 @@ function SheetBody({
   const active = isActiveStop(stop) ? stop : null;
   const changeable = isChangeableStop(stop);
   const direction = directionOf(position);
-  const [draft, setDraft] = useState<TrailingFormValues>(() => sheetValues(stop, position.product));
+  const [values, setValues] = useState<TrailingFormValues>(() =>
+    sheetValues(stop, position.product),
+  );
   const [touched, setTouched] = useState(false);
   const [failure, setFailure] = useState<string | null>(null);
-  // A switch to rupees before the first price leaves the field empty; it fills once the price lands.
+  // A switch to rupees before the first price leaves the field empty; it fills, once, when the price
+  // lands (state adjusted during render, so there is no effect and no extra paint).
   const [awaitingDefault, setAwaitingDefault] = useState(false);
-  const withDefault = (form: TrailingFormValues): TrailingFormValues =>
-    awaitingDefault && form.value === null
-      ? { ...form, value: defaultTrailValue(form.unit, ltp) }
-      : form;
-  const values = withDefault(draft);
+  if (awaitingDefault && ltp !== null) {
+    setAwaitingDefault(false);
+    if (values.value === null) setValues({ ...values, value: defaultTrailValue(values.unit, ltp) });
+  }
 
   const check = checkTrailing(values, { position, ltp });
   const shown = touched ? check : ({ ok: true } as const);
@@ -148,8 +150,10 @@ function SheetBody({
       patch.unit !== undefined && patch.value === null
         ? { ...patch, value: defaultTrailValue(patch.unit, ltp) }
         : patch;
-    setDraft((current) => ({ ...withDefault(current), ...next }));
-    setAwaitingDefault(patch.unit !== undefined && next.value === null);
+    setValues((current) => ({ ...current, ...next }));
+    // Waiting only matters for a unit switch; typing a value of one's own ends it.
+    if (patch.unit !== undefined) setAwaitingDefault(next.value === null);
+    else if (patch.value !== undefined) setAwaitingDefault(false);
     setFailure(null);
     if (typed) setTouched(true);
   };
