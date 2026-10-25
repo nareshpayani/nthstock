@@ -4482,7 +4482,11 @@
                   "enum": [
                     "PRICE_ALERT",
                     "ORDER_FILLED",
-                    "TRAILING_STOP"
+                    "TRAILING_STOP",
+                    "ORDER_REJECTED",
+                    "AMO_RELEASED",
+                    "SQUARED_OFF",
+                    "SECURITY"
                   ]
                 },
                 "title": {

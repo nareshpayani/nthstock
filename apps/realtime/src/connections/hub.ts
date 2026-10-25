@@ -6,6 +6,7 @@ import {
   encodeQuoteFrame,
   instrumentOf,
   type AccountDeltaEvent,
+  type NotificationEvent,
   type Order,
   type Quote,
   type WsInstrument,
@@ -62,6 +63,11 @@ export type Hub = {
    * with no quotes, to every open connection of its user and to no one else. Never conflated.
    */
   deliverAccountDelta(userId: string, delta: AccountDeltaEvent['delta']): void;
+  /**
+   * The same private channel (NSTOCK-0381): a stored notification goes, as a `notification`
+   * message with the alert that fired it, to every open connection of its user only.
+   */
+  deliverNotification(userId: string, pushed: Omit<NotificationEvent, 'v' | 'userId'>): void;
   /**
    * Closes every connection of a revoked session with 4401 (T-195), leaving the user's other
    * sessions open. Resolves to how many it closed.
@@ -258,6 +264,24 @@ export function createHub(options: HubOptions = {}): Hub {
     }
   };
 
+  const deliverNotification = (
+    userId: string,
+    { notification, alert }: Omit<NotificationEvent, 'v' | 'userId'>,
+  ) => {
+    for (const session of byUser.get(userId) ?? []) {
+      try {
+        sendJson(session.socket, {
+          v: WS_PROTOCOL_VERSION,
+          type: 'notification',
+          notification,
+          ...(alert ? { alert } : {}),
+        });
+      } catch (error) {
+        logger.warn('notification send failed', { error: String(error) });
+      }
+    }
+  };
+
   const closeSession = (sessionId: string) => {
     const revoked = [...(bySession.get(sessionId) ?? [])];
     for (const session of revoked) {
@@ -374,6 +398,7 @@ export function createHub(options: HubOptions = {}): Hub {
     ingest,
     deliverOrder,
     deliverAccountDelta,
+    deliverNotification,
     closeSession,
     flush,
     heartbeat,

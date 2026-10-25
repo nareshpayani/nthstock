@@ -41,6 +41,8 @@ import {
   trailingStops,
 } from '../../db/schema/paper.js';
 import type { AuditRepo } from '../audit/index.js';
+import type { Notifier, StoredNotification } from '../notifications/index.js';
+import { notificationsForChange } from './changeNotifications.js';
 import {
   AccountConflict,
   clearsOrders,
@@ -181,6 +183,11 @@ export type PgAccountStoreOptions = {
    * matcher reads only its own shard's live orders (NSTOCK-0366). Without it the column stays null.
    */
   shards?: number;
+  /**
+   * Where the notifications a change raises go (NSTOCK-0379): written in the commit's transaction,
+   * announced once it has committed. Left out, commits raise none.
+   */
+  notifier?: Notifier;
 };
 
 /**
@@ -192,7 +199,7 @@ export type PgAccountStoreOptions = {
  * loser writes nothing. With the row held it diffs `change` into order upserts, new order events,
  * new ledger rows (numbered after the account's highest `seq`, so a user's sequence has no gaps),
  * the replaced position and holding-sale rows, changed holdings, new or changed trailing stops,
- * and the audit entries. The account row carries the engine `seq` and the exit order ids.
+ * the audit entries and the notifications the change raises, with their outbox rows. The account row carries the engine `seq` and the exit order ids.
  *
  * `load` rebuilds the engine's working set from those rows: today's and live orders with their
  * events, all holdings, the ledger as a carried balance plus today's entries, and the active and
@@ -202,6 +209,7 @@ export function createPgAccountStore({
   database,
   audit,
   shards,
+  notifier,
 }: PgAccountStoreOptions): AccountStore {
   /** Takes the account row at `expected` and moves it to the next version; AccountConflict if not. */
   async function claimVersion(
@@ -699,8 +707,9 @@ export function createPgAccountStore({
       throw new Error('The account kept changing while it was loaded');
     },
 
-    commit: (userId, change, expectedVersion, auditEntries) =>
-      database.transaction(async (tx) => {
+    async commit(userId, change, expectedVersion, auditEntries) {
+      let stored: StoredNotification[] = [];
+      const committed = await database.transaction(async (tx) => {
         const version = await claimVersion(tx, userId, change.after, expectedVersion);
         if (clearsOrders(change)) await clearOrders(tx, userId);
         await writeOrders(tx, userId, change);
@@ -711,8 +720,15 @@ export function createPgAccountStore({
         await writeTrailingStops(tx, userId, change);
         // The audit entries commit or roll back with the change they record.
         await audit.appendMany(auditEntries, tx);
+        // So do the notifications: one exists exactly when its event does.
+        if (notifier) {
+          stored = await notifier.repo.appendMany(notificationsForChange(userId, change), tx);
+        }
         return version;
-      }),
+      });
+      notifier?.committed(stored);
+      return committed;
+    },
 
     async ordersPage(userId, { status, cursor, limit = PAGE_LIMIT_DEFAULT }: OrdersPageQuery = {}) {
       const scope = and(eq(orders.userId, userId), status ? eq(orders.status, status) : undefined);
