@@ -8,6 +8,7 @@ import {
   startReconcileLoop,
   type LiveOrder,
   type LiveOrderSnapshot,
+  type LiveStop,
 } from './reconcile.js';
 
 const SHARDS = 4;
@@ -27,6 +28,31 @@ const live = (orderId: string, token: number, version: number, extra: Partial<Li
   version,
   ...extra,
 });
+
+/** A TRAILING long stop at `stopPrice`, as Postgres holds it. */
+const liveStop = (
+  stopId: string,
+  token: number,
+  version: number,
+  stopPrice = 90_00,
+  userId = 'u1',
+): LiveStop => ({
+  stopId,
+  userId,
+  token,
+  version,
+  state: {
+    status: 'TRAILING',
+    direction: 'LONG',
+    trail: { unit: 'AMOUNT', amount: 10_00 },
+    activationPrice: null,
+    watermarkPrice: stopPrice + 10_00,
+    stopPrice,
+  },
+});
+
+const stopPrices = (book: OrderBook) =>
+  [...book.stops()].map((s) => [s.stopId, s.version, s.state.stopPrice]);
 
 function harness() {
   const books = new Map<number, OrderBook>();
@@ -54,14 +80,22 @@ describe('reconcileBooks (NSTOCK-0366)', () => {
       price: 101_00,
     });
 
-    const result = reconcile({ orders: [live('o1', T1, 5)], versions: new Map([['u1', 5]]) });
-    expect(result).toEqual({ added: 1, removed: 1 });
+    const result = reconcile({
+      stops: [],
+      orders: [live('o1', T1, 5)],
+      versions: new Map([['u1', 5]]),
+    });
+    expect(result).toEqual({ added: 1, removed: 1, stopsAdded: 0, stopsRemoved: 0 });
     expect([...book(T1).orders()].map((o) => [o.orderId, o.version])).toEqual([['o1', 5]]);
     expect(heldUsers(books)).toEqual(['u1']);
     // A second round with nothing new changes nothing.
-    expect(reconcile({ orders: [live('o1', T1, 5)], versions: new Map([['u1', 5]]) })).toEqual({
+    expect(
+      reconcile({ stops: [], orders: [live('o1', T1, 5)], versions: new Map([['u1', 5]]) }),
+    ).toEqual({
       added: 0,
       removed: 0,
+      stopsAdded: 0,
+      stopsRemoved: 0,
     });
   });
 
@@ -73,10 +107,11 @@ describe('reconcileBooks (NSTOCK-0366)', () => {
     expect(lost.book(T1).tick(100_00).crossed).toEqual([order]);
     expect(lost.book(T1).hasOrder('o1')).toBe(false);
     const result = lost.reconcile({
+      stops: [],
       orders: [live('o1', T1, 5)],
       versions: new Map([['u1', 5]]),
     });
-    expect(result).toEqual({ added: 1, removed: 0 });
+    expect(result).toEqual({ added: 1, removed: 0, stopsAdded: 0, stopsRemoved: 0 });
     expect(lost.book(T1).hasOrder('o1')).toBe(true);
 
     // A newer user version took the order off before the read: it stays off.
@@ -84,8 +119,8 @@ describe('reconcileBooks (NSTOCK-0366)', () => {
     gone.book(T1).upsertOrder(order);
     gone.book(T1).tick(100_00);
     gone.book(T1).removeOrder('o1', 6);
-    const none = gone.reconcile({ orders: [], versions: new Map([['u1', 6]]) });
-    expect(none).toEqual({ added: 0, removed: 0 });
+    const none = gone.reconcile({ stops: [], orders: [], versions: new Map([['u1', 6]]) });
+    expect(none).toEqual({ added: 0, removed: 0, stopsAdded: 0, stopsRemoved: 0 });
     expect(gone.book(T1).hasOrder('o1')).toBe(false);
   });
 
@@ -94,7 +129,7 @@ describe('reconcileBooks (NSTOCK-0366)', () => {
     // A modify at version 7 arrived after Postgres was read at version 6.
     book(T1).upsertOrder({ orderId: 'o1', userId: 'u1', version: 7, side: 'BUY', price: 99_00 });
     book(T2).upsertOrder({ orderId: 'new', userId: 'u1', version: 7, side: 'BUY', price: 98_00 });
-    reconcile({ orders: [live('o1', T1, 6)], versions: new Map([['u1', 6]]) });
+    reconcile({ stops: [], orders: [live('o1', T1, 6)], versions: new Map([['u1', 6]]) });
     expect([...book(T1).orders()].map((o) => o.price)).toEqual([99_00]);
     expect(book(T2).hasOrder('new')).toBe(true);
   });
@@ -103,14 +138,14 @@ describe('reconcileBooks (NSTOCK-0366)', () => {
     for (const readVersion of [6, 7]) {
       const { book, reconcile } = harness();
       book(T1).upsertOrder({ orderId: 'o1', userId: 'u1', version: 7, side: 'BUY', price: 99_00 });
-      const result = reconcile({ orders: [], versions: new Map([['u1', readVersion]]) });
+      const result = reconcile({ stops: [], orders: [], versions: new Map([['u1', readVersion]]) });
       expect(result.removed).toBe(0);
       expect(book(T1).hasOrder('o1')).toBe(true);
     }
     // Once the read is newer than the order, the removal lands.
     const { book, reconcile } = harness();
     book(T1).upsertOrder({ orderId: 'o1', userId: 'u1', version: 7, side: 'BUY', price: 99_00 });
-    expect(reconcile({ orders: [], versions: new Map([['u1', 8]]) }).removed).toBe(1);
+    expect(reconcile({ stops: [], orders: [], versions: new Map([['u1', 8]]) }).removed).toBe(1);
     expect(book(T1).hasOrder('o1')).toBe(false);
   });
 
@@ -124,12 +159,98 @@ describe('reconcileBooks (NSTOCK-0366)', () => {
       price: 90_00,
     });
     reconcile({
+      stops: [],
       orders: [live('old', T1, 2, { shard: null }), live('elsewhere', OTHER, 2, { shard: null })],
       versions: new Map([['u1', 2]]),
     });
     expect(book(T1).hasOrder('old')).toBe(true);
     expect(books.has(OTHER)).toBe(false);
     expect(book(T2).hasOrder('erased')).toBe(false);
+  });
+});
+
+describe('reconcileBooks: trailing stops (NSTOCK-0368)', () => {
+  it('adds an active stop a lost STOP_ADD left out, only on this shard', () => {
+    const { book, books, reconcile } = harness();
+    const result = reconcile({
+      orders: [],
+      stops: [liveStop('t1', T1, 4), liveStop('elsewhere', OTHER, 4)],
+      versions: new Map([['u1', 4]]),
+    });
+    expect(result).toEqual({ added: 0, removed: 0, stopsAdded: 1, stopsRemoved: 0 });
+    expect(stopPrices(book(T1))).toEqual([['t1', 4, 90_00]]);
+    expect(books.has(OTHER)).toBe(false);
+    // A user with only stops on the books is asked about on the next round.
+    expect(heldUsers(books)).toEqual(['u1']);
+    // The stop rests on its price: a tick through it triggers it.
+    expect(
+      book(T1)
+        .tick(90_00)
+        .triggered.map((s) => s.stopId),
+    ).toEqual(['t1']);
+  });
+
+  it('takes off a stop a lost STOP_CANCEL left in, and an erased account’s stops', () => {
+    const { book, reconcile } = harness();
+    book(T1).upsertStop(liveStop('t1', T1, 3));
+    book(T2).upsertStop(liveStop('t9', T2, 2, 90_00, 'u9'));
+    const result = reconcile({ orders: [], stops: [], versions: new Map([['u1', 5]]) });
+    expect(result).toEqual({ added: 0, removed: 0, stopsAdded: 0, stopsRemoved: 2 });
+    expect(book(T1).hasStop('t1')).toBe(false);
+    expect(book(T2).hasStop('t9')).toBe(false);
+    expect(book(T1).tick(80_00).triggered).toEqual([]);
+  });
+
+  it('keeps a stop command newer than the read', () => {
+    const { book, reconcile } = harness();
+    // A STOP_ADD at version 7 moved t1 to 95 and placed t2 after Postgres was read at version 6.
+    book(T1).upsertStop(liveStop('t1', T1, 7, 95_00));
+    book(T2).upsertStop(liveStop('t2', T2, 7));
+    const result = reconcile({
+      orders: [],
+      stops: [liveStop('t1', T1, 6, 90_00)],
+      versions: new Map([['u1', 6]]),
+    });
+    expect(result).toEqual({ added: 0, removed: 0, stopsAdded: 0, stopsRemoved: 0 });
+    expect(stopPrices(book(T1))).toEqual([['t1', 7, 95_00]]);
+    expect(book(T2).hasStop('t2')).toBe(true);
+    // Once the read is newer, the missing stop comes off.
+    expect(reconcile({ orders: [], stops: [], versions: new Map([['u1', 8]]) }).stopsRemoved).toBe(
+      2,
+    );
+  });
+
+  it('restores a triggered stop whose fill was lost at the same version, not at a newer one', () => {
+    // The stop triggered and left the book, but Postgres still lists it active at version 5.
+    const lost = harness();
+    lost.book(T1).upsertStop(liveStop('t1', T1, 5));
+    expect(
+      lost
+        .book(T1)
+        .tick(89_00)
+        .triggered.map((s) => s.stopId),
+    ).toEqual(['t1']);
+    expect(lost.book(T1).hasStop('t1')).toBe(false);
+    const result = lost.reconcile({
+      orders: [],
+      stops: [liveStop('t1', T1, 5)],
+      versions: new Map([['u1', 5]]),
+    });
+    expect(result).toEqual({ added: 0, removed: 0, stopsAdded: 1, stopsRemoved: 0 });
+    expect(stopPrices(lost.book(T1))).toEqual([['t1', 5, 90_00]]);
+
+    // A newer user version (the exit's commit) took it off before the read: it stays off.
+    const filled = harness();
+    filled.book(T1).upsertStop(liveStop('t1', T1, 5));
+    filled.book(T1).tick(89_00);
+    filled.book(T1).removeStop('t1', 6);
+    const none = filled.reconcile({
+      orders: [],
+      stops: [liveStop('t1', T1, 5)],
+      versions: new Map([['u1', 6]]),
+    });
+    expect(none).toEqual({ added: 0, removed: 0, stopsAdded: 0, stopsRemoved: 0 });
+    expect(filled.book(T1).hasStop('t1')).toBe(false);
   });
 });
 
@@ -141,7 +262,7 @@ describe('startReconcileLoop (NSTOCK-0366)', () => {
       source: {
         read: async () => {
           await new Promise<void>((resolve) => (finish = resolve));
-          return { orders: [], versions: new Map() };
+          return { stops: [], orders: [], versions: new Map() };
         },
       },
       shard: 1,
@@ -173,7 +294,7 @@ describe('startReconcileLoop (NSTOCK-0366)', () => {
       source: {
         read: async () => {
           reads += 1;
-          return { orders: [], versions: new Map() };
+          return { stops: [], orders: [], versions: new Map() };
         },
       },
       shard: 1,
@@ -213,7 +334,7 @@ describe('startReconcileLoop (NSTOCK-0366)', () => {
         source: {
           read: async () => {
             reads += 1;
-            return { orders: [], versions: new Map() };
+            return { stops: [], orders: [], versions: new Map() };
           },
         },
         shard: 1,
@@ -246,7 +367,7 @@ describe('startReconcileLoop (NSTOCK-0366)', () => {
             reads += 1;
             return reads === 1
               ? new Promise<never>(() => undefined)
-              : Promise.resolve({ orders: [], versions: new Map() });
+              : Promise.resolve({ stops: [], orders: [], versions: new Map() });
           },
         },
         shard: 1,
@@ -280,7 +401,7 @@ describe('startReconcileLoop (NSTOCK-0366)', () => {
           calls += 1;
           if (fail) throw new Error('connection refused');
           if (calls === 2) await new Promise<void>((resolve) => (release = resolve));
-          return { orders: [live('o1', T1, 1)], versions: new Map() };
+          return { stops: [], orders: [live('o1', T1, 1)], versions: new Map() };
         },
       },
       shard: 1,
