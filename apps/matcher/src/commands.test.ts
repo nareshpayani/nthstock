@@ -110,6 +110,42 @@ describe('readMatcherCommands (NSTOCK-0365)', () => {
     await reader.close();
   });
 
+  it('keeps applying the rest of a batch when onCommand throws on one entry', async () => {
+    const { client, calls } = scriptedClient([
+      () => [['k', [entry('1-0', add(1, 100_00)), entry('2-0', add(2, 99_00))]]],
+    ]);
+    const warnings: { message: string; fields: unknown }[] = [];
+    const seen: number[] = [];
+    const reader = readMatcherCommands({
+      client,
+      shard: 3,
+      onCommand: (command) => {
+        if (command.version === 1) throw new Error('book exploded');
+        seen.push(command.version);
+      },
+      log: {
+        info: () => undefined,
+        warn: (message, fields) => warnings.push({ message, fields }),
+      },
+      commandsKey: () => 'k',
+    });
+    await vi.waitFor(() => expect(calls).toHaveLength(2));
+    expect(seen).toEqual([2]);
+    expect(calls[1]?.at(-1)).toBe('2-0');
+    expect(warnings).toEqual([
+      {
+        message: 'Dropped a matcher command that failed to apply',
+        fields: expect.objectContaining({
+          shard: 3,
+          id: '1-0',
+          type: 'ADD',
+          orderId: 'o1',
+        }) as unknown,
+      },
+    ]);
+    await reader.close();
+  });
+
   it('logs a failed read once and retries', async () => {
     const fail = () => {
       throw new Error('connection refused');

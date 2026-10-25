@@ -101,8 +101,22 @@ export function readMatcherCommands(options: {
       for (const [id, fields] of entries) {
         cursor = id;
         const command = parseCommand(fields);
-        if (command) onCommand(command);
-        else log.warn('Dropped a malformed matcher command', { shard, id });
+        if (!command) {
+          log.warn('Dropped a malformed matcher command', { shard, id });
+          continue;
+        }
+        try {
+          onCommand(command);
+        } catch (error) {
+          // Drop only this entry: the cursor has moved on, so the rest of the batch must still run.
+          log.warn('Dropped a matcher command that failed to apply', {
+            shard,
+            id,
+            type: command.type,
+            ...('orderId' in command ? { orderId: command.orderId } : {}),
+            error: String(error),
+          });
+        }
       }
     }
   }
