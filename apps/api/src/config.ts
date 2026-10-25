@@ -58,6 +58,23 @@ export function runsOrderSweep(mode: JobsMode): boolean {
 /** Who matches resting orders against ticks (spec market-data-and-matching §5.4). */
 export type MatcherMode = 'inline' | 'worker';
 
+/**
+ * The start-up warning for `MATCHER_MODE=worker` without `JOBS_MODE=bullmq`, else null: the worker
+ * mode runs no order sweep, so without the job worker AMO release and end of day reach an account
+ * only on its user's next request.
+ */
+export function matcherModeWarning(config: {
+  matcherMode: MatcherMode;
+  jobsMode: JobsMode;
+}): string | null {
+  if (config.matcherMode !== 'worker' || config.jobsMode === 'bullmq') return null;
+  return (
+    `MATCHER_MODE=worker with JOBS_MODE=${config.jobsMode}: no process runs the session jobs, so ` +
+    "AMO release and end of day reach an account only on its user's next request. Set " +
+    'JOBS_MODE=bullmq and run the job worker.'
+  );
+}
+
 export type ApiConfig = {
   /** `NODE_ENV=production`: random OTPs, no dev OTP or dev CAPTCHA. */
   production: boolean;

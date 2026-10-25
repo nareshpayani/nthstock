@@ -2,20 +2,25 @@ import { ErrorState, Skeleton, buttonVariants } from '@nthstock/ui';
 import { Link, useRouter, type ErrorComponentProps } from '@tanstack/react-router';
 import { strings } from '../strings';
 
+/** Centres a route-level state card in the content area, both ways, on every screen size. */
+const CENTERED = 'grid min-h-[calc(100dvh-10rem)] w-full place-items-center';
+
 /** Error boundary UI for every route (router defaultErrorComponent): never a blank page. */
 export function RouteError({ reset }: ErrorComponentProps) {
   const router = useRouter();
   return (
-    <div className="mx-auto w-full max-w-lg rounded-lg border border-line bg-surface">
-      <ErrorState
-        title={strings.errors.routeTitle}
-        description={strings.errors.routeBody}
-        retryLabel={strings.errors.retry}
-        onRetry={() => {
-          reset();
-          void router.invalidate();
-        }}
-      />
+    <div className={CENTERED}>
+      <div className="w-full max-w-lg rounded-lg border border-line bg-surface">
+        <ErrorState
+          title={strings.errors.routeTitle}
+          description={strings.errors.routeBody}
+          retryLabel={strings.errors.retry}
+          onRetry={() => {
+            reset();
+            void router.invalidate();
+          }}
+        />
+      </div>
     </div>
   );
 }
@@ -37,13 +42,15 @@ export function RoutePending() {
 
 export function NotFound() {
   return (
-    <div className="mx-auto grid w-full max-w-lg justify-items-center gap-3 rounded-lg border border-line bg-surface px-4 py-10 text-center">
-      <p className="font-mono text-display text-brand">404</p>
-      <h1 className="text-title text-ink">{strings.notFound.title}</h1>
-      <p className="text-body text-ink-muted">{strings.notFound.body}</p>
-      <Link to="/dashboard" className={buttonVariants({ variant: 'primary' })}>
-        {strings.notFound.back}
-      </Link>
+    <div className={CENTERED}>
+      <div className="grid w-full max-w-lg justify-items-center gap-3 rounded-lg border border-line bg-surface px-4 py-10 text-center">
+        <p className="font-mono text-display text-brand">404</p>
+        <h1 className="text-title text-ink">{strings.notFound.title}</h1>
+        <p className="text-body text-ink-muted">{strings.notFound.body}</p>
+        <Link to="/dashboard" className={buttonVariants({ variant: 'primary' })}>
+          {strings.notFound.back}
+        </Link>
+      </div>
     </div>
   );
 }

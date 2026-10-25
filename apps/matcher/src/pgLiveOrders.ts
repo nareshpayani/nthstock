@@ -1,4 +1,5 @@
 import type { Pool } from 'pg';
+import type { MatcherLog } from './matcher.js';
 import type { LiveOrder, LiveOrderSource, LiveStop } from './reconcile.js';
 
 /** Long enough for a shard's live orders, short enough that a stuck read cannot pile up rounds. */
@@ -36,14 +37,14 @@ const paiseOrNull = (value: string | null): number | null =>
   value === null ? null : Number(value);
 
 /** The row's trail: the CHECK holds exactly one value to its unit, so a missing one is damage. */
-function trailOf(row: LiveStopRow): LiveStop['state']['trail'] {
+function trailOf(row: LiveStopRow): LiveStop['state']['trail'] | null {
   if (row.trail_unit === 'PERCENT' && row.trail_basis_points !== null) {
     return { unit: 'PERCENT', basisPoints: row.trail_basis_points };
   }
   if (row.trail_unit === 'AMOUNT' && row.trail_amount !== null) {
     return { unit: 'AMOUNT', amount: Number(row.trail_amount) };
   }
-  throw new Error(`Trailing stop ${row.id} has no trail value for its unit`);
+  return null;
 }
 
 /**
@@ -53,9 +54,14 @@ function trailOf(row: LiveStopRow): LiveStop['state']['trail'] {
  * stops query reads the ARMED and TRAILING rows, the ones `STOP_ADD` puts on a book, of every
  * shard: `trailing_stops` has no shard column and `shardOf` is not plain SQL, so the reconcile
  * keeps those on its shard by token. Prices and versions are bigint columns, which `pg` returns as
- * strings.
+ * strings. A damaged stop row (no trail value for its unit) is logged and left out, so one bad row
+ * cannot stop every round (NSTOCK-0388); the reconcile then takes that stop off a book, which could
+ * not step it anyway.
  */
-export function createPgLiveOrderSource(pool: Pick<Pool, 'connect'>): LiveOrderSource {
+export function createPgLiveOrderSource(
+  pool: Pick<Pool, 'connect'>,
+  log?: Pick<MatcherLog, 'warn'>,
+): LiveOrderSource {
   return {
     async read(shard, userIds) {
       const client = await pool.connect();
@@ -93,20 +99,32 @@ export function createPgLiveOrderSource(pool: Pick<Pool, 'connect'>): LiveOrderS
           shard: row.shard,
           version: Number(row.version),
         }));
-        const liveStops: LiveStop[] = stops.rows.map((row) => ({
-          stopId: row.id,
-          userId: row.user_id,
-          token: row.token,
-          version: Number(row.version),
-          state: {
-            status: row.status,
-            direction: row.direction,
-            trail: trailOf(row),
-            activationPrice: paiseOrNull(row.activation_price),
-            watermarkPrice: paiseOrNull(row.watermark_price),
-            stopPrice: paiseOrNull(row.stop_price),
-          },
-        }));
+        const liveStops: LiveStop[] = [];
+        for (const row of stops.rows) {
+          const trail = trailOf(row);
+          if (!trail) {
+            log?.warn('Skipped a damaged trailing stop row', {
+              stopId: row.id,
+              userId: row.user_id,
+              trailUnit: row.trail_unit,
+            });
+            continue;
+          }
+          liveStops.push({
+            stopId: row.id,
+            userId: row.user_id,
+            token: row.token,
+            version: Number(row.version),
+            state: {
+              status: row.status,
+              direction: row.direction,
+              trail,
+              activationPrice: paiseOrNull(row.activation_price),
+              watermarkPrice: paiseOrNull(row.watermark_price),
+              stopPrice: paiseOrNull(row.stop_price),
+            },
+          });
+        }
         return {
           orders,
           stops: liveStops,

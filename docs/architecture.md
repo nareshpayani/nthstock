@@ -128,14 +128,17 @@ streams, so apps/api stops matching in process.
   group, runs the user's engine at the tick's price and time (`PaperDesk.ingestFor`), commits through the account
   store with the expected version, publishes the order update and only then acks. The engine re-checks every
   order, so a replayed request fills nothing twice and a request for an order modified since fills only what still
-  crosses. A request a crashed process held is claimed after 30 s; an unsent one puts its orders back on the book.
+  crosses. A request a crashed process held is claimed after 30 s; an unsent one puts its orders and triggered stops
+  back on the book. A commit that loses on version runs again up to 3 times. A malformed request, or one delivered
+  more than 5 times without committing, is copied to `nthstock:matcher:fills:dead:v1` (with its source stream, id
+  and reason) and acked; the reconcile puts its order back on the book (NSTOCK-0388).
 - **`MATCHER_MODE`** (NSTOCK-0369, spec §5.4): `inline`, the default, keeps today's in-process desk (unit tests, the
   `/v1/__test` scripted ticks, the E2E suites); a request that arrives after an inline fill finds nothing to do.
   `worker` (needs `QUOTE_SHARDS`) builds the desk with `followTicks: false`: it subscribes to no ticks, reads the
   adapter's current quote whenever an order action or a valuation needs a price (so a MARKET order fills at the live
   price), and fills resting orders only from the matcher's requests. apps/api then runs no 15 s sweep, so AMO
   release, square-off and day close run on each user's next request or fill until the E16 session jobs take them
-  over. Try it with `MATCHER_MODE=worker npm run dev:api`.
+  over; apps/api warns at start-up when `JOBS_MODE` is not `bullmq`. Try it with `MATCHER_MODE=worker npm run dev:api`.
 - **Benchmark** (NSTOCK-0370, `tools/loadTest/matcher.mjs`, [load-test runbook](runbooks/load-test.md#matcher-nstock-0370)):
   1,00,000 resting orders and 10,000 trailing stops over 500 instruments at 2,000 ticks a second take p95
   0.06 ms of book time per tick and read 6.8 heap entries a tick on average, against 220 for a full walk; every

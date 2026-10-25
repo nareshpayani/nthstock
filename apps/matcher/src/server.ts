@@ -5,7 +5,7 @@ import { Pool } from 'pg';
 import { loadConfig } from './config.js';
 import { jsonLogger } from './logger.js';
 import { createFillWriter } from './fills.js';
-import { startMatcher, type MatcherTick } from './matcher.js';
+import { startMatcher } from './matcher.js';
 import {
   CONNECTION_TIMEOUT_MS,
   QUERY_TIMEOUT_MS,
@@ -54,15 +54,23 @@ const lease = startLease({
   renewMs: config.leaseRenewMs,
   log: jsonLogger,
 });
-// Set once the matcher exists: a failed send puts the crossed orders back on its books.
-let sendFills: ((tick: MatcherTick) => Promise<void>) | null = null;
+// Built before the matcher, so no tick can find it missing: a failed send puts the crossed orders
+// and triggered stops back on the matcher's books, which exist by the time a tick acts.
+const sendFills = createFillWriter({
+  stream: redis,
+  shard: config.shard,
+  book: (token) => matcher.book(token),
+  log: jsonLogger,
+});
 const matcher = startMatcher({
   client: streams,
   shard: config.shard,
   holdsLease: lease.isHeld,
   alwaysOpen: config.alwaysOpen,
   commands: { client: commands },
-  ...(pool ? { reconcile: { source: createPgLiveOrderSource(pool), shards: config.shards } } : {}),
+  ...(pool
+    ? { reconcile: { source: createPgLiveOrderSource(pool, jsonLogger), shards: config.shards } }
+    : {}),
   log: jsonLogger,
   onTick: (tick) => {
     jsonLogger.info('tick acted', {
@@ -71,14 +79,16 @@ const matcher = startMatcher({
       triggered: tick.triggered.length,
       moved: tick.moved.length,
     });
-    void sendFills?.(tick);
+    // The writer handles a failed send itself; this catches a bug in it, which would otherwise
+    // be an unhandled rejection that ends the process.
+    sendFills(tick).catch((error: unknown) => {
+      jsonLogger.warn('fill writer failed', {
+        shard: config.shard,
+        token: tick.token,
+        error: error instanceof Error ? (error.stack ?? error.message) : String(error),
+      });
+    });
   },
-});
-sendFills = createFillWriter({
-  stream: redis,
-  shard: config.shard,
-  book: (token) => matcher.book(token),
-  log: jsonLogger,
 });
 await matcher.ready();
 jsonLogger.info('matcher started', { shard: config.shard, shards: config.shards });

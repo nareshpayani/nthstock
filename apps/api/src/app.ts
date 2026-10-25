@@ -199,7 +199,8 @@ export function buildApp(options: AppOptions = {}): App {
     app.addHook('onReady', async () => {
       sweeper = setInterval(() => {
         deps.orders.sweep().catch((error: unknown) => {
-          app.log.error({ error }, 'order sweep failed');
+          // pino serialises an error (its message and stack) only under `err`.
+          app.log.error({ err: error }, 'order sweep failed');
         });
       }, sweepMs);
       sweeper.unref();
