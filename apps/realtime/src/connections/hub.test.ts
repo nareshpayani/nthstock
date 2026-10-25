@@ -10,7 +10,7 @@ import {
 import { fakeSocket } from '../test/fakeSocket.js';
 import { quoteFramesOf } from '../test/frames.js';
 import { manualTimers } from '../test/manualTimers.js';
-import { testAccountDelta, testOrder } from '../test/orders.js';
+import { testAccountDelta, testNotification, testOrder } from '../test/orders.js';
 import { testQuote } from '../test/quotes.js';
 
 const subscribe = (symbols: string[], exchange = 'NSE') =>
@@ -415,5 +415,31 @@ describe('hub session revocation (T-195)', () => {
     expect(fine.closedWith?.code).toBe(WS_CLOSE_CODES.unauthorized);
     expect(hub.connectionCount()).toBe(0);
     expect(logger.warn).toHaveBeenCalledWith('close failed', { error: 'Error: socket gone' });
+  });
+});
+
+describe('hub notifications (NSTOCK-0381)', () => {
+  it("sends each user's notifications, with the alert if any, to their connections only", () => {
+    const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn() };
+    const hub = createHub({ timers: manualTimers(), logger });
+    const broken = fakeSocket();
+    broken.send = () => {
+      throw new Error('socket gone');
+    };
+    const alice = fakeSocket();
+    const bob = fakeSocket();
+    hub.open(broken, { userId: 'usr_alice' });
+    hub.open(alice, { userId: 'usr_alice' });
+    hub.open(bob, { userId: 'usr_bob' });
+
+    hub.deliverNotification('usr_alice', { notification: testNotification('41') });
+
+    expect(alice.json()).toEqual([
+      { v: WS_PROTOCOL_VERSION, type: 'notification', notification: testNotification('41') },
+    ]);
+    expect(bob.sent).toEqual([]);
+    expect(logger.warn).toHaveBeenCalledWith('notification send failed', {
+      error: 'Error: socket gone',
+    });
   });
 });

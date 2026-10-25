@@ -1,7 +1,9 @@
 import {
   ACCOUNT_DELTA_EVENT_VERSION,
+  NOTIFICATION_EVENT_VERSION,
   ORDER_UPDATE_EVENT_VERSION,
   WS_PROTOCOL_VERSION,
+  notifyChannel,
   orderUpdatesChannel,
   type Order,
 } from '@nthstock/contracts';
@@ -10,7 +12,7 @@ import { afterAll, beforeAll, expect, it, vi } from 'vitest';
 import { createRealtimeServer, WS_PATH } from '../app.js';
 import { createRedisOrderFeed } from './orderFeed.js';
 import { connectAuthed, testAuthenticator } from '../test/auth.js';
-import { testAccountDelta, testOrder } from '../test/orders.js';
+import { testAccountDelta, testNotification, testOrder } from '../test/orders.js';
 import { describeWithRedis, startTestRedis, type TestRedis } from '../test/testRedis.js';
 
 describeWithRedis('Redis order channel to WebSocket clients (T-133 integration)', () => {
@@ -109,6 +111,53 @@ describeWithRedis('Redis order channel to WebSocket clients (T-133 integration)'
     expect(logger.warn).toHaveBeenCalledTimes(2);
 
     alice.close();
+    bob.close();
+    await server.close();
+  }, 60_000);
+
+  it("sends user A's notification to A only, within the tick-to-screen budget (NSTOCK-0381)", async () => {
+    const run = Math.random().toString(36).slice(2, 10);
+    const [a, b] = [`usr_a_${run}`, `usr_b_${run}`];
+    const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn() };
+    const orderFeed = createRedisOrderFeed({ url: redis?.url ?? '', logger });
+    const server = createRealtimeServer({ authenticate: testAuthenticator(), orderFeed });
+    const port = await server.listen(0, '127.0.0.1');
+    const url = `ws://127.0.0.1:${port}${WS_PATH}`;
+    const alice = await connectAuthed(url, a);
+    const bob = await connectAuthed(url, b);
+    await orderFeed.settled();
+
+    const event = (userId: string, id: string) => ({
+      v: NOTIFICATION_EVENT_VERSION,
+      userId,
+      notification: testNotification(id),
+    });
+    await publisher.publish(notifyChannel(a), JSON.stringify(event(b, '1'))); // forged
+    await publisher.publish(notifyChannel(a), 'not json');
+    const sentAt = performance.now();
+    await publisher.publish(notifyChannel(a), JSON.stringify(event(a, '3')));
+
+    expect(await alice.next()).toEqual({
+      kind: 'json',
+      message: {
+        v: WS_PROTOCOL_VERSION,
+        type: 'notification',
+        notification: testNotification('3'),
+      },
+    });
+    expect(performance.now() - sentAt).toBeLessThan(500);
+    expect(await alice.drain()).toEqual([]);
+    expect(await bob.drain()).toEqual([]);
+    expect(logger.warn).toHaveBeenCalledTimes(2);
+
+    // A's last connection closing unsubscribes A's notify channel too.
+    alice.close();
+    await alice.closed;
+    await vi.waitFor(async () => {
+      await orderFeed.settled();
+      const counts = (await publisher.pubsub('NUMSUB', notifyChannel(a))) as [string, number];
+      expect(Number(counts[1])).toBe(0);
+    });
     bob.close();
     await server.close();
   }, 60_000);

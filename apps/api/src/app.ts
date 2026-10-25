@@ -18,6 +18,10 @@ import {
 import { portfolioRoutes } from './modules/portfolio/index.js';
 import { testControlRoutes, type TestControls } from './modules/testControls/index.js';
 import { watchlistRoutes } from './modules/watchlists/index.js';
+import {
+  startNotificationPublisher,
+  type NotificationPublisher,
+} from './modules/notifications/index.js';
 import type { Publisher } from './ticks/publisher.js';
 import { startTickPump, type TickPump } from './ticks/tickPump.js';
 
@@ -47,6 +51,11 @@ export type AppOptions = {
    * pushed without a tick or a request. `null` turns it off (tests drive time themselves).
    */
   orderSweepMs?: number | null;
+  /**
+   * How often the notification outbox relay runs, and how old a row must be before it takes it
+   * (NSTOCK-0380); default `OUTBOX_RELAY_MS`. `null` runs no timer. Only with `orderPublisher`.
+   */
+  notificationRelayMs?: number | null;
   /**
    * Registers the `/v1/__test` clock and price routes (T-162) for E2E suites. Left out (always, in
    * production), those paths answer 404. `server.ts` passes it only for `NODE_ENV=test` with
@@ -149,6 +158,21 @@ export function buildApp(options: AppOptions = {}): App {
     });
     app.addHook('onClose', async () => {
       updates?.stop();
+    });
+    // Notifications go out on the same publisher, with the outbox relay (NSTOCK-0380).
+    let notifications: NotificationPublisher | null = null;
+    app.addHook('onReady', async () => {
+      notifications = startNotificationPublisher({
+        notifier: deps.notifier,
+        publisher: orderPublisher,
+        log: app.log,
+        ...(options.notificationRelayMs !== undefined
+          ? { relayMs: options.notificationRelayMs }
+          : {}),
+      });
+    });
+    app.addHook('onClose', async () => {
+      notifications?.stop();
     });
   }
   // Each publisher is closed once, even when ticks and order updates share one.
