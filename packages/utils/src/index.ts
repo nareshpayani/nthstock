@@ -45,3 +45,4 @@ export {
   verifyTotp,
 } from './totp.js';
 export { deviceLabel } from './deviceLabel.js';
+export { shardOf } from './shard.js';

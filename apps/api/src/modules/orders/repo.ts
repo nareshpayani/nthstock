@@ -1,9 +1,20 @@
-import type { LedgerEntry, Order, OrderHistoryEntry, OrderStatus } from '@nthstock/contracts';
+import type {
+  LedgerEntry,
+  Order,
+  OrderHistoryEntry,
+  OrderStatus,
+  TrailingStopStatus,
+} from '@nthstock/contracts';
 import { PAGE_LIMIT_DEFAULT } from '@nthstock/contracts';
 import type { PaperEngineWorkingSet } from '@nthstock/paperEngine';
 import { istDateKey } from '@nthstock/utils';
 import type { AuditRepo } from '../audit/index.js';
-import { AccountConflict, type AccountChange, type AccountStore } from './accountStore.js';
+import {
+  AccountConflict,
+  clearsOrders,
+  type AccountChange,
+  type AccountStore,
+} from './accountStore.js';
 
 type StoredAccount = {
   version: number;
@@ -15,6 +26,13 @@ type StoredAccount = {
   ledgerIds: Set<string>;
 };
 
+/** Stops that still act: their accounts load at boot so ticks keep stepping them (NSTOCK-0368). */
+const ACTIVE_STOPS: ReadonlySet<TrailingStopStatus> = new Set([
+  'PENDING_ENTRY',
+  'ARMED',
+  'TRAILING',
+  'TRIGGERED',
+]);
 const LIVE: ReadonlySet<OrderStatus> = new Set(['AMO', 'OPEN']);
 
 /**
@@ -26,10 +44,12 @@ export function createMemoryAccountStore({ audit }: { audit: AuditRepo }): Accou
   const accounts = new Map<string, StoredAccount>();
 
   /** The account with the change applied, leaving `current` untouched. */
-  function applied(current: StoredAccount | undefined, { after }: AccountChange): StoredAccount {
-    const orders = new Map(current?.orders);
+  function applied(current: StoredAccount | undefined, change: AccountChange): StoredAccount {
+    const { after } = change;
+    const cleared = clearsOrders(change);
+    const orders = new Map(cleared ? [] : current?.orders);
     for (const order of after.orders) orders.set(order.id, structuredClone(order));
-    const history = new Map(current?.history);
+    const history = new Map(cleared ? [] : current?.history);
     for (const [id, entries] of after.history) history.set(id, structuredClone(entries));
     const ledger = [...(current?.ledger ?? [])];
     const ledgerIds = new Set(current?.ledgerIds);
@@ -98,7 +118,11 @@ export function createMemoryAccountStore({ audit }: { audit: AuditRepo }): Accou
     liveAccountIds: () =>
       Promise.resolve(
         [...accounts]
-          .filter(([, account]) => [...account.orders.values()].some((o) => LIVE.has(o.status)))
+          .filter(
+            ([, account]) =>
+              [...account.orders.values()].some((o) => LIVE.has(o.status)) ||
+              account.workingSet.trailingStops.some((stop) => ACTIVE_STOPS.has(stop.status)),
+          )
           .map(([userId]) => userId),
       ),
 

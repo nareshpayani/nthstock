@@ -28,6 +28,12 @@ Get the changed files with `gh pr diff <n> --name-only`, then run these subagent
 parallel, giving each the PR number, the linked issue and its list of files. They only report; you
 judge each finding, drop false positives and duplicates, and post the rest as your own.
 
+Run them in the **foreground**: start every pass that applies in one message, each Agent call with
+`run_in_background: false`, so they run in parallel and you get all their results back before you
+continue. Never start one in the background: this review runs headless, and when your turn ends
+the run exits, so a background pass never reports and no verdict is posted (NSTOCK-0356). Wait for
+every result, then always go on to "How to report".
+
 | Agent | When |
 |---|---|
 | `frontend-reviewer` | any `.tsx` or `apps/web`, `packages/ui`, `packages/tokens` change |
@@ -48,7 +54,11 @@ Docs-only and config-only PRs skip them. If a pass fails or times out, review th
      `agent-automerge.yml` squash-merge the PR once every check is green (ADR 0006), so add it only
      when you would merge the PR yourself. Spec PRs and PRs touching `.github/`, `.claude/` or
      `CLAUDE.md` still wait for the owner.
-4. A real bug you find **outside this PR's scope** → open a new issue with
+4. **No round limit, one no-progress rule.** Every push gets a full review, however many rounds it
+   takes. From round 3 on, read your earlier summaries (`gh pr view <n> --json comments`): if a
+   blocking finding is the same, unresolved, in this review and the previous 2, the Fixer is not
+   moving it. Add `needs-human` instead of `agent:fix-needed` and say which finding is stuck.
+5. A real bug you find **outside this PR's scope** → open a new issue with
    `bash tools/github/issueKey.sh create --type bug --subject "<what is broken>"` (it is titled
    `NSTOCK-0001 : <what is broken>`), with steps to reproduce and expected behaviour, and the labels
    `agent:ready` and an `area:*` label.

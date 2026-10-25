@@ -21,6 +21,7 @@ animation frame) → <PriceCell> paint
 ```
 | Segment | Tool already in the repo |
 |---|---|
+| apps/quotes → tick streams → client socket (NSTOCK-0355) | same command, `quotesToScreen.latency.test.ts` (needs a built apps/quotes) |
 | tick → client socket (one process pair, real Redis) | `npm run test:latency -w @nthstock/realtime` (`tickToScreen.latency.test.ts`, asserts p95 < 500 ms; needs Docker or `REDIS_TEST_URL` and a built apps/api) |
 | tick → client at 1,000 sockets | `infra/k6/wsSmoke.js` (see `infra/k6/README.md`; local only, k6 binary or Docker) |
 | socket → paint, long tasks, re-renders | `npm run e2e:perf` (`renderPerf.spec.ts`, `webVitals.spec.ts`) |

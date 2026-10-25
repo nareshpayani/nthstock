@@ -47,6 +47,92 @@ CDN + WAF ─► Load balancer ─► apps/api (Fastify, stateless)     apps/rea
 - Auth: OTP (mock SMS provider until launch) + device PIN (Argon2id) + optional TOTP; 15-min JWT access token + rotating refresh token in httpOnly SameSite=Strict cookie, revocable in Redis.
 - Testing: Vitest, Supertest, Testcontainers, contract tests.
 
+### Paper accounts on PostgreSQL
+Spec `backend-core.md` §5.3, ADR 0007. The `AccountStore` (`apps/api/src/modules/orders/accountStore.ts`; memory in
+`repo.ts`, Postgres in `pgRepo.ts`) is the record of each paper account; the per-user `PaperEngine` on the `PaperDesk`
+is a cache of it.
+- **Load:** the first use of an account loads its working set (live orders, today's orders, positions, holdings and
+  today's ledger, with the earlier ledger carried as a balance) and its version.
+- **Commit:** every engine change is committed with its audit entries in one transaction against the version it was
+  read at. A commit that loses to another writer reloads the account and runs the action once more; losing twice
+  answers 409 `CONFLICT`. Any other failure answers 500 and the account is reloaded before its next use. Each user's
+  commits run in order on a per-user queue; users never wait for each other.
+- **Reads:** the order book, order history and funds ledger pages read from the store, so they cover every day.
+- **Restart:** at boot, and on the order sweep if the database was down then, apps/api loads every account with an
+  AMO or OPEN order, so a resting order fills on the first crossing tick after a restart.
+- **Reset and demo seed:** a reset clears the stored orders and their history (the ledger is append-only and keeps
+  every row); the demo seed replaces the whole account.
+
+### Quote service (Wave 3, E22)
+Spec `market-data-and-matching.md` §4. `apps/quotes` will be the one source of ticks, so every API instance,
+apps/realtime, the matcher and the candle writer see the same prices. It depends on nothing but Redis, because it
+is the piece a licensed vendor feed replaces (D3).
+- **Shards:** an instrument's shard is `shardOf(token, SHARDS)` (`@nthstock/utils`, FNV-1a). Locally `SHARDS=1`.
+- **One writer per shard:** a process writes only while it holds `lease:quotes:{shard}` (`SET … NX PX 5000`, renewed
+  every 2 s). A second process waits and takes over when the holder stops, or within the TTL when it dies.
+- **Streams:** each batch is appended to `nthstock:ticks:v1:{shard}` (`XADD MAXLEN ~ 2400`, about 10 minutes) with a
+  per-shard `seq`, and its quotes go to the snapshot hash `nthstock:quotes:last:v1:{shard}` in the same MULTI. A
+  consumer that sees any `seq` other than the next one re-reads the snapshot (`tickStreamStep` in
+  `packages/contracts`).
+- **apps/realtime reads the streams** when `QUOTE_SHARDS` is set (`feeds/streamFeed.ts`): at start it loads each
+  shard's snapshot, then follows every stream with one blocking `XREAD`. A gap or a restarted writer (its `seq` starts
+  again at 1) triggers a snapshot re-read; a malformed entry is logged and skipped. Without `QUOTE_SHARDS` it keeps
+  the pub/sub feed from the API's tick pump.
+- **apps/api on the quote service** (`QUOTE_SHARDS` with `REDIS_URL`, `ticks/quoteStreams.ts`): the adapter is built
+  with `externalTicks`, so it never runs its own random walk; it starts from the snapshots and moves on every stream
+  batch (`MockMarketDataAdapter.applyQuotes`), so the paper desk, alerts, lists, movers and candles all follow the one
+  quote service, and the tick pump does not start. `GET /v1/market/quotes` reads the snapshot hashes directly, so
+  two instances answer the same LTP at the same moment. Both apps read the streams through `followTickStreams` in
+  `packages/marketData`. Without `QUOTE_SHARDS` nothing changes: the adapter ticks in process.
+- **Locally:** `npm run dev:api` starts apps/quotes beside apps/api, apps/realtime and the web app, with
+  `QUOTE_SHARDS=1`, so the full stack runs on the quote service by default (Compose runs Postgres and Redis; the apps
+  run under Turborepo).
+- **Latency (NSTOCK-0355):** `npm run test:latency -w @nthstock/realtime` measures tick-to-screen across apps/quotes,
+  Redis Streams, apps/realtime and a WebSocket client (plus one frame to paint), beside the API tick-pump path.
+  Locally: p95 240 to 260 ms on the quote service against 86 to 106 ms on the pump, both under the 500 ms target. The
+  difference is the 250 ms batch window of the writer; CI asserts the p95 on every PR.
+
+### Matcher (Wave 3, E23)
+Spec `market-data-and-matching.md` §5. A matcher worker will fill resting orders and trigger trailing stops off the tick
+streams, so apps/api stops matching in process.
+- **Order book** (`OrderBook` in `packages/paperEngine`, NSTOCK-0363): per instrument, BUY and SELL LIMIT orders sit
+  in price heaps and trailing stops in heaps on their stop, watermark and activation prices. A tick pops only what it
+  fills, triggers, ratchets or activates, and moves every stop with `stepTrailingStop`, the rule the engine and the
+  browser mock run, so it leaves each stop where stepping every stop would (property-tested against that full walk).
+  A change applies only when its version is newer than the one held.
+- **Worker** (`apps/matcher`, NSTOCK-0364): one process per shard holds `lease:matcher:{shard}` (the same
+  `startLease` as apps/quotes, now in `packages/marketData`) and follows that shard's tick stream with
+  `followTickStreams`. Every process for the shard keeps following, so a standby is current when it takes over;
+  only the holder runs ticks through the books, and only in market hours (`MOCK_MARKET_ALWAYS_OPEN` for demos).
+  `npm run dev:api` starts it.
+- **Order commands** (`MatcherCommand` in `packages/contracts`, NSTOCK-0365): after each order commit apps/api
+  appends `ADD`, `MODIFY` or `CANCEL` for a LIMIT order to `nthstock:matcher:commands:v1:{shard}` (capped at
+  100,000 entries), carrying the account version of that commit. Every matcher process for the shard reads the
+  stream with `XREAD BLOCK` and applies each command to the instrument's book by the version rule, so a late or
+  replayed command never undoes a newer one; malformed entries are logged and skipped. `STOP_ADD` and
+  `STOP_CANCEL` are in the contract and applied by the worker; apps/api sends them with server-side trailing stops.
+- **Status:** the book, the worker and the order commands are built. The reconcile loop, fills, server-side
+  trailing stops, `MATCHER_MODE` and the benchmark are NSTOCK-0366 to 0370; until then the worker only logs what a
+  tick crossed.
+
+### Server-side trailing stops (NSTOCK-0368)
+In api mode trailing stops run on the server with the same engine rules as the browser mock (SPEC-TFC-1 §6, §10.6).
+- **Store:** the engine's working set is version 4: it carries the trailing stops (active ones and today's), the
+  engine `seq`, the exit order ids and the stops' idempotency keys. Migration 0015 adds `trailing_stops` (one row per
+  `TrailingStop`, trail as unit plus amount or basis points, CHECKed against the contract lists) and
+  `paper_accounts.seq` and `exit_order_ids`. A commit upserts the stops that changed; a reset clears them with the
+  orders. So a stop survives a restart, keeps its stop price, and `seq` never goes back.
+- **Routes:** apps/api serves `GET/POST /v1/trailing-stops`, `PATCH/DELETE /v1/trailing-stops/:id`,
+  `POST /v1/positions/close` and `GET /v1/account/state`, with refusals mapped by `trailingStopApiError` like the
+  mock. Every action is audited (`TRAILING_STOP_PLACE`, `_MODIFY`, `_CANCEL`, `POSITION_CLOSE`) and every state change
+  as `TRAILING_STOP_UPDATE`.
+- **Frames:** after each commit the orders module publishes an `AccountDeltaEvent` (the changed orders and stops at
+  their newest `seq`, positions and funds) on the user's order channel, after the order updates. apps/realtime sends it
+  to that user's connections as an `accountDelta` frame with no quotes, so the web app's trading store runs in api mode
+  exactly as on MSW: it loads the account state, applies frames, and reloads on a gap.
+- **Matcher:** ticks still step stops in apps/api's process. Once the matcher worker (NSTOCK-0364, 0365) is on
+  `develop`, apps/api sends `STOP_ADD` and `STOP_CANCEL` to it instead.
+
 ### Market data and chart bars
 - `packages/marketData` generates each range's own bars (1D: 1-minute, 1W: 5-minute, 1M: hourly,
   1Y: daily, 5Y: weekly) and `resampleCandles` groups them into a coarser bar size on request
@@ -54,7 +140,47 @@ CDN + WAF ─► Load balancer ─► apps/api (Fastify, stateless)     apps/rea
   `packages/contracts`). An unknown pair, such as 1D with weekly bars, is a 400.
 - Intraday bars start at the 9:15 IST open (`sessionBarStart` in `packages/utils`), as NSE charts do.
   The web chart keeps the bar size in the URL and folds live ticks into the current bar of that size.
-- From Phase 4, TimescaleDB continuous aggregates replace the in-memory grouping; the contract stays.
+- On the full stack the API serves stored bars from TimescaleDB (next section); the contract stays.
+  The mock backend (MSW) and the memory driver keep the generated bars.
+
+### Candle store (Wave 3, E25)
+Spec `market-data-and-matching.md` §7. Chart bars are stored, so the 1-minute bar a user watched form is the bar
+the chart shows after a reload.
+- **Database:** Compose, CI and Testcontainers run `timescale/timescaledb:2.17.2-pg16` (Postgres 16 with the
+  Apache core and the free community features). Migration `0014_timescaledb_candles` (hand-written, like the
+  partitioned orders) creates the extension as `nthstock_owner`; `nthstock_app` may read and upsert bars, never
+  delete them or run DDL.
+- **Storage:** `candles_1m (token, bucket, open, high, low, close, volume)`, prices in paise, primary key
+  `(token, bucket)`, a hypertable in 1-day chunks, compressed by `token` after 7 days.
+- **Aggregates:** `candles_5m`, `candles_15m`, `candles_30m`, `candles_1h` and `candles_1d` are continuous
+  aggregates on `time_bucket(…, origin => 09:15 IST)`, so bars start at the NSE open and a daily bar is one
+  session. Each has a refresh policy of one bucket (window of three, so a replayed minute is folded in) and
+  real-time aggregation on, so a read includes minutes not yet materialised. Weekly bars group `candles_1d`.
+- **Writer:** the candle writer (`apps/api/src/candleWriter.ts`) reads the tick streams in its own consumer group
+  and keeps each instrument's forming bar in memory. On a minute boundary it writes every closed bar of that minute
+  in one multi-row `INSERT … ON CONFLICT (token, bucket) DO UPDATE`, records the minute as written, and only then
+  acknowledges the stream entries, so a restart re-reads what was not stored: no minute is lost and a replayed one
+  overwrites itself with the same values.
+- **History:** `npm run db:seed:candles` (also run by `seed:demo`) writes 2 years of daily bars and 30 days (at least
+  22 sessions) of 1-minute bars from the deterministic generator, so charts have depth on day one and every machine
+  stores the same rows. Because `candles_1d` aggregates `candles_1m`, a day older than the minute window is stored
+  as one 09:15 IST row carrying that day's OHLCV. Minute bars go to the indices and their large-cap members
+  (66 instruments, about 577k rows, 23 s locally); `--all` adds daily history for every symbol. The seed must refresh
+  the aggregates as the owner (`DATABASE_MIGRATION_URL`; the app role may not): real-time aggregation only covers
+  minutes after an aggregate's watermark, so history never materialised would drop out once a policy runs. One-row
+  days are inserted only where nothing is stored, so a later seed keeps the minute bars of sessions that left the
+  window.
+- **Running the writer:** `npm run dev:candles -w @nthstock/api` beside `npm run dev:api` (one process per
+  deployment: it uses a fixed consumer name).
+- **Reads:** `GET /v1/market/instruments/:symbol/candles` reads 1-minute bars from the hypertable, 5 minutes to an
+  hour and daily bars from the aggregates, weekly bars by grouping the daily ones, and finishes the forming bar with
+  the live price from the quote snapshot. A symbol with no stored bars in the window (not seeded, or only daily
+  history on an intraday range) keeps the generated bars, so nothing regresses.
+- **Schema check:** `db:check` with `DB_CHECK_URL` compares a migrated database with the schema files and the
+  hand-written relations, skipping TimescaleDB's catalog, chunks and internal schemas; CI runs it.
+- **AWS (Phase 6):** RDS does not offer TimescaleDB; the spec's open question 1 decides between self-managed
+  Postgres on EC2, Timescale Cloud, or native partitions with rollup tables. The queries are plain `time_bucket`
+  reads, so the fallback is contained.
 
 ### Price alerts and notifications
 - `AlertDesk` (`packages/paperEngine/src/alertDesk.ts`) runs in both backends beside the paper desk:
@@ -179,6 +305,7 @@ nthstock/
 │   │       │                     # beside them; others import a module only via index.ts
 │   │       ├── ticks/            # mock tick pump and quote publisher
 │   │       └── test/             # injected backend, test Postgres/Redis, cross-module suites
+│   ├── quotes/                   # tick writer: one process per shard behind a Redis lease (Wave 3, E22)
 │   ├── realtime/                 # WebSocket server
 │   │   └── src/
 │   │       ├── app.ts, server.ts, config.ts, logger.ts, protocol.ts, timers.ts

@@ -55,7 +55,33 @@ function apiModeBuild(apiMode: ApiMode): Plugin {
   };
 }
 
-export default defineConfig(({ mode }) => {
+/**
+ * The workspace packages the app imports, mapped to their TypeScript source. Their package.json
+ * points at the built `dist`, which goes stale after a pull or while a package is edited, so the
+ * dev server reads the source instead (NSTOCK-0361). `@nthstock/tokens` stays on `dist`: its CSS is
+ * generated, and `predev` builds it.
+ */
+const PACKAGE_SOURCES: Record<string, string> = {
+  '@nthstock/apiClient': 'apiClient/src/index.ts',
+  '@nthstock/contracts': 'contracts/src/index.ts',
+  '@nthstock/contracts/testing': 'contracts/src/testing/index.ts',
+  '@nthstock/marketData': 'marketData/src/index.ts',
+  '@nthstock/marketData/testing': 'marketData/src/testing.ts',
+  '@nthstock/paperEngine': 'paperEngine/src/index.ts',
+  '@nthstock/ui': 'ui/src/index.ts',
+  '@nthstock/ui/allIcons': 'ui/src/icons/allIcons.ts',
+  '@nthstock/utils': 'utils/src/index.ts',
+};
+
+const packagesDir = decodeURIComponent(new URL('../../packages/', import.meta.url).pathname);
+const sourceAliases = Object.entries(PACKAGE_SOURCES).map(([name, path]) => ({
+  find: new RegExp(`^${name}$`),
+  replacement: resolve(packagesDir, path),
+}));
+
+export default defineConfig(({ command, mode }) => {
+  // Only the dev server reads package source; builds, previews and Vitest keep the published dist.
+  const fromSource = command === 'serve' && mode !== 'test' && !process.env['VITEST'];
   // Validate VITE_* at start-up so a typo in the mode fails `vite`, `vite build` and Vitest at once.
   const runtime = parseRuntimeConfig(loadEnv(mode, process.cwd(), 'VITE_'));
   // api mode (T-076): /v1 → apps/api and /ws → apps/realtime, same origin for cookies.
@@ -92,7 +118,10 @@ export default defineConfig(({ mode }) => {
       apiModeBuild(runtime.apiMode),
     ],
     resolve: {
-      alias: { '@': decodeURIComponent(new URL('./src', import.meta.url).pathname) },
+      alias: [
+        ...(fromSource ? sourceAliases : []),
+        { find: '@', replacement: decodeURIComponent(new URL('./src', import.meta.url).pathname) },
+      ],
     },
     server: { port: 5173, ...(proxy ? { proxy } : {}) },
     preview: { port: 4173, headers: securityHeaders, ...(proxy ? { proxy } : {}) },

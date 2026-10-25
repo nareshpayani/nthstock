@@ -26,6 +26,18 @@ export async function expectNoSeriousA11yViolations(
   label: string,
   scope?: string,
 ): Promise<void> {
+  // Let entrance animations settle first. A dialog fades in (`animate-pop-in`, opacity 0 → 1), and
+  // axe run mid-fade measures text blended with what is behind it: ink-muted read as #657588 on
+  // #f5f5f7 (4.33:1) instead of #5A6B80 on white, failing color-contrast only when the run was fast.
+  // Infinite animations (spinners, skeleton shimmer) never finish, so they are left alone.
+  await page.evaluate(() =>
+    Promise.all(
+      document
+        .getAnimations()
+        .filter((animation) => animation.effect?.getTiming().iterations !== Infinity)
+        .map((animation) => animation.finished.catch(() => undefined)),
+    ),
+  );
   const loaded = await page.evaluate(() => Boolean((window as AxeWindow).axe));
   // Evaluated over the DevTools protocol, not as an inline <script>: the preview server's CSP
   // (script-src 'self', T-173) blocks inline scripts, and the page is tested under that CSP.

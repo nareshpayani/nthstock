@@ -82,7 +82,7 @@ export type PaperDeskOptions = {
   onOrderUpdate?: (userId: string, order: Order) => void;
   /** Every trailing-stop change of every user (SPEC-TFC-1 §10.1). */
   onTrailingStopUpdate?: (userId: string, stop: TrailingStop) => void;
-  /** False refuses trailing stops (apps/api until its store keeps them). Default true. */
+  /** False refuses trailing stops. Default true. */
   trailingStops?: boolean;
   /** After any change to a user's engine (MSW saves a snapshot here). */
   onChange?: (userId: string, engine: PaperEngine) => void;
@@ -524,6 +524,16 @@ export class PaperDesk {
   async restore(userId: string, snapshot: PaperEngineSnapshot): Promise<void> {
     const engine = this.#newEngine(userId, snapshot);
     await Promise.all([...activeTokens(engine)].map((token) => this.#prepare(token)));
+    this.#engines.set(userId, engine);
+    this.#reindex(userId, engine);
+  }
+
+  /**
+   * Starts the user over with a new, empty engine (an account store that has no account for
+   * them), dropping the one in memory without any change callbacks.
+   */
+  forget(userId: string): void {
+    const engine = this.#newEngine(userId);
     this.#engines.set(userId, engine);
     this.#reindex(userId, engine);
   }

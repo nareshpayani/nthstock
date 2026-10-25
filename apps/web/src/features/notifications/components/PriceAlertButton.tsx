@@ -1,6 +1,16 @@
 import { ApiError } from '@nthstock/apiClient';
 import type { Exchange, PriceAlert } from '@nthstock/contracts';
-import { Button, Dialog, Field, IconBell, IconButton, Input, NumberInput, cn } from '@nthstock/ui';
+import {
+  Button,
+  Dialog,
+  Field,
+  IconBell,
+  IconButton,
+  Input,
+  NumberInput,
+  cn,
+  useToast,
+} from '@nthstock/ui';
 import { formatInr } from '@nthstock/utils';
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate, useRouterState } from '@tanstack/react-router';
@@ -19,8 +29,9 @@ export type PriceAlertButtonProps = { symbol: string; exchange: Exchange };
 /**
  * The bell beside the watchlist star on a stock page (NSTOCK-0344). It is filled while the stock
  * has an active alert, and opens a dialog to set one: a price (quick levels ±1% and ±2%), the
- * direction read from which side of the live price it is, and an optional note. The stock's alerts
- * are listed under the form. Logged out, it goes to log in and back.
+ * direction read from which side of the live price it is, and an optional note. Setting one closes
+ * the dialog with a toast; reopen it to add another. The stock's alerts are listed under the form.
+ * Logged out, it goes to log in and back.
  */
 export function PriceAlertButton({ symbol, exchange }: PriceAlertButtonProps) {
   const { status } = useSession();
@@ -47,8 +58,8 @@ function AlertDialog({ symbol, exchange }: PriceAlertButtonProps) {
   const [open, setOpen] = useState(false);
   const [price, setPrice] = useState<number | null>(null);
   const [note, setNote] = useState('');
-  const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const toast = useToast();
   const create = useCreateAlert();
   const cancel = useCancelAlert();
 
@@ -60,7 +71,6 @@ function AlertDialog({ symbol, exchange }: PriceAlertButtonProps) {
 
   const change = (next: boolean) => {
     setOpen(next);
-    setMessage(null);
     setError(null);
     if (next && ltp !== null) setPrice(presetLevel(ltp, 1));
     if (!next) setNote('');
@@ -73,8 +83,11 @@ function AlertDialog({ symbol, exchange }: PriceAlertButtonProps) {
       { symbol, exchange, condition, price, ...(note.trim() ? { note: note.trim() } : {}) },
       {
         onSuccess: (alert: PriceAlert) => {
-          setMessage(strings.dialog.created(symbol, formatInr(alert.price)));
-          setNote('');
+          change(false);
+          toast.show({
+            title: strings.dialog.created(symbol, formatInr(alert.price)),
+            tone: 'success',
+          });
         },
         onError: (cause) => {
           const code = cause instanceof ApiError ? cause.code : null;
@@ -168,11 +181,6 @@ function AlertDialog({ symbol, exchange }: PriceAlertButtonProps) {
               ? strings.dialog.samePrice
               : null}
         </p>
-        {message ? (
-          <p role="status" className="text-body font-medium text-up">
-            {message}
-          </p>
-        ) : null}
       </form>
       {mine.length > 0 ? (
         <section className="mt-4 grid gap-1" aria-label={strings.dialog.activeTitle}>

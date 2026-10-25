@@ -453,7 +453,7 @@ export const routes = {
     response: Order,
   },
 
-  // Trailing stops (SPEC-TFC-1 §10.6). apps/api answers 501 until it adopts the engine's stops.
+  // Trailing stops (SPEC-TFC-1 §10.6): the MSW mock and apps/api (NSTOCK-0368) both serve them.
   trailingStopsList: {
     method: 'GET',
     path: '/v1/trailing-stops',

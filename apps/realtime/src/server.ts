@@ -2,12 +2,21 @@ import { createRealtimeServer } from './app.js';
 import { createJwtCookieAuthenticator, resolveJwtSecret } from './connections/auth.js';
 import { loadConfig } from './config.js';
 import { createRedisQuoteFeed } from './feeds/feed.js';
+import { createRedisStreamQuoteFeed } from './feeds/streamFeed.js';
 import { jsonLogger } from './logger.js';
 import { createRedisOrderFeed } from './feeds/orderFeed.js';
 import { createRedisSessionRevocationFeed } from './feeds/sessionRevocationFeed.js';
 
 const config = loadConfig(process.env);
-const feed = createRedisQuoteFeed({ url: config.redisUrl, logger: jsonLogger });
+// Ticks from apps/quotes' streams when it runs (QUOTE_SHARDS), else apps/api's tick channel.
+const feed =
+  config.quoteShards === null
+    ? createRedisQuoteFeed({ url: config.redisUrl, logger: jsonLogger })
+    : createRedisStreamQuoteFeed({
+        url: config.redisUrl,
+        shards: config.quoteShards,
+        logger: jsonLogger,
+      });
 const orderFeed = createRedisOrderFeed({ url: config.redisUrl, logger: jsonLogger });
 const revocations = createRedisSessionRevocationFeed({ url: config.redisUrl, logger: jsonLogger });
 const secret = resolveJwtSecret({

@@ -8,12 +8,15 @@
     "dev": "tsx watch src/server.ts",
     "build": "tsc -p tsconfig.build.json",
     "start": "node dist/server.js",
+    "candles": "node dist/candleWriter.js",
+    "dev:candles": "DATABASE_URL=${DATABASE_URL:-postgres://nthstock_app:nthstock_app_dev@127.0.0.1:5432/nthstock} REDIS_URL=${REDIS_URL:-redis://127.0.0.1:6379} tsx watch src/candleWriter.ts",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "test": "vitest run --coverage",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "tsx src/db/migrateCli.ts",
-    "db:check": "tsx src/db/checkCli.ts"
+    "db:check": "tsx src/db/checkCli.ts",
+    "db:seed:candles": "tsx src/modules/candles/seedCli.ts"
   },
   "dependencies": {
     "@fastify/rate-limit": "11.2.1",

@@ -7,6 +7,10 @@ name: 'Agent: Fixer'
 # (develop and production are never pushed to).
 # An hourly sweep catches what events miss: Dependabot-triggered runs get no secrets, and a PR
 # that went red because develop was broken needs another look once develop is green again.
+# There is no attempt limit (owner decision 2026-10-25): the Fixer keeps going until CI is green.
+# The one safeguard is for no progress: when the last AGENT_NO_PROGRESS_RUNS (default 5) CI runs
+# on a PR, each on a new commit, all fail in exactly the same jobs and steps, the PR gets
+# `needs-human` instead of another identical attempt, so a stuck loop cannot drain the plan quota.
 
 on:
   pull_request:
@@ -42,7 +46,7 @@ jobs:
           SENDER: ${{ github.event.sender.login }}
           OWNER: ${{ (vars.OWNER_LOGIN || 'nareshpayani') }}
           BOT: ${{ (vars.AGENT_BOT_LOGIN || 'claude[bot]') }}
-          MAX_ATTEMPTS: ${{ (vars.AGENT_MAX_CI_FIX_ATTEMPTS || '3') }}
+          NO_PROGRESS_RUNS: ${{ (vars.AGENT_NO_PROGRESS_RUNS || '5') }}
           LABEL_PR: ${{ github.event.pull_request.number }}
           LABEL_BRANCH: ${{ github.event.pull_request.head.ref }}
           LABEL_HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
@@ -68,26 +72,47 @@ jobs:
             [ "$(gh run list --repo "$repo" --workflow ci.yml --branch develop \
               --status completed --limit 1 --json conclusion --jq '.[0].conclusion // ""')" = "failure" ]
           }
-          # Prints "ok" when the PR is one agents may fix; flags it needs-human when out of attempts.
+          # The failing jobs and steps of a CI run, e.g. "Test/Run tests,Lint/Lint".
+          failure_signature() {
+            gh run view "$1" --repo "$repo" --json jobs \
+              --jq '[.jobs[] | select(.conclusion == "failure") | .name + "/" + ([.steps[]? | select(.conclusion == "failure") | .name] | join("+"))] | sort | join(",")'
+          }
+          # True when the last NO_PROGRESS_RUNS CI runs on the branch are all red, each on a different
+          # commit, with the same failure signature: fixes are landing but nothing changes.
+          no_progress() {
+            local branch="$1" runs ids distinct sig first=""
+            runs=$(gh run list --repo "$repo" --workflow ci.yml --branch "$branch" --event pull_request \
+              --status completed --limit "$NO_PROGRESS_RUNS" --json databaseId,conclusion,headSha)
+            [ "$(jq 'length' <<< "$runs")" -ge "$NO_PROGRESS_RUNS" ] || return 1
+            [ "$(jq '[.[] | select(.conclusion != "failure")] | length' <<< "$runs")" -eq 0 ] || return 1
+            distinct=$(jq '[.[].headSha] | unique | length' <<< "$runs")
+            [ "$distinct" -ge "$NO_PROGRESS_RUNS" ] || return 1
+            ids=$(jq -r '.[].databaseId' <<< "$runs")
+            for id in $ids; do
+              sig=$(failure_signature "$id")
+              [ -n "$first" ] || first="$sig"
+              [ "$sig" = "$first" ] || return 1
+            done
+            echo "$first"
+          }
+          # Prints "ok" when the PR is one agents may fix; flags it needs-human when fixes stop making progress.
           eligible() {
-            local pr="$1" info author cross labels attempts
-            info=$(gh pr view "$pr" --repo "$repo" --json author,isCrossRepository,labels,state)
+            local pr="$1" info author cross labels branch stuck
+            info=$(gh pr view "$pr" --repo "$repo" --json author,isCrossRepository,labels,state,headRefName)
             [ "$(jq -r .state <<< "$info")" = "OPEN" ] || return 0
             cross=$(jq -r .isCrossRepository <<< "$info")
             author=$(jq -r .author.login <<< "$info")
             labels=$(jq -r '[.labels[].name] | join(",")' <<< "$info")
+            branch=$(jq -r .headRefName <<< "$info")
             [ "$cross" = "false" ] || return 0
             case ",$labels," in *,needs-human,*) return 0 ;; esac
             case "$author" in
               "$OWNER"|"$BOT"|app/claude|app/dependabot|dependabot\[bot\]) ;;
               *) return 0 ;;
             esac
-            attempts=$(gh api "repos/$repo/issues/$pr/comments" --paginate \
-              --jq '[.[] | select(.body | contains("<!-- nthstock-agent-ci-fix -->"))] | length' \
-              | awk '{s+=$1} END {print s+0}')
-            if [ "$attempts" -ge "$MAX_ATTEMPTS" ]; then
+            if stuck=$(no_progress "$branch"); then
               gh pr edit "$pr" --repo "$repo" --add-label needs-human >/dev/null
-              gh pr comment "$pr" --repo "$repo" --body "Agents tried to fix CI $attempts times without success, so this PR needs a human look."
+              gh pr comment "$pr" --repo "$repo" --body "CI failed the same way ($stuck) on each of the last $NO_PROGRESS_RUNS commits, so fixes are not making progress. Labelled \`needs-human\`; push a change and remove the label to let the Fixer carry on."
               return 0
             fi
             echo ok
@@ -149,7 +174,11 @@ jobs:
       cancel-in-progress: false
     steps:
       - uses: actions/checkout@v7
+        # No persisted GITHUB_TOKEN: the agent action points origin at its app token, so its pushes
+        # start CI and the Reviewer. checkout@v7 keeps the token in an includeIf file the action
+        # cannot clear, and GITHUB_TOKEN pushes start no workflows (NSTOCK-0377).
         with:
+          persist-credentials: false
           ref: ${{ needs.resolve-target.outputs.mode == 'develop' && 'develop' || needs.resolve-target.outputs.branch }}
           fetch-depth: 0
       - name: Block pushes to production and develop
@@ -164,6 +193,8 @@ jobs:
       - run: npm ci || echo "::warning::npm ci failed; the Fixer will diagnose it."
       - if: env.HAS_AGENT_TOKEN != 'true'
         run: echo "::notice::CLAUDE_CODE_OAUTH_TOKEN is not set; agent skipped. See docs/agent-workflow.md."
+      - id: before
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
       - if: env.HAS_AGENT_TOKEN == 'true'
         uses: anthropics/claude-code-action@v1
         with:
@@ -183,5 +214,21 @@ jobs:
           # gh is limited to what fixer.md needs: read PRs, runs and review threads, comment and reply,
           # edit labels, check out, open the fix-develop PR and the needs-human issue. No `gh pr merge`.
           claude_args: |
-            --max-turns 60
             --allowedTools "Read,Glob,Grep,Edit,Write,Bash(npm:*),Bash(npx:*),Bash(node:*),Bash(git:*),Bash(gh pr view:*),Bash(gh pr diff:*),Bash(gh pr checks:*),Bash(gh pr list:*),Bash(gh pr comment:*),Bash(gh pr edit:*),Bash(gh pr checkout:*),Bash(gh pr create:*),Bash(gh issue create:*),Bash(gh run view:*),Bash(gh run list:*),Bash(gh api repos/*/pulls/*/comments*),Bash(gh api repos/*/pulls/*/reviews*),Bash(gh api repos/*/issues/*/comments*),Bash(gh api repos/*/actions/*),Bash(gh api repos/*/commits/*),Bash(bash tools/github/issueKey.sh:*)"
+      # The other half of the no-progress safeguard: a CI-fix run that pushes nothing leaves the same
+      # red commit, which the hourly sweep would pick again forever. Hand it to the owner instead.
+      - name: Flag a CI fix that pushed nothing
+        if: >-
+          always() && env.HAS_AGENT_TOKEN == 'true' && needs.resolve-target.outputs.mode == 'pr' &&
+          startsWith(needs.resolve-target.outputs.reason, 'failing CI')
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ needs.resolve-target.outputs.pr }}
+          BEFORE: ${{ steps.before.outputs.sha }}
+        run: |
+          info=$(gh pr view "$PR" --repo "$GITHUB_REPOSITORY" --json state,headRefOid,labels)
+          [ "$(jq -r .state <<< "$info")" = "OPEN" ] || exit 0
+          [ "$(jq -r .headRefOid <<< "$info")" = "$BEFORE" ] || exit 0
+          jq -e '[.labels[].name] | index("needs-human")' <<< "$info" >/dev/null && exit 0
+          gh pr edit "$PR" --repo "$GITHUB_REPOSITORY" --add-label needs-human
+          gh pr comment "$PR" --repo "$GITHUB_REPOSITORY" --body "The Fixer finished without pushing a fix for the red CI on ${BEFORE:0:7} ([run]($GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID)). Labelled \`needs-human\`; remove the label to let the Fixer try again."

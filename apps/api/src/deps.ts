@@ -1,11 +1,12 @@
 import { MockMarketDataAdapter, type MarketDataAdapter } from '@nthstock/marketData';
-import type { Redis } from 'ioredis';
+import { Redis } from 'ioredis';
 import { systemClock, type Clock } from '@nthstock/utils';
 import type { DbDriver } from './config.js';
 import { createDatabase, type Database } from './db/client.js';
 import { createPiiCrypto, resolvePiiKeys, type PiiKeys } from './db/crypto.js';
 import { createMemoryAuditRepo, createPgAuditRepo, type AuditRepo } from './modules/audit/index.js';
 import { createAlertService, type AlertService } from './modules/alerts/index.js';
+import { createPgCandleStore, type CandleStore } from './modules/candles/index.js';
 import {
   createArgon2PinHasher,
   createMemoryAuthRepo,
@@ -26,8 +27,11 @@ import {
 } from './modules/auth/index.js';
 import {
   createMemoryAccountStore,
+  createPgAccountStore,
   createOrderService,
+  startMatcherCommands,
   type AccountStore,
+  type MatcherCommands,
   type OrderService,
 } from './modules/orders/index.js';
 import { createMemoryUsersRepo, createPgUsersRepo, type UsersRepo } from './modules/users/index.js';
@@ -36,6 +40,11 @@ import {
   createPgWatchlistsRepo,
   type WatchlistsRepo,
 } from './modules/watchlists/index.js';
+import {
+  startQuoteStreams,
+  type QuoteStreams,
+  type QuoteStreamsOptions,
+} from './ticks/quoteStreams.js';
 
 /**
  * Every module's storage seam (ADR 0004 §3). Each module's Postgres repo (`pgRepo.ts`) takes over
@@ -47,7 +56,7 @@ export type Repos = {
   users: UsersRepo;
   auth: AuthRepo;
   watchlists: WatchlistsRepo;
-  /** Paper accounts: the record behind each user's engine (T-202; the orders service uses it from T-204). */
+  /** Paper accounts: the record behind each user's engine (T-202); the orders service's engines are its cache (T-204). */
   accounts: AccountStore;
   /** The append-only audit log. */
   audit: AuditRepo;
@@ -81,6 +90,18 @@ export type AppDeps = {
    */
   sessionRevocations: SessionRevocations;
   /**
+   * The quote service's streams and snapshots (NSTOCK-0354) when `QUOTE_SHARDS` is set: the
+   * adapter then moves only on them, and `GET /v1/market/quotes` reads the snapshots. Null: the
+   * adapter ticks on its own, as before.
+   */
+  quoteStreams: QuoteStreams | null;
+  /**
+   * Stored candles on TimescaleDB (NSTOCK-0375) under `DB_DRIVER=postgres`: the candles route reads
+   * them and falls back to the adapter's generated bars where the store has none. Null on the
+   * memory driver, where the route serves the adapter's bars as before.
+   */
+  candleStore: CandleStore | null;
+  /**
    * Releases what `createDeps` created itself (the orders desk's subscriptions, the adapter's
    * timers, the Postgres pool). Injected parts are left alone.
    */
@@ -94,6 +115,13 @@ export type DepsOverrides = {
   market?: MarketDataAdapter;
   /** `MOCK_MARKET_ALWAYS_OPEN`: let the mock market tick outside NSE hours. */
   marketAlwaysOpen?: boolean;
+  /**
+   * `QUOTE_SHARDS` with `REDIS_URL`: follow apps/quotes instead of ticking here (NSTOCK-0354). A
+   * `market` passed with it must be a `MockMarketDataAdapter` built with `externalTicks`.
+   */
+  quoteStreams?: QuoteStreamsOptions;
+  /** Use this candle store (tests); null turns stored candles off under `postgres`. */
+  candleStore?: CandleStore | null;
   production?: boolean;
   sms?: SmsProvider;
   /** Where the default mock SMS provider writes its dev log line; default: nowhere. */
@@ -149,8 +177,15 @@ export function createDeps(overrides: DepsOverrides = {}): AppDeps {
   const clock = overrides.clock ?? systemClock;
   const market =
     overrides.market ??
-    new MockMarketDataAdapter({ clock, alwaysOpen: overrides.marketAlwaysOpen ?? false });
+    new MockMarketDataAdapter({
+      clock,
+      alwaysOpen: overrides.marketAlwaysOpen ?? false,
+      externalTicks: overrides.quoteStreams !== undefined,
+    });
   const owned = overrides.market ? null : market;
+  if (overrides.quoteStreams && !(market instanceof MockMarketDataAdapter)) {
+    throw new Error('quoteStreams needs a MockMarketDataAdapter to apply the quotes to');
+  }
   const production = overrides.production ?? false;
   const dbDriver = overrides.dbDriver ?? (overrides.database ? 'postgres' : 'memory');
   const database = openDatabase(overrides, dbDriver);
@@ -187,16 +222,40 @@ export function createDeps(overrides: DepsOverrides = {}): AppDeps {
       overrides.repos?.watchlists ??
       (database ? createPgWatchlistsRepo({ database }) : createMemoryWatchlistsRepo()),
     audit,
-    accounts: overrides.repos?.accounts ?? createMemoryAccountStore({ audit }),
+    accounts:
+      overrides.repos?.accounts ??
+      (database ? createPgAccountStore({ database, audit }) : createMemoryAccountStore({ audit })),
   };
   const orders = createOrderService({
     clock,
     market,
     audit: repos.audit,
+    accounts: repos.accounts,
     ...(overrides.onAuditError ? { onAuditError: overrides.onAuditError } : {}),
     ...(overrides.newOrderId ? { newId: overrides.newOrderId } : {}),
   });
   const alerts = createAlertService({ clock, market, orders });
+  // Last, so nothing above can throw after the Redis connections are open.
+  const quoteStreams =
+    overrides.quoteStreams && market instanceof MockMarketDataAdapter
+      ? startQuoteStreams(market, overrides.quoteStreams)
+      : null;
+  // On the quote service, every committed order change goes to the matcher too (NSTOCK-0365).
+  let matcherCommands: { commands: MatcherCommands; redis: Redis } | null = null;
+  if (quoteStreams && overrides.quoteStreams) {
+    const { url, shards, commandsKey, log } = overrides.quoteStreams;
+    const redis = new Redis(url, { maxRetriesPerRequest: 1, commandTimeout: 1_000 });
+    // A failed send is logged by the commands themselves, once per outage.
+    redis.on('error', () => undefined);
+    const commands = startMatcherCommands({
+      orders,
+      stream: redis,
+      shards,
+      ...(commandsKey ? { commandsKey } : {}),
+      log,
+    });
+    matcherCommands = { commands, redis };
+  }
   return {
     clock,
     repos,
@@ -212,6 +271,13 @@ export function createDeps(overrides: DepsOverrides = {}): AppDeps {
     alerts,
     dbDriver,
     database,
+    quoteStreams,
+    candleStore:
+      overrides.candleStore !== undefined
+        ? overrides.candleStore
+        : database
+          ? createPgCandleStore({ database })
+          : null,
     sessionRevocations: redisState
       ? createRedisSessionRevocations({
           redis: redisState,
@@ -223,6 +289,9 @@ export function createDeps(overrides: DepsOverrides = {}): AppDeps {
       await orders.flushAudit();
       alerts.dispose();
       orders.dispose();
+      matcherCommands?.commands.stop();
+      matcherCommands?.redis.disconnect();
+      await quoteStreams?.close();
       owned?.dispose();
       await ownedDatabase?.close();
     },

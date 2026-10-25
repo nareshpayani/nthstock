@@ -13,11 +13,12 @@
   ],
   "scripts": {
     "dev": "turbo run dev",
-    "dev:api": "npm run infra:up && npm run db:migrate && VITE_API_MODE=api REDIS_URL=${REDIS_URL:-redis://127.0.0.1:6379} DB_DRIVER=${DB_DRIVER:-postgres} DATABASE_URL=${DATABASE_URL:-postgres://nthstock_app:nthstock_app_dev@127.0.0.1:5432/nthstock} JWT_SECRET=${JWT_SECRET:-$(node -e \"process.stdout.write(require('node:crypto').randomBytes(32).toString('base64url'))\")} turbo run dev --env-mode=loose --filter=@nthstock/api --filter=@nthstock/realtime --filter=@nthstock/web",
-    "seed:demo": "DEMO_SEED=true npm run dev:api",
+    "dev:api": "npm run infra:up && npm run db:migrate && VITE_API_MODE=api REDIS_URL=${REDIS_URL:-redis://127.0.0.1:6379} DB_DRIVER=${DB_DRIVER:-postgres} DATABASE_URL=${DATABASE_URL:-postgres://nthstock_app:nthstock_app_dev@127.0.0.1:5432/nthstock} JWT_SECRET=${JWT_SECRET:-$(node -e \"process.stdout.write(require('node:crypto').randomBytes(32).toString('base64url'))\")} QUOTE_SHARDS=${QUOTE_SHARDS:-1} SHARDS=${QUOTE_SHARDS:-1} turbo run dev --env-mode=loose --filter=@nthstock/quotes --filter=@nthstock/api --filter=@nthstock/realtime --filter=@nthstock/web",
+    "seed:demo": "npm run infra:up && npm run db:migrate && npm run db:seed:candles && DEMO_SEED=true npm run dev:api",
     "infra:up": "docker compose -f infra/docker-compose.yml up -d --wait",
     "infra:down": "docker compose -f infra/docker-compose.yml down",
     "db:migrate": "DATABASE_MIGRATION_URL=${DATABASE_MIGRATION_URL:-postgres://nthstock_owner:nthstock_owner_dev@127.0.0.1:5432/nthstock} npm run db:migrate -w @nthstock/api",
+    "db:seed:candles": "DATABASE_URL=${DATABASE_URL:-postgres://nthstock_app:nthstock_app_dev@127.0.0.1:5432/nthstock} DATABASE_MIGRATION_URL=${DATABASE_MIGRATION_URL:-postgres://nthstock_owner:nthstock_owner_dev@127.0.0.1:5432/nthstock} npm run db:seed:candles -w @nthstock/api --",
     "storybook": "npm run storybook -w @nthstock/ui",
     "build-storybook": "turbo run build-storybook",
     "build": "turbo run build",
@@ -29,6 +30,7 @@
     "check": "npm run format:check && npm run lint && npm run typecheck && npm run test && npm run build",
     "e2e": "npm run e2e -w @nthstock/web",
     "e2e:api": "npm run e2e:api -w @nthstock/web",
+    "e2e:dev": "npm run e2e:dev -w @nthstock/web",
     "e2e:perf": "npm run e2e:perf -w @nthstock/web"
   },
   "devDependencies": {

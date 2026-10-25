@@ -127,6 +127,13 @@ function SheetBody({
   );
   const [touched, setTouched] = useState(false);
   const [failure, setFailure] = useState<string | null>(null);
+  // A switch to rupees before the first price leaves the field empty; it fills, once, when the price
+  // lands (state adjusted during render, so there is no effect and no extra paint).
+  const [awaitingDefault, setAwaitingDefault] = useState(false);
+  if (awaitingDefault && ltp !== null) {
+    setAwaitingDefault(false);
+    if (values.value === null) setValues({ ...values, value: defaultTrailValue(values.unit, ltp) });
+  }
 
   const check = checkTrailing(values, { position, ltp });
   const shown = touched ? check : ({ ok: true } as const);
@@ -144,6 +151,9 @@ function SheetBody({
         ? { ...patch, value: defaultTrailValue(patch.unit, ltp) }
         : patch;
     setValues((current) => ({ ...current, ...next }));
+    // Waiting only matters for a unit switch; typing a value of one's own ends it.
+    if (patch.unit !== undefined) setAwaitingDefault(next.value === null);
+    else if (patch.value !== undefined) setAwaitingDefault(false);
     setFailure(null);
     if (typed) setTouched(true);
   };

@@ -363,3 +363,41 @@ describe('MockMarketDataAdapter data', () => {
     expect(await adapter.getPopularSearches(0)).toHaveLength(1);
   });
 });
+
+describe('MockMarketDataAdapter external ticks (NSTOCK-0354)', () => {
+  const symbol = master.equities[0]?.instrument.symbol ?? '';
+
+  it('never starts its own timer, and moves only on applyQuotes', async () => {
+    const scheduler = manualScheduler();
+    const adapter = new MockMarketDataAdapter({
+      master,
+      clock: openClock,
+      scheduler,
+      externalTicks: true,
+    });
+    const received: Quote[][] = [];
+    adapter.subscribe([symbol], (quotes) => received.push([...quotes]));
+    expect(scheduler.active()).toBe(0);
+
+    const before = (await adapter.getQuote(symbol)) as Quote;
+    const ltp = before.ltp + 500;
+    adapter.applyQuotes([
+      { ...before, ltp, change: ltp - before.prevClose, high: Math.max(before.high, ltp) },
+    ]);
+
+    expect((await adapter.getQuote(symbol))?.ltp).toBe(ltp);
+    expect(received.map((batch) => batch.map((quote) => quote.ltp))).toEqual([[ltp]]);
+    adapter.dispose();
+  });
+
+  it('ignores quotes for unknown instruments or a mismatched token', async () => {
+    const adapter = new MockMarketDataAdapter({ master, clock: openClock, externalTicks: true });
+    const before = (await adapter.getQuote(symbol)) as Quote;
+    adapter.applyQuotes([
+      { ...before, symbol: 'NOSUCH', ltp: 1 },
+      { ...before, token: before.token + 1, ltp: 1 },
+    ]);
+    expect((await adapter.getQuote(symbol))?.ltp).toBe(before.ltp);
+    adapter.dispose();
+  });
+});

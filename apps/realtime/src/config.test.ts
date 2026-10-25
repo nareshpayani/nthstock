@@ -10,6 +10,7 @@ describe('loadConfig', () => {
       host: '0.0.0.0',
       redisUrl: 'redis://127.0.0.1:6379',
       testControls: false,
+      quoteShards: null,
     });
   });
 
@@ -21,6 +22,7 @@ describe('loadConfig', () => {
         PORT: '9000',
         HOST: '127.0.0.1',
         REDIS_URL: 'redis://redis.local:6380',
+        QUOTE_SHARDS: '4',
       }),
     ).toEqual({
       production: true,
@@ -29,6 +31,7 @@ describe('loadConfig', () => {
       host: '127.0.0.1',
       redisUrl: 'redis://redis.local:6380',
       testControls: false,
+      quoteShards: 4,
     });
   });
 

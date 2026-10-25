@@ -37,6 +37,7 @@ const EnvSchema = z.object({
     ),
   PG_POOL_MAX: z.coerce.number().int().min(1).max(100).default(10),
   DB_DRIVER: z.enum(['memory', 'postgres']).default('memory'),
+  QUOTE_SHARDS: z.coerce.number().int().min(1).max(64).optional(),
   PII_ENC_KEYS: z.string().optional(),
   PII_HMAC_KEY: z.string().optional(),
 });
@@ -68,6 +69,12 @@ export type ApiConfig = {
    */
   dbDriver: DbDriver;
   /**
+   * `QUOTE_SHARDS` (NSTOCK-0354): follow this many apps/quotes shards on Redis instead of ticking
+   * in process, and serve `GET /v1/market/quotes` from their snapshots. Needs REDIS_URL. Unset:
+   * the in-process adapter ticks and the tick pump publishes, as before.
+   */
+  quoteShards: number | null;
+  /**
    * `ENABLE_TEST_CONTROLS=true` with `NODE_ENV=test`: registers the `/v1/__test` clock and price
    * routes for E2E suites (T-162). Off by default; refused in any other NODE_ENV.
    */
@@ -84,6 +91,36 @@ export type ApiConfig = {
    */
   pii: { keys: PiiKeys; devKeys: boolean };
 };
+
+const CandleWriterEnvSchema = z.object({
+  DATABASE_URL: EnvSchema.shape.DATABASE_URL,
+  REDIS_URL: EnvSchema.shape.REDIS_URL,
+  SHARDS: z.coerce.number().int().min(1).max(64).default(1),
+});
+
+/** The candle writer entry (`src/candleWriter.ts`, spec market-data-and-matching §7.2). */
+export type CandleWriterConfig = {
+  /** `DATABASE_URL`, as the DML-only `nthstock_app` role. */
+  databaseUrl: string;
+  /** `REDIS_URL`, the Redis apps/quotes writes its tick streams to. */
+  redisUrl: string;
+  /** `SHARDS`: how many shards apps/quotes writes (its own `SHARDS`); default 1. */
+  shards: number;
+};
+
+/** Reads and validates the candle writer's environment; throws at startup on a bad value. */
+export function loadCandleWriterConfig(
+  env: Readonly<Record<string, string | undefined>>,
+): CandleWriterConfig {
+  const parsed = CandleWriterEnvSchema.safeParse(env);
+  if (!parsed.success) {
+    throw new Error(`Invalid candle writer environment: ${z.prettifyError(parsed.error)}`);
+  }
+  const { DATABASE_URL: databaseUrl, REDIS_URL: redisUrl, SHARDS: shards } = parsed.data;
+  if (!databaseUrl) throw new Error('Invalid candle writer environment: DATABASE_URL must be set');
+  if (!redisUrl) throw new Error('Invalid candle writer environment: REDIS_URL must be set');
+  return { databaseUrl, redisUrl, shards };
+}
 
 /** Reads and validates the environment; throws at startup on a bad value. */
 export function loadConfig(env: Readonly<Record<string, string | undefined>>): ApiConfig {
@@ -107,6 +144,9 @@ export function loadConfig(env: Readonly<Record<string, string | undefined>>): A
     // Short-lived auth state (OTP challenges, the session revocation cache) lives in Redis, so
     // that apps/api holds no state of its own (T-193).
     throw new Error('Invalid apps/api environment: DB_DRIVER=postgres needs REDIS_URL');
+  }
+  if (parsed.data.QUOTE_SHARDS !== undefined && !parsed.data.REDIS_URL) {
+    throw new Error('Invalid apps/api environment: QUOTE_SHARDS needs REDIS_URL');
   }
   if (production && parsed.data.DEMO_SEED) {
     throw new Error('Invalid apps/api environment: DEMO_SEED is for local demos, not production');
@@ -137,6 +177,7 @@ export function loadConfig(env: Readonly<Record<string, string | undefined>>): A
     databaseUrl: parsed.data.DATABASE_URL,
     pgPoolMax: parsed.data.PG_POOL_MAX,
     dbDriver: parsed.data.DB_DRIVER,
+    quoteShards: parsed.data.QUOTE_SHARDS ?? null,
     testControls: parsed.data.ENABLE_TEST_CONTROLS,
     demoSeed: parsed.data.DEMO_SEED,
     pii: { keys: piiKeys, devKeys },

@@ -259,6 +259,10 @@ export const strings = {
           kind: 'text',
           text: 'The trailing logic lives in one pure function, stepTrailingStop(state, tick), in the shared paper engine. It runs on every tick of the instrument, in the same step as order matching. For a long position the high-water mark is max(mark, LTP) and the stop is max(stop, mark − trail) rounded down to the 5-paise tick, so it never moves back. At LTP ≤ stop it places one reduce-only exit.',
         },
+        {
+          kind: 'text',
+          text: 'The same engine runs on the server (NSTOCK-0368). In api mode apps/api keeps every stop in a Postgres trailing_stops table, beside the account’s engine seq and its exit orders, so a stop keeps ratcheting after a restart and a retried place with the same key answers with the same stop. Each committed change goes out on the user’s Redis channel, and apps/realtime sends it to that user’s tabs as an accountDelta frame, the same frame the in-browser demo sends. The ticket, chart line and sheet work the same in both modes.',
+        },
         { kind: 'diagram', id: 'tslo' },
         {
           kind: 'table',
@@ -395,7 +399,18 @@ export const strings = {
             'The ticket validates the order with the same Zod schema the server uses, then sends POST /v1/orders with an idempotency key.',
             'The orders module checks the funds, and the paper engine fills a market order at the current price, or keeps a limit order open until the price reaches it.',
             'The fill commits the order, its events, the funds ledger, the position and the audit entries in one Postgres transaction.',
+            'The engine in memory is only a cache of the account in Postgres. Each change commits against the version it was read at, so a second writer is caught, reloads and retries once. At boot apps/api loads every account with a resting order, so a limit order placed before a restart still fills on the tick that crosses it.',
             'The order update goes out over Redis and the WebSocket, and every screen updates from it.',
+          ],
+        },
+        { kind: 'heading', text: 'Matching off the API process (being built)' },
+        {
+          kind: 'steps',
+          items: [
+            'apps/matcher runs one process per shard of instruments. A Redis lease picks the one that acts; the others follow the same streams, so a standby is current the moment it takes over.',
+            'After each order commit, apps/api appends an ADD, MODIFY or CANCEL command to the shard’s command stream, stamped with the account version. A late or replayed command never undoes a newer one.',
+            'Each instrument has an order book: limit orders and trailing stops sit in price heaps, so a tick reads only what it fills, triggers or moves, not every resting order. A property test checks it against a full walk.',
+            'Still to come: the reconcile loop from Postgres, fills committed through the account store, server-side trailing stops, a switch to turn it on, and a benchmark.',
           ],
         },
         {
@@ -602,6 +617,21 @@ export const strings = {
             'The Demo simulator can nudge or gap one instrument’s real feed, so every screen sees the same move.',
           ],
         },
+        { kind: 'heading', text: 'Stored candles on TimescaleDB' },
+        {
+          kind: 'text',
+          text: 'On the full stack, chart bars are stored, not made up on request: the 1-minute bar a user watched form is the bar the chart shows after a reload, and a year of daily bars is one indexed read.',
+        },
+        {
+          kind: 'list',
+          items: [
+            'candles_1m is a TimescaleDB hypertable (one row per instrument and minute, prices in paise) in 1-day chunks, compressed by instrument after 7 days.',
+            'Continuous aggregates build 5, 15, 30 and 60-minute and daily bars from it with time_bucket counted from 09:15 IST, so a 15-minute bar opens at 09:15, 09:30 and so on and a daily bar is one NSE session. Real-time aggregation adds the minutes not yet materialised, so a read always includes every closed minute.',
+            'The candle writer reads the tick streams in its own Redis consumer group, keeps the forming bar of every instrument in memory, and writes each closed minute in one multi-row upsert. It acknowledges a minute only after it is stored, so a restart re-reads from there: no minute is lost and none is counted twice.',
+            'A seed writes 2 years of daily history and 30 days of 1-minute bars from the same deterministic generator, so charts have depth on day one and every machine stores the same rows.',
+            'GET /v1/market/instruments/:symbol/candles keeps its contract: 1-minute bars come from the hypertable, 5 minutes to 1 hour and daily from the aggregates, weekly from the daily bars, and the forming bar is finished with the live price from the quote service.',
+          ],
+        },
         {
           kind: 'links',
           label: 'Read the code',
@@ -613,6 +643,11 @@ export const strings = {
               href: repoLink('packages/marketData/src/sectors.ts'),
             },
             { label: 'Symbol master', href: repoLink('packages/marketData/src/symbolMaster.ts') },
+            {
+              label: 'Candle store migration',
+              href: repoLink('apps/api/drizzle/0014_timescaledb_candles.sql'),
+            },
+            { label: 'Candle store and writer', href: repoLink('apps/api/src/modules/candles') },
             {
               label: 'ADR 0004: mock backend',
               href: repoLink('docs/adr/0004-mock-backend-and-paper-engine.md'),
@@ -654,6 +689,7 @@ export const strings = {
             ['Fastify 5', 'REST API with per-route schemas and rate limits'],
             ['ws', 'The WebSocket server'],
             ['PostgreSQL 16 and Drizzle ORM', 'System of record and migrations'],
+            ['TimescaleDB 2.17', 'Stored candles: a 1-minute hypertable and continuous aggregates'],
             ['Redis 7 and ioredis', 'Pub/sub, OTPs, revocation, rate limits'],
             ['jose', 'Signed 15-minute access tokens'],
             ['Argon2id', 'PIN hashing'],
@@ -726,6 +762,25 @@ export const strings = {
             ],
             ['Long animation frames at 4× CPU throttling', 'none over 50 ms', 'none'],
             ['Price text updates', 'every tick', 'about 25 a second'],
+          ],
+        },
+        { kind: 'heading', text: 'Tick to screen, measured' },
+        {
+          kind: 'table',
+          caption:
+            'npm run test:latency, 8 symbols for 10 s over a real Redis, plus one 60 Hz frame to paint (3 runs)',
+          head: ['Path', 'Target', 'p95'],
+          rows: [
+            [
+              'apps/quotes → Redis Streams → apps/realtime → browser socket',
+              'under 500 ms',
+              '240 to 260 ms; most of it is the 250 ms batch window',
+            ],
+            [
+              'API tick pump → Redis pub/sub → apps/realtime → browser socket',
+              'under 500 ms',
+              '86 to 106 ms',
+            ],
           ],
         },
         { kind: 'heading', text: 'What keeps it fast' },
@@ -904,7 +959,7 @@ export const strings = {
         {
           kind: 'code',
           label: 'nthstock/',
-          text: 'CLAUDE.md               project rules every agent reads first\nWRITEUP.md              design rationale for the assignment\napps/\n  web/                  React SPA\n    e2e/                Playwright specs: journeys, phone, perf, a11y\n    scripts/            build budgets, no raw colours, import rules\n    src/\n      main.tsx          boot: config, mocks, providers, router\n      app/              app-wide wiring: layouts, live quotes, router\n      routes/           file routes; thin, they load a feature page\n      features/<name>/  dashboard, stockDetail, orderTicket, chartTrading,\n                        scalper, orders, positions, holdings, funds,\n                        watchlist, search, guide, …\n      shared/           cross-feature components and hooks\n      mocks/            MSW handlers and the in-browser market\n  api/                  Fastify modular monolith\n    drizzle/            SQL migrations\n    src/\n      app.ts server.ts config.ts deps.ts\n      db/               Postgres client, migrator, column crypto\n      http/             errors, cookies, CSRF, security headers\n      modules/<name>/   auth, users, watchlists, orders, portfolio,\n                        funds, market, audit, health, demo\n      ticks/            tick pump and Redis publisher\n  realtime/             WebSocket server\n    src/connections/    auth, hub, subscription registry\n    src/feeds/          Redis quote, order and revocation feeds\npackages/\n  ui/                   design system components and Storybook\n  tokens/               design tokens → CSS variables and Tailwind\n  contracts/            Zod schemas for every REST and WS message\n  marketData/           the mock market\n  paperEngine/          orders, fills, ledger, P&L, trailing stops\n  apiClient/            REST and WS clients, quote and trading stores\n  config/               shared ESLint, TypeScript, Vitest presets\n  utils/                INR formatting, market hours, IST dates\ninfra/                  Docker Compose, PgBouncer, k6\ntools/                  issue keys, release checks, load test\ndocs/                   product, architecture, ADRs, specs, runbooks\n.claude/                agents, rules, skills, hooks\n.github/                workflows, PR template, CODEOWNERS',
+          text: 'CLAUDE.md               project rules every agent reads first\nWRITEUP.md              design rationale for the assignment\napps/\n  web/                  React SPA\n    e2e/                Playwright specs: journeys, phone, perf, a11y\n    scripts/            build budgets, no raw colours, import rules\n    src/\n      main.tsx          boot: config, mocks, providers, router\n      app/              app-wide wiring: layouts, live quotes, router\n      routes/           file routes; thin, they load a feature page\n      features/<name>/  dashboard, stockDetail, orderTicket, chartTrading,\n                        scalper, orders, positions, holdings, funds,\n                        watchlist, search, guide, …\n      shared/           cross-feature components and hooks\n      mocks/            MSW handlers and the in-browser market\n  api/                  Fastify modular monolith\n    drizzle/            SQL migrations\n    src/\n      app.ts server.ts config.ts deps.ts\n      db/               Postgres client, migrator, column crypto\n      http/             errors, cookies, CSRF, security headers\n      modules/<name>/   auth, users, watchlists, orders, portfolio,\n                        funds, market, audit, health, demo\n      ticks/            tick pump and Redis publisher\n  realtime/             WebSocket server\n    src/connections/    auth, hub, subscription registry\n    src/feeds/          Redis quote, order and revocation feeds\n  quotes/               tick writer, one per shard behind a Redis lease\npackages/\n  ui/                   design system components and Storybook\n  tokens/               design tokens → CSS variables and Tailwind\n  contracts/            Zod schemas for every REST and WS message\n  marketData/           the mock market\n  paperEngine/          orders, fills, ledger, P&L, trailing stops\n  apiClient/            REST and WS clients, quote and trading stores\n  config/               shared ESLint, TypeScript, Vitest presets\n  utils/                INR formatting, market hours, IST dates, shards\ninfra/                  Docker Compose, PgBouncer, k6\ntools/                  issue keys, release checks, load test\ndocs/                   product, architecture, ADRs, specs, runbooks\n.claude/                agents, rules, skills, hooks\n.github/                workflows, PR template, CODEOWNERS',
         },
         {
           kind: 'list',
@@ -1142,7 +1197,7 @@ export const strings = {
           items: [
             'Agents never push to develop or production; a pre-push hook and branch rules block it.',
             'Only the owner or the agent app can start an agent, so strangers on the public repo cannot spend usage or inject prompts.',
-            'Loop limits: 3 review rounds or 3 CI-fix attempts, then needs-human.',
+            'No attempt or round limits: the Fixer fixes and the Reviewer re-reviews every push until the PR is green; only a no-progress check (the same failure on 5 commits in a row) hands a PR to the owner.',
             'Claude Code hooks in .claude/hooks run format, lint and typecheck on every edit, and block edits to secrets and generated files.',
             'Rules in .claude/rules and skills in .claude/skills give every session the same standards and procedures.',
           ],
@@ -1206,7 +1261,7 @@ export const strings = {
         {
           kind: 'list',
           items: [
-            'Trailing stops on the server: move the engine into apps/api on Postgres, sending the same accountDelta frames. In India a trailing stop is not an exchange order type, so a broker must run it.',
+            'Trailing stops in the matcher worker: they already run on the server in apps/api on Postgres; next they move into the sharded matcher. In India a trailing stop is not an exchange order type, so a broker must run it.',
             'Real-device testing in CI, with two-finger iPhone gestures on a device farm.',
             'Several stops per position, plus SL, SL-M and OCO orders on the same chart lines.',
             'A licensed market data feed behind the same adapter.',

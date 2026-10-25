@@ -21,6 +21,7 @@ export const stockDetailKeys = {
     ['stockDetail', 'stats', { symbol: params.symbol, ...withExchange(params.exchange) }] as const,
   depth: (params: InstrumentParams) =>
     ['stockDetail', 'depth', { symbol: params.symbol, ...withExchange(params.exchange) }] as const,
+  listings: (symbol: string) => ['stockDetail', 'listings', { symbol }] as const,
   profile: (params: InstrumentParams) =>
     [
       'stockDetail',
@@ -106,5 +107,27 @@ export function profileQuery(api: ApiClient, params: InstrumentParams) {
         signal,
       }),
     staleTime: 30 * 60_000,
+  });
+}
+
+/** Search hits a symbol lookup reads, enough for the exact match on both exchanges to be in. */
+export const LISTINGS_SEARCH_LIMIT = 20;
+
+/**
+ * The exchanges that list `symbol`, from `GET /v1/market/search` (T-106). A search answers 200
+ * with no hit for an exchange that does not list it, where looking the instrument up there would
+ * answer 404 and put an error in the console on every stock page.
+ */
+export function listingsQuery(api: ApiClient, symbol: string) {
+  return queryOptions({
+    queryKey: stockDetailKeys.listings(symbol),
+    queryFn: async ({ signal }) => {
+      const { items } = await api.request('marketSearch', {
+        query: { q: symbol, limit: LISTINGS_SEARCH_LIMIT },
+        signal,
+      });
+      return items.filter((hit) => hit.symbol === symbol).map((hit) => hit.exchange);
+    },
+    staleTime: Infinity,
   });
 }
