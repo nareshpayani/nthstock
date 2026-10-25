@@ -21,18 +21,43 @@ import { fileURLToPath } from 'node:url';
 import { Redis } from 'ioredis';
 import { OrderBook } from '../../packages/paperEngine/dist/index.js';
 
+const FLAGS = [
+  'instruments',
+  'orders',
+  'stops',
+  'users',
+  'tick-ms',
+  'duration',
+  'redis',
+  'seed',
+  'sigma',
+];
 const args = new Map();
 for (let i = 2; i < process.argv.length; i += 2) {
-  args.set(process.argv[i].replace(/^--/, ''), process.argv[i + 1]);
+  const flag = process.argv[i];
+  const name = flag.replace(/^--/, '');
+  const value = process.argv[i + 1];
+  if (!flag.startsWith('--') || !FLAGS.includes(name)) {
+    throw new Error(`unknown flag ${flag}; expected one of --${FLAGS.join(', --')}`);
+  }
+  if (value === undefined || value.startsWith('--')) throw new Error(`${flag} needs a value`);
+  args.set(name, value);
 }
-const INSTRUMENTS = Number(args.get('instruments') ?? 500);
-const ORDERS = Number(args.get('orders') ?? 100_000);
-const STOPS = Number(args.get('stops') ?? 10_000);
-const USERS = Number(args.get('users') ?? 10_000);
-const TICK_MS = Number(args.get('tick-ms') ?? 250);
-const DURATION_S = Number(args.get('duration') ?? 30);
+/** A numeric flag, refused unless it is a finite number above `min`. */
+const numberArg = (name, fallback, min = 0) => {
+  const value = Number(args.get(name) ?? fallback);
+  if (!Number.isFinite(value) || value <= min)
+    throw new Error(`--${name} must be a number above ${String(min)}`);
+  return value;
+};
+const INSTRUMENTS = numberArg('instruments', 500);
+const ORDERS = numberArg('orders', 100_000);
+const STOPS = numberArg('stops', 10_000, -1);
+const USERS = numberArg('users', 10_000);
+const TICK_MS = numberArg('tick-ms', 250);
+const DURATION_S = numberArg('duration', 30);
 const REDIS_URL = args.get('redis') ?? null;
-const SEED = Number(args.get('seed') ?? 42);
+const SEED = numberArg('seed', 42, -1);
 
 // A seeded generator, so two runs place the same book and walk the same prices.
 let state = SEED >>> 0;
@@ -98,7 +123,7 @@ const loadMs = performance.now() - loadStart;
  * Each tick's price: a GBM step of 0.25% (about 2.7% over a 30 s run, some 40 times a real
  * stock's volatility), so a short run crosses many orders and moves many stops.
  */
-const SIGMA = Number(args.get('sigma') ?? 0.0025);
+const SIGMA = numberArg('sigma', 0.0025);
 function walk(token) {
   const z = Math.sqrt(-2 * Math.log(1 - random())) * Math.cos(2 * Math.PI * random());
   // A few ticks jump, as news does, so some ticks cross many orders at once.
@@ -107,8 +132,9 @@ function walk(token) {
   return prices[token];
 }
 
+/** The p-th percentile, or null for an empty sample, so a lost sample never reads as 0 ms. */
 const percentile = (values, p) => {
-  if (values.length === 0) return 0;
+  if (values.length === 0) return null;
   const sorted = Float64Array.from(values).sort();
   return sorted[Math.min(sorted.length - 1, Math.ceil((p / 100) * sorted.length) - 1)];
 };
@@ -127,25 +153,38 @@ const sentAt = new Map();
 const hopMs = [];
 let readerDone = Promise.resolve();
 let stopping = false;
+// Failed sends and reads are counted, and any of them fails the run: a hop sample with holes in
+// it would otherwise print as a good result.
+let sendErrors = 0;
+let readErrors = 0;
+let lastError = null;
 if (REDIS_URL) {
-  writer = new Redis(REDIS_URL);
-  reader = new Redis(REDIS_URL, { maxRetriesPerRequest: null });
+  writer = new Redis(REDIS_URL, { maxRetriesPerRequest: 2 });
+  reader = new Redis(REDIS_URL, { maxRetriesPerRequest: 2 });
   await writer.call('XGROUP', 'CREATE', stream, 'api', '$', 'MKSTREAM');
   readerDone = (async () => {
     while (!stopping) {
-      const reply = await reader.call(
-        'XREADGROUP',
-        'GROUP',
-        'api',
-        'bench',
-        'COUNT',
-        '500',
-        'BLOCK',
-        '200',
-        'STREAMS',
-        stream,
-        '>',
-      );
+      let reply;
+      try {
+        reply = await reader.call(
+          'XREADGROUP',
+          'GROUP',
+          'api',
+          'bench',
+          'COUNT',
+          '500',
+          'BLOCK',
+          '200',
+          'STREAMS',
+          stream,
+          '>',
+        );
+      } catch (error) {
+        readErrors += 1;
+        lastError = String(error);
+        await new Promise((resolve) => setTimeout(resolve, 100));
+        continue;
+      }
       if (!reply) continue;
       // RESP2 pairs or a RESP3 map, as `streamsOf` in apps/api reads them.
       const entries = Array.isArray(reply[0]) ? reply[0][1] : reply[1];
@@ -160,7 +199,12 @@ if (REDIS_URL) {
           sentAt.delete(key);
         }
       }
-      if (ids.length > 0) await reader.call('XACK', stream, 'api', ...ids);
+      if (ids.length > 0) {
+        await reader.call('XACK', stream, 'api', ...ids).catch((error) => {
+          readErrors += 1;
+          lastError = String(error);
+        });
+      }
     }
   })();
 }
@@ -229,15 +273,12 @@ await new Promise((resolve) => {
         for (const fill of fills) {
           const key = `${String(token)}:${String(ticks)}:${fill.userId}`;
           sentAt.set(key, started);
-          writer.xadd(
-            stream,
-            'MAXLEN',
-            '~',
-            100_000,
-            '*',
-            'fill',
-            JSON.stringify({ ...fill, key }),
-          );
+          writer
+            .xadd(stream, 'MAXLEN', '~', 100_000, '*', 'fill', JSON.stringify({ ...fill, key }))
+            .catch((error) => {
+              sendErrors += 1;
+              lastError = String(error);
+            });
         }
       }
       // Fresh orders and stops replace the ones that left, so the book stays full.
@@ -258,8 +299,17 @@ if (writer && reader) {
     await new Promise((resolve) => setTimeout(resolve, 50));
   }
   stopping = true;
-  await readerDone;
-  await writer.del(stream);
+  // The reader's BLOCK is 200 ms, so it stops well inside 5 s unless its connection is gone.
+  const READER_STOP_MS = 5_000;
+  const stopped = await Promise.race([
+    readerDone.then(() => true),
+    new Promise((resolve) => setTimeout(() => resolve(false), READER_STOP_MS)),
+  ]);
+  if (!stopped) {
+    readErrors += 1;
+    lastError = `the reader did not stop within ${String(READER_STOP_MS)} ms`;
+  }
+  await writer.del(stream).catch(() => undefined);
   writer.disconnect();
   reader.disconnect();
 }
@@ -301,7 +351,17 @@ const result = {
   triggered: triggeredTotal,
   moved: movedTotal,
   fillRequests: requests,
-  ...(REDIS_URL ? { tickToRequestReadMs: summary(hopMs), requestsRead: hopMs.length } : {}),
+  ...(REDIS_URL
+    ? {
+        tickToRequestReadMs: summary(hopMs),
+        requestsRead: hopMs.length,
+        // Requests sent but never read back in the drain: any of these fails the run.
+        lost: sentAt.size,
+        sendErrors,
+        readErrors,
+        ...(lastError ? { lastError } : {}),
+      }
+    : {}),
 };
 
 const round = (value) => (typeof value === 'number' ? Math.round(value * 1_000) / 1_000 : value);
@@ -313,3 +373,9 @@ const day = result.at.slice(0, 10);
 const file = `${dir}${day}-matcher-orders${String(ORDERS)}-instruments${String(INSTRUMENTS)}${REDIS_URL ? '-redis' : ''}.json`;
 writeFileSync(file, `${JSON.stringify(rounded, null, 2)}\n`);
 process.stdout.write(`Saved ${file}\n`);
+if (REDIS_URL && (result.requestsRead !== requests || sendErrors > 0 || readErrors > 0)) {
+  process.stderr.write(
+    `The fill hop is incomplete: ${String(result.requestsRead)} of ${String(requests)} requests read, ${String(sendErrors)} send and ${String(readErrors)} read errors.\n`,
+  );
+  process.exitCode = 1;
+}

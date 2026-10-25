@@ -1,6 +1,7 @@
 import {
   CONSENT_POLICY_VERSION,
   DEV_OTP,
+  MATCHER_FILLS_GROUP,
   OtpRequestResponse,
   Session,
   routes,
@@ -17,7 +18,10 @@ import { PRE_SESSION_CSRF } from '../../test/authFlow.js';
 import { manualClock } from '../../test/manualClock.js';
 import { describeWithPostgresAndRedis } from '../../test/postgresRedisApp.js';
 
-// NSTOCK-0370: the commit half of tick to fill (ADR 0013), measured on Postgres and Redis. Users
+// NSTOCK-0370: the commit half of tick to fill (ADR 0013), measured on Postgres and Redis. A
+// wall-clock test, so it runs alone via `npm run test:latency -w @nthstock/api`
+// (vitest.latency.config.ts), not in the main suite; matcherFills.integration.test.ts is the
+// deterministic check of what a fill commits. Users
 // rest a BUY LIMIT each; the matcher's fill requests for all of them land on the fill stream in
 // one burst, as from one tick that crosses every order; apps/api (MATCHER_MODE=worker) reads them
 // in its consumer group and commits each through the account store. Each latency runs from the
@@ -31,7 +35,10 @@ const RATE = Number(process.env['MATCHER_BENCH_RATE'] ?? 100);
 const SHARDS = 2;
 const master = generateSymbolMaster({ equityCount: 20 });
 const EQUITY = master.equities[0]?.instrument;
-const TOKEN = EQUITY?.token ?? 0;
+if (!EQUITY) throw new Error('the symbol master has no equities');
+const TOKEN = EQUITY.token;
+/** How long one wait for commits may take before the test names what is still pending. */
+const COMMIT_WAIT_MS = 30_000;
 const SHARD = shardOf(TOKEN, SHARDS);
 const AT = '2026-09-28T04:30:00.000Z'; // Monday 10:00 IST, market open
 const silent = { info: () => undefined, warn: () => undefined };
@@ -42,7 +49,8 @@ async function login(
   i: number,
 ): Promise<{ userId: string; access: string; remoteAddress: string }> {
   const remoteAddress = `10.${String(Math.floor(i / 250))}.${String(i % 250)}.1`;
-  const mobile = `98${String(70_000_000 + i)}`;
+  // The demo's fake range (9000000001 and up), offset clear of the seeded demo users.
+  const mobile = String(9_000_500_000 + i);
   const requested = await app.inject({
     method: 'POST',
     url: routes.otpRequest.path,
@@ -62,9 +70,11 @@ async function login(
   return { userId: session.user.id, access: session.accessToken, remoteAddress };
 }
 
-const percentile = (values: number[], p: number) => {
+/** The p-th percentile, or null for an empty sample (so a lost sample never reads as 0 ms). */
+const percentile = (values: number[], p: number): number | null => {
+  if (values.length === 0) return null;
   const sorted = [...values].sort((a, b) => a - b);
-  return sorted[Math.min(sorted.length - 1, Math.ceil((p / 100) * sorted.length) - 1)] ?? 0;
+  return sorted[Math.min(sorted.length - 1, Math.ceil((p / 100) * sorted.length) - 1)] ?? null;
 };
 
 describeWithPostgresAndRedis('matcher fill commit latency (integration, NSTOCK-0370)', (h) => {
@@ -73,9 +83,7 @@ describeWithPostgresAndRedis('matcher fill commit latency (integration, NSTOCK-0
     const redis = h.redis();
     const clock = manualClock(AT);
     const market = new MockMarketDataAdapter({ master, clock, externalTicks: true });
-    const base = (await new MockMarketDataAdapter({ master }).getQuote(
-      EQUITY?.symbol ?? '',
-    )) as Quote;
+    const base = (await new MockMarketDataAdapter({ master }).getQuote(EQUITY.symbol)) as Quote;
     await redis.hset(
       `${prefix}last:${String(SHARD)}`,
       String(TOKEN),
@@ -102,6 +110,7 @@ describeWithPostgresAndRedis('matcher fill commit latency (integration, NSTOCK-0
     await app.ready();
 
     const resting: { userId: string; orderId: string }[] = [];
+    const users = new Map<string, { access: string; remoteAddress: string }>();
     for (let i = 0; i < USERS; i += 1) {
       const user = await login(app, i);
       const placed = await app.inject({
@@ -119,13 +128,17 @@ describeWithPostgresAndRedis('matcher fill commit latency (integration, NSTOCK-0
         },
       });
       expect(placed.statusCode, placed.body).toBe(200);
-      resting.push({ userId: user.userId, orderId: (placed.json() as Order).id });
+      const orderId = (placed.json() as Order).id;
+      resting.push({ userId: user.userId, orderId });
+      users.set(orderId, user);
     }
 
     const sentAt = new Map<string, number>();
     const tookMs = new Map<string, number>();
     const waiting = new Set<() => void>();
+    const lastStatus = new Map<string, string>();
     app.deps.orders.onOrderUpdate((_userId, order) => {
+      lastStatus.set(order.id, order.status);
       const at = sentAt.get(order.id);
       if (order.status !== 'EXECUTED' || at === undefined) return;
       tookMs.set(order.id, performance.now() - at);
@@ -133,9 +146,21 @@ describeWithPostgresAndRedis('matcher fill commit latency (integration, NSTOCK-0
       for (const wake of waiting) wake();
     });
     const committed = (orders: readonly { orderId: string }[]) =>
-      new Promise<void>((resolve) => {
+      new Promise<void>((resolve, reject) => {
+        const timer = setTimeout(() => {
+          waiting.delete(check);
+          const pending = orders
+            .filter(({ orderId }) => !tookMs.has(orderId))
+            .map(({ orderId }) => `${orderId} (${lastStatus.get(orderId) ?? 'no update'})`);
+          reject(
+            new Error(
+              `fills not committed after ${String(COMMIT_WAIT_MS)} ms: ${pending.join(', ')}`,
+            ),
+          );
+        }, COMMIT_WAIT_MS);
         const check = () => {
           if (orders.every(({ orderId }) => tookMs.has(orderId))) {
+            clearTimeout(timer);
             waiting.delete(check);
             resolve();
           }
@@ -157,7 +182,10 @@ describeWithPostgresAndRedis('matcher fill commit latency (integration, NSTOCK-0
     };
     const key = `${prefix}fills:${String(SHARD)}`;
     const stats = (orders: readonly { orderId: string }[]) => {
-      const values = orders.map(({ orderId }) => tookMs.get(orderId) ?? Number.NaN);
+      const values = orders.flatMap(({ orderId }) => {
+        const ms = tookMs.get(orderId);
+        return ms === undefined ? [] : [ms];
+      });
       return {
         p50: percentile(values, 50),
         p95: percentile(values, 95),
@@ -183,7 +211,8 @@ describeWithPostgresAndRedis('matcher fill commit latency (integration, NSTOCK-0
       sentAt.set(order.orderId, started);
       pipeline.xadd(key, '*', ...request(order));
     }
-    await pipeline.exec();
+    const sent = await pipeline.exec();
+    expect(sent?.every(([error]) => error === null)).toBe(true);
     await committed(burst);
     const burstMs = performance.now() - started;
 
@@ -196,6 +225,25 @@ describeWithPostgresAndRedis('matcher fill commit latency (integration, NSTOCK-0
       },
     };
     process.stdout.write(`matcher fill commit latency ${JSON.stringify(result)}\n`);
-    expect(result.steady.p95).toBeLessThan(100);
+
+    // Every request was acknowledged, and each fill is on the record at the limit price.
+    const [unacked] = (await redis.xpending(key, MATCHER_FILLS_GROUP)) as [number];
+    expect(unacked).toBe(0);
+    for (const { orderId } of [steady[0], burst[0]].filter((o) => o !== undefined)) {
+      const owner = users.get(orderId);
+      const stored = await app.inject({
+        method: 'GET',
+        url: `/v1/orders/${orderId}`,
+        headers: { authorization: `Bearer ${owner?.access ?? ''}` },
+        remoteAddress: owner?.remoteAddress ?? '',
+      });
+      expect(stored.json()).toMatchObject({
+        status: 'EXECUTED',
+        filledQty: 1,
+        avgFillPrice: 1_390_00,
+      });
+    }
+    expect(result.steady.p95).not.toBeNull();
+    expect(result.steady.p95 ?? Number.POSITIVE_INFINITY).toBeLessThan(100);
   }, 120_000);
 });

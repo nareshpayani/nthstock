@@ -105,7 +105,12 @@ replaced at the new price, so the book stays full.
 Every entry a tick reads is one it fills, triggers or moves, or an entry a ratchet left behind
 (spec §11 criterion 3). Loading 1,00,000 orders takes about 0.1 s.
 
-**2. The commit** (`matcherFillLatency.integration.test.ts`, `MATCHER_BENCH_USERS=400`): apps/api
+With `--redis` the run fails (exit code 1) if any fill request is lost, a send or read fails, or
+the reader does not stop: the result then reports `lost`, `sendErrors` and `readErrors`. An empty
+sample prints as `null`, never as 0 ms. Unknown flags and flags without a value are refused.
+
+**2. The commit** (`matcherFill.latency.test.ts`, run alone with
+`MATCHER_BENCH_USERS=400 npm run test:latency -w @nthstock/api` against Postgres and Redis): apps/api
 with `MATCHER_MODE=worker` on Postgres and Redis reads fill requests from the stream and commits
 each through the account store. Latency runs from the `XADD` to the order update, which apps/api
 sends only after the commit.
