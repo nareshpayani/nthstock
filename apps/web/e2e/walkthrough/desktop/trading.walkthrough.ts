@@ -64,6 +64,8 @@ async function tapUntil(
   for (let attempt = 0; attempt < times && !(await done()); attempt += 1) {
     await act.click(button, 1400);
   }
+  // A caption must never describe something the recording did not show.
+  if (!(await done())) throw new Error(`tapUntil: condition still false after ${times} taps`);
 }
 
 clip(
