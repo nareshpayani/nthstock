@@ -190,17 +190,33 @@ the chart shows after a reload.
   reads, so the fallback is contained.
 
 ### Price alerts and notifications
-- `AlertDesk` (`packages/paperEngine/src/alertDesk.ts`) runs in both backends beside the paper desk:
-  it subscribes to an instrument only while an active alert needs it, fires an ABOVE or BELOW alert
-  once on the first tick at or past its level (a gap fires with the LTP that crossed), and refuses a
-  level the price has already passed.
-- Fired alerts, executed orders and triggered trailing stops add notifications (newest 100 per user,
-  with a read flag). Routes: `/v1/alerts` (GET, POST), `/v1/alerts/:id` (DELETE),
-  `/v1/notifications` (GET), `/v1/notifications/read` (POST); at most 50 active alerts per user.
-- Delivery: the mock socket sends a `notification` message to the owner at once; in api mode the
-  client polls every 30 s until apps/realtime carries notifications (the notifications service of
-  Phases 3 to 5). The web app toasts a fired alert on any page and draws active alerts as dotted
-  price lines on the chart.
+Spec `market-data-and-matching.md` §6 (E24, NSTOCK-0379 to 0385). The mock backend keeps `AlertDesk`
+(`packages/paperEngine/src/alertDesk.ts`) in the browser; api mode stores everything in Postgres.
+- **Notifications** (NSTOCK-0379): a `notifications` row (migration 0017; kinds `PRICE_ALERT`, `ORDER_FILLED`,
+  `ORDER_REJECTED`, `TRAILING_STOP`, `AMO_RELEASED`, `SQUARED_OFF`, `SECURITY`) is written in the same
+  transaction as its cause: the account store derives fill, rejection, AMO release, square-off and trailing stop
+  notices from each order change (`orders/changeNotifications.ts`) and appends them beside the audit entries. The
+  newest 100 per user are kept. Bodies are built from contract types and never hold a mobile number or a name.
+- **Outbox** (NSTOCK-0379): each row gets a `notification_outbox` row in the same transaction. After commit apps/api
+  publishes a `NotificationEvent` on `nthstock:notify:v1:{userId}` and clears the outbox row; a relay publishes
+  rows older than 5 s every 5 s, so a crash or a Redis outage only delays delivery. Delivery is at least once and
+  the web app drops an id it already holds.
+- **Fan-out** (NSTOCK-0379): apps/realtime subscribes each connected user's notify channel beside their order
+  channel and sends `{ type: 'notification' }` to that user's sockets only; an event whose `userId` does not match
+  its channel, or that fails the contract, is dropped.
+- **Price alerts** (NSTOCK-0383): alerts live in `price_alerts` (migration 0018), at most 50 active per user. A
+  firing is one transaction, `UPDATE … WHERE status = 'ACTIVE' RETURNING` plus the notification and its outbox
+  row, so an alert fires exactly once whoever sees the tick first. apps/api watches the active alerts' instruments
+  (reloaded at start) and sends `ALERT_ADD` and `ALERT_CANCEL` to the shard's matcher command stream; the matcher
+  holds alerts on its `OrderBook` in two price heaps (ABOVE lowest first, BELOW highest first), reloads the active
+  ones every 60 s, and fires through the same transaction, then publishes. A level the price has already passed is
+  refused; a gap fires with the LTP that crossed it.
+- **Security notices** (NSTOCK-0382): a sign-in from a new device, two-factor turned on or off, and logging out the
+  other sessions raise a `SECURITY` notification naming the device type and the IST time ("Not you? Change your
+  PIN."). Raising one never fails the action it reports.
+- **Web** (NSTOCK-0384): the bell and the toasts update from the socket push with no poll; a pushed id already held
+  is dropped, and the list and the alerts are re-read after a reconnect. Routes: `/v1/alerts` (GET, POST),
+  `/v1/alerts/:id` (DELETE), `/v1/notifications` (GET), `/v1/notifications/read` (POST).
 
 ### Two-factor authentication and step-up
 - TOTP is RFC 6238 (HMAC-SHA1, 6 digits, 30 s step, ±1 step) in `packages/utils/src/totp.ts`, on
