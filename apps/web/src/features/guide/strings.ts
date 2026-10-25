@@ -819,7 +819,7 @@ export const strings = {
           items: [
             'The first OTP login sends consentVersion, the policy version the user ticked. The API refuses a sign-up without the current version (400 CONSENT_REQUIRED) and writes the user and a consents row in one transaction, then audits CONSENT_GRANTED.',
             'POST /v1/account/deletion needs a step-up and confirm: DELETE. The user is marked deleted first, so no login can start a new session; then every session is revoked with reason ACCOUNT_DELETED (tokens refused, sockets closed), OPEN and AMO paper orders are cancelled, and ACCOUNT_DELETION_REQUESTED is audited with the purge date.',
-            'For 30 days an OTP login for that mobile answers 403 ACCOUNT_DELETED with purgeAfter, and the login page says, in IST, when the data is erased. The purge job (a BullMQ job, with the other Phase 2 jobs) then erases the PII and leaves a tombstone; audit entries never held a mobile or a name.',
+            'For 30 days an OTP login for that mobile answers 403 ACCOUNT_DELETED with purgeAfter, and the login page says, in IST, when the data is erased. The account.purge job (BullMQ, 02:00 IST daily, as the nthstock_purge role) then deletes every row of the user from every table but the audit log, one transaction per account, erases the PII and leaves a tombstone, so the mobile can sign up again; audit entries never held a mobile or a name.',
             'The web app navigates to /login?deleted=… before it clears the session, forgets the trusted browser and empties the query cache, so nothing from the account stays on the device.',
           ],
         },

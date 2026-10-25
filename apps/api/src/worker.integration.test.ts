@@ -32,6 +32,7 @@ describeWithPostgres('job worker process (T-207)', () => {
         JOBS_MODE: 'bullmq',
         DB_DRIVER: 'postgres',
         DATABASE_URL: postgres.appUrl,
+        PURGE_DATABASE_URL: postgres.purgeUrl,
         REDIS_URL: redis.url,
         JOBS_PREFIX: prefix,
       },
@@ -54,6 +55,7 @@ describeWithPostgres('job worker process (T-207)', () => {
     await connection.quit();
     for (const key of keys) expect(JOB_NAMES).toContain(key);
     expect(keys).toContain('session.amoRelease');
+    expect(keys).toContain('account.purge');
 
     child.kill('SIGTERM');
     expect(await exited).toBe(0);

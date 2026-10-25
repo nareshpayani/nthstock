@@ -21,6 +21,7 @@ describe('loadConfig', () => {
       jwtSecret: undefined,
       redisUrl: null,
       databaseUrl: null,
+      purgeDatabaseUrl: null,
       pgPoolMax: 10,
       dbDriver: 'memory',
       jobsMode: 'inline',
@@ -32,6 +33,7 @@ describe('loadConfig', () => {
     });
     expect(loadConfig({ REDIS_URL: ' ' }).redisUrl).toBeNull();
     expect(loadConfig({ DATABASE_URL: ' ' }).databaseUrl).toBeNull();
+    expect(loadConfig({ PURGE_DATABASE_URL: ' ' }).purgeDatabaseUrl).toBeNull();
   });
 
   it('reads every variable', () => {
@@ -44,6 +46,7 @@ describe('loadConfig', () => {
         MOCK_MARKET_ALWAYS_OPEN: 'true',
         REDIS_URL: 'redis://127.0.0.1:6379',
         DATABASE_URL: 'postgres://nthstock_app:pw@127.0.0.1:5432/nthstock',
+        PURGE_DATABASE_URL: 'postgres://nthstock_purge:pw@127.0.0.1:5432/nthstock',
         PG_POOL_MAX: '20',
         DB_DRIVER: 'postgres',
         JOBS_MODE: 'bullmq',
@@ -60,6 +63,7 @@ describe('loadConfig', () => {
       jwtSecret: 'test-only-secret-at-least-32-characters',
       redisUrl: 'redis://127.0.0.1:6379',
       databaseUrl: 'postgres://nthstock_app:pw@127.0.0.1:5432/nthstock',
+      purgeDatabaseUrl: 'postgres://nthstock_purge:pw@127.0.0.1:5432/nthstock',
       pgPoolMax: 20,
       dbDriver: 'postgres',
       jobsMode: 'bullmq',

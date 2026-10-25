@@ -128,12 +128,13 @@ describe('auth.tokenCleanup', () => {
 describe('createJobs (maintenance)', () => {
   const deps = {
     database: null,
+    purgeDatabase: null,
     auth: createMemoryAuthRepo(),
   } as unknown as JobsDeps; // The session-job deps are never called here.
 
-  it('schedules both jobs daily at their IST times', () => {
+  it('schedules the maintenance jobs daily at their IST times', () => {
     const jobs = createJobs(deps);
-    for (const name of ['db.orderPartitions', 'auth.tokenCleanup'] as const) {
+    for (const name of ['db.orderPartitions', 'auth.tokenCleanup', 'account.purge'] as const) {
       expect(jobs.find((job) => job.name === name)?.schedule).toEqual(JOB_SCHEDULES[name]);
     }
     expect(JOB_SCHEDULES['db.orderPartitions']).toEqual({
@@ -144,6 +145,7 @@ describe('createJobs (maintenance)', () => {
       cron: '0 3 * * *',
       tradingDaysOnly: false,
     });
+    expect(JOB_SCHEDULES['account.purge']).toEqual({ cron: '0 2 * * *', tradingDaysOnly: false });
   });
 
   it('runs them on a weekend too', async () => {
@@ -163,5 +165,7 @@ describe('createJobs (maintenance)', () => {
       status: 'done',
       result: { refreshTokens: 0, deviceTokens: 0, sessions: 0 },
     });
+    // DB_DRIVER=memory has no purge role: nothing to purge.
+    expect(await run('account.purge')).toEqual({ status: 'done', result: { accounts: 0 } });
   });
 });
