@@ -69,6 +69,54 @@ function harness(store: Partial<AlertStore> & { active: AlertStore['active'] }) 
 }
 
 describe('startAlertDesk (NSTOCK-0383)', () => {
+  it('reloads on its timer until stopped', async () => {
+    const active = vi.fn(() => Promise.resolve([alertAt('a1', MINE)]));
+    let tick: (() => void) | undefined;
+    const setIntervalFake = vi.fn((callback: () => void, ms?: number) => {
+      tick = callback;
+      return ms as unknown as ReturnType<typeof setInterval>;
+    });
+    const clearIntervalFake = vi.fn();
+    const books = new Map<number, OrderBook>();
+    const book = (token: number) => {
+      let found = books.get(token);
+      if (!found) {
+        found = new OrderBook();
+        books.set(token, found);
+      }
+      return found;
+    };
+    const desk = startAlertDesk({
+      store: {
+        active,
+        fire: (alertId) => Promise.resolve(eventFor(alertId)),
+        published: () => Promise.resolve(),
+      },
+      publisher: { publish: () => Promise.resolve(1) },
+      shard: SHARD,
+      shards: SHARDS,
+      books,
+      book,
+      log: { info: () => undefined, warn: () => undefined },
+      everyMs: 5_000,
+      timer: {
+        setInterval: setIntervalFake as unknown as typeof setInterval,
+        clearInterval: clearIntervalFake as unknown as typeof clearInterval,
+      },
+    });
+    await desk.ready();
+    expect(setIntervalFake).toHaveBeenCalledWith(expect.any(Function), 5_000);
+    expect(active).toHaveBeenCalledTimes(1);
+
+    tick?.();
+    await vi.waitFor(() => {
+      expect(active).toHaveBeenCalledTimes(2);
+    });
+
+    await desk.stop();
+    expect(clearIntervalFake).toHaveBeenCalledTimes(1);
+  });
+
   it("loads only this shard's active alerts onto the books", async () => {
     const { desk, books } = harness({
       active: () => Promise.resolve([alertAt('a1', MINE), alertAt('a2', OTHER)]),

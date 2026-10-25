@@ -1,4 +1,4 @@
-import type { Quote } from '@nthstock/contracts';
+import { PRICE_ALERTS_MAX_ACTIVE, type Quote } from '@nthstock/contracts';
 import type { MarketDataAdapter } from '@nthstock/marketData';
 import { describe, expect, it, vi } from 'vitest';
 import { manualClock } from '../../test/manualClock.js';
@@ -15,13 +15,16 @@ const quote = (ltp: number) =>
 const clock = manualClock('2026-09-25T04:30:00.000Z');
 
 /** One API process on a shared store; `tick` feeds its market subscription. */
-function process(shared: {
-  repo: ReturnType<typeof createMemoryNotificationsRepo>;
-  alertsRepo: AlertsRepo;
-}) {
+function process(
+  shared: {
+    repo: ReturnType<typeof createMemoryNotificationsRepo>;
+    alertsRepo: AlertsRepo;
+  },
+  getQuote: () => Promise<Quote | null> = () => Promise.resolve(quote(1_500_00)),
+) {
   const listeners = new Set<(quotes: Quote[]) => void>();
   const market = {
-    getQuote: () => Promise.resolve(quote(1_500_00)),
+    getQuote,
     subscribe: (_symbols: string[], listener: (quotes: Quote[]) => void) => {
       listeners.add(listener);
       return () => listeners.delete(listener);
@@ -83,6 +86,42 @@ describe('alert service (NSTOCK-0383)', () => {
     expect(watching()).toBe(0);
     await expect(alerts.cancel('usr_a', alert.id)).rejects.toMatchObject({ status: 409 });
     await expect(alerts.cancel('usr_b', alert.id)).rejects.toMatchObject({ status: 404 });
+  });
+
+  it('refuses a BELOW level the price has already passed', async () => {
+    const { alerts } = setup();
+    await expect(
+      alerts.create('usr_a', { ...above, condition: 'BELOW', price: 1_510_00 }),
+    ).rejects.toMatchObject({ status: 400, code: 'VALIDATION_ERROR' });
+    await expect(
+      alerts.create('usr_a', { ...above, condition: 'BELOW', price: 1_490_00 }),
+    ).resolves.toMatchObject({ status: 'ACTIVE' });
+  });
+
+  it('answers 404 for an unknown symbol and stores nothing', async () => {
+    const repo = createMemoryNotificationsRepo({ clock });
+    const shared = { repo, alertsRepo: createMemoryAlertsRepo({ notifications: repo }) };
+    const { alerts } = process(shared, () => Promise.resolve(null));
+    await expect(alerts.create('usr_a', above)).rejects.toMatchObject({
+      status: 404,
+      code: 'NOT_FOUND',
+    });
+    expect((await alerts.list('usr_a')).items).toHaveLength(0);
+  });
+
+  it('refuses an alert past the active limit with LIMIT_REACHED, and frees a slot on cancel', async () => {
+    const { alerts } = setup();
+    const made = [];
+    for (let i = 0; i < PRICE_ALERTS_MAX_ACTIVE; i += 1) {
+      made.push(await alerts.create('usr_a', { ...above, price: 1_530_00 + i }));
+    }
+    await expect(alerts.create('usr_a', above)).rejects.toMatchObject({
+      status: 422,
+      code: 'LIMIT_REACHED',
+    });
+    await expect(alerts.create('usr_b', above)).resolves.toMatchObject({ status: 'ACTIVE' });
+    await alerts.cancel('usr_a', made[0]?.id ?? '');
+    await expect(alerts.create('usr_a', above)).resolves.toMatchObject({ status: 'ACTIVE' });
   });
 
   it('fires once when two processes see the crossing tick', async () => {
