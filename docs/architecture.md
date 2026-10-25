@@ -109,17 +109,18 @@ streams, so apps/api stops matching in process.
   appends `ADD`, `MODIFY` or `CANCEL` for a LIMIT order to `nthstock:matcher:commands:v1:{shard}` (capped at
   100,000 entries), carrying the account version of that commit. Every matcher process for the shard reads the
   stream with `XREAD BLOCK` and applies each command to the instrument's book by the version rule, so a late or
-  replayed command never undoes a newer one; malformed entries are logged and skipped. `STOP_ADD` and
-  `STOP_CANCEL` are in the contract and applied by the worker; apps/api sends them with server-side trailing stops.
+  replayed command never undoes a newer one; malformed entries are logged and skipped. After each trailing stop
+  change apps/api also sends `STOP_ADD` (an `ARMED` or `TRAILING` stop with the state the book steps; a ratchet
+  is a `STOP_ADD` too) or `STOP_CANCEL` (any other status), at the same account version (NSTOCK-0368).
 - **Reconcile** (NSTOCK-0366): on start and every 60 s the matcher reads its shard's OPEN LIMIT orders and the
   account versions from Postgres in one REPEATABLE READ snapshot, through the `orders_shard_live_idx` partial
   index on `orders.shard` (migration 0016, set on insert as `shardOf(token, QUOTE_SHARDS)`). It upserts every
   live order and takes off any order Postgres no longer has live, each at the account version, so a lost command
   is repaired within a minute while a command newer than the read stands. An upsert at the same price keeps the
   order's heap entry, so the rounds leave nothing stale. Rows from before the column are matched by token.
-- **Status:** the book, the worker, the order commands and the reconcile loop are built. Fills, server-side
-  trailing stops, `MATCHER_MODE` and the benchmark are NSTOCK-0367 to 0370; until then the worker only logs what a
-  tick crossed.
+- **Status:** the book, the worker, the order and stop commands and the reconcile loop (orders only) are built.
+  Fills, reconciling stops, `MATCHER_MODE` and the benchmark are NSTOCK-0367 to 0370; until then the worker only
+  logs what a tick crossed.
 
 ### Server-side trailing stops (NSTOCK-0368)
 In api mode trailing stops run on the server with the same engine rules as the browser mock (SPEC-TFC-1 §6, §10.6).
@@ -136,8 +137,8 @@ In api mode trailing stops run on the server with the same engine rules as the b
   their newest `seq`, positions and funds) on the user's order channel, after the order updates. apps/realtime sends it
   to that user's connections as an `accountDelta` frame with no quotes, so the web app's trading store runs in api mode
   exactly as on MSW: it loads the account state, applies frames, and reloads on a gap.
-- **Matcher:** ticks still step stops in apps/api's process. Once the matcher worker (NSTOCK-0364, 0365) is on
-  `develop`, apps/api sends `STOP_ADD` and `STOP_CANCEL` to it instead.
+- **Matcher:** apps/api sends every committed stop change to the matcher as `STOP_ADD` or `STOP_CANCEL`. Until
+  `MATCHER_MODE` hands the books to the worker, ticks still step stops in apps/api's own process.
 
 ### Market data and chart bars
 - `packages/marketData` generates each range's own bars (1D: 1-minute, 1W: 5-minute, 1M: hourly,

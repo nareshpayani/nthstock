@@ -408,10 +408,10 @@ export const strings = {
           kind: 'steps',
           items: [
             'apps/matcher runs one process per shard of instruments. A Redis lease picks the one that acts; the others follow the same streams, so a standby is current the moment it takes over.',
-            'After each order commit, apps/api appends an ADD, MODIFY or CANCEL command to the shard’s command stream, stamped with the account version. A late or replayed command never undoes a newer one.',
+            'After each order commit, apps/api appends an ADD, MODIFY or CANCEL command to the shard’s command stream, stamped with the account version, and a STOP_ADD or STOP_CANCEL after each trailing stop change. A late or replayed command never undoes a newer one.',
             'Each instrument has an order book: limit orders and trailing stops sit in price heaps, so a tick reads only what it fills, triggers or moves, not every resting order. A property test checks it against a full walk.',
             'Every minute, and on start, the matcher reads its shard’s live orders from Postgres, the record, and repairs its books, so a lost command is fixed within a minute.',
-            'Still to come: fills committed through the account store, server-side trailing stops, a switch to turn it on, and a benchmark.',
+            'Still to come: fills committed through the account store, reconciling trailing stops, a switch to turn it on, and a benchmark. Until then apps/api steps trailing stops in its own process.',
           ],
         },
         {
@@ -1330,7 +1330,7 @@ export const strings = {
     ticks: {
       title: 'Tick pipeline',
       description:
-        'A seeded symbol master feeds a GBM price step per instrument inside the mock market adapter. In the hosted demo the in-browser paper engine turns ticks into accountDelta frames for the trading store. On the full stack the API tick pump publishes to Redis and apps/realtime sends conflated binary frames to the quote store.',
+        'A seeded symbol master feeds a GBM price step per instrument inside the mock market adapter. In the hosted demo the in-browser paper engine turns ticks into accountDelta frames for the trading store. On the full stack the API tick pump publishes to Redis, apps/realtime sends conflated binary frames to the quote store, and the engine in apps/api sends accountDelta frames through apps/realtime after each commit.',
       groups: { demo: 'Hosted demo, in the browser', stack: 'Full stack' },
       nodes: {
         master: ['Symbol master', '5,000 equities, seeded'],
@@ -1348,7 +1348,7 @@ export const strings = {
         'The symbol master creates 5,000 equities and the indices from a fixed seed.',
         'Each instrument steps its price with geometric Brownian motion: the one on screen every 250 ms, the rest every second.',
         'The mock market adapter turns the steps into quotes, 1-minute bars, candles and depth, and can replay missed ticks after a pause.',
-        'In the hosted demo, the paper engine matches orders and steps trailing stops on each tick, and sends one accountDelta frame every 250 ms to the trading store.',
+        'In the hosted demo, the paper engine matches orders and steps trailing stops on each tick, and sends one accountDelta frame every 250 ms to the trading store. On the full stack the same engine runs in apps/api, which sends an accountDelta frame after each commit.',
         'On the full stack, the apps/api tick pump publishes each batch to Redis, and apps/realtime sends each socket its subscribed symbols, at most 4 updates a second, as binary frames to the quote store.',
       ],
     },

@@ -13,6 +13,7 @@ export { createOrderService, type OrderService } from './service.js';
 export {
   commandFor,
   startMatcherCommands,
+  stopCommandFor,
   type CommandStream,
   type MatcherCommands,
 } from './matcherCommands.js';
