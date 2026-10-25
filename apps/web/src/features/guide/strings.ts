@@ -95,7 +95,7 @@ export const strings = {
         {
           kind: 'steps',
           items: [
-            'Open the login page and tap Try demo. It loads a ready-made account with watchlists and holdings.',
+            'Open the login page and tap Try demo. It loads a ready-made account with watchlists and holdings and opens RELIANCE with the Demo simulator on, on a phone too.',
             'Or log in by hand: enter 9000000001, tick the consent box, choose Get OTP, and enter 123456. It is a demo code and works only on the demo site.',
             'On the PIN step, choose Skip for now. You land on the dashboard as Demo Investor.',
           ],
@@ -122,6 +122,20 @@ export const strings = {
             'Drag an order line’s handle to modify it. Tap your position chip to add a trailing stop.',
             'Switch on Scalp for the one-tap pad. Arm it first; it disarms itself after 2 minutes idle.',
             'Use the labelled Demo simulator on the instrument page to move the price, so a trailing stop ratchets and triggers in seconds.',
+          ],
+        },
+        {
+          kind: 'links',
+          label: 'Watch it first',
+          items: [
+            {
+              label: 'Walkthrough video: the five journeys on a 390 px phone, 80 seconds',
+              href: repoLink('apps/web/public/demo/walkthrough.mp4'),
+            },
+            {
+              label: 'Shot list and how the video is recorded',
+              href: repoLink('docs/runbooks/demo-walkthrough.md'),
+            },
           ],
         },
         {

@@ -6,6 +6,24 @@ Each step below is also an automated check in
 [`e2e/journeys.spec.ts`](../../apps/web/e2e/journeys.spec.ts), so the take can be rehearsed with a
 known result.
 
+## The scripted take
+
+The published video (<https://nthstock-a13a5.web.app/demo/walkthrough.mp4>, about 80 seconds) is
+this shot list played by
+[`e2e/walkthrough/demoWalkthrough.walkthrough.ts`](../../apps/web/e2e/walkthrough/demoWalkthrough.walkthrough.ts)
+on a 390 × 844 touch phone, with a caption per step and a dot where the finger lands. It uses only
+what a visitor has: Try demo, the price-axis gutter, the ticket, the position chip, the Demo
+simulator and the scalper, on RELIANCE (the Try demo instrument). To re-record it:
+
+```bash
+npm run e2e:walkthrough -w @nthstock/web            # production build, served locally
+bash tools/demo/recordWalkthrough.sh https://nthstock-a13a5.web.app   # or the live site
+```
+
+Both write `apps/web/public/demo/walkthrough.mp4` (H.264, so iPhone Safari plays it); commit it and
+release, and the site serves the new take at the same URL. A hand-held take on a phone, following
+the steps below, can replace the file the same way.
+
 ## Before recording
 
 - Phone in portrait, with Do Not Disturb on, the screen recorder ready and the browser zoom at 100%.

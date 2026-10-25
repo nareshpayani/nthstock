@@ -1,6 +1,12 @@
 import { setupWorker } from 'msw/browser';
 import { resolveWsUrl, type RuntimeConfig } from '@/app/config/runtimeConfig';
-import { enterDemoMode, isDemoMode, registerSimulator } from '@/shared/lib/demoSimulator';
+import {
+  enterDemoMode,
+  isDemoMode,
+  markDemoPending,
+  registerSimulator,
+  setDemoStarter,
+} from '@/shared/lib/demoSimulator';
 import { wantsDemo, withoutDemoParam } from './demoParam';
 import { seedMockDemo } from './demoSeed';
 import { ORDER_SWEEP_MS, createMockHandlers } from './handlers';
@@ -100,9 +106,23 @@ export async function startMockWorker(
     if (document.visibilityState === 'hidden') orders.flush();
   });
   // The Simulator exists only in demo mode (SPEC-TFC-1 TFC-12); a reload in the same session keeps it.
-  if (listStorage && isDemoMode(listStorage)) {
+  let simulatorOn = false;
+  const startSimulator = () => {
+    if (simulatorOn) return;
+    simulatorOn = true;
     registerSimulator(createSimulator({ adapter, orders }));
-  }
+  };
+  if (listStorage && isDemoMode(listStorage)) startSimulator();
+  // Try demo outside demo mode: reload with ?demo=1, so the seed is written before the mocks read
+  // their saved state, as on a direct ?demo=1 load; the login page then carries on (TFC-12).
+  setDemoStarter(() => {
+    if (listStorage && !isDemoMode(listStorage) && markDemoPending(listStorage)) {
+      window.location.assign('/login?demo=1');
+      return 'reloading';
+    }
+    startSimulator();
+    return 'ready';
+  });
   // Chrome stops idle service workers; this re-registers the tab with a restarted one.
   const keeper = startWorkerKeeper();
   return { worker, adapter, orders, ensureActive: keeper.ensureActive };

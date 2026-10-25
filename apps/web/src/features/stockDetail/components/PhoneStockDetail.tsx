@@ -15,6 +15,7 @@ import { KeyStatsCard } from './KeyStatsCard';
 import { MarketDepthCard } from './MarketDepthCard';
 import { OverviewCard } from './OverviewCard';
 import { PositionStrip } from './PositionStrip';
+import { SimulatorPanel } from './SimulatorPanel';
 import { CHART_HEIGHT, StockChartCard } from './StockChartCard';
 import { StockHeader } from './StockHeader';
 
@@ -44,7 +45,7 @@ export type PhoneStockDetailProps = {
 /**
  * The instrument page on a phone (T12, SPEC-TFC-1 §9.4), a deliberate layout and not a shrunk
  * desktop: the header, the chart at about half the screen with its range row, then Overview,
- * Depth and Orders tabs, and at the bottom the position strip and a sticky Sell and Buy bar in
+ * Depth and Orders tabs (the Demo simulator above them in demo mode), and at the bottom the position strip and a sticky Sell and Buy bar in
  * thumb reach, above the safe area. Every control is at least 44 px. Equities only; indices keep
  * the header and chart.
  */
@@ -113,6 +114,8 @@ export function PhoneStockDetail({
           trading
         />,
       )}
+      {/* Demo mode only (TFC-12): under the chart, so a phone demo can ratchet and trigger a stop. */}
+      <SimulatorPanel symbol={symbol} />
       <Tabs value={tab} onValueChange={(next) => setTab(next as PhoneTab)} className="grid gap-0">
         <TabsList aria-label={strings.phone.tabsLabel} className="gap-0">
           {PHONE_TABS.map((key) => (
