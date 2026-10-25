@@ -284,7 +284,14 @@ export function createOrderService({
       trailingStops,
       funds: desk.fundsSummary(userId),
     };
-    for (const listener of [...deltaListeners]) listener(userId, delta);
+    for (const listener of [...deltaListeners]) {
+      // One failing listener must not stop the others, nor fail the commit already made.
+      try {
+        listener(userId, delta);
+      } catch (error) {
+        reportError(error);
+      }
+    }
   }
 
   /**
@@ -305,12 +312,26 @@ export function createOrderService({
   let liveLoaded = false;
 
   /**
-   * Loads every account with a live (AMO or OPEN) order, so a resting order placed before a
-   * restart fills on the tick that crosses it (spec backend-core §5.3).
+   * Loads every account with a live (AMO or OPEN) order or an active trailing stop, so a resting
+   * order placed before a restart fills on the tick that crosses it (spec backend-core §5.3) and
+   * a stop keeps stepping on ticks alone (NSTOCK-0368). One account that fails to load is reported
+   * and skipped; the next sweep tries it again.
    */
   async function hydrateLive(): Promise<void> {
-    for (const userId of await accounts.liveAccountIds()) await ensure(userId);
-    liveLoaded = true;
+    let failed = false;
+    for (const userId of await accounts.liveAccountIds()) {
+      try {
+        await ensure(userId);
+      } catch (error) {
+        failed = true;
+        reportError(
+          new Error(
+            `Account ${userId} did not load: ${error instanceof Error ? error.message : String(error)}`,
+          ),
+        );
+      }
+    }
+    liveLoaded = !failed;
   }
 
   const desk = new PaperDesk({

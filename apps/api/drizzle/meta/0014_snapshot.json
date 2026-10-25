@@ -1,5 +1,5 @@
 {
-  "id": "e2a4312d-160f-4282-bf6e-152dcf5b0330",
+  "id": "b97bfccf-dda6-4ac5-b1a0-83848575c085",
   "prevId": "e18b70e0-9505-49df-84dc-fc6ea4dadc4a",
   "version": "7",
   "dialect": "postgresql",
@@ -1475,6 +1475,22 @@
           "method": "btree",
           "with": {}
         },
+        "trailing_stops_active_user_id_idx": {
+          "name": "trailing_stops_active_user_id_idx",
+          "columns": [
+            {
+              "expression": "user_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "where": "\"trailing_stops\".\"status\" IN ('PENDING_ENTRY', 'ARMED', 'TRAILING', 'TRIGGERED')",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
         "trailing_stops_user_id_client_request_id_key": {
           "name": "trailing_stops_user_id_client_request_id_key",
           "columns": [
@@ -1543,6 +1559,10 @@
         "trailing_stops_qty_check": {
           "name": "trailing_stops_qty_check",
           "value": "\"trailing_stops\".\"protected_qty\" >= 0"
+        },
+        "trailing_stops_prices_check": {
+          "name": "trailing_stops_prices_check",
+          "value": "(\"trailing_stops\".\"activation_price\" IS NULL OR \"trailing_stops\".\"activation_price\" > 0) AND (\"trailing_stops\".\"stop_price\" IS NULL OR \"trailing_stops\".\"stop_price\" > 0) AND (\"trailing_stops\".\"watermark_price\" IS NULL OR \"trailing_stops\".\"watermark_price\" >= 0) AND (\"trailing_stops\".\"exit_limit_offset\" IS NULL OR \"trailing_stops\".\"exit_limit_offset\" >= 0)"
         },
         "trailing_stops_seq_check": {
           "name": "trailing_stops_seq_check",

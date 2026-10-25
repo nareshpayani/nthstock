@@ -11,6 +11,8 @@ import { MONDAY_10_00_IST, inr, scriptedPrices, setClock, setPrice } from './sup
 
 const onTick = (paise: number) => Math.round(paise / TICK_SIZE_PAISE) * TICK_SIZE_PAISE;
 
+const escape = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
 const rupeesIn = (text: string) => {
   const match = /₹([\d,]+\.\d\d)/.exec(text);
   if (!match?.[1]) throw new Error(`no price in "${text}"`);
@@ -58,10 +60,15 @@ test(`a trailing stop ratchets with scripted ticks and closes the position when 
     .toBeGreaterThan(placed);
   const raised = rupeesIn(await line.innerText());
 
-  // A pullback that stays above the stop leaves it where it is.
+  // A pullback that stays above the stop leaves it where it is: the backend's own copy, read
+  // after the tick (a read syncs the engine first), and the line both keep the raised stop.
   await setPrice(page, 'INFY', raised + 2 * TICK_SIZE_PAISE);
-  await page.waitForTimeout(1_500);
-  expect(rupeesIn(await line.innerText())).toBe(raised);
+  const stops = (await page.evaluate(async () => {
+    const response = await fetch('/v1/trailing-stops', { credentials: 'include' });
+    return (await response.json()) as { items: { stopPrice: number | null; status: string }[] };
+  })) as { items: { stopPrice: number | null; status: string }[] };
+  expect(stops.items[0]).toMatchObject({ status: 'TRAILING', stopPrice: raised });
+  await expect(line).toHaveText(new RegExp(`Trailing SL ${escape(inr(raised))} `));
 
   // Through the stop: the market exit sells the 5 and the stop ends Executed.
   await setPrice(page, 'INFY', raised - TICK_SIZE_PAISE);

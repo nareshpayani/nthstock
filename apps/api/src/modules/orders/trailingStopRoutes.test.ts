@@ -122,13 +122,54 @@ describe('trailing-stop routes (NSTOCK-0368)', () => {
     );
   });
 
-  it('refuses a stop without a position and a stop of another user', async () => {
+  it('refuses a stop without a position, another user’s stop, and bad or unsigned requests', async () => {
     const refused = await send('POST', routes.trailingStopPlace.path, stopRequest);
-    expect(refused.statusCode).toBeGreaterThanOrEqual(400);
-    expect(refused.statusCode).toBeLessThan(500);
-    expect(ApiError.safeParse(refused.json()).success).toBe(true);
+    expect(refused.statusCode).toBe(422);
+    expect(ApiError.parse(refused.json()).error.code).toBe('ORDER_REJECTED');
 
-    expect((await send('DELETE', '/v1/trailing-stops/ts_nobody')).statusCode).toBe(404);
+    await buy();
+    const mine = TrailingStop.parse(
+      (await send('POST', routes.trailingStopPlace.path, stopRequest)).json(),
+    );
+    const other = await loginWithOtp(app, '9876543211');
+    const theirs = await app.inject({
+      method: 'DELETE',
+      url: `/v1/trailing-stops/${mine.id}`,
+      headers: { authorization: `Bearer ${other.access}`, 'x-csrf-token': 'bearer' },
+    });
+    expect(theirs.statusCode).toBe(404);
+    const listed = await app.inject({
+      method: 'GET',
+      url: '/v1/trailing-stops',
+      headers: { authorization: `Bearer ${other.access}` },
+    });
+    expect(TrailingStopsResponse.parse(listed.json()).items).toEqual([]);
+
+    expect((await app.inject({ method: 'GET', url: '/v1/trailing-stops' })).statusCode).toBe(401);
+    const unsigned = await app.inject({
+      method: 'POST',
+      url: routes.trailingStopPlace.path,
+      headers: { authorization: `Bearer ${user.access}` },
+      payload: stopRequest,
+    });
+    expect(unsigned.statusCode).toBe(403);
+    const invalid = await send('POST', routes.trailingStopPlace.path, {
+      ...stopRequest,
+      trail: { unit: 'AMOUNT', amount: -1 },
+    });
+    expect(invalid.statusCode).toBe(400);
+  });
+
+  it('answers a retried place with the same stop (idempotency key)', async () => {
+    await buy();
+    const request = { ...stopRequest, clientRequestId: 'ts_retry_1' };
+    const first = TrailingStop.parse(
+      (await send('POST', routes.trailingStopPlace.path, request)).json(),
+    );
+    const again = TrailingStop.parse(
+      (await send('POST', routes.trailingStopPlace.path, request)).json(),
+    );
+    expect(again.id).toBe(first.id);
   });
 
   it('closes a position in one step, cancelling its stop', async () => {

@@ -95,20 +95,6 @@ export function parseRuntimeConfig(env: Readonly<Record<string, unknown>>): Runt
   };
 }
 
-/** What this build's backend can do, for features that only one mode supports yet. */
-export type TradingCapabilities = {
-  /**
-   * Trailing stops and `accountDelta` frames (SPEC-TFC-1 §10.6): the in-browser paper engine and,
-   * since NSTOCK-0368, apps/api (its account store keeps the stops and apps/realtime relays the
-   * frames). Both modes have them; the flag stays for a backend that does not.
-   */
-  trailingStops: boolean;
-};
-
-export function tradingCapabilities(config: Pick<RuntimeConfig, 'apiMode'>): TradingCapabilities {
-  return { trailingStops: config.apiMode === 'msw' || config.apiMode === 'api' };
-}
-
 /** The WebSocket URL to use: the configured one, or `/ws` on the page's own host. */
 export function resolveWsUrl(
   config: Pick<RuntimeConfig, 'wsUrl'>,

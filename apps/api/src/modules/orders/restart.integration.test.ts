@@ -172,4 +172,53 @@ describeWithPostgres('orders across an apps/api restart (integration, T-204)', (
     expect(done.seq).toBeGreaterThan(seqAfterRestart);
     expect(done.positions.find((p) => p.token === TOKEN)?.netQty).toBe(0);
   });
+
+  it('triggers a stop after a restart on ticks alone, with no request from its user (NSTOCK-0368)', async () => {
+    await pg.truncate();
+    const clock = manualClock('2026-09-28T04:30:00.000Z'); // Monday 10:00 IST, market open
+    const boot = () => {
+      const market = new MockMarketDataAdapter({ master, clock, scheduler: noTimers });
+      const app = buildApp({
+        deps: { clock, market, dbDriver: 'postgres', databaseUrl: pg.appUrl },
+        orderSweepMs: null,
+      });
+      running.push({ app, market });
+      return app;
+    };
+    const before = boot();
+    const user = await loginWithOtp(before, '9876543210');
+    const headers = { authorization: `Bearer ${user.access}`, 'x-csrf-token': 'bearer' };
+    const bought = await before.inject({
+      method: 'POST',
+      url: routes.orderPlace.path,
+      headers,
+      payload: { token: TOKEN, side: 'BUY', type: 'MARKET', product: 'DELIVERY', qty: 3 },
+    });
+    const fill = Order.parse(bought.json()).avgFillPrice ?? 0;
+    const placed = await before.inject({
+      method: 'POST',
+      url: routes.trailingStopPlace.path,
+      headers,
+      payload: {
+        token: TOKEN,
+        product: 'DELIVERY',
+        trail: { unit: 'AMOUNT', amount: 10_00 },
+        activationPrice: null,
+        exitOrderType: 'MARKET',
+        exitLimitOffset: null,
+      },
+    });
+    const stop = TrailingStop.parse(placed.json());
+    await before.close();
+    running.splice(0);
+
+    // The new process loads the account at boot: it has no resting order, only the stop.
+    const after = boot();
+    await after.ready();
+    const updates: TrailingStop[] = [];
+    after.deps.orders.onAccountDelta((_userId, delta) => updates.push(...delta.trailingStops));
+    after.deps.orders.pinPrice(TOKEN, fill - 11_00);
+    await after.deps.orders.sweep();
+    expect(updates.map((s) => [s.id, s.status])).toContainEqual([stop.id, 'EXECUTED']);
+  });
 });

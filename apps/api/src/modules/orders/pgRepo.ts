@@ -130,6 +130,17 @@ const toLedgerEntry = (row: LedgerRow): LedgerEntry => ({
   createdAt: row.createdAt.toISOString(),
 });
 
+/** The row's trail; the CHECK holds exactly one value to its unit, so a missing one is damage. */
+function trailOf(row: StopRow): TrailingStop['trail'] {
+  if (row.trailUnit === 'PERCENT' && row.trailBasisPoints !== null) {
+    return { unit: 'PERCENT', basisPoints: row.trailBasisPoints };
+  }
+  if (row.trailUnit === 'AMOUNT' && row.trailAmount !== null) {
+    return { unit: 'AMOUNT', amount: row.trailAmount };
+  }
+  throw new Error(`Trailing stop ${row.id} has no trail value for its unit`);
+}
+
 const toTrailingStop = (row: StopRow): TrailingStop => ({
   id: row.id,
   token: row.token,
@@ -139,10 +150,7 @@ const toTrailingStop = (row: StopRow): TrailingStop => ({
   exchange: row.exchange as Exchange,
   product: row.product as ProductType,
   direction: row.direction as PositionDirection,
-  trail:
-    row.trailUnit === 'PERCENT'
-      ? { unit: 'PERCENT', basisPoints: row.trailBasisPoints ?? 0 }
-      : { unit: 'AMOUNT', amount: row.trailAmount ?? 0 },
+  trail: trailOf(row),
   activationPrice: row.activationPrice,
   exitOrderType: row.exitOrderType as TrailingStopExitType,
   exitLimitOffset: row.exitLimitOffset,
@@ -746,11 +754,17 @@ export function createPgAccountStore({ database, audit }: PgAccountStoreOptions)
     },
 
     async liveAccountIds() {
-      const rows = await database.db
-        .selectDistinct({ userId: orders.userId })
-        .from(orders)
-        .where(inArray(orders.status, LIVE_STATUSES));
-      return rows.map((row) => row.userId).sort();
+      const [withOrders, withStops] = await Promise.all([
+        database.db
+          .selectDistinct({ userId: orders.userId })
+          .from(orders)
+          .where(inArray(orders.status, LIVE_STATUSES)),
+        database.db
+          .selectDistinct({ userId: trailingStops.userId })
+          .from(trailingStops)
+          .where(inArray(trailingStops.status, ACTIVE_STOP_STATUSES)),
+      ]);
+      return [...new Set([...withOrders, ...withStops].map((row) => row.userId))].sort();
     },
 
     async accountsTouchedOn(tradeDate) {

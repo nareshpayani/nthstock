@@ -224,6 +224,10 @@ export const trailingStops = pgTable(
   (table) => [
     // `load` reads a user's active stops and today's finished ones.
     index('trailing_stops_user_id_updated_at_idx').on(table.userId, table.updatedAt),
+    // `liveAccountIds` at boot: the users with an active stop, a small part of the table.
+    index('trailing_stops_active_user_id_idx')
+      .on(table.userId)
+      .where(sql`${table.status} IN ('PENDING_ENTRY', 'ARMED', 'TRAILING', 'TRIGGERED')`),
     uniqueIndex('trailing_stops_user_id_client_request_id_key').on(
       table.userId,
       table.clientRequestId,
@@ -244,6 +248,10 @@ export const trailingStops = pgTable(
       sql`${table.exitOrderType} IN (${sqlList(TRAILING_STOP_EXIT_TYPES)})`,
     ),
     check('trailing_stops_qty_check', sql`${table.protectedQty} >= 0`),
+    check(
+      'trailing_stops_prices_check',
+      sql`(${table.activationPrice} IS NULL OR ${table.activationPrice} > 0) AND (${table.stopPrice} IS NULL OR ${table.stopPrice} > 0) AND (${table.watermarkPrice} IS NULL OR ${table.watermarkPrice} >= 0) AND (${table.exitLimitOffset} IS NULL OR ${table.exitLimitOffset} >= 0)`,
+    ),
     check('trailing_stops_seq_check', sql`${table.seq} >= 0`),
   ],
 );

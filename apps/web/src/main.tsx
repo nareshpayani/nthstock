@@ -8,7 +8,7 @@ import { createLiveQuotes } from './app/live/liveQuotes';
 import { AppProviders } from './app/providers/AppProviders';
 import { createQueryClient } from './app/queryClient';
 import { createAppRouter } from './app/router/router';
-import { parseRuntimeConfig, tradingCapabilities } from './app/config/runtimeConfig';
+import { parseRuntimeConfig } from './app/config/runtimeConfig';
 import { writeTradingCommit } from './app/live/tradingCache';
 import { bindTradingSession } from './app/live/tradingSession';
 import { restSnapshot, startVisibilitySync } from './app/live/visibilitySync';
@@ -88,19 +88,17 @@ function boot() {
     ...(beforeRequest ? { ready: beforeRequest } : {}),
   });
   const router = createAppRouter({ queryClient, apiClient });
-  // The trading store (ADR 0012) runs where the engine sends account frames: both modes now.
+  // The trading store (ADR 0012): both backends send account frames (NSTOCK-0368).
   const { wsClient, quoteStore, orderUpdates, tradingStore } = createLiveQuotes(
     config,
     window.location,
     mocksReady,
-    tradingCapabilities(config).trailingStops
-      ? {
-          loadState: () => apiClient.request('accountState'),
-          onCommit: (commit) => {
-            writeTradingCommit(queryClient, commit);
-          },
-        }
-      : undefined,
+    {
+      loadState: () => apiClient.request('accountState'),
+      onCommit: (commit) => {
+        writeTradingCommit(queryClient, commit);
+      },
+    },
   );
   if (tradingStore)
     bindTradingSession({ store: tradingStore, sessions: useSessionStore, document });
