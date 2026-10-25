@@ -244,6 +244,11 @@ jobs:
       - run: npm run db:migrate -w @nthstock/api
         env:
           DATABASE_MIGRATION_URL: postgres://nthstock_owner:nthstock_owner_dev@127.0.0.1:5432/nthstock
+      # NSTOCK-0376: the migrated database matches the schema files and hand-written relations,
+      # TimescaleDB's own catalog objects skipped.
+      - run: npm run db:check -w @nthstock/api
+        env:
+          DB_CHECK_URL: postgres://nthstock_app:nthstock_app_dev@127.0.0.1:5432/nthstock
       - run: npx turbo run build --filter=@nthstock/web^... --filter=@nthstock/api --filter=@nthstock/realtime
       # T-171: tick-to-screen p95 < 500 ms over this job's Redis, run alone so it measures the pipeline.
       - run: npm run test:latency -w @nthstock/realtime
