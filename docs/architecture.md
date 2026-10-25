@@ -195,6 +195,7 @@ nthstock/
 │   │       │                     # beside them; others import a module only via index.ts
 │   │       ├── ticks/            # mock tick pump and quote publisher
 │   │       └── test/             # injected backend, test Postgres/Redis, cross-module suites
+│   ├── quotes/                   # tick writer: one process per shard behind a Redis lease (Wave 3, E22)
 │   ├── realtime/                 # WebSocket server
 │   │   └── src/
 │   │       ├── app.ts, server.ts, config.ts, logger.ts, protocol.ts, timers.ts
