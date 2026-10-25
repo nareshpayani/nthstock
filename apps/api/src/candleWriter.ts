@@ -51,7 +51,13 @@ const shutdown = () => {
   void writer
     .close()
     .then(() => database.close())
-    .finally(() => process.exit(0));
+    .then(
+      () => process.exit(0),
+      (error: unknown) => {
+        log.warn('candle writer shutdown failed', { error: String(error) });
+        process.exit(1);
+      },
+    );
 };
 process.once('SIGINT', shutdown);
 process.once('SIGTERM', shutdown);

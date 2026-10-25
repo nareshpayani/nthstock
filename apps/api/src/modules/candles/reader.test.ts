@@ -23,6 +23,7 @@ function memoryStore(rows: StoredBar[]): CandleStore & { reads: StoredInterval[]
   return {
     reads,
     upsertMinuteBars: () => Promise.resolve(),
+    insertMinuteBarsIfAbsent: () => Promise.resolve(),
     readBars(token, interval, from, to) {
       reads.push(interval);
       return Promise.resolve(

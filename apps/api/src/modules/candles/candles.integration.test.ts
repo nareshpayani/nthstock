@@ -144,7 +144,7 @@ describeWithPostgres('candle history seed and stored candles (integration)', () 
         ).rows[0]?.digest;
       const before = await digest();
       const summary = await seed();
-      expect(summary).toMatchObject({ symbols: 2, minuteSymbols: 2, refreshed: true });
+      expect(summary).toMatchObject({ symbols: 2, minuteSymbols: 2 });
       expect(summary.asOf.toISOString()).toBe(FRIDAY_OPEN);
       expect(await digest()).toBe(before);
     });
@@ -288,6 +288,62 @@ describeWithPostgres('candle history seed and stored candles (integration)', () 
       expect(year.candles.at(-2)?.c).toBe(
         instrumentHistory(master, DAILY_ONLY, calendar, { minutes: false })?.daily.at(-2)?.c,
       );
+    });
+  });
+  // Last: these change the stored rows the route tests above read.
+  describe('after the seed', () => {
+    const dailyBars = async (symbol: string) =>
+      (
+        await owner.query(
+          `select bucket, open, high, low, close, volume from candles_1d where token = $1
+            order by bucket`,
+          [token(symbol)],
+        )
+      ).rows.map(asCandle);
+
+    it('keeps every seeded day readable once the refresh policies have run', async () => {
+      const before = await dailyBars('INFY');
+      const { rows: jobs } = await owner.query<{ id: number }>(
+        `select job_id as id from timescaledb_information.jobs
+          where proc_name = 'policy_refresh_continuous_aggregate'`,
+      );
+      expect(jobs).toHaveLength(CANDLE_AGGREGATES.length);
+      // Each run moves its aggregate's watermark to the present; history it never materialised
+      // would drop out of real-time reads here.
+      for (const job of jobs) await owner.query('CALL run_job($1)', [job.id]);
+      expect(await dailyBars('INFY')).toEqual(before);
+      expect(before).toHaveLength(calendar.daily.length);
+    });
+
+    it('keeps the minute bars of a session that slid out of the minute window on a later seed', async () => {
+      const oldest = calendar.minute[0] as Date;
+      const minutesOf = async () =>
+        (
+          await owner.query<{ n: string; volume: string }>(
+            `select count(*) as n, sum(volume)::bigint as volume from candles_1m
+              where token = $1 and bucket >= $2 and bucket < $2::timestamptz + interval '1 day'`,
+            [token('INFY'), oldest.toISOString()],
+          )
+        ).rows[0];
+      const before = await minutesOf();
+      expect(before?.n).toBe('375');
+
+      // A week later the oldest minute session is outside the window.
+      const laterClock = fixedClock(fromIst(2026, 10, 30, 16 * 60));
+      expect(historyCalendar(laterClock.now()).minute[0]?.getTime()).toBeGreaterThan(
+        oldest.getTime(),
+      );
+      await seedCandles({
+        store,
+        master,
+        clock: laterClock,
+        symbols: ['INFY'],
+        refresh: refreshWithOwner(pg.ownerUrl),
+      });
+
+      expect(await minutesOf()).toEqual(before);
+      const day = (await dailyBars('INFY')).find((bar) => bar.t === oldest.toISOString());
+      expect(day?.v).toBe(Number(before?.volume));
     });
   });
 });

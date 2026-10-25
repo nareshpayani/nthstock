@@ -1,4 +1,4 @@
-import { sql } from 'drizzle-orm';
+import { sql, type SQL } from 'drizzle-orm';
 import type { Database } from '../../db/client.js';
 
 /** One stored bar: `bucket` is its open time; prices are integer paise, volume is shares. */
@@ -36,6 +36,12 @@ export type CandleStore = {
    * last values. One multi-row INSERT per `UPSERT_CHUNK_ROWS` bars, in one transaction.
    */
   upsertMinuteBars(bars: readonly StoredBar[]): Promise<void>;
+  /**
+   * Like `upsertMinuteBars`, but a bar whose token and minute are already stored is left as it is
+   * (`ON CONFLICT DO NOTHING`). The seed writes its one-row daily history this way, so a session
+   * that already holds minute bars from an earlier seed keeps them.
+   */
+  insertMinuteBarsIfAbsent(bars: readonly StoredBar[]): Promise<void>;
   /** Bars of `interval` for `token` opening in `[from, to)`, oldest first. */
   readBars(token: number, interval: StoredInterval, from: Date, to: Date): Promise<StoredBar[]>;
 };
@@ -63,26 +69,35 @@ const toBar = (row: BarRow): StoredBar => ({
 
 /** The candle store on TimescaleDB (migration 0014), as the DML-only app role. */
 export function createPgCandleStore({ database }: { database: Database }): CandleStore {
+  /** One multi-row INSERT per `UPSERT_CHUNK_ROWS` bars, all in one transaction. */
+  const writeBars = async (bars: readonly StoredBar[], onConflict: SQL): Promise<void> => {
+    if (bars.length === 0) return;
+    await database.transaction(async (tx) => {
+      for (let start = 0; start < bars.length; start += UPSERT_CHUNK_ROWS) {
+        const rows = bars
+          .slice(start, start + UPSERT_CHUNK_ROWS)
+          .map(
+            (bar) =>
+              sql`(${bar.token}, ${bar.bucket.toISOString()}::timestamptz, ${bar.open}, ${bar.high}, ${bar.low}, ${bar.close}, ${bar.volume})`,
+          );
+        await tx.execute(sql`
+          INSERT INTO candles_1m (token, bucket, open, high, low, close, volume)
+          VALUES ${sql.join(rows, sql`, `)}
+          ${onConflict}`);
+      }
+    });
+  };
   return {
-    async upsertMinuteBars(bars) {
-      if (bars.length === 0) return;
-      await database.transaction(async (tx) => {
-        for (let start = 0; start < bars.length; start += UPSERT_CHUNK_ROWS) {
-          const rows = bars
-            .slice(start, start + UPSERT_CHUNK_ROWS)
-            .map(
-              (bar) =>
-                sql`(${bar.token}, ${bar.bucket.toISOString()}::timestamptz, ${bar.open}, ${bar.high}, ${bar.low}, ${bar.close}, ${bar.volume})`,
-            );
-          await tx.execute(sql`
-            INSERT INTO candles_1m (token, bucket, open, high, low, close, volume)
-            VALUES ${sql.join(rows, sql`, `)}
-            ON CONFLICT (token, bucket) DO UPDATE SET
+    upsertMinuteBars: (bars) =>
+      writeBars(
+        bars,
+        sql`ON CONFLICT (token, bucket) DO UPDATE SET
               open = EXCLUDED.open, high = EXCLUDED.high, low = EXCLUDED.low,
-              close = EXCLUDED.close, volume = EXCLUDED.volume`);
-        }
-      });
-    },
+              close = EXCLUDED.close, volume = EXCLUDED.volume`,
+      ),
+
+    insertMinuteBarsIfAbsent: (bars) =>
+      writeBars(bars, sql`ON CONFLICT (token, bucket) DO NOTHING`),
 
     async readBars(token, interval, from, to) {
       const relation = sql.raw(RELATION[interval]);

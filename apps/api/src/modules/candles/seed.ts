@@ -48,11 +48,13 @@ export type CandleSeedOptions = {
   symbols?: 'default' | 'all' | readonly string[];
   calendar?: HistoryCalendarOptions;
   /**
-   * Re-materialises the continuous aggregates over the seeded range. The app role cannot
-   * (`must be owner of view`), so the CLI passes `refreshWithOwner` when DATABASE_MIGRATION_URL is
-   * set; left out, reads still see every bar through real-time aggregation.
+   * Materialises the continuous aggregates over the seeded range. Required: real-time aggregation
+   * only covers minutes after an aggregate's watermark, and the first refresh policy run moves the
+   * watermark to the present, so seeded history that was never materialised would vanish from
+   * reads. The app role cannot refresh (`must be owner of view`): the CLI passes
+   * `refreshWithOwner(DATABASE_MIGRATION_URL)`.
    */
-  refresh?: (from: Date, to: Date) => Promise<void>;
+  refresh: (from: Date, to: Date) => Promise<void>;
   onProgress?: (done: number, total: number, symbol: string) => void;
 };
 
@@ -64,7 +66,6 @@ export type CandleSeedSummary = {
   symbols: number;
   minuteSymbols: number;
   rows: number;
-  refreshed: boolean;
 };
 
 const toStored = (token: number, bar: Candle): StoredBar => ({
@@ -87,12 +88,31 @@ export function seedRows(
   calendar: HistoryCalendar,
   minutes: boolean,
 ): StoredBar[] {
+  const { daily, minute } = seedRowSets(master, symbol, calendar, minutes);
+  return [...daily, ...minute];
+}
+
+/**
+ * `seedRows` split by how they are written: the minute window is upserted (a rerun replaces it),
+ * the one-row daily sessions are inserted only where nothing is stored, so a session that slid out
+ * of the minute window since an earlier seed keeps its minute bars instead of gaining a whole-day
+ * row on top of its 09:15 minute (which would double its volume in `candles_1d`).
+ */
+export function seedRowSets(
+  master: SymbolMaster,
+  symbol: string,
+  calendar: HistoryCalendar,
+  minutes: boolean,
+): { daily: StoredBar[]; minute: StoredBar[] } {
   const history = instrumentHistory(master, symbol, calendar, { minutes });
-  if (!history) return [];
+  if (!history) return { daily: [], minute: [] };
   const dailyOnly = minutes
     ? history.daily.slice(0, history.daily.length - calendar.minute.length)
     : history.daily;
-  return [...dailyOnly, ...history.minutes].map((bar) => toStored(history.token, bar));
+  return {
+    daily: dailyOnly.map((bar) => toStored(history.token, bar)),
+    minute: history.minutes.map((bar) => toStored(history.token, bar)),
+  };
 }
 
 function seedSymbols(master: SymbolMaster, choice: CandleSeedOptions['symbols']) {
@@ -110,31 +130,37 @@ function seedSymbols(master: SymbolMaster, choice: CandleSeedOptions['symbols'])
   return { daily: [...minutes], minutes };
 }
 
-/** Writes the history; running it twice with the same as-of leaves the same rows. */
+/**
+ * Writes the history, then refreshes the aggregates. Running it twice with the same as-of leaves
+ * the same rows; a later as-of adds the new sessions and keeps the stored ones' minute bars.
+ */
 export async function seedCandles(options: CandleSeedOptions): Promise<CandleSeedSummary> {
   const calendar = historyCalendar(options.clock.now(), options.calendar);
   const { daily, minutes } = seedSymbols(options.master, options.symbols ?? 'default');
-  let pending: StoredBar[] = [];
+  let pendingDaily: StoredBar[] = [];
+  let pendingMinutes: StoredBar[] = [];
   let rows = 0;
   let minuteSymbols = 0;
   const flush = async () => {
-    if (pending.length === 0) return;
-    await options.store.upsertMinuteBars(pending);
-    rows += pending.length;
-    pending = [];
+    await options.store.insertMinuteBarsIfAbsent(pendingDaily);
+    await options.store.upsertMinuteBars(pendingMinutes);
+    rows += pendingDaily.length + pendingMinutes.length;
+    pendingDaily = [];
+    pendingMinutes = [];
   };
   for (const [done, symbol] of daily.entries()) {
     const withMinutes = minutes.has(symbol);
-    const bars = seedRows(options.master, symbol, calendar, withMinutes);
-    if (bars.length > 0 && withMinutes) minuteSymbols += 1;
-    pending.push(...bars);
-    if (pending.length >= SEED_BATCH_BARS) await flush();
+    const sets = seedRowSets(options.master, symbol, calendar, withMinutes);
+    if (sets.minute.length > 0) minuteSymbols += 1;
+    pendingDaily.push(...sets.daily);
+    pendingMinutes.push(...sets.minute);
+    if (pendingDaily.length + pendingMinutes.length >= SEED_BATCH_BARS) await flush();
     options.onProgress?.(done + 1, daily.length, symbol);
   }
   await flush();
   const from = calendar.daily[0] ?? calendar.asOf;
   const to = calendar.asOf;
-  if (options.refresh) await options.refresh(from, new Date(to.getTime() + 86_400_000));
+  await options.refresh(from, new Date(to.getTime() + 86_400_000));
   return {
     asOf: calendar.asOf,
     from,
@@ -142,7 +168,6 @@ export async function seedCandles(options: CandleSeedOptions): Promise<CandleSee
     symbols: daily.length,
     minuteSymbols,
     rows,
-    refreshed: options.refresh !== undefined,
   };
 }
 

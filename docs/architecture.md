@@ -135,8 +135,11 @@ the chart shows after a reload.
   22 sessions) of 1-minute bars from the deterministic generator, so charts have depth on day one and every machine
   stores the same rows. Because `candles_1d` aggregates `candles_1m`, a day older than the minute window is stored
   as one 09:15 IST row carrying that day's OHLCV. Minute bars go to the indices and their large-cap members
-  (66 instruments, about 577k rows, 23 s locally); `--all` adds daily history for every symbol. The seed refreshes
-  the aggregates as the owner role, because the app role may not.
+  (66 instruments, about 577k rows, 23 s locally); `--all` adds daily history for every symbol. The seed must refresh
+  the aggregates as the owner (`DATABASE_MIGRATION_URL`; the app role may not): real-time aggregation only covers
+  minutes after an aggregate's watermark, so history never materialised would drop out once a policy runs. One-row
+  days are inserted only where nothing is stored, so a later seed keeps the minute bars of sessions that left the
+  window.
 - **Running the writer:** `npm run dev:candles -w @nthstock/api` beside `npm run dev:api` (one process per
   deployment: it uses a fixed consumer name).
 - **Reads:** `GET /v1/market/instruments/:symbol/candles` reads 1-minute bars from the hypertable, 5 minutes to an
