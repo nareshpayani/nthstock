@@ -35,6 +35,12 @@ backend and paper engine, and ADR 0005, the web UI architecture).
 |---|---|---|---|
 | [Backend core on PostgreSQL](backend-core.md) ([task list](backend-core-tasks.md)) | E11 to E21 | T-176 to T-244 | Approved 2026-09-28 (PR #236); E11 to E14 merged |
 
+## Wave 3 (CLAUDE.md §7 Phases 4 and 5, server side)
+
+| Spec | Epics | Status |
+|---|---|---|
+| [Quote service, matcher worker, notifications service and TimescaleDB candles](market-data-and-matching.md) | E22 to E25 | Draft for owner review, 2026-10-24 |
+
 ## Release TFC-1: Trade from Charts (ahead of the remaining Phase 2 epics)
 
 | Document | Content | Status |
