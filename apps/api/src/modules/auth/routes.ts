@@ -81,7 +81,7 @@ export const authRoutes =
       // The error's name and code only: a driver message can carry the SQL parameters.
       onError: (error: unknown, context: { userId: string; event: string }) => {
         const { name, code } = (error ?? {}) as { name?: unknown; code?: unknown };
-        app.log.warn(
+        app.log.error(
           { ...context, error: { name, code } },
           'a security notification was not stored',
         );
