@@ -272,7 +272,8 @@ jobs:
       - name: Preload pg_stat_statements
         continue-on-error: true
         run: |
-          psql -v ON_ERROR_STOP=1 -c "ALTER SYSTEM SET shared_preload_libraries = 'timescaledb,pg_stat_statements'"
+          # A list of quoted names: one quoted 'a,b' would be read as a single library name.
+          psql -v ON_ERROR_STOP=1 -c "ALTER SYSTEM SET shared_preload_libraries = 'timescaledb', 'pg_stat_statements'"
           docker restart ${{ job.services.postgres.id }}
           for attempt in $(seq 1 30); do
             pg_isready -h 127.0.0.1 -U postgres -d nthstock && break
