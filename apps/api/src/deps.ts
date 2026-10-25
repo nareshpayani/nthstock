@@ -175,10 +175,6 @@ export function createDeps(overrides: DepsOverrides = {}): AppDeps {
   if (overrides.quoteStreams && !(market instanceof MockMarketDataAdapter)) {
     throw new Error('quoteStreams needs a MockMarketDataAdapter to apply the quotes to');
   }
-  const quoteStreams =
-    overrides.quoteStreams && market instanceof MockMarketDataAdapter
-      ? startQuoteStreams(market, overrides.quoteStreams)
-      : null;
   const production = overrides.production ?? false;
   const dbDriver = overrides.dbDriver ?? (overrides.database ? 'postgres' : 'memory');
   const database = openDatabase(overrides, dbDriver);
@@ -228,6 +224,11 @@ export function createDeps(overrides: DepsOverrides = {}): AppDeps {
     ...(overrides.newOrderId ? { newId: overrides.newOrderId } : {}),
   });
   const alerts = createAlertService({ clock, market, orders });
+  // Last, so nothing above can throw after the Redis connections are open.
+  const quoteStreams =
+    overrides.quoteStreams && market instanceof MockMarketDataAdapter
+      ? startQuoteStreams(market, overrides.quoteStreams)
+      : null;
   return {
     clock,
     repos,

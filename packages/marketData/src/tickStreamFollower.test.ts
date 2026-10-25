@@ -141,11 +141,12 @@ describe('followTickStreams', () => {
     redis.fail(new Error('connection reset'));
     redis.queue(['1-0', ['batch', '{']], ['2-0', ['other', 'x']]);
     // The failed read waits half a second before the next one.
-    await vi.waitFor(() => expect(warnings).toHaveLength(3), { timeout: 2_000 });
+    await vi.waitFor(() => expect(warnings).toHaveLength(4), { timeout: 2_000 });
     await follower.close();
 
     expect(seen).toEqual([]);
     expect(warnings).toEqual([
+      'Dropped unparseable snapshot rows',
       'Reading the tick stream failed',
       'Dropped a malformed tick stream entry',
       'Dropped a malformed tick stream entry',
@@ -177,6 +178,104 @@ describe('followTickStreams', () => {
     await follower.close();
 
     expect(keys).toEqual(['t:0', 's:0', 't:1', 's:1']);
-    expect(quoteSnapshotKey(0)).not.toBe('s:0');
+  });
+
+  it('defaults to the contract key names', async () => {
+    const redis = fakeRedis({});
+    const keys: string[] = [];
+    const follower = followTickStreams({
+      client: {
+        ...redis.client,
+        xrevrange: async (key) => {
+          keys.push(key);
+          return [];
+        },
+        hvals: async (key) => {
+          keys.push(key);
+          return [];
+        },
+      },
+      shards: 1,
+      onQuotes: () => undefined,
+    });
+    await follower.ready();
+    await follower.close();
+
+    expect(keys).toEqual([tickStreamKey(0), quoteSnapshotKey(0)]);
+  });
+
+  it('keeps following when onQuotes throws, and resyncs on the next entry', async () => {
+    const redis = fakeRedis({
+      last: record('5-0', 7, [quote(1, 10_100)]),
+      snapshot: [quote(1, 10_100)],
+    });
+    const seen: number[][] = [];
+    const warnings: string[] = [];
+    let failNext = false;
+    const follower = followTickStreams({
+      client: redis.client,
+      shards: 1,
+      onQuotes: (quotes) => {
+        if (failNext) {
+          failNext = false;
+          throw new Error('listener broke');
+        }
+        seen.push(quotes.map((q) => q.ltp));
+      },
+      log: { warn: (message) => warnings.push(message) },
+    });
+    await follower.ready();
+    failNext = true;
+    redis.queue(record('6-0', 8, [quote(1, 10_200)]));
+    await vi.waitFor(() => expect(warnings).toHaveLength(1));
+    redis.setSnapshot([quote(1, 10_900)]);
+    redis.queue(record('7-0', 9, [quote(1, 11_000)]));
+    await vi.waitFor(() => expect(seen).toHaveLength(3), { timeout: 3_000 });
+    await follower.close();
+
+    expect(warnings).toEqual(['Reading the tick stream failed']);
+    expect(seen).toEqual([[10_100], [10_900], [11_000]]);
+  });
+
+  it('retries a failed start until Redis answers, and logs the outage once', async () => {
+    const redis = fakeRedis({ snapshot: [quote(1, 10_100)] });
+    const warnings: string[] = [];
+    const seen: number[][] = [];
+    let attempts = 0;
+    const follower = followTickStreams({
+      client: {
+        ...redis.client,
+        xrevrange: async (...args) => {
+          attempts += 1;
+          if (attempts < 3) throw new Error('connection refused');
+          return redis.client.xrevrange(...args);
+        },
+      },
+      shards: 1,
+      onQuotes: (quotes) => seen.push(quotes.map((q) => q.ltp)),
+      log: { warn: (message) => warnings.push(message) },
+    });
+    await follower.ready();
+    await follower.close();
+
+    expect(attempts).toBe(3);
+    expect(warnings).toEqual(['Starting the tick streams failed']);
+    expect(seen).toEqual([[10_100]]);
+  });
+
+  it('resolves ready() and stops retrying when closed while Redis is down', async () => {
+    const redis = fakeRedis({});
+    const follower = followTickStreams({
+      client: {
+        ...redis.client,
+        xrevrange: async () => {
+          throw new Error('connection refused');
+        },
+      },
+      shards: 1,
+      onQuotes: () => undefined,
+    });
+    await follower.close();
+    await follower.ready();
   });
 });

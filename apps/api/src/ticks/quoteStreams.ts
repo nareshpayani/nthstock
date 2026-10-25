@@ -43,7 +43,7 @@ export function startQuoteStreams(
   const snapshotKey = options.snapshotKey ?? quoteSnapshotKey;
   // XREAD BLOCK holds its connection, so the follower gets one of its own.
   const follow = new Redis(options.url, { maxRetriesPerRequest: null });
-  const reads = new Redis(options.url, { maxRetriesPerRequest: 1 });
+  const reads = new Redis(options.url, { maxRetriesPerRequest: 1, commandTimeout: 1_000 });
   let down = false;
   const onError = (error: Error) => {
     if (down) return;
@@ -62,7 +62,11 @@ export function startQuoteStreams(
     ...(options.streamKey ? { streamKey: options.streamKey } : {}),
     snapshotKey,
     ...(options.blockMs === undefined ? {} : { blockMs: options.blockMs }),
-    log: { warn: (message) => log.warn(message) },
+    log: {
+      warn: (message, fields) =>
+        log.warn(fields ? `${message} ${JSON.stringify(fields)}` : message),
+      info: (message) => log.info(message),
+    },
     onQuotes: (quotes) => market.applyQuotes(quotes),
   });
 
@@ -82,14 +86,27 @@ export function startQuoteStreams(
       const pipeline = reads.pipeline();
       for (const { token, shard } of wanted) pipeline.hget(snapshotKey(shard), String(token));
       // With Redis down the adapter still has the last prices the streams brought.
-      const rows = wanted.length === 0 ? [] : ((await pipeline.exec().catch(() => null)) ?? []);
+      const results =
+        wanted.length === 0
+          ? []
+          : await pipeline.exec().catch((error: unknown) => {
+              log.warn(`Quote snapshot read failed for ${wanted.length} symbols: ${String(error)}`);
+              return null;
+            });
+      const rows = results ?? [];
       const quotes: Quote[] = [];
+      let unusable = 0;
       for (const [index, { symbol }] of wanted.entries()) {
         const [error, row] = rows[index] ?? [null, null];
         const parsed =
           !error && typeof row === 'string' ? Quote.safeParse(safeJson(row)) : undefined;
+        // A row that is missing is normal before the first write; an error or a corrupt row is not.
+        if (error || (row != null && !parsed?.success)) unusable += 1;
         const quote = parsed?.success ? parsed.data : await market.getQuote(symbol, exchange);
         if (quote) quotes.push(quote);
+      }
+      if (unusable > 0 && results) {
+        log.warn(`Quote snapshot read failed for ${unusable} symbols`);
       }
       return quotes;
     },

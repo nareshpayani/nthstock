@@ -28,6 +28,7 @@ export type TickStreamClient = {
 
 export type TickStreamFollowerLog = {
   warn(message: string, fields?: Record<string, unknown>): void;
+  info?(message: string, fields?: Record<string, unknown>): void;
 };
 
 export type TickStreamFollowerOptions = {
@@ -45,21 +46,25 @@ export type TickStreamFollowerOptions = {
 };
 
 export type TickStreamFollower = {
-  /** Resolves once the snapshots are read and the follower waits on the streams. */
+  /**
+   * Resolves once the snapshots are read and the follower waits on the streams, or when it is
+   * closed first. Never rejects: with Redis down it stays pending while the follower retries.
+   */
   ready(): Promise<void>;
   /** Stops reading and disconnects the client. */
   close(): Promise<void>;
 };
 
 const RETRY_MS = 500;
+const MAX_RETRY_MS = 10_000;
 
-type TimeoutGlobal = { setTimeout(callback: () => void, ms: number): unknown };
+type TimerGlobal = {
+  setTimeout(callback: () => void, ms: number): unknown;
+  clearTimeout(timer: unknown): void;
+};
 
-/** This package has no DOM or Node types, so the timer is looked up on `globalThis`. */
-const pause = (ms: number) =>
-  new Promise<void>((resolve) => {
-    (globalThis as unknown as TimeoutGlobal).setTimeout(resolve, ms);
-  });
+/** This package has no DOM or Node types, so the timers are looked up on `globalThis`. */
+const timers = globalThis as unknown as TimerGlobal;
 
 /**
  * Follows the tick streams apps/quotes writes (spec market-data-and-matching §4): it starts from
@@ -86,10 +91,13 @@ export function followTickStreams(options: TickStreamFollowerOptions): TickStrea
   async function resync(shard: number): Promise<void> {
     const rows = await client.hvals(snapshotKey(shard));
     const quotes: Quote[] = [];
+    let dropped = 0;
     for (const row of rows) {
       const parsed = Quote.safeParse(safeJson(row));
       if (parsed.success) quotes.push(parsed.data);
+      else dropped += 1;
     }
+    if (dropped > 0) log.warn('Dropped unparseable snapshot rows', { shard, dropped });
     emit(quotes);
   }
 
@@ -105,55 +113,110 @@ export function followTickStreams(options: TickStreamFollowerOptions): TickStrea
     }
   }
 
-  async function follow(): Promise<void> {
-    while (!closed) {
-      let read: [string, TickStreamRecord[]][] | null;
-      try {
-        read = (await client.xread(
-          'COUNT',
-          100,
-          'BLOCK',
-          blockMs,
-          'STREAMS',
-          ...shards.map(streamKey),
-          ...shards.map((shard) => cursor.get(shard)?.id ?? '$'),
-        )) as [string, TickStreamRecord[]][] | null;
-      } catch (error) {
-        if (closed) return;
-        log.warn('Reading the tick stream failed', { error: String(error) });
-        await pause(RETRY_MS);
-        continue;
-      }
-      for (const [key, entries] of read ?? []) {
-        const shard = shards.find((candidate) => streamKey(candidate) === key);
-        const position = shard === undefined ? undefined : cursor.get(shard);
-        if (shard === undefined || !position) continue;
-        for (const [id, fields] of entries) {
-          position.id = id;
-          const entry = parseEntry(fields);
-          if (!entry) {
-            log.warn('Dropped a malformed tick stream entry', { shard });
-            continue;
-          }
+  /** One `XREAD BLOCK` and the entries it returned. */
+  async function step(): Promise<void> {
+    const read = (await client.xread(
+      'COUNT',
+      100,
+      'BLOCK',
+      blockMs,
+      'STREAMS',
+      ...shards.map(streamKey),
+      ...shards.map((shard) => cursor.get(shard)?.id ?? '$'),
+    )) as [string, TickStreamRecord[]][] | null;
+    for (const [key, entries] of read ?? []) {
+      const shard = shards.find((candidate) => streamKey(candidate) === key);
+      const position = shard === undefined ? undefined : cursor.get(shard);
+      if (shard === undefined || !position) continue;
+      for (const [id, fields] of entries) {
+        position.id = id;
+        const entry = parseEntry(fields);
+        if (!entry) {
+          log.warn('Dropped a malformed tick stream entry', { shard });
+          continue;
+        }
+        try {
           if (tickStreamStep(position.seq, entry) === 'resync') await resync(shard);
           position.seq = entry.seq;
           emit(entry.quotes);
+        } catch (error) {
+          // This entry is consumed, so the next one must re-read the snapshot.
+          position.seq = null;
+          throw error;
         }
       }
     }
   }
 
-  const started = start();
-  // A failed start surfaces through ready(); the caller's client logs the outage.
-  started.catch(() => undefined);
-  const following = started.then(follow, () => undefined);
+  let wake: () => void = () => undefined;
+  /** Waits `ms`, or less when `close()` is called. */
+  const sleep = (ms: number) =>
+    new Promise<void>((resolve) => {
+      const timer = timers.setTimeout(resolve, ms);
+      wake = () => {
+        timers.clearTimeout(timer);
+        resolve();
+      };
+    });
+
+  let markReady: () => void = () => undefined;
+  const ready = new Promise<void>((resolve) => {
+    markReady = resolve;
+  });
+
+  let markClosed: () => void = () => undefined;
+  const closing = new Promise<void>((resolve) => {
+    markClosed = resolve;
+  });
+  /** A call into the client that `close()` ends at once, even if the client never answers. */
+  const unlessClosed = (call: Promise<void>): Promise<void> => {
+    call.catch(() => undefined);
+    return Promise.race([call, closing]);
+  };
+
+  async function run(): Promise<void> {
+    let started = false;
+    let failures = 0;
+    while (!closed) {
+      try {
+        if (!started) {
+          await unlessClosed(start());
+          if (closed) break;
+          started = true;
+          markReady();
+        }
+        await unlessClosed(step());
+        if (closed) break;
+        if (failures > 0) {
+          failures = 0;
+          log.info?.('Following the tick streams again');
+        }
+      } catch (error) {
+        if (closed) break;
+        // Logged once per outage; the retries after it stay quiet.
+        if (failures === 0) {
+          const message = started
+            ? 'Reading the tick stream failed'
+            : 'Starting the tick streams failed';
+          log.warn(message, { error: String(error) });
+        }
+        failures += 1;
+        await sleep(Math.min(RETRY_MS * 2 ** (failures - 1), MAX_RETRY_MS));
+      }
+    }
+    markReady();
+  }
+
+  const running = run();
 
   return {
-    ready: () => started,
+    ready: () => ready,
     async close() {
       closed = true;
+      markClosed();
+      wake();
       client.disconnect();
-      await following;
+      await running;
     },
   };
 }
