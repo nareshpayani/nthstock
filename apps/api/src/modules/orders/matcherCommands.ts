@@ -77,7 +77,10 @@ export function startMatcherCommands(options: {
     failing = true;
     log.warn(`Matcher commands failed: ${error instanceof Error ? error.message : String(error)}`);
   };
-  const stop = orders.onOrderUpdate((userId, order, version) => {
+  const stop = orders.onOrderUpdate((userId, order, version, last = true) => {
+    // Updates of one order in one commit share its version and the book keeps the first it sees,
+    // so only the final state is sent.
+    if (!last) return;
     const command = commandFor(userId, order, version);
     if (!command) return;
     const key = commandsKey(shardOf(command.token, shards));

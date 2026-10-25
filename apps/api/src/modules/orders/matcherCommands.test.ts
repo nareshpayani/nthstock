@@ -107,6 +107,20 @@ describe('startMatcherCommands (NSTOCK-0365)', () => {
     expect(orders.listeners.size).toBe(0);
   });
 
+  it('sends only the last update of an order that changed twice in one commit', async () => {
+    const orders = fakeOrders();
+    const { stream, sent } = fakeStream();
+    const log = { info: () => undefined, warn: () => undefined };
+    startMatcherCommands({ orders, stream, shards: 1, log });
+
+    for (const listener of orders.listeners) {
+      listener('usr_a', limit, 4, false);
+      listener('usr_a', { ...limit, status: 'EXECUTED' }, 4, true);
+    }
+    await flush();
+    expect(sent.map((s) => [s.command.type, s.command.version])).toEqual([['CANCEL', 4]]);
+  });
+
   it('logs a failing stream once, and again only after it recovered', async () => {
     const orders = fakeOrders();
     const { stream, sent, setDown } = fakeStream();
