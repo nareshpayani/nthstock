@@ -108,14 +108,14 @@ export async function startMockWorker(
   return { worker, adapter, orders, ensureActive: keeper.ensureActive };
 }
 
+let workerUpdateMissIgnored = false;
+
 /**
  * MSW re-checks an existing worker with `registration.update()` and leaves the promise uncaught.
  * When the page navigates while that check runs, Chrome rejects it ("Failed to update a
  * ServiceWorker ... Not found") although the running worker is fine, and the rejection shows as
  * an uncaught error in the console (NSTOCK-0361). Only that rejection is silenced.
  */
-let workerUpdateMissIgnored = false;
-
 function ignoreWorkerUpdateMiss() {
   if (workerUpdateMissIgnored) return;
   workerUpdateMissIgnored = true;
