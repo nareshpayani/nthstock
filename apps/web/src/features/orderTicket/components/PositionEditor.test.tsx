@@ -369,8 +369,13 @@ describe('position editor (NSTOCK-0395)', () => {
     async () => {
       const token = await renderWithLoad(() => new Promise<never>(() => {}));
       const editor = await openEditor(token);
+      // The Suspense fallback is the same skeleton, so let the lazy chunk settle first: what is
+      // left on screen is then the editor's own loading state.
+      await act(async () => {
+        await import('./PositionEditor');
+      });
       expect(
-        await within(editor).findByRole('status', { name: 'Loading the order ticket' }),
+        within(editor).getByRole('status', { name: 'Loading the order ticket' }),
       ).toBeInTheDocument();
       expect(within(editor).queryByText(/This position is closed/)).toBeNull();
     },
