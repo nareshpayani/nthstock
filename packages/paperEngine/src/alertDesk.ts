@@ -48,7 +48,23 @@ const ENDED_KEPT = 20;
 
 type Watch = { exchange: Exchange; symbol: string; stop: () => void };
 
-const crossed = (alert: Pick<PriceAlert, 'condition' | 'price'>, ltp: number) =>
+/**
+ * The notification text of a fired alert, the same wherever it fires (the mock, apps/api and the
+ * matcher, NSTOCK-0383): "INFY crossed above ₹1,530.00", "Now ₹1,531.20 · the user's note".
+ */
+export function priceAlertNotice(
+  alert: Pick<PriceAlert, 'symbol' | 'condition' | 'price' | 'note'>,
+  ltp: number,
+): { title: string; body: string } {
+  const direction = alert.condition === 'ABOVE' ? 'above' : 'below';
+  return {
+    title: `${alert.symbol} crossed ${direction} ${formatInr(alert.price)}`,
+    body: [`Now ${formatInr(ltp)}`, alert.note].filter(Boolean).join(' · '),
+  };
+}
+
+/** Whether `ltp` fires the alert: at or past its level on its side. */
+export const crossed = (alert: Pick<PriceAlert, 'condition' | 'price'>, ltp: number) =>
   alert.condition === 'ABOVE' ? ltp >= alert.price : ltp <= alert.price;
 
 /**
@@ -185,13 +201,11 @@ export class AlertDesk {
             triggeredAt: this.#now(),
             triggeredLtp: quote.ltp,
           };
-          const direction = alert.condition === 'ABOVE' ? 'above' : 'below';
           this.#add(
             userId,
             {
               kind: 'PRICE_ALERT',
-              title: `${alert.symbol} crossed ${direction} ${formatInr(alert.price)}`,
-              body: [`Now ${formatInr(quote.ltp)}`, alert.note].filter(Boolean).join(' · '),
+              ...priceAlertNotice(alert, quote.ltp),
               symbol: alert.symbol,
               exchange: alert.exchange,
             },

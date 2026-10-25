@@ -47,6 +47,15 @@ export function applyCommand(book: OrderBook, command: MatcherCommand): boolean 
       });
     case 'STOP_CANCEL':
       return book.removeStop(command.stopId, command.version);
+    case 'ALERT_ADD':
+      return book.addAlert({
+        alertId: command.alertId,
+        userId: command.userId,
+        condition: command.condition,
+        price: command.price,
+      });
+    case 'ALERT_CANCEL':
+      return book.removeAlert(command.alertId);
   }
 }
 

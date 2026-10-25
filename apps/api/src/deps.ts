@@ -1,11 +1,22 @@
+import {
+  MATCHER_COMMANDS_MAXLEN,
+  matcherCommandsKey,
+  type MatcherCommand,
+} from '@nthstock/contracts';
 import { MockMarketDataAdapter, type MarketDataAdapter } from '@nthstock/marketData';
 import { Redis } from 'ioredis';
-import { systemClock, type Clock } from '@nthstock/utils';
+import { shardOf, systemClock, type Clock } from '@nthstock/utils';
 import type { DbDriver } from './config.js';
 import { createDatabase, type Database } from './db/client.js';
 import { createPiiCrypto, resolvePiiKeys, type PiiKeys } from './db/crypto.js';
 import { createMemoryAuditRepo, createPgAuditRepo, type AuditRepo } from './modules/audit/index.js';
-import { createAlertService, type AlertService } from './modules/alerts/index.js';
+import {
+  createAlertService,
+  createMemoryAlertsRepo,
+  createPgAlertsRepo,
+  type AlertService,
+  type AlertsRepo,
+} from './modules/alerts/index.js';
 import { createPgCandleStore, type CandleStore } from './modules/candles/index.js';
 import {
   createArgon2PinHasher,
@@ -69,6 +80,8 @@ export type Repos = {
   audit: AuditRepo;
   /** The notification centre and its outbox (NSTOCK-0379). */
   notifications: NotificationsRepo;
+  /** Price alerts (NSTOCK-0383). */
+  alerts: AlertsRepo;
 };
 
 /** What modules get injected instead of reaching for globals: time, storage and market data. */
@@ -259,6 +272,11 @@ export function createDeps(overrides: DepsOverrides = {}): AppDeps {
       (database ? createPgWatchlistsRepo({ database }) : createMemoryWatchlistsRepo()),
     audit,
     notifications: notificationsRepo,
+    alerts:
+      overrides.repos?.alerts ??
+      (database
+        ? createPgAlertsRepo({ database, notifications: notificationsRepo })
+        : createMemoryAlertsRepo({ notifications: notificationsRepo })),
     accounts:
       overrides.repos?.accounts ??
       (database
@@ -278,7 +296,16 @@ export function createDeps(overrides: DepsOverrides = {}): AppDeps {
     ...(overrides.onAuditError ? { onAuditError: overrides.onAuditError } : {}),
     ...(overrides.newOrderId ? { newId: overrides.newOrderId } : {}),
   });
-  const alerts = createAlertService({ clock, market, notifier, onNotifyError });
+  // Set below once the matcher's command stream is open; alerts made before that need none.
+  let sendAlertCommand: ((command: MatcherCommand) => void) | null = null;
+  const alerts = createAlertService({
+    clock,
+    market,
+    repo: repos.alerts,
+    notifier,
+    onNotifyError,
+    sendCommand: (command) => sendAlertCommand?.(command),
+  });
   // Last, so nothing above can throw after the Redis connections are open.
   const quoteStreams =
     overrides.quoteStreams && market instanceof MockMarketDataAdapter
@@ -299,6 +326,25 @@ export function createDeps(overrides: DepsOverrides = {}): AppDeps {
       log,
     });
     matcherCommands = { commands, redis };
+    // Alerts rest on the matcher's books too (NSTOCK-0383); a lost one is reloaded by its reconcile.
+    const key = commandsKey ?? matcherCommandsKey;
+    sendAlertCommand = (command) => {
+      redis
+        .xadd(
+          key(shardOf(command.token, shards)),
+          'MAXLEN',
+          '~',
+          MATCHER_COMMANDS_MAXLEN,
+          '*',
+          'command',
+          JSON.stringify(command),
+        )
+        .catch((error: unknown) => {
+          log.warn(
+            `Alert command failed: ${error instanceof Error ? error.message : String(error)}`,
+          );
+        });
+    };
   }
   return {
     clock,

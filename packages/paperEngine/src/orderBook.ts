@@ -21,6 +21,18 @@ export type BookStop = {
   state: TrailingStopState;
 };
 
+/**
+ * A price alert as the book holds it (NSTOCK-0383): ABOVE fires on the first LTP at or above
+ * `price`, BELOW at or below. Alerts have no versions: one is added once and fires or is removed
+ * once.
+ */
+export type BookAlert = {
+  alertId: string;
+  userId: string;
+  condition: 'ABOVE' | 'BELOW';
+  price: number;
+};
+
 export type BookTick = {
   /** LIMIT orders this price crosses, now off the book (put back with `restoreOrder`). */
   crossed: BookOrder[];
@@ -28,6 +40,8 @@ export type BookTick = {
   triggered: BookStop[];
   /** Stops this price activated or ratcheted, in their new state; they stay on the book. */
   moved: BookStop[];
+  /** Price alerts this price fires, now off the book. */
+  alerts: BookAlert[];
   /** Heap entries read, stale ones included: what the matcher benchmark counts per tick. */
   read: number;
 };
@@ -53,6 +67,8 @@ const max = (a: Keyed, b: Keyed) => a.key > b.key;
  * | short watermark | highest first | LTP below it: ratchets |
  * | long ARMED | lowest activation first | LTP ≥ activation: activates |
  * | short ARMED | highest activation first | LTP ≤ activation: activates |
+ * | ABOVE alert | lowest price first | LTP ≥ price: fires (NSTOCK-0383) |
+ * | BELOW alert | highest price first | LTP ≤ price: fires |
  *
  * Every stop it touches moves by `stepTrailingStop`, the rule the engine and the browser mock run,
  * so a tick leaves each stop exactly where stepping every stop would. A change is applied only when
@@ -68,6 +84,9 @@ export class OrderBook {
   readonly #shortMarks = new BinaryHeap<Keyed>(max);
   readonly #longArmed = new BinaryHeap<Keyed>(min);
   readonly #shortArmed = new BinaryHeap<Keyed>(max);
+  readonly #above = new BinaryHeap<Keyed>(min);
+  readonly #below = new BinaryHeap<Keyed>(max);
+  readonly #alerts = new Map<string, { alert: BookAlert; seq: number }>();
 
   readonly #orders = new Map<string, { order: BookOrder; seq: number }>();
   readonly #stops = new Map<string, { stop: BookStop; seq: number }>();
@@ -76,9 +95,34 @@ export class OrderBook {
   readonly #stopVersions = new Map<string, Held>();
   #seq = 0;
 
-  /** Resting LIMIT orders and live stops on the book. */
-  get size(): { orders: number; stops: number } {
-    return { orders: this.#orders.size, stops: this.#stops.size };
+  /** Resting LIMIT orders, live stops and active alerts on the book. */
+  get size(): { orders: number; stops: number; alerts: number } {
+    return { orders: this.#orders.size, stops: this.#stops.size, alerts: this.#alerts.size };
+  }
+
+  hasAlert(alertId: string): boolean {
+    return this.#alerts.has(alertId);
+  }
+
+  /** The active alerts, in no particular order (the reconcile loop compares them). */
+  *alerts(): IterableIterator<BookAlert> {
+    for (const { alert } of this.#alerts.values()) yield alert;
+  }
+
+  /** `ALERT_ADD`: rests the alert at its price. False when it is already on the book. */
+  addAlert(alert: BookAlert): boolean {
+    if (this.#alerts.has(alert.alertId)) return false;
+    assertPositivePaise(alert.price, 'Alert price');
+    const seq = this.#next();
+    this.#alerts.set(alert.alertId, { alert, seq });
+    const entry = { id: alert.alertId, seq, key: alert.price };
+    (alert.condition === 'ABOVE' ? this.#above : this.#below).push(entry);
+    return true;
+  }
+
+  /** `ALERT_CANCEL`, or an alert that fired elsewhere. False when it was not on the book. */
+  removeAlert(alertId: string): boolean {
+    return this.#alerts.delete(alertId);
   }
 
   hasOrder(orderId: string): boolean {
@@ -156,7 +200,7 @@ export class OrderBook {
   /** One tick at `ltp` paise: pops what it crosses, triggers, ratchets and activates. */
   tick(ltp: number): BookTick {
     assertPositivePaise(ltp, 'LTP');
-    const result: BookTick = { crossed: [], triggered: [], moved: [], read: 0 };
+    const result: BookTick = { crossed: [], triggered: [], moved: [], alerts: [], read: 0 };
 
     for (const [heap, crosses] of [
       [this.#buys, (key: number) => ltp <= key],
@@ -194,6 +238,18 @@ export class OrderBook {
           this.#placeStop(stop);
           result.moved.push(stop);
         }
+      }
+    }
+
+    for (const [heap, fires] of [
+      [this.#above, (key: number) => ltp >= key],
+      [this.#below, (key: number) => ltp <= key],
+    ] as const) {
+      for (const id of this.#drain(heap, this.#alerts, fires, result)) {
+        const held = this.#alerts.get(id);
+        if (!held) continue;
+        this.#alerts.delete(id);
+        result.alerts.push(held.alert);
       }
     }
     return result;

@@ -3,6 +3,8 @@ import {
   KycStatus,
   LedgerEntryType,
   NotificationKind,
+  PriceAlertCondition,
+  PriceAlertStatus,
   TrailingStopExitType,
   TrailingStopStatus,
 } from '@nthstock/contracts';
@@ -13,6 +15,7 @@ import {
   TRAILING_STOP_EXIT_TYPES,
   TRAILING_STOP_STATUSES,
 } from './schema/paper.js';
+import { PRICE_ALERT_CONDITIONS, PRICE_ALERT_STATUSES } from './schema/alerts.js';
 import { NOTIFICATION_KINDS } from './schema/notifications.js';
 import { KYC_STATUSES } from './schema/users.js';
 import { EXCHANGES } from './schema/watchlists.js';
@@ -35,6 +38,11 @@ describe('schema enums', () => {
 
   it('checks notifications.kind against the contract NotificationKind', () => {
     expect([...NOTIFICATION_KINDS]).toEqual(NotificationKind.options);
+  });
+
+  it('checks the price_alerts lists against the contract', () => {
+    expect([...PRICE_ALERT_CONDITIONS]).toEqual(PriceAlertCondition.options);
+    expect([...PRICE_ALERT_STATUSES]).toEqual(PriceAlertStatus.options);
   });
 
   it('checks watchlist_items.exchange against the contract Exchange', () => {

@@ -138,10 +138,18 @@ export {
 export {
   ALERT_DESK_SNAPSHOT_VERSION,
   AlertDesk,
+  crossed as priceAlertCrossed,
+  priceAlertNotice,
   type AlertActionResult,
   type AlertBook,
   type AlertDeskOptions,
   type AlertDeskSnapshot,
   type AlertMarket,
 } from './alertDesk.js';
-export { OrderBook, type BookOrder, type BookStop, type BookTick } from './orderBook.js';
+export {
+  OrderBook,
+  type BookAlert,
+  type BookOrder,
+  type BookStop,
+  type BookTick,
+} from './orderBook.js';
