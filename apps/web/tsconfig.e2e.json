@@ -5,5 +5,10 @@
     "types": ["node"],
     "noEmit": true
   },
-  "include": ["e2e", "playwright.config.ts", "playwright.deployed.config.ts"]
+  "include": [
+    "e2e",
+    "playwright.config.ts",
+    "playwright.deployed.config.ts",
+    "playwright.walkthrough.config.ts"
+  ]
 }

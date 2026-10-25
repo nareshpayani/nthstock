@@ -36,6 +36,52 @@ export function enterDemoMode(storage: Pick<Storage, 'setItem'>): void {
   }
 }
 
+/** sessionStorage key: Try demo reloaded the page to load the demo account, and carries on. */
+export const DEMO_PENDING_STORAGE_KEY = 'nthstock.demoPending';
+
+/**
+ * What Try demo does next: `ready` when demo mode is on in this page; `reloading` when the page is
+ * reloading with `?demo=1` to load the demo account first.
+ */
+export type DemoStart = 'ready' | 'reloading';
+
+/**
+ * Turns demo mode on. The mock backend sets it at start; in api mode nothing does, so
+ * `startDemo` has nothing to do there.
+ */
+let demoStarter: (() => DemoStart) | null = null;
+
+export function setDemoStarter(start: (() => DemoStart) | null): void {
+  demoStarter = start;
+}
+
+/**
+ * Try demo (REQ-DEL-02, TFC-12): a cold load of /login and one tap give the same app as `?demo=1`,
+ * with the demo account's watchlists and holdings and the Demo simulator.
+ */
+export function startDemo(): DemoStart {
+  return demoStarter?.() ?? 'ready';
+}
+
+/** Marks Try demo as pending across the `?demo=1` reload. */
+export function markDemoPending(storage: Pick<Storage, 'setItem'>): boolean {
+  try {
+    storage.setItem(DEMO_PENDING_STORAGE_KEY, '1');
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Drops a Try demo pending flag. */
+export function clearDemoPending(storage: Pick<Storage, 'removeItem'>): void {
+  try {
+    storage.removeItem(DEMO_PENDING_STORAGE_KEY);
+  } catch {
+    // Nothing to clear without storage.
+  }
+}
+
 let current: SimulatorActions | null = null;
 const listeners = new Set<() => void>();
 

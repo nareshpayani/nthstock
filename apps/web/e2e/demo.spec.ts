@@ -22,3 +22,25 @@ test('?demo=1 seeds the demo user: two watchlists and holdings', async ({ page }
     await expect(page.getByText(list.name, { exact: true }).first()).toBeAttached();
   }
 });
+
+// REQ-DEL-02, TFC-12: Try demo from a cold load of /login gives demo mode, with the labelled Demo
+// simulator on the instrument page and the demo account's holdings, the same as ?demo=1 (the
+// walkthrough relies on it).
+test('Try demo opens the instrument page with the Demo simulator and the demo account', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto('/login');
+  await page.getByRole('button', { name: 'Try demo' }).click();
+  await expect(page).toHaveURL(/\/stocks\/RELIANCE$/);
+  const simulator = page.getByRole('region', { name: 'Demo simulator' });
+  await expect(simulator).toBeVisible();
+  await expect(simulator.getByRole('button', { name: 'Rally +1%' })).toBeVisible();
+
+  // The demo account comes with it: the seeded holdings are in the portfolio.
+  await page.goto('/portfolio');
+  const main = page.getByRole('main');
+  for (const symbol of new Set(DEMO_TRADES.map((trade) => trade.symbol))) {
+    await expect(main.getByText(symbol, { exact: true }).first()).toBeVisible();
+  }
+});

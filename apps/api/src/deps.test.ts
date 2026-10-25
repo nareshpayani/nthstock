@@ -78,4 +78,11 @@ describe('createDeps', () => {
   it('refuses DB_DRIVER=postgres without a URL', () => {
     expect(() => createDeps({ dbDriver: 'postgres' })).toThrow(/needs a DATABASE_URL/);
   });
+
+  it('matches inline by default, and refuses MATCHER_MODE=worker without the quote streams', async () => {
+    const deps = createDeps();
+    expect(deps.matcherMode).toBe('inline');
+    await deps.dispose();
+    expect(() => createDeps({ matcherMode: 'worker' })).toThrow(/MATCHER_MODE=worker needs/);
+  });
 });

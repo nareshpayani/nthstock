@@ -129,10 +129,16 @@ streams, so apps/api stops matching in process.
   store with the expected version, publishes the order update and only then acks. The engine re-checks every
   order, so a replayed request fills nothing twice and a request for an order modified since fills only what still
   crosses. A request a crashed process held is claimed after 30 s; an unsent one puts its orders back on the book.
-- **Status:** the book, the worker, the order and stop commands, the reconcile loop (orders only) and fills are
-  built, and so are server-side trailing stops (NSTOCK-0368). Reconciling stops (#573), `MATCHER_MODE` and the
-  benchmark are NSTOCK-0369 and 0370; until `MATCHER_MODE=worker` apps/api also fills on its own ticks, and a
-  request that arrives after such a fill finds nothing to do.
+- **`MATCHER_MODE`** (NSTOCK-0369, spec §5.4): `inline`, the default, keeps today's in-process desk (unit tests, the
+  `/v1/__test` scripted ticks, the E2E suites); a request that arrives after an inline fill finds nothing to do.
+  `worker` (needs `QUOTE_SHARDS`) builds the desk with `followTicks: false`: it subscribes to no ticks, reads the
+  adapter's current quote whenever an order action or a valuation needs a price (so a MARKET order fills at the live
+  price), and fills resting orders only from the matcher's requests. apps/api then runs no 15 s sweep, so AMO
+  release, square-off and day close run on each user's next request or fill until the E16 session jobs take them
+  over. Try it with `MATCHER_MODE=worker npm run dev:api`.
+- **Status:** the book, the worker, the order and stop commands, the reconcile loop (orders, and trailing stops
+  with NSTOCK-0387), fills and `MATCHER_MODE` are built, and so are server-side trailing stops (NSTOCK-0368). The
+  benchmark is NSTOCK-0370.
 
 ### Server-side trailing stops (NSTOCK-0368)
 In api mode trailing stops run on the server with the same engine rules as the browser mock (SPEC-TFC-1 §6, §10.6).
@@ -202,17 +208,33 @@ the chart shows after a reload.
   reads, so the fallback is contained.
 
 ### Price alerts and notifications
-- `AlertDesk` (`packages/paperEngine/src/alertDesk.ts`) runs in both backends beside the paper desk:
-  it subscribes to an instrument only while an active alert needs it, fires an ABOVE or BELOW alert
-  once on the first tick at or past its level (a gap fires with the LTP that crossed), and refuses a
-  level the price has already passed.
-- Fired alerts, executed orders and triggered trailing stops add notifications (newest 100 per user,
-  with a read flag). Routes: `/v1/alerts` (GET, POST), `/v1/alerts/:id` (DELETE),
-  `/v1/notifications` (GET), `/v1/notifications/read` (POST); at most 50 active alerts per user.
-- Delivery: the mock socket sends a `notification` message to the owner at once; in api mode the
-  client polls every 30 s until apps/realtime carries notifications (the notifications service of
-  Phases 3 to 5). The web app toasts a fired alert on any page and draws active alerts as dotted
-  price lines on the chart.
+Spec `market-data-and-matching.md` §6 (E24, NSTOCK-0379 to 0385). The mock backend keeps `AlertDesk`
+(`packages/paperEngine/src/alertDesk.ts`) in the browser; api mode stores everything in Postgres.
+- **Notifications** (NSTOCK-0379): a `notifications` row (migration 0017; kinds `PRICE_ALERT`, `ORDER_FILLED`,
+  `ORDER_REJECTED`, `TRAILING_STOP`, `AMO_RELEASED`, `SQUARED_OFF`, `SECURITY`) is written in the same
+  transaction as its cause: the account store derives fill, rejection, AMO release, square-off and trailing stop
+  notices from each order change (`orders/changeNotifications.ts`) and appends them beside the audit entries. The
+  newest 100 per user are kept. Bodies are built from contract types and never hold a mobile number or a name.
+- **Outbox** (NSTOCK-0379): each row gets a `notification_outbox` row in the same transaction. After commit apps/api
+  publishes a `NotificationEvent` on `nthstock:notify:v1:{userId}` and clears the outbox row; a relay publishes
+  rows older than 5 s every 5 s, so a crash or a Redis outage only delays delivery. Delivery is at least once and
+  the web app drops an id it already holds.
+- **Fan-out** (NSTOCK-0379): apps/realtime subscribes each connected user's notify channel beside their order
+  channel and sends `{ type: 'notification' }` to that user's sockets only; an event whose `userId` does not match
+  its channel, or that fails the contract, is dropped.
+- **Price alerts** (NSTOCK-0383): alerts live in `price_alerts` (migration 0018), at most 50 active per user. A
+  firing is one transaction, `UPDATE … WHERE status = 'ACTIVE' RETURNING` plus the notification and its outbox
+  row, so an alert fires exactly once whoever sees the tick first. apps/api watches the active alerts' instruments
+  (reloaded at start) and sends `ALERT_ADD` and `ALERT_CANCEL` to the shard's matcher command stream; the matcher
+  holds alerts on its `OrderBook` in two price heaps (ABOVE lowest first, BELOW highest first), reloads the active
+  ones every 60 s, and fires through the same transaction, then publishes. A level the price has already passed is
+  refused; a gap fires with the LTP that crossed it.
+- **Security notices** (NSTOCK-0382): a sign-in from a new device, two-factor turned on or off, and logging out the
+  other sessions raise a `SECURITY` notification naming the device type and the IST time ("Not you? Change your
+  PIN."). Raising one never fails the action it reports.
+- **Web** (NSTOCK-0384): the bell and the toasts update from the socket push with no poll; a pushed id already held
+  is dropped, and the list and the alerts are re-read after a reconnect. Routes: `/v1/alerts` (GET, POST),
+  `/v1/alerts/:id` (DELETE), `/v1/notifications` (GET), `/v1/notifications/read` (POST).
 
 ### Two-factor authentication and step-up
 - TOTP is RFC 6238 (HMAC-SHA1, 6 digits, 30 s step, ±1 step) in `packages/utils/src/totp.ts`, on
@@ -302,14 +324,30 @@ Spec `backend-core.md` §3 and §9, ADR 0007 §11. Code: `apps/api/src/modules/j
   the same thing in `npm run check`. A new route in the map joins with no extra wiring: regenerate
   and commit the file.
 
+### Demo mode and Try demo (TFC-12, REQ-DEL-02)
+The hosted site is the msw-mode build: the mock backend runs in the browser's service worker
+(`apps/web/src/mocks/browser.ts`) and each tab keeps its own paper account in sessionStorage.
+- **Demo mode** is a sessionStorage flag (`nthstock.demoMode`). It loads the demo account
+  (watchlists, holdings, ledger from `@nthstock/paperEngine`) and registers the Demo simulator,
+  whose Rally, Pull back and Gap buttons move one instrument's feed, so every screen sees the same
+  move. The instrument page shows it on desktop and on the phone layout, labelled "Simulated".
+- **`?demo=1`** turns it on at load: the seed is written before the mocks read their saved state.
+- **Try demo** on /login gives the same thing from a cold load. Outside demo mode it reloads to
+  `/login?demo=1` with a pending flag, then logs in as the demo user and opens RELIANCE without a
+  second tap (`startDemo` in `shared/lib/demoSimulator.ts`, `TryDemo.tsx`). In api mode nothing
+  registers a starter, so Try demo only logs in.
+- **Walkthrough video:** a Playwright script plays the five journeys on a 390 px touch phone
+  against the production build and encodes `public/demo/walkthrough.mp4`
+  (`docs/runbooks/demo-walkthrough.md`).
+
 ### Phase 2 sign-off (E21)
 - Demo seed: with `DB_DRIVER=postgres`, `DEMO_SEED=true` writes the demo user (upserted by the
   mobile's blind index), their terms and privacy consent (`UsersRepo.ensureConsent`, idempotent),
   the demo watchlists and the paper account (through the account store) to Postgres. Seeding twice
   or across a restart gives the same state (`seed.integration.test.ts`), equal to MSW's `?demo=1`.
 - Local stack: `npm run dev:api` starts Postgres and Redis, migrates, then runs apps/api,
-  apps/realtime, apps/quotes and the web app; `db:psql` and `db:reset` cover the chores
-  (`docs/runbooks/local-demo.md`).
+  apps/realtime, apps/quotes, the web app and the BullMQ jobs worker (`JOBS_MODE=bullmq`);
+  `db:psql` and `db:reset` cover the chores (`docs/runbooks/local-demo.md`).
 - Proof: the api-mode Playwright job restarts apps/api mid-test and still sees the session,
   watchlists, orders and holdings; the security settings journey (TOTP on, log in with TOTP, log out
   another session, delete the account, axe on every step) runs in msw and api mode; a performance

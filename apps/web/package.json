@@ -17,7 +17,8 @@
     "e2e:perf": "E2E_PERF=1 playwright test",
     "e2e:deployed": "playwright test -c playwright.deployed.config.ts",
     "lhci": "npx --yes @lhci/cli@0.15.1 autorun --config=lighthouserc.cjs",
-    "build:api-check": "VITE_API_MODE=api vite build --outDir dist-api --emptyOutDir --logLevel warn && node scripts/checkBuild.mjs dist-api"
+    "build:api-check": "VITE_API_MODE=api vite build --outDir dist-api --emptyOutDir --logLevel warn && node scripts/checkBuild.mjs dist-api",
+    "e2e:walkthrough": "bash ../../tools/demo/recordWalkthrough.sh"
   },
   "devDependencies": {
     "@nthstock/config": "0.0.0",
