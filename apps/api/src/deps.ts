@@ -41,6 +41,7 @@ import {
   createMemoryAccountStore,
   createPgAccountStore,
   createOrderService,
+  logFillClientEvents,
   startMatcherCommands,
   startMatcherFills,
   type AccountStore,
@@ -375,18 +376,33 @@ export function createDeps(overrides: DepsOverrides = {}): AppDeps {
   // connection of its own: XREADGROUP BLOCK holds it.
   let matcherFills: MatcherFills | null = null;
   if (quoteStreams && overrides.quoteStreams) {
-    const { url, shards, fillsKey, fillClaimIdleMs, blockMs, log } = overrides.quoteStreams;
+    const {
+      url,
+      shards,
+      fillsKey,
+      fillsDeadKey,
+      fillClaimIdleMs,
+      fillMaxDeliveries,
+      blockMs,
+      log,
+    } = overrides.quoteStreams;
     const client = new Redis(url, { maxRetriesPerRequest: null });
-    // A failed read is logged by the reader itself, once per outage.
-    client.on('error', () => undefined);
+    // Failed reads are logged by the reader itself, once per outage; the connection's own errors
+    // and reconnects here, at most once a minute (NSTOCK-0388).
+    logFillClientEvents(client, log);
     matcherFills = startMatcherFills({
       orders,
       client,
       shards,
       consumer: `api-${randomUUID()}`,
       log,
+      // The command connection is free when the reader's is held by XREADGROUP BLOCK, so it
+      // removes this process's consumer from the groups on close.
+      ...(matcherCommands ? { cleanup: matcherCommands.redis } : {}),
       ...(fillsKey ? { fillsKey } : {}),
+      ...(fillsDeadKey ? { deadLetterKey: fillsDeadKey } : {}),
       ...(fillClaimIdleMs === undefined ? {} : { claimIdleMs: fillClaimIdleMs }),
+      ...(fillMaxDeliveries === undefined ? {} : { maxDeliveries: fillMaxDeliveries }),
       ...(blockMs === undefined ? {} : { blockMs }),
     });
   }

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   MatcherCommand,
+  MATCHER_FILL_MAX_IDS,
   MatcherFill,
   matcherCommandsKey,
   matcherFillsKey,
@@ -75,5 +76,18 @@ describe('MatcherFill (NSTOCK-0367)', () => {
   it('refuses a local time and a price that is not positive', () => {
     expect(MatcherFill.safeParse({ ...fill, ts: '2026-09-28T10:00:00+05:30' }).success).toBe(false);
     expect(MatcherFill.safeParse({ ...fill, ltp: 0 }).success).toBe(false);
+  });
+
+  it('refuses more ids than one request may name (NSTOCK-0388)', () => {
+    const ids = (n: number) => Array.from({ length: n }, (_, i) => `pe_${String(i)}`);
+    expect(MatcherFill.safeParse({ ...fill, orderIds: ids(MATCHER_FILL_MAX_IDS) }).success).toBe(
+      true,
+    );
+    expect(
+      MatcherFill.safeParse({ ...fill, orderIds: ids(MATCHER_FILL_MAX_IDS + 1) }).success,
+    ).toBe(false);
+    expect(MatcherFill.safeParse({ ...fill, stopIds: ids(MATCHER_FILL_MAX_IDS + 1) }).success).toBe(
+      false,
+    );
   });
 });

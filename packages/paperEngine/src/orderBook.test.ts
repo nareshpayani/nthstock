@@ -85,6 +85,21 @@ describe('OrderBook (NSTOCK-0363)', () => {
     expect(book.restoreOrder(o1)).toBe(false);
   });
 
+  it('keeps a newer MODIFY when the fill of the crossed version fails (NSTOCK-0388)', () => {
+    const book = new OrderBook();
+    const o1 = order('o1', 'BUY', 100_00, 5);
+    book.upsertOrder(o1);
+    expect(book.tick(100_00).crossed).toEqual([o1]);
+    // The user moved the limit down before the fill request for version 5 failed.
+    const modified = order('o1', 'BUY', 95_00, 6);
+    expect(book.upsertOrder(modified)).toBe(true);
+    expect(book.restoreOrder(o1)).toBe(false);
+    expect([...book.orders()]).toEqual([modified]);
+    // The old limit no longer crosses; the new one does.
+    expect(book.tick(99_00).crossed).toEqual([]);
+    expect(book.tick(95_00).crossed).toEqual([modified]);
+  });
+
   it('keeps the heap entry of an order upserted at the same price, and lists the orders', () => {
     const book = new OrderBook();
     book.upsertOrder(order('o1', 'SELL', 100_00, 1));

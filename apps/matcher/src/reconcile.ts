@@ -130,6 +130,9 @@ export const RECONCILE_EVERY_MS = 60_000;
 /** A read still pending after this is abandoned, so one stalled connection cannot end the loop. */
 export const RECONCILE_READ_TIMEOUT_MS = 15_000;
 
+/** A failing reconcile is logged on its first round and then every this many (10 min at 60 s). */
+export const RECONCILE_FAILURE_LOG_EVERY = 10;
+
 function readWithin<T>(read: Promise<T>, ms: number): Promise<T> {
   let timeout: ReturnType<typeof setTimeout> | undefined;
   const expired = new Promise<never>((_, reject) => {
@@ -139,8 +142,10 @@ function readWithin<T>(read: Promise<T>, ms: number): Promise<T> {
 }
 
 /**
- * Reconciles on start and then every `everyMs`. A failed read is logged and retried on the next
- * round; the books keep what the commands built meanwhile.
+ * Reconciles on start and then every `everyMs`. A failed read is retried on the next round; the
+ * books keep what the commands built meanwhile. An outage is logged on its first failed round and
+ * every `RECONCILE_FAILURE_LOG_EVERY`th after it, with the count and the error's stack, so a
+ * reconcile that stays down is not one line an hour ago.
  */
 export function startReconcileLoop(options: {
   source: LiveOrderSource;
@@ -157,7 +162,7 @@ export function startReconcileLoop(options: {
   timer?: { setInterval: typeof setInterval; clearInterval: typeof clearInterval } | null;
 }): ReconcileLoop {
   const { source, shard, shards, books, book, log } = options;
-  let failing = false;
+  let failures = 0;
   let stopped = false;
   let running: Promise<ReconcileResult | null> | null = null;
 
@@ -177,15 +182,21 @@ export function startReconcileLoop(options: {
         book,
         asked: new Set(users),
       });
-      if (failing) log.info('Reconcile recovered', { shard });
-      failing = false;
+      if (failures > 0) log.info('Reconcile recovered', { shard, failures });
+      failures = 0;
       // A repaired book means a command was lost; worth a line every time.
       if (result.added + result.removed + result.stopsAdded + result.stopsRemoved > 0)
         log.info('Reconcile repaired the books', { shard, ...result });
       return result;
     } catch (error) {
-      if (!failing) log.warn('Reconcile failed', { shard, error: String(error) });
-      failing = true;
+      failures += 1;
+      if (failures === 1 || failures % RECONCILE_FAILURE_LOG_EVERY === 0) {
+        log.warn('Reconcile failed', {
+          shard,
+          failures,
+          error: error instanceof Error ? (error.stack ?? error.message) : String(error),
+        });
+      }
       return null;
     }
   }

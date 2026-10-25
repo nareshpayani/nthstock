@@ -142,6 +142,10 @@ export class PaperDesk {
   readonly #holidays: HolidayTable;
   readonly #ticks = new Map<InstrumentToken, number>();
   readonly #pins = new Map<InstrumentToken, number>();
+  /** The tick time of the newest matcher request per instrument (`ingestFor`), in ms. */
+  readonly #matcherTickAt = new Map<InstrumentToken, number>();
+  /** While an older matcher request runs, its own price, seen only by its users' engines. */
+  #heldPrice: { token: InstrumentToken; ltp: number } | null = null;
   /** Ticks seen per instrument, from the feed and from pinned prices. */
   readonly #tickSeq = new Map<InstrumentToken, number>();
   readonly #fillCaps = new Map<InstrumentToken, number>();
@@ -166,7 +170,11 @@ export class PaperDesk {
     this.#engines = options.engines ?? mapRegistry();
     this.#holidays = options.holidays ?? nseHolidays2026;
     this.#prices = {
-      getLtp: (token) => this.#pins.get(token) ?? this.#ticks.get(token) ?? null,
+      getLtp: (token) =>
+        this.#pins.get(token) ??
+        (this.#heldPrice?.token === token ? this.#heldPrice.ltp : undefined) ??
+        this.#ticks.get(token) ??
+        null,
       tickSeq: (token) => this.#tickSeq.get(token) ?? 0,
     };
     this.#instrumentSource = {
@@ -468,22 +476,39 @@ export class PaperDesk {
    * takes `ltp` as the instrument's price and syncs only these users' engines, at the tick's own
    * time when it is recent, as `ingest` does. The engine re-checks every order and stop, so a
    * request for an order that has since changed fills only what still crosses.
+   *
+   * Requests can arrive out of order (two apps/api processes, a claimed retry), so the price is
+   * kept only when the tick is newer than the last request's for the instrument (NSTOCK-0388); an
+   * older one still runs its users at its own price, which is what crossed on the matcher's book.
+   * A request this desk cannot run (disposed, a price that is not positive paise, a bad time)
+   * throws, so the reader leaves it pending instead of acking it unfilled.
    */
   async ingestFor(
     userIds: Iterable<string>,
     tick: { token: InstrumentToken; ltp: number; ts: string },
   ): Promise<void> {
-    if (this.#disposed || tick.ltp <= 0) return;
-    await this.#prepare(tick.token);
-    this.#ticks.set(tick.token, tick.ltp);
-    this.#countTick(tick.token);
+    if (this.#disposed) throw new Error('The paper desk is disposed');
+    if (!Number.isSafeInteger(tick.ltp) || tick.ltp <= 0) {
+      throw new RangeError(`A matcher tick price must be positive paise, got ${String(tick.ltp)}`);
+    }
     const at = Date.parse(tick.ts);
+    if (Number.isNaN(at)) throw new RangeError(`A matcher tick time must be ISO 8601: ${tick.ts}`);
+    await this.#prepare(tick.token);
+    const last = this.#matcherTickAt.get(tick.token);
+    if (last === undefined || at > last) {
+      this.#ticks.set(tick.token, tick.ltp);
+      this.#matcherTickAt.set(tick.token, at);
+    } else {
+      this.#heldPrice = { token: tick.token, ltp: tick.ltp };
+    }
+    this.#countTick(tick.token);
     const now = this.#options.clock.now().getTime();
     this.#tickAt = at <= now && now - at <= REPLAY_WINDOW_MS ? new Date(at) : null;
     try {
       for (const userId of userIds) this.#syncUser(userId);
     } finally {
       this.#tickAt = null;
+      this.#heldPrice = null;
     }
   }
 

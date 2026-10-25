@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { manualClock } from '../../test/manualClock.js';
 import { createMemoryAuditRepo } from '../audit/repo.js';
 import { AccountConflict, type AccountStore } from './accountStore.js';
-import { createOrderService, type OrderService } from './service.js';
+import { MATCHER_FILL_RETRIES, createOrderService, type OrderService } from './service.js';
 import { createMemoryAccountStore } from './repo.js';
 
 // The matcher's fill request on the account store (ADR 0013, NSTOCK-0367): the paths the reader
@@ -114,13 +114,32 @@ describe('applyMatcherFill', () => {
     expect(events).toEqual([]);
   });
 
-  it('rejects when both commits lose on version, and publishes nothing', async () => {
-    const { service, fill, executed, calls, events } = await setup(
-      () => new AccountConflict(USER, 1, 2),
+  it('runs again up to MATCHER_FILL_RETRIES times, and fills once on the last (NSTOCK-0388)', async () => {
+    const { service, fill, executed, calls, events } = await setup((call) =>
+      call <= MATCHER_FILL_RETRIES ? new AccountConflict(USER, call, call + 1) : null,
     );
 
-    await expect(service.applyMatcherFill(fill)).rejects.toBeInstanceOf(AccountConflict);
-    expect(calls()).toBe(2);
+    await service.applyMatcherFill(fill);
+
+    expect(calls()).toBe(MATCHER_FILL_RETRIES + 1);
+    expect(events.filter((event) => event === 'order:EXECUTED')).toHaveLength(1);
+    expect(await executed()).toHaveLength(1);
+  });
+
+  it('rejects with the real versions when every commit loses, and publishes nothing', async () => {
+    const { service, fill, executed, calls, events } = await setup(
+      (call) => new AccountConflict(USER, call, call + 1),
+    );
+
+    const rejected = service.applyMatcherFill(fill);
+    await expect(rejected).rejects.toBeInstanceOf(AccountConflict);
+    // The last attempt's versions, not placeholders.
+    await expect(rejected).rejects.toMatchObject({
+      userId: USER,
+      expectedVersion: MATCHER_FILL_RETRIES + 1,
+      actualVersion: MATCHER_FILL_RETRIES + 2,
+    });
+    expect(calls()).toBe(MATCHER_FILL_RETRIES + 1);
     expect(await executed()).toHaveLength(0);
     expect(events).toEqual([]);
   });

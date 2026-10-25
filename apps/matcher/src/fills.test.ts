@@ -1,5 +1,5 @@
-import { MatcherFill } from '@nthstock/contracts';
-import { OrderBook, type BookOrder } from '@nthstock/paperEngine';
+import { MATCHER_FILL_MAX_IDS, MatcherFill } from '@nthstock/contracts';
+import { OrderBook, type BookOrder, type BookStop } from '@nthstock/paperEngine';
 import { describe, expect, it } from 'vitest';
 import { createFillWriter, fillsFor, type FillStream } from './fills.js';
 import type { MatcherTick } from './matcher.js';
@@ -97,6 +97,87 @@ describe('createFillWriter (NSTOCK-0367)', () => {
     await write(tick(crossed));
     downFor = null;
     await write(tick(crossed));
-    expect(lines).toEqual(['Sending matcher fills failed', 'Sending matcher fills recovered']);
+    expect(lines).toEqual(['Sending a matcher fill failed', 'Sending matcher fills recovered']);
+  });
+
+  it('puts a triggered stop back as TRAILING when its request fails, and logs the ids (NSTOCK-0388)', async () => {
+    const book = new OrderBook();
+    const stop: BookStop = {
+      stopId: 'st1',
+      userId: 'u1',
+      version: 4,
+      state: {
+        status: 'TRAILING',
+        direction: 'LONG',
+        trail: { unit: 'AMOUNT', amount: 5_00 },
+        activationPrice: null,
+        watermarkPrice: 105_00,
+        stopPrice: 100_00,
+      },
+    };
+    book.upsertStop(stop);
+    book.upsertOrder(order('o1', 'u1'));
+    const acted = book.tick(99_95);
+    expect(acted.triggered.map((s) => s.state.status)).toEqual(['TRIGGERED']);
+    expect(book.size).toEqual({ orders: 0, stops: 0, alerts: 0 });
+
+    const warnings: { message: string; fields?: Record<string, unknown> }[] = [];
+    const info: { message: string; fields?: Record<string, unknown> }[] = [];
+    let down = true;
+    const write = createFillWriter({
+      stream: {
+        xadd: async () => {
+          if (down) throw new Error('READONLY replica');
+          return '1-0';
+        },
+      },
+      shard: 2,
+      book: () => book,
+      log: {
+        info: (message, fields) => info.push({ message, ...(fields ? { fields } : {}) }),
+        warn: (message, fields) => warnings.push({ message, ...(fields ? { fields } : {}) }),
+      },
+    });
+    const failedTick: MatcherTick = { ...acted, token: 7, symbol: 'TEST', ltp: 99_95, ts: 'x' };
+    await write(failedTick);
+
+    expect(warnings).toEqual([
+      {
+        message: 'Sending a matcher fill failed',
+        fields: {
+          shard: 2,
+          token: 7,
+          userId: 'u1',
+          orderIds: ['o1'],
+          stopIds: ['st1'],
+          reason: 'READONLY replica',
+        },
+      },
+    ]);
+    // Both are back at their version; the stop where the tick left it, so it triggers again.
+    expect([...book.stops()]).toEqual([stop]);
+    expect([...book.orders()].map((o) => o.orderId)).toEqual(['o1']);
+    expect(book.tick(99_95).triggered.map((s) => s.stopId)).toEqual(['st1']);
+
+    // A second failure in the same outage is counted, not logged.
+    await write(failedTick);
+    down = false;
+    await write(failedTick);
+    expect(warnings).toHaveLength(1);
+    expect(info).toEqual([
+      { message: 'Sending matcher fills recovered', fields: { shard: 2, failedSends: 2 } },
+    ]);
+  });
+});
+
+describe('fillsFor ids (NSTOCK-0388)', () => {
+  it('names at most the contract maximum of ids, still in one request', () => {
+    const many = Array.from({ length: MATCHER_FILL_MAX_IDS + 5 }, (_, i) =>
+      order(`o${String(i)}`, 'u1'),
+    );
+    const fills = fillsFor(tick(many, ['u1']));
+    expect(fills).toHaveLength(1);
+    expect(fills[0]?.orderIds).toHaveLength(MATCHER_FILL_MAX_IDS);
+    expect(MatcherFill.safeParse(fills[0]).success).toBe(true);
   });
 });
