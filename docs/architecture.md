@@ -136,9 +136,14 @@ streams, so apps/api stops matching in process.
   price), and fills resting orders only from the matcher's requests. apps/api then runs no 15 s sweep, so AMO
   release, square-off and day close run on each user's next request or fill until the E16 session jobs take them
   over. Try it with `MATCHER_MODE=worker npm run dev:api`.
+- **Benchmark** (NSTOCK-0370, `tools/loadTest/matcher.mjs`, [load-test runbook](runbooks/load-test.md#matcher-nstock-0370)):
+  1,00,000 resting orders and 10,000 trailing stops over 500 instruments at 2,000 ticks a second take p95
+  0.06 ms of book time per tick and read 6.8 heap entries a tick on average, against 220 for a full walk; every
+  entry read is a fill, a trigger, a ratchet or an entry a ratchet left behind. Tick to fill commit is about
+  10 ms at p95 at a steady rate (Redis hop p95 3.1 ms, Postgres commit p95 6.5 ms). One apps/api process commits
+  550 to 650 fills a second, so a burst queues; more API processes in the consumer group add fill capacity.
 - **Status:** the book, the worker, the order and stop commands, the reconcile loop (orders, and trailing stops
-  with NSTOCK-0387), fills and `MATCHER_MODE` are built, and so are server-side trailing stops (NSTOCK-0368). The
-  benchmark is NSTOCK-0370.
+  with NSTOCK-0387), fills, `MATCHER_MODE`, server-side trailing stops (NSTOCK-0368) and the benchmark are built.
 
 ### Server-side trailing stops (NSTOCK-0368)
 In api mode trailing stops run on the server with the same engine rules as the browser mock (SPEC-TFC-1 §6, §10.6).
