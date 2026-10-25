@@ -32,9 +32,17 @@ trap cleanup EXIT
 if [ -z "$base_url" ]; then
   VITE_API_MODE=msw VITE_MOCK_MARKET_OPEN=true VITE_TEST_CONTROLS=true \
     npx vite build --outDir dist-e2e-walkthrough --emptyOutDir
-  npx vite preview --outDir dist-e2e-walkthrough --host 127.0.0.1 --port 4180 --strictPort >/dev/null 2>&1 &
+  # A stale server on 4180 would make this preview exit and the clips record the old build.
+  preview_log=test-results/walkthrough-preview.log
+  mkdir -p test-results
+  npx vite preview --outDir dist-e2e-walkthrough --host 127.0.0.1 --port 4180 --strictPort \
+    >"$preview_log" 2>&1 &
   preview_pid=$!
-  for _ in $(seq 1 30); do curl -sf -o /dev/null http://127.0.0.1:4180/login && break; sleep 1; done
+  for _ in $(seq 1 30); do
+    kill -0 "$preview_pid" 2>/dev/null || { cat "$preview_log" >&2; echo "vite preview exited" >&2; exit 1; }
+    curl -sf -o /dev/null http://127.0.0.1:4180/login && break
+    sleep 1
+  done
   curl -sf -o /dev/null http://127.0.0.1:4180/login || { echo "vite preview did not start" >&2; exit 1; }
   base_url="http://127.0.0.1:4180"
 fi
@@ -51,7 +59,8 @@ for video in "$clips"/*.webm; do
   ffmpeg -v error -y -i "$video" -c:v libx264 -preset slow -crf 28 -pix_fmt yuv420p \
     -movflags +faststart -an "public/demo/$name.mp4"
   # The captions track, and a poster frame from 40% in for the guide's player.
-  [ -f "$clips/$name.vtt" ] && cp "$clips/$name.vtt" "public/demo/$name.vtt"
+  [ -f "$clips/$name.vtt" ] || { echo "$name has no captions track ($clips/$name.vtt)" >&2; exit 1; }
+  cp "$clips/$name.vtt" "public/demo/$name.vtt"
   duration="$(ffprobe -v error -show_entries format=duration -of csv=p=0 "public/demo/$name.mp4")"
   ffmpeg -v error -y -ss "$(awk -v d="$duration" 'BEGIN { print d * 0.4 }')" -i "public/demo/$name.mp4" \
     -frames:v 1 -vf scale=720:-2 -q:v 5 "public/demo/$name.jpg"

@@ -1,5 +1,4 @@
-import { existsSync } from 'node:fs';
-import { mkdir, writeFile } from 'node:fs/promises';
+import { mkdir, rename, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { DEV_OTP } from '@nthstock/contracts';
 import { expect, test, type Page } from '@playwright/test';
@@ -25,16 +24,18 @@ export function clip(id: string, title: string, body: (page: Page) => Promise<vo
     if (!video) throw new Error('video recording is off');
     await mkdir(CLIPS_DIR, { recursive: true });
     await writeFile(join(CLIPS_DIR, `${id}.vtt`), captions);
-    // saveAs can race Playwright's own copy of the video into the test's output folder; the file
-    // is complete once the page is closed, so try again.
+    // saveAs into a temporary name, then rename, so a clip file is never a partial copy. saveAs
+    // can race Playwright's own copy of the video into the test's output folder; try again.
     const target = join(CLIPS_DIR, `${id}.webm`);
+    const partial = `${target}.partial`;
     for (let attempt = 1; ; attempt += 1) {
       try {
-        await video.saveAs(target);
+        await video.saveAs(partial);
+        await rename(partial, target);
         break;
       } catch (error) {
-        if (existsSync(target)) break;
         if (attempt === 3) throw error;
+        console.warn(`${id}: saving the video failed (attempt ${String(attempt)}), retrying`);
         await new Promise((resolve) => setTimeout(resolve, 1000));
       }
     }

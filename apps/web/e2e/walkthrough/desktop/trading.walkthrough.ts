@@ -26,16 +26,26 @@ async function freshLogIn(page: Page, path: string) {
 async function setClock(page: Page, at: string) {
   await page.clock.setFixedTime(new Date(at));
   const body: TestClockRequest = { at };
-  await page.evaluate(
+  const status = await page.evaluate(
     async ({ path, body, header }) => {
-      await fetch(path, {
+      const response = await fetch(path, {
         method: 'POST',
         headers: { 'content-type': 'application/json', [header]: 'walkthrough' },
         body: JSON.stringify(body),
       });
+      return response.status;
     },
     { path: TEST_CONTROL_PATHS.clock, body, header: AUTH_CSRF_HEADER },
   );
+  // 404 means a build without the MSW test controls (the recorder builds with them).
+  expect(status, `POST ${TEST_CONTROL_PATHS.clock}`).toBe(200);
+}
+
+/** A price field's value in rupees; fails on an empty or zero field. */
+async function priceIn(field: Locator) {
+  const value = Number(await field.inputValue());
+  expect(value, 'price field').toBeGreaterThan(0);
+  return value;
 }
 
 const ticketOf = (page: Page, symbol: string) =>
@@ -64,8 +74,8 @@ async function tapUntil(
   for (let attempt = 0; attempt < times && !(await done()); attempt += 1) {
     await act.click(button, 1400);
   }
-  // A caption must never describe something the recording did not show.
-  if (!(await done())) throw new Error(`tapUntil: condition still false after ${times} taps`);
+  // The caption that follows describes the result, so it must have happened.
+  if (!(await done())) throw new Error(`no result after ${String(times)} taps`);
 }
 
 clip(
@@ -108,9 +118,9 @@ clip(
     await act.click(ticket.getByRole('radio', { name: 'Limit' }), 500);
     await say(page, 'A limit order: type a price, or pick one from the market depth.', 1800);
     const pick = ticket.getByRole('button', { name: /use as limit price$/ });
-    if (await pick.count()) await act.click(pick.nth(3), 900);
+    await act.click(pick.nth(3), 900);
     const price = ticket.getByRole('textbox', { name: 'Price (₹)' });
-    const picked = Number(await price.inputValue());
+    const picked = await priceIn(price);
     await act.type(price, (Math.round(picked * 1.3 * 20) / 20).toFixed(2), 900);
     await act.click(ticket.getByRole('button', { name: 'Buy INFY' }), 900);
     await say(
@@ -201,6 +211,7 @@ clip('trailingStop', 'a trailing stop-loss that ratchets up and triggers once', 
   const rally = simulator.getByRole('button', { name: 'Rally +1%' });
   await tapUntil(act, rally, async () => rupees(await line.innerText()) > placed);
   await act.click(rally, 1500);
+  await expect.poll(async () => rupees(await line.innerText())).toBeGreaterThan(placed);
   await say(
     page,
     `The stop ratcheted up from ${inr(placed)} to ${inr(rupees(await line.innerText()))}.`,
@@ -295,7 +306,7 @@ clip('orders', 'the order book: open, modify, cancel and the status timeline', a
   const ticket = ticketOf(page, 'INFY');
   await act.click(ticket.getByRole('radio', { name: 'Limit' }));
   const price = ticket.getByRole('textbox', { name: 'Price (₹)' });
-  const ltp = Number(await price.inputValue());
+  const ltp = await priceIn(price);
   await act.type(price, (Math.round(ltp * 0.95 * 20) / 20).toFixed(2));
   await act.type(ticket.getByRole('textbox', { name: 'Quantity' }), '5');
   await act.click(ticket.getByRole('button', { name: 'Buy INFY' }));
@@ -338,11 +349,9 @@ clip('positionsPortfolio', 'positions with live P&L, exit, and the portfolio', a
   await say(page, 'Portfolio: delivery holdings, valued live, with total and day P&L.', 3000);
   await page.mouse.wheel(0, 400);
   await page.waitForTimeout(1500);
-  const firstStock = page.getByRole('main').locator('a[href^="/stocks/"]').first();
-  if (await firstStock.count()) {
-    await act.hover(firstStock);
-    await say(page, 'Each holding links to its stock page.', 1800);
-  }
+  const firstHolding = page.getByRole('table', { name: 'Holdings' }).getByRole('row').nth(1);
+  await act.hover(firstHolding);
+  await say(page, 'Each holding shows quantity, average price, LTP and P&L.', 1800);
   await page.goto('/stocks/TCS');
   await marketBuy(page, 'TCS', '3');
   await act.click(nav(page, 'Positions'), 1200);

@@ -158,6 +158,7 @@ describe('GuidePage', () => {
       const track = player.querySelector('track');
       expect(track).toHaveAttribute('kind', 'captions');
       expect(track).toHaveAttribute('src', videoFile(video.id, 'vtt'));
+      expect(track).toHaveAttribute('srclang', 'en');
     }
   });
 

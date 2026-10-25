@@ -105,6 +105,7 @@ clip('walkthrough', 'demo walkthrough on a phone (T30)', async (page) => {
     await expect(ticket).toBeVisible({ timeout: 1500 });
   }).toPass({ timeout: 15_000 });
   const limit = Number(await ticket.getByRole('textbox', { name: 'Price (₹)' }).inputValue());
+  expect(limit, 'the ticket price').toBeGreaterThan(0);
   await ticket.getByRole('textbox', { name: 'Quantity' }).fill('4');
   await finger.tap(ticket.getByRole('switch', { name: 'Add trailing stop' }));
   await ticket.getByRole('textbox', { name: 'Trail (%)' }).fill('1');
