@@ -18,7 +18,7 @@ import { bytea, instant, sqlList } from './columns.js';
 export const KYC_STATUSES = ['NOT_STARTED', 'PENDING', 'VERIFIED'] as const;
 
 /** What a user consented to (spec backend-core §4.1, §10). */
-export const CONSENT_PURPOSES = ['TERMS_AND_PRIVACY'] as const;
+const CONSENT_PURPOSES = ['TERMS_AND_PRIVACY'] as const;
 
 /**
  * Users (T-190, spec backend-core §4.1). No plaintext PII: the mobile, name and email are

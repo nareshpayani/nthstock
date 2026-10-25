@@ -30,7 +30,7 @@ export type OverlayLine = {
  * Hit priority when handles overlap (§8.4): the active drag first, then orders, then the trailing
  * stop, then the position. Lower wins; the ghost sits with orders.
  */
-export const TONE_PRIORITY: Record<OverlayTone, number> = {
+const TONE_PRIORITY: Record<OverlayTone, number> = {
   pending: 0,
   buy: 1,
   sell: 1,

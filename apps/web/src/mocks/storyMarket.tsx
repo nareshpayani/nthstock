@@ -19,7 +19,7 @@ import { QuoteStoreContext } from '@/shared/lib/quoteStoreContext';
 import { marketHandlers } from './handlers/market';
 
 /** Saturday 26 Sep 2026, 11:30 IST: the mock market is closed, so the data holds still. */
-export const STORY_CLOCK = fixedClock(fromIst(2026, 9, 26, 11 * 60 + 30));
+const STORY_CLOCK = fixedClock(fromIst(2026, 9, 26, 11 * 60 + 30));
 const STORY_ORIGIN = 'http://story.test';
 
 /**

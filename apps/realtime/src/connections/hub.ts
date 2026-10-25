@@ -98,7 +98,7 @@ export const FLUSH_INTERVAL_MS = 1_000 / MAX_UPDATES_PER_SECOND;
 
 /** How often the heartbeat runs: idle checks each time, a ping every `PING_INTERVAL_MS`. */
 export const HEARTBEAT_INTERVAL_MS = 5_000;
-export const PING_INTERVAL_MS = 20_000;
+const PING_INTERVAL_MS = 20_000;
 /** Above this many bytes buffered for a client, its quote frames are dropped (T-075). */
 export const MAX_BUFFERED_BYTES = 1024 * 1024;
 

@@ -13,8 +13,8 @@ import { runJob, safeErrorMessage, type JobLog, type JobOutcome } from './runner
 export const JOBS_QUEUE = 'jobs';
 
 /** Three attempts in all, 30 s then 60 s apart (`exponential`: delay × 2^(attempt − 1)). */
-export const JOB_ATTEMPTS = 3;
-export const JOB_BACKOFF_MS = 30_000;
+const JOB_ATTEMPTS = 3;
+const JOB_BACKOFF_MS = 30_000;
 
 export type JobSchedulerOptions = {
   /** Redis for BullMQ; the worker blocks on it, so give it a connection of its own. */

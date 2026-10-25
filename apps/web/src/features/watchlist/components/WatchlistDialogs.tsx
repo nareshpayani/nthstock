@@ -28,7 +28,7 @@ export type WatchlistDialogsProps = {
  * The name rule from packages/contracts (1 to 24 characters after trimming) plus uniqueness
  * against the user's other lists, ignoring case, as both backends check it.
  */
-export function watchlistNameForm(otherNames: readonly string[]) {
+function watchlistNameForm(otherNames: readonly string[]) {
   return z.object({
     name: WatchlistName.refine(
       (name) => !otherNames.some((other) => sameWatchlistName(other, name)),

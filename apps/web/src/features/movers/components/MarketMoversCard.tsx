@@ -17,11 +17,10 @@ import { strings } from '../strings';
 
 /** Rows shown per direction on the dashboard. */
 export const MOVERS_ROWS = 5;
-export const MOVERS_DIRECTIONS = ['gainers', 'losers'] as const satisfies readonly MoverDirection[];
+const MOVERS_DIRECTIONS = ['gainers', 'losers'] as const satisfies readonly MoverDirection[];
 
 export type MoversIndex = (typeof strings.indices)[number];
-export const MOVERS_INDICES: readonly MoversIndex[] = strings.indices;
-export const DEFAULT_MOVERS_INDEX: string = strings.indices[0].value;
+const MOVERS_INDICES: readonly MoversIndex[] = strings.indices;
 export const DEFAULT_MOVERS_DIRECTION: MoverDirection = 'gainers';
 
 /** The index for a URL value: known symbols pass, anything else falls back to the Nifty 50. */

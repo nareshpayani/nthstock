@@ -22,8 +22,8 @@ const PAISE_PER_CRORE = 1_000_000_000;
 
 /** Market-cap buckets by full market cap (₹ crore): large ≥ 50,000, mid ≥ 5,000, small below. */
 export type MarketCapBucket = 'LARGE' | 'MID' | 'SMALL';
-export const LARGE_CAP_MIN_CRORE = 50_000;
-export const MID_CAP_MIN_CRORE = 5_000;
+const LARGE_CAP_MIN_CRORE = 50_000;
+const MID_CAP_MIN_CRORE = 5_000;
 
 export function marketCapBucket(marketCapCrore: number): MarketCapBucket {
   if (marketCapCrore >= LARGE_CAP_MIN_CRORE) return 'LARGE';

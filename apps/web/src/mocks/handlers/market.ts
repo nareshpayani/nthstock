@@ -3,7 +3,7 @@ import type { HttpHandler } from 'msw';
 import { defineRoute, notFound, type RouteHandlerOptions } from '../handlerKit';
 
 /** Version string the mock health route reports. */
-export const MOCK_VERSION = 'msw';
+const MOCK_VERSION = 'msw';
 
 /**
  * REST handlers for the market routes (T-052), all served by one adapter instance so REST

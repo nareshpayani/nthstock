@@ -3,7 +3,7 @@ import { useContext, useEffect, useState } from 'react';
 import { MarketSessionContext } from '@/shared/lib/marketSessionContext';
 
 /** How often the open/closed state is re-read from the clock. */
-export const MARKET_OPEN_REFRESH_MS = 30_000;
+const MARKET_OPEN_REFRESH_MS = 30_000;
 
 /**
  * True while NSE is in its continuous session (9:15–15:30 IST on a trading day, holidays

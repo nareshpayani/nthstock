@@ -53,7 +53,7 @@ export type PerfSmokeOptions = {
 };
 
 /** The PIN every perf user has (they exist only in a local database). */
-export const PERF_PIN = '135790';
+const PERF_PIN = '135790';
 const SEED_CONCURRENCY = 16;
 const ORDER_TOKENS = 20;
 const MAX_FAILURES_REPORTED = 5;

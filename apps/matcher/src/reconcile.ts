@@ -128,7 +128,7 @@ export type ReconcileLoop = {
 export const RECONCILE_EVERY_MS = 60_000;
 
 /** A read still pending after this is abandoned, so one stalled connection cannot end the loop. */
-export const RECONCILE_READ_TIMEOUT_MS = 15_000;
+const RECONCILE_READ_TIMEOUT_MS = 15_000;
 
 /** A failing reconcile is logged on its first round and then every this many (10 min at 60 s). */
 export const RECONCILE_FAILURE_LOG_EVERY = 10;

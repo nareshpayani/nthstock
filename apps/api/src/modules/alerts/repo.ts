@@ -47,8 +47,6 @@ const listed = (alerts: readonly PriceAlert[]) => {
   ];
 };
 
-export { listed as listedAlerts };
-
 /** The memory repo, for unit tests and `DB_DRIVER=memory`; notifications go to `notifications`. */
 export function createMemoryAlertsRepo({
   notifications,

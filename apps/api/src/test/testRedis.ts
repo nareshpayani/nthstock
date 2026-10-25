@@ -13,7 +13,7 @@ import { describe } from 'vitest';
  */
 export type TestRedis = { url: string; stop(): Promise<void> };
 
-export const REDIS_TEST_IMAGE = 'redis:7-alpine';
+const REDIS_TEST_IMAGE = 'redis:7-alpine';
 
 const skip = process.env.SKIP_REDIS_INTEGRATION === '1';
 

@@ -27,7 +27,7 @@ type DeviceRow = typeof devices.$inferSelect;
 type SessionRow = typeof sessions.$inferSelect;
 
 /** A SHA-256 in hex (how the services pass token hashes) as the 32 bytes the tables store. */
-export function tokenHashBytes(hash: string): Buffer {
+function tokenHashBytes(hash: string): Buffer {
   if (!/^[0-9a-f]{64}$/.test(hash)) throw new Error('A token hash must be a hex SHA-256');
   return Buffer.from(hash, 'hex');
 }
@@ -55,7 +55,7 @@ const toDevice = (row: DeviceRow): DeviceRecord => ({
  * own count and the fifth one locks.
  */
 /** Rows one cleanup statement deletes at most (T-210); a session's cascade adds its tokens. */
-export const CLEANUP_CHUNK = 5_000;
+const CLEANUP_CHUNK = 5_000;
 const CLEANUP_STATEMENT_TIMEOUT_MS = 10_000;
 
 /** Runs a `… limit <chunk>` delete until it deletes less than a chunk; the total deleted. */
@@ -71,7 +71,7 @@ async function deleteInChunks(database: Database, chunk: number, statement: SQL)
   }
 }
 
-export function createPgDeviceStore({
+function createPgDeviceStore({
   database,
   clock,
   pii,
@@ -307,7 +307,7 @@ const toSession = (row: SessionRow): SessionRecord => ({
  * `useRefreshToken` is one statement that locks the token row, sets `used_at` if it is unset, and
  * returns the value it had before, so of two concurrent uses exactly one sees it unused.
  */
-export function createPgSessionStore({
+function createPgSessionStore({
   database,
   cleanupChunk = CLEANUP_CHUNK,
 }: {

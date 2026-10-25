@@ -1,7 +1,7 @@
 import type { ApiClient } from '@nthstock/apiClient';
 import { queryOptions } from '@tanstack/react-query';
 
-export const collectionsKeys = {
+const collectionsKeys = {
   all: ['collections'] as const,
   list: (id: string) => ['collections', 'list', { id }] as const,
 };

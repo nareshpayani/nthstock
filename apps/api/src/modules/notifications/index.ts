@@ -3,11 +3,7 @@
 // import internals.
 export { createNotifier, type Notifier } from './notifier.js';
 export { createPgNotificationsRepo } from './pgRepo.js';
-export {
-  OUTBOX_RELAY_MS,
-  startNotificationPublisher,
-  type NotificationPublisher,
-} from './publisher.js';
+export { startNotificationPublisher, type NotificationPublisher } from './publisher.js';
 export { createMemoryNotificationsRepo, type NotificationsRepo } from './repo.js';
 export type { NewNotification, StoredNotification } from './schema.js';
 export {

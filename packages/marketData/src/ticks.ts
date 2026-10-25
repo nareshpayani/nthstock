@@ -6,7 +6,7 @@ import type { GbmParams } from './sectors.js';
 export const TRADING_DAYS_PER_YEAR = 252;
 /** Normal NSE session length, 9:15–15:30 IST. */
 export const SESSION_MINUTES = 375;
-export const SESSION_SECONDS_PER_YEAR = TRADING_DAYS_PER_YEAR * SESSION_MINUTES * 60;
+const SESSION_SECONDS_PER_YEAR = TRADING_DAYS_PER_YEAR * SESSION_MINUTES * 60;
 
 /** Years of trading time covered by one tick of `intervalMs`. */
 export function tickYears(intervalMs: number): number {

@@ -24,11 +24,10 @@ export const ordersKeys = {
   history: (id: string) => ['orders', 'history', { id }] as const,
 };
 
-/** Holdings and the portfolio summary. Every `orderUpdate` invalidates `holdingsKeys.all`. */
+/** Holdings. Every `orderUpdate` invalidates `holdingsKeys.all`. */
 export const holdingsKeys = {
   all: ['holdings'] as const,
   list: () => ['holdings', 'list'] as const,
-  summary: () => ['holdings', 'summary'] as const,
 };
 
 /** Positions. Every `orderUpdate` invalidates `positionsKeys.all`. */

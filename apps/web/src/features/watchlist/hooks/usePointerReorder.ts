@@ -2,7 +2,7 @@ import { useRef, useState, type KeyboardEvent, type MouseEvent, type PointerEven
 import { dropIndex } from '../model/dropIndex';
 
 /** Pixels the pointer must travel before a press becomes a drag, so a click stays a click. */
-export const DRAG_THRESHOLD_PX = 4;
+const DRAG_THRESHOLD_PX = 4;
 
 export type DragState = { from: number; to: number; offset: number };
 

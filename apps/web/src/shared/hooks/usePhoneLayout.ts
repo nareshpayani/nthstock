@@ -4,7 +4,7 @@ import { useCallback, useSyncExternalStore } from 'react';
  * Below Tailwind's `md` breakpoint: the phone layout of SPEC-TFC-1 §9.4 (bottom sheets, the
  * instrument page's tabs and sticky bottom bar). Covers phones up to large ones in portrait.
  */
-export const PHONE_QUERY = '(max-width: 767.98px)';
+const PHONE_QUERY = '(max-width: 767.98px)';
 
 /** Whether a media query matches, following changes. False where `matchMedia` is missing. */
 export function useMediaQuery(query: string): boolean {

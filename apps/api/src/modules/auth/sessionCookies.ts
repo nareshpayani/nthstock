@@ -4,7 +4,7 @@ import { parseCookies, serializeCookie, type CookieOptions } from '../../http/co
 import type { IssuedSession } from './sessionService.js';
 
 /** Path of the refresh and device cookies: only the auth routes ever receive them. */
-export const REFRESH_COOKIE_PATH = '/v1/auth';
+const REFRESH_COOKIE_PATH = '/v1/auth';
 
 const base = (secure: boolean): Omit<CookieOptions, 'maxAge' | 'path'> => ({
   httpOnly: true,
@@ -13,7 +13,7 @@ const base = (secure: boolean): Omit<CookieOptions, 'maxAge' | 'path'> => ({
 });
 
 /** Adds a Set-Cookie header without dropping ones already set on the reply. */
-export function appendSetCookie(reply: FastifyReply, cookie: string): void {
+function appendSetCookie(reply: FastifyReply, cookie: string): void {
   const existing = reply.getHeader('set-cookie');
   const list =
     existing === undefined ? [] : Array.isArray(existing) ? existing : [String(existing)];

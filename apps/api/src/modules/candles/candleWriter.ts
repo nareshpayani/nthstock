@@ -12,16 +12,15 @@ import {
 import type { CandleStore, StoredBar } from './store.js';
 
 /** The candle writer's consumer group on every tick stream (spec market-data-and-matching §7.2). */
-export const CANDLES_GROUP = 'candles';
+const CANDLES_GROUP = 'candles';
 /** One writer process reads every shard; a fixed name keeps its pending entries across restarts. */
-export const CANDLES_CONSUMER = 'candle-writer';
+const CANDLES_CONSUMER = 'candle-writer';
 
 /** The last minute written for a shard (minutes since the epoch), so a restart does not redo it. */
-export const candlesWrittenKey = (shard: number): string =>
-  `nthstock:candles:written:v1:${String(shard)}`;
+const candlesWrittenKey = (shard: number): string => `nthstock:candles:written:v1:${String(shard)}`;
 
 /** A minute is written without waiting for a silent shard once it ended this long ago. */
-export const DEFAULT_IDLE_GRACE_MS = 5_000;
+const DEFAULT_IDLE_GRACE_MS = 5_000;
 
 export type CandleWriterLog = {
   info(message: string, fields?: Record<string, unknown>): void;

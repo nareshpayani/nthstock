@@ -11,7 +11,7 @@ export type CandlesParams = {
   interval?: CandleInterval | undefined;
 };
 
-export const chartKeys = {
+const chartKeys = {
   all: ['charts'] as const,
   candles: (params: CandlesParams) => ['charts', 'candles', params] as const,
 };

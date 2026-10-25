@@ -2,9 +2,9 @@ import type { ApiClient } from '@nthstock/apiClient';
 import { queryOptions } from '@tanstack/react-query';
 
 /** Results shown in the search dropdown. */
-export const SEARCH_RESULTS_LIMIT = 8;
+const SEARCH_RESULTS_LIMIT = 8;
 
-export const searchKeys = {
+const searchKeys = {
   all: ['search'] as const,
   results: (q: string) => ['search', 'results', { q, limit: SEARCH_RESULTS_LIMIT }] as const,
   popular: () => ['search', 'popular'] as const,

@@ -2,7 +2,6 @@ import type { Watchlist, WatchlistItem } from '@nthstock/contracts';
 import { describe, expect, it } from 'vitest';
 import {
   OPTIMISTIC_ID_PREFIX,
-  listsContaining,
   withCreatedList,
   withItemAdded,
   withItemRemoved,
@@ -68,11 +67,5 @@ describe('optimistic watchlist updates', () => {
     expect(tokens('wl_1', withItemRemoved(data, 'wl_1', 1))).toEqual([2]);
     expect(tokens('wl_1', withItemsReordered(data, 'wl_1', [2, 1]))).toEqual([2, 1]);
     expect(withItemAdded(data, 'wl_nope', three)).toEqual(data);
-  });
-
-  it('finds the lists holding a stock', () => {
-    expect(listsContaining(data, 1)).toEqual(['wl_1']);
-    expect(listsContaining(data, 99)).toEqual([]);
-    expect(listsContaining(undefined, 1)).toEqual([]);
   });
 });
