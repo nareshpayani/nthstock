@@ -410,7 +410,8 @@ export const strings = {
             'apps/matcher runs one process per shard of instruments. A Redis lease picks the one that acts; the others follow the same streams, so a standby is current the moment it takes over.',
             'After each order commit, apps/api appends an ADD, MODIFY or CANCEL command to the shard’s command stream, stamped with the account version, and a STOP_ADD or STOP_CANCEL after each trailing stop change. A late or replayed command never undoes a newer one.',
             'Each instrument has an order book: limit orders and trailing stops sit in price heaps, so a tick reads only what it fills, triggers or moves, not every resting order. A property test checks it against a full walk.',
-            'Still to come: the reconcile loop from Postgres, fills committed through the account store, a switch to turn it on, and a benchmark. Until then apps/api steps trailing stops in its own process.',
+            'Every minute, and on start, the matcher reads its shard’s live orders from Postgres, the record, and repairs its books, so a lost command is fixed within a minute.',
+            'Still to come: fills committed through the account store, reconciling trailing stops, a switch to turn it on, and a benchmark. Until then apps/api steps trailing stops in its own process.',
           ],
         },
         {
@@ -549,6 +550,16 @@ export const strings = {
             'The web app navigates to /login?deleted=… before it clears the session, forgets the trusted browser and empties the query cache, so nothing from the account stays on the device.',
           ],
         },
+        { kind: 'heading', text: 'OpenAPI 3.1, generated from the contracts' },
+        {
+          kind: 'list',
+          items: [
+            'packages/contracts builds an OpenAPI 3.1 document from the same route map that types the client, validates the server and drives the mocks, using Zod 4’s own z.toJSONSchema. Nothing is written by hand and no extra library is needed.',
+            'Every route appears once with its method, path, path and query parameters, request body, response schema, its auth (cookie or Bearer JWT) and the ApiError envelope for every error. Response types are shared component schemas, so Order is described once.',
+            'apps/api serves it at GET /v1/docs/openapi.json, public and cacheable, revalidated by ETag so a deploy shows at once. npm run openapi writes the same text to docs/api/openapi.json, ready for Postman, Swagger Editor or a client generator.',
+            'CI regenerates the file on every pull request, uploads it as a build artifact and fails when the committed copy is stale, so the published API description can never drift from the code. A new route joins automatically.',
+          ],
+        },
         { kind: 'heading', text: 'Rules every layer follows' },
         {
           kind: 'list',
@@ -574,6 +585,8 @@ export const strings = {
             },
             { label: 'Trading store', href: repoLink('packages/apiClient/src/tradingStore.ts') },
             { label: 'Binary quote frame', href: repoLink('packages/contracts/src/quoteFrame.ts') },
+            { label: 'OpenAPI document', href: repoLink('docs/api/openapi.json') },
+            { label: 'OpenAPI generator', href: repoLink('packages/contracts/src/openapi.ts') },
           ],
         },
       ],
@@ -959,7 +972,7 @@ export const strings = {
         {
           kind: 'code',
           label: 'nthstock/',
-          text: 'CLAUDE.md               project rules every agent reads first\nWRITEUP.md              design rationale for the assignment\napps/\n  web/                  React SPA\n    e2e/                Playwright specs: journeys, phone, perf, a11y\n    scripts/            build budgets, no raw colours, import rules\n    src/\n      main.tsx          boot: config, mocks, providers, router\n      app/              app-wide wiring: layouts, live quotes, router\n      routes/           file routes; thin, they load a feature page\n      features/<name>/  dashboard, stockDetail, orderTicket, chartTrading,\n                        scalper, orders, positions, holdings, funds,\n                        watchlist, search, guide, …\n      shared/           cross-feature components and hooks\n      mocks/            MSW handlers and the in-browser market\n  api/                  Fastify modular monolith\n    drizzle/            SQL migrations\n    src/\n      app.ts server.ts config.ts deps.ts\n      db/               Postgres client, migrator, column crypto\n      http/             errors, cookies, CSRF, security headers\n      modules/<name>/   auth, users, watchlists, orders, portfolio,\n                        funds, market, audit, health, demo\n      ticks/            tick pump and Redis publisher\n  realtime/             WebSocket server\n    src/connections/    auth, hub, subscription registry\n    src/feeds/          Redis quote, order and revocation feeds\n  quotes/               tick writer, one per shard behind a Redis lease\npackages/\n  ui/                   design system components and Storybook\n  tokens/               design tokens → CSS variables and Tailwind\n  contracts/            Zod schemas for every REST and WS message\n  marketData/           the mock market\n  paperEngine/          orders, fills, ledger, P&L, trailing stops\n  apiClient/            REST and WS clients, quote and trading stores\n  config/               shared ESLint, TypeScript, Vitest presets\n  utils/                INR formatting, market hours, IST dates, shards\ninfra/                  Docker Compose, PgBouncer, k6\ntools/                  issue keys, release checks, load test\ndocs/                   product, architecture, ADRs, specs, runbooks\n.claude/                agents, rules, skills, hooks\n.github/                workflows, PR template, CODEOWNERS',
+          text: 'CLAUDE.md               project rules every agent reads first\nWRITEUP.md              design rationale for the assignment\napps/\n  web/                  React SPA\n    e2e/                Playwright specs: journeys, phone, perf, a11y\n    scripts/            build budgets, no raw colours, import rules\n    src/\n      main.tsx          boot: config, mocks, providers, router\n      app/              app-wide wiring: layouts, live quotes, router\n      routes/           file routes; thin, they load a feature page\n      features/<name>/  dashboard, stockDetail, orderTicket, chartTrading,\n                        scalper, orders, positions, holdings, funds,\n                        watchlist, search, guide, …\n      shared/           cross-feature components and hooks\n      mocks/            MSW handlers and the in-browser market\n  api/                  Fastify modular monolith\n    drizzle/            SQL migrations\n    src/\n      app.ts server.ts config.ts deps.ts\n      db/               Postgres client, migrator, column crypto\n      http/             errors, cookies, CSRF, security headers\n      modules/<name>/   auth, users, watchlists, orders, portfolio,\n                        funds, market, audit, health, docs, demo\n      ticks/            tick pump and Redis publisher\n  realtime/             WebSocket server\n    src/connections/    auth, hub, subscription registry\n    src/feeds/          Redis quote, order and revocation feeds\n  quotes/               tick writer, one per shard behind a Redis lease\npackages/\n  ui/                   design system components and Storybook\n  tokens/               design tokens → CSS variables and Tailwind\n  contracts/            Zod schemas for every REST and WS message\n  marketData/           the mock market\n  paperEngine/          orders, fills, ledger, P&L, trailing stops\n  apiClient/            REST and WS clients, quote and trading stores\n  config/               shared ESLint, TypeScript, Vitest presets\n  utils/                INR formatting, market hours, IST dates, shards\ninfra/                  Docker Compose, PgBouncer, k6\ntools/                  issue keys, release checks, load test\ndocs/                   product, architecture, ADRs, specs, runbooks,\n                        api/openapi.json (generated)\n.claude/                agents, rules, skills, hooks\n.github/                workflows, PR template, CODEOWNERS',
         },
         {
           kind: 'list',
@@ -1009,8 +1022,8 @@ export const strings = {
             ],
             [
               'Contract',
-              'Shared Zod schemas and adapter suites',
-              'Every market adapter must pass the shared contract suite; mocks are typed from the same schemas',
+              'Shared Zod schemas, route contract tests, adapter suites',
+              'Every route in the map is registered in Fastify with its method, path and auth, and has an MSW handler; every scenario response on both backends is checked against its route schema, every error against ApiError; every market adapter passes the shared suite',
             ],
             [
               'End to end',

@@ -224,7 +224,13 @@ export function createDeps(overrides: DepsOverrides = {}): AppDeps {
     audit,
     accounts:
       overrides.repos?.accounts ??
-      (database ? createPgAccountStore({ database, audit }) : createMemoryAccountStore({ audit })),
+      (database
+        ? createPgAccountStore({
+            database,
+            audit,
+            ...(overrides.quoteStreams ? { shards: overrides.quoteStreams.shards } : {}),
+          })
+        : createMemoryAccountStore({ audit })),
   };
   const orders = createOrderService({
     clock,

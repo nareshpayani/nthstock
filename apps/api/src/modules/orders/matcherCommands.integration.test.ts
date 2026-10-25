@@ -2,10 +2,12 @@ import { MatcherCommand, routes, type Quote } from '@nthstock/contracts';
 import { MockMarketDataAdapter, generateSymbolMaster } from '@nthstock/marketData';
 import { shardOf } from '@nthstock/utils';
 import { Redis } from 'ioredis';
+import { Client } from 'pg';
 import { afterAll, beforeAll, expect, it } from 'vitest';
 import { buildApp } from '../../app.js';
 import { loginWithOtp } from '../../test/authFlow.js';
 import { manualClock } from '../../test/manualClock.js';
+import { describeWithPostgres, useTestPostgres } from '../../test/testPostgres.js';
 import {
   describeWithRedis,
   startTestRedis,
@@ -174,4 +176,87 @@ describeWithRedis('matcher commands from apps/api (integration, NSTOCK-0365)', (
 
     await app.close();
   }, 60_000);
+});
+
+describeWithPostgres('order rows record their matcher shard (integration, NSTOCK-0366)', () => {
+  describeWithRedis('with Redis', () => {
+    let redis: TestRedis | undefined;
+    let reader: Redis;
+
+    beforeAll(async () => {
+      redis = await startTestRedis();
+      reader = new Redis(redis.url);
+    }, 180_000);
+
+    afterAll(async () => {
+      reader.disconnect();
+      await redis?.stop();
+    });
+
+    it("sets orders.shard to the instrument's shard on insert", async () => {
+      const pg = await useTestPostgres();
+      await pg.truncate();
+      const prefix = uniqueChannel('shard');
+      const clock = manualClock('2026-09-28T04:30:00.000Z');
+      const market = new MockMarketDataAdapter({ master, clock, externalTicks: true });
+      const base = (await new MockMarketDataAdapter({ master }).getQuote(
+        EQUITY?.symbol ?? '',
+      )) as Quote;
+      const shard = shardOf(TOKEN, SHARDS);
+      await reader.hset(
+        `${prefix}:last:${String(shard)}`,
+        String(TOKEN),
+        JSON.stringify({ ...base, ltp: 1_400_00 }),
+      );
+      const app = buildApp({
+        deps: {
+          clock,
+          market,
+          dbDriver: 'postgres',
+          databaseUrl: pg.appUrl,
+          quoteStreams: {
+            url: redis?.url ?? '',
+            shards: SHARDS,
+            streamKey: (s) => `${prefix}:ticks:${String(s)}`,
+            snapshotKey: (s) => `${prefix}:last:${String(s)}`,
+            commandsKey: (s) => `${prefix}:commands:${String(s)}`,
+            blockMs: 100,
+            log: silent,
+          },
+        },
+        orderSweepMs: null,
+      });
+      app.addHook('onClose', () => market.dispose());
+      await app.ready();
+      const user = await loginWithOtp(app, '9876500012');
+      const placed = await app.inject({
+        method: 'POST',
+        url: routes.orderPlace.path,
+        headers: { authorization: `Bearer ${user.access}`, 'x-csrf-token': 'bearer' },
+        payload: {
+          token: TOKEN,
+          side: 'BUY',
+          type: 'LIMIT',
+          price: 1_390_00,
+          product: 'DELIVERY',
+          qty: 1,
+        },
+      });
+      expect(placed.statusCode, placed.body).toBe(200);
+      const { id } = placed.json() as { id: string };
+
+      const owner = new Client({ connectionString: pg.ownerUrl });
+      await owner.connect();
+      try {
+        const { rows } = await owner.query<{ shard: number | null }>(
+          'SELECT shard FROM orders WHERE id = $1',
+          [id],
+        );
+        expect(rows).toEqual([{ shard }]);
+      } finally {
+        await owner.end();
+        await app.close();
+      }
+    }, 60_000);
+  });
 });

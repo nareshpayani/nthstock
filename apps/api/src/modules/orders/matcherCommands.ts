@@ -85,8 +85,9 @@ export function stopCommandFor(
  * Sends every committed order and trailing stop change to the matcher (NSTOCK-0365, 0368): one
  * entry on the command stream of the instrument's shard, after the commit that made it, as
  * `startOrderUpdatePublisher` publishes the change to the user's socket. A failed send is logged
- * once until sending recovers and is not retried: the matcher's reconcile loop (NSTOCK-0366, still
- * to come, and needed before `MATCHER_MODE` hands it the books) repairs the book from Postgres.
+ * once until sending recovers and is not retried: the matcher's reconcile loop (NSTOCK-0366)
+ * repairs resting orders from Postgres within a minute; stops are not reconciled yet, which must
+ * land before `MATCHER_MODE` hands the worker the books.
  */
 export function startMatcherCommands(options: {
   orders: Pick<OrderService, 'onOrderUpdate' | 'onTrailingStopUpdate'>;

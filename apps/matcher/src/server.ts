@@ -1,9 +1,15 @@
 import { randomUUID } from 'node:crypto';
 import { startLease } from '@nthstock/marketData';
 import { Redis } from 'ioredis';
+import { Pool } from 'pg';
 import { loadConfig } from './config.js';
 import { jsonLogger } from './logger.js';
 import { startMatcher } from './matcher.js';
+import {
+  CONNECTION_TIMEOUT_MS,
+  QUERY_TIMEOUT_MS,
+  createPgLiveOrderSource,
+} from './pgLiveOrders.js';
 
 // apps/matcher (spec market-data-and-matching §5): one process per shard fills resting orders and
 // triggers trailing stops off the tick stream, while it holds the shard's lease.
@@ -24,6 +30,21 @@ commands.on('error', (error: Error) => {
   jsonLogger.warn('matcher command redis error', { error: error.message });
 });
 
+// One connection is enough: the reconcile loop reads once a minute.
+const pool = config.databaseUrl
+  ? new Pool({
+      connectionString: config.databaseUrl,
+      max: 1,
+      application_name: 'apps/matcher',
+      connectionTimeoutMillis: CONNECTION_TIMEOUT_MS,
+      query_timeout: QUERY_TIMEOUT_MS,
+    })
+  : null;
+pool?.on('error', (error: Error) => {
+  jsonLogger.warn('postgres idle connection error', { error: error.message });
+});
+if (!pool) jsonLogger.warn('DATABASE_URL is not set: the books are not reconciled with Postgres');
+
 const lease = startLease({
   redis,
   key: `lease:matcher:${String(config.shard)}`,
@@ -38,6 +59,7 @@ const matcher = startMatcher({
   holdsLease: lease.isHeld,
   alwaysOpen: config.alwaysOpen,
   commands: { client: commands },
+  ...(pool ? { reconcile: { source: createPgLiveOrderSource(pool), shards: config.shards } } : {}),
   log: jsonLogger,
   onTick: (tick) => {
     jsonLogger.info('tick acted', {
@@ -55,6 +77,7 @@ const shutdown = () => {
   void matcher
     .close()
     .then(() => lease.stop())
+    .then(() => pool?.end())
     .then(() => redis.quit())
     .finally(() => process.exit(0));
 };

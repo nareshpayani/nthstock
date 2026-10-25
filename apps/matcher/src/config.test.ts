@@ -11,6 +11,7 @@ describe('loadConfig', () => {
       leaseTtlMs: 5_000,
       leaseRenewMs: 2_000,
       alwaysOpen: false,
+      databaseUrl: null,
     });
   });
 
@@ -24,6 +25,7 @@ describe('loadConfig', () => {
         LEASE_TTL_MS: '6000',
         LEASE_RENEW_MS: '1500',
         MOCK_MARKET_ALWAYS_OPEN: 'true',
+        DATABASE_URL: 'postgres://nthstock_app@db.internal:5432/nthstock',
       }),
     ).toEqual({
       production: true,
@@ -33,7 +35,12 @@ describe('loadConfig', () => {
       leaseTtlMs: 6_000,
       leaseRenewMs: 1_500,
       alwaysOpen: true,
+      databaseUrl: 'postgres://nthstock_app@db.internal:5432/nthstock',
     });
+  });
+
+  it('refuses a DATABASE_URL that is not Postgres', () => {
+    expect(() => loadConfig({ DATABASE_URL: 'mysql://db/x' })).toThrow(/postgres:\/\//);
   });
 
   it('refuses a shard outside the shard count', () => {
