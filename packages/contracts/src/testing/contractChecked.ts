@@ -74,7 +74,8 @@ export function contractViolation(
   routeMap: RouteMap = routes,
 ): string | null {
   const path = request.url.split('?')[0] ?? request.url;
-  if (!path.startsWith('/v1/') || path.startsWith(`${TEST_CONTROL_PREFIX}/`)) return null;
+  if ((path !== '/v1' && !path.startsWith('/v1/')) || path.startsWith(`${TEST_CONTROL_PREFIX}/`))
+    return null;
   const match = matchRoute(request.method, request.url, routeMap);
   const label = `${request.method} ${request.url}${match ? ` (route "${match.name}")` : ''}`;
   const ok = response.status >= 200 && response.status < 300;
@@ -98,9 +99,13 @@ const bodyExcerpt = (body: unknown): string => {
 };
 
 export class ContractViolationError extends Error {
-  constructor(readonly violations: readonly string[]) {
+  constructor(
+    readonly violations: readonly string[],
+    options?: ErrorOptions,
+  ) {
     super(
       `${String(violations.length)} contract violation(s):\n${violations.map((v) => `- ${v}`).join('\n')}`,
+      options,
     );
     this.name = 'ContractViolationError';
   }
@@ -140,12 +145,16 @@ export function contractChecked(
     ...wrap(backend),
     violations,
     async close() {
-      // The violations are reported even when the inner teardown fails.
+      // The violations are reported even when the inner teardown fails (sync throw or rejection).
       let teardown: unknown = null;
-      await Promise.resolve(backend.close?.()).catch((error: unknown) => {
-        teardown = error ?? new Error('Backend close failed');
-      });
-      if (violations.length > 0) throw new ContractViolationError(violations);
+      await Promise.resolve()
+        .then(() => backend.close?.())
+        .catch((error: unknown) => {
+          teardown = error ?? new Error('Backend close failed');
+        });
+      if (violations.length > 0) {
+        throw new ContractViolationError(violations, teardown === null ? {} : { cause: teardown });
+      }
       if (teardown !== null) throw teardown;
     },
   };

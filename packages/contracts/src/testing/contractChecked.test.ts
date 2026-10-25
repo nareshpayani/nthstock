@@ -152,3 +152,48 @@ describe('contractChecked', () => {
     );
   });
 });
+
+describe('contractChecked close', () => {
+  const broken = (close: () => unknown) =>
+    contractChecked({
+      send: () => Promise.resolve({ status: 200, body: { wrong: true } }),
+      close: close as () => void,
+    });
+
+  it('reports violations even when the teardown rejects, with the teardown as cause', async () => {
+    const teardown = new Error('teardown');
+    const backend = broken(() => Promise.reject(teardown));
+    await expect(backend.send({ method: 'GET', url: '/v1/health' })).rejects.toThrow();
+    const error: unknown = await Promise.resolve(backend.close?.()).catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(ContractViolationError);
+    expect((error as Error).cause).toBe(teardown);
+  });
+
+  it('reports violations when the teardown throws synchronously', async () => {
+    const backend = broken(() => {
+      throw new Error('sync');
+    });
+    await expect(backend.send({ method: 'GET', url: '/v1/health' })).rejects.toThrow();
+    await expect(backend.close?.()).rejects.toBeInstanceOf(ContractViolationError);
+  });
+
+  it('rethrows the teardown error when there are no violations', async () => {
+    const backend = broken(() => Promise.reject(new Error('teardown')));
+    await expect(backend.close?.()).rejects.toThrow('teardown');
+    const silent = broken(() => Promise.reject(undefined));
+    await expect(silent.close?.()).rejects.toThrow('Backend close failed');
+  });
+
+  it('trims long bodies in violation messages', () => {
+    const body = { error: 'x'.repeat(1000) };
+    const message = contractViolation({ method: 'GET', url: '/v1/health' }, { status: 500, body });
+    expect(message).toContain('…');
+    expect(message).not.toContain(JSON.stringify(body));
+  });
+
+  it('checks the bare /v1 path too', () => {
+    expect(
+      contractViolation({ method: 'GET', url: '/v1' }, { status: 404, body: 'nope' }),
+    ).not.toBeNull();
+  });
+});
