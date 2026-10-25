@@ -77,7 +77,7 @@ user data (the demo mobile is the made-up 9000000001, D9).
 |---|---|---|
 | 1 | Postgres and Redis on loopback, two roles, migrations idempotent | `infra/docker-compose.yml`, CI `e2e-api` job (init.sql, `db:migrate`), [`client.integration.test.ts`](../../apps/api/src/db/client.integration.test.ts) |
 | 2 | `db:check` fails on drift | CI `db:check` step, [`liveSchemaCheck.test.ts`](../../apps/api/src/db/liveSchemaCheck.test.ts) |
-| 3 | A restart keeps users, sessions, watchlists, orders, holdings | [`restartPersistence.spec.ts`](../../apps/web/e2e/restartPersistence.spec.ts) (api mode, CI), [`restart.integration.test.ts`](../../apps/api/src/modules/orders/restart.integration.test.ts) |
+| 3 | A restart keeps users, sessions, watchlists, orders, holdings | [`apiRestart.spec.ts`](../../apps/web/e2e/apiRestart.spec.ts) (api mode, CI), [`restart.integration.test.ts`](../../apps/api/src/modules/orders/restart.integration.test.ts) |
 | 4 | Dual-backend scenarios pass on both backends | [`scenarios.test.ts`](../../apps/api/src/test/scenarios.test.ts) |
 | 5 | Money columns are `bigint` | [`paperTables.integration.test.ts`](../../apps/api/src/db/paperTables.integration.test.ts) |
 | 6 | No plaintext PII in `users` | [`users/pgRepo.integration.test.ts`](../../apps/api/src/modules/users/pgRepo.integration.test.ts) |
