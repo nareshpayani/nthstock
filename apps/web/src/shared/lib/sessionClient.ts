@@ -7,7 +7,7 @@ import {
 import type { Session } from '@nthstock/contracts';
 import type { QueryClient } from '@tanstack/react-query';
 import { gateFetch } from './networkGate';
-import { useSessionStore } from './sessionStore';
+import { knownSignedOut, useSessionStore } from './sessionStore';
 
 /**
  * The CSRF header value before a session exists (OTP, PIN login, the refresh after a reload).
@@ -46,9 +46,16 @@ export function refreshSession(apiClient: ApiClient): Promise<boolean> {
   return refreshing;
 }
 
-/** The current session, restoring it with one refresh on the first call of a page load. */
+/**
+ * The current session, restoring it with one refresh on the first call of a page load. A browser
+ * known to be signed out skips that refresh, which could only answer 401.
+ */
 export async function ensureSession(apiClient: ApiClient): Promise<Session | null> {
-  if (useSessionStore.getState().status === 'unknown') await refreshSession(apiClient);
+  const { status, clearSession } = useSessionStore.getState();
+  if (status === 'unknown') {
+    if (knownSignedOut()) clearSession();
+    else await refreshSession(apiClient);
+  }
   return useSessionStore.getState().session;
 }
 

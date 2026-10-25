@@ -30,13 +30,17 @@ for (const viewport of VIEWPORTS) {
     ).toBeVisible();
     await dialog.getByRole('textbox', { name: 'Note (optional)' }).fill('Breakout');
     await dialog.getByRole('button', { name: 'Set alert' }).click();
-    await expect(dialog.getByRole('status')).toHaveText(/^Alert set: INFY at ₹/);
+    // Setting an alert closes the dialog with a toast.
+    await expect(dialog).toBeHidden();
+    await expect(page.getByText(/^Alert set: INFY at ₹/)).toBeVisible();
+    const bellButton = page.getByRole('button', { name: 'Price alerts for INFY, 1 active' });
+    await expect(bellButton).toBeVisible();
+    // Reopened, it lists the alert under the form, ready for another.
+    await bellButton.click();
     await expect(dialog.getByRole('region', { name: 'Active alerts' })).toContainText('Breakout');
     await expectNoSeriousA11yViolations(page, 'price alert dialog', '[role="dialog"]');
     await dialog.getByRole('button', { name: 'Close' }).first().click();
-    await expect(
-      page.getByRole('button', { name: 'Price alerts for INFY, 1 active' }),
-    ).toBeVisible();
+    await expect(dialog).toBeHidden();
 
     // The price jumps past the level: a toast at once, and the bell counts it.
     const { base } = await scriptedPrices(page, 'INFY');
