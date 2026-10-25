@@ -4,6 +4,7 @@ import {
   matcherCommandsKey,
   type MatcherCommand,
   type Order,
+  type TrailingStop,
 } from '@nthstock/contracts';
 import { shardOf } from '@nthstock/utils';
 import type { PublisherLog } from '../../ticks/publisher.js';
@@ -51,13 +52,43 @@ export function commandFor(userId: string, order: Order, version: number): Match
 }
 
 /**
- * Sends every committed order change to the matcher (NSTOCK-0365): one entry on the command
+ * The matcher command for a committed trailing stop change (NSTOCK-0368): an `ARMED` or
+ * `TRAILING` stop is on the book, so it is sent with its state as `STOP_ADD` (the book upserts,
+ * so a ratchet is a `STOP_ADD` too), and a stop in any other status is taken off with
+ * `STOP_CANCEL`.
+ */
+export function stopCommandFor(
+  userId: string,
+  stop: TrailingStop,
+  version: number,
+): MatcherCommand {
+  const base = { v: MATCHER_COMMAND_VERSION, token: stop.token, version } as const;
+  if (stop.status !== 'ARMED' && stop.status !== 'TRAILING')
+    return { ...base, type: 'STOP_CANCEL', stopId: stop.id };
+  return {
+    ...base,
+    type: 'STOP_ADD',
+    stopId: stop.id,
+    userId,
+    state: {
+      status: stop.status,
+      direction: stop.direction,
+      trail: stop.trail,
+      activationPrice: stop.activationPrice,
+      watermarkPrice: stop.watermarkPrice,
+      stopPrice: stop.stopPrice,
+    },
+  };
+}
+
+/**
+ * Sends every committed order and trailing stop change to the matcher (NSTOCK-0365): one entry on the command
  * stream of the instrument's shard, after the commit that made it, as `startOrderUpdatePublisher`
  * publishes the change to the user's socket. A failed send is logged once until sending recovers;
  * the matcher's reconcile loop repairs the book from Postgres within a minute.
  */
 export function startMatcherCommands(options: {
-  orders: Pick<OrderService, 'onOrderUpdate'>;
+  orders: Pick<OrderService, 'onOrderUpdate' | 'onTrailingStopUpdate'>;
   stream: CommandStream;
   /** `QUOTE_SHARDS`: the matcher shards, the same as the quote service's. */
   shards: number;
@@ -77,16 +108,26 @@ export function startMatcherCommands(options: {
     failing = true;
     log.warn(`Matcher commands failed: ${error instanceof Error ? error.message : String(error)}`);
   };
-  const stop = orders.onOrderUpdate((userId, order, version, last = true) => {
-    // Updates of one order in one commit share its version and the book keeps the first it sees,
-    // so only the final state is sent.
-    if (!last) return;
-    const command = commandFor(userId, order, version);
-    if (!command) return;
+  const send = (command: MatcherCommand) => {
     const key = commandsKey(shardOf(command.token, shards));
     stream
       .xadd(key, 'MAXLEN', '~', MATCHER_COMMANDS_MAXLEN, '*', 'command', JSON.stringify(command))
       .then(onSent, onFailed);
+  };
+  const stopOrders = orders.onOrderUpdate((userId, order, version, last = true) => {
+    // Updates of one order in one commit share its version and the book keeps the first it sees,
+    // so only the final state is sent.
+    if (!last) return;
+    const command = commandFor(userId, order, version);
+    if (command) send(command);
   });
-  return { stop };
+  const stopStops = orders.onTrailingStopUpdate((userId, trailingStop, version) => {
+    send(stopCommandFor(userId, trailingStop, version));
+  });
+  return {
+    stop: () => {
+      stopOrders();
+      stopStops();
+    },
+  };
 }

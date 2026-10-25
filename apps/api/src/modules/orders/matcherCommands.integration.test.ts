@@ -36,7 +36,7 @@ describeWithRedis('matcher commands from apps/api (integration, NSTOCK-0365)', (
     await redis?.stop();
   });
 
-  it('sends ADD, MODIFY and CANCEL for a LIMIT order, in version order', async () => {
+  async function startApp(phone: string) {
     const url = redis?.url ?? '';
     const prefix = uniqueChannel('commands');
     const clock = manualClock('2026-09-28T04:30:00.000Z'); // Monday 10:00 IST, market open
@@ -69,8 +69,14 @@ describeWithRedis('matcher commands from apps/api (integration, NSTOCK-0365)', (
     });
     app.addHook('onClose', () => market.dispose());
     await app.ready();
-    const user = await loginWithOtp(app, '9876500011');
+    const user = await loginWithOtp(app, phone);
     const headers = { authorization: `Bearer ${user.access}`, 'x-csrf-token': 'bearer' };
+
+    return { app, prefix, shard, headers, user, clock };
+  }
+
+  it('sends ADD, MODIFY and CANCEL for a LIMIT order, in version order', async () => {
+    const { app, prefix, shard, headers, user, clock } = await startApp('9876500011');
 
     const placed = await app.inject({
       method: 'POST',
@@ -116,6 +122,55 @@ describeWithRedis('matcher commands from apps/api (integration, NSTOCK-0365)', (
     expect(new Set(versions).size).toBe(3);
     // Nothing went to the other shard.
     expect(await reader.xlen(`${prefix}:commands:${String(1 - shard)}`)).toBe(0);
+
+    await app.close();
+  }, 60_000);
+
+  it('sends STOP_ADD and STOP_CANCEL for a trailing stop (NSTOCK-0368)', async () => {
+    const { app, prefix, shard, headers } = await startApp('9876500012');
+
+    const bought = await app.inject({
+      method: 'POST',
+      url: routes.orderPlace.path,
+      headers,
+      payload: { token: TOKEN, side: 'BUY', type: 'MARKET', product: 'DELIVERY', qty: 2 },
+    });
+    expect(bought.statusCode, bought.body).toBe(200);
+    const placed = await app.inject({
+      method: 'POST',
+      url: routes.trailingStopPlace.path,
+      headers,
+      payload: {
+        token: TOKEN,
+        product: 'DELIVERY',
+        trail: { unit: 'AMOUNT', amount: 10_00 },
+        activationPrice: null,
+        exitOrderType: 'MARKET',
+        exitLimitOffset: null,
+      },
+    });
+    expect(placed.statusCode, placed.body).toBe(200);
+    const stopId = (placed.json() as { id: string }).id;
+    const cancelled = await app.inject({
+      method: 'DELETE',
+      url: `/v1/trailing-stops/${stopId}`,
+      headers,
+    });
+    expect(cancelled.statusCode, cancelled.body).toBe(200);
+
+    const key = `${prefix}:commands:${String(shard)}`;
+    await expect.poll(async () => await reader.xlen(key), { timeout: 10_000 }).toBe(2);
+    const commands = (await reader.xrange(key, '-', '+')).map(([, fields]) =>
+      MatcherCommand.parse(JSON.parse(fields[1] ?? '')),
+    );
+    expect(commands.map((c) => c.type)).toEqual(['STOP_ADD', 'STOP_CANCEL']);
+    expect(commands[0]).toMatchObject({
+      stopId,
+      token: TOKEN,
+      state: { status: 'TRAILING', direction: 'LONG', trail: { unit: 'AMOUNT', amount: 10_00 } },
+    });
+    expect(commands[1]).toMatchObject({ stopId, type: 'STOP_CANCEL' });
+    expect(commands[0]?.version).toBeLessThan(commands[1]?.version ?? 0);
 
     await app.close();
   }, 60_000);

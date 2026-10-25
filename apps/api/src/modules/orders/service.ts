@@ -64,6 +64,16 @@ export type OrderUpdateListener = (
   last?: boolean,
 ) => void;
 
+/**
+ * A committed trailing stop change, at the account version after its commit (the matcher's
+ * `STOP_ADD` / `STOP_CANCEL`, NSTOCK-0368). Only a stop's final state in the commit is announced.
+ */
+export type TrailingStopUpdateListener = (
+  userId: string,
+  stop: TrailingStop,
+  version: number,
+) => void;
+
 /** One committed account change, for the Redis publisher (NSTOCK-0368). */
 export type AccountDelta = AccountDeltaEvent['delta'];
 export type AccountDeltaListener = (userId: string, delta: AccountDelta) => void;
@@ -141,6 +151,7 @@ export function createOrderService({
 }: OrderServiceDeps) {
   const listeners = new Set<OrderUpdateListener>();
   const deltaListeners = new Set<AccountDeltaListener>();
+  const stopListeners = new Set<TrailingStopUpdateListener>();
   /** How many of each user's ledger entries are in the audit log already. */
   const auditedLedger = new Map<string, number>();
   const cache = new Map<string, AccountCache>();
@@ -269,7 +280,10 @@ export function createOrderService({
         const last = !updates.slice(at + 1).some((later) => later.id === order.id);
         for (const listener of [...listeners]) listener(userId, order, version, last);
       }
-      await announceDelta(userId, engine, latestById(updates), latestById(stopUpdates));
+      const stops = latestById(stopUpdates);
+      for (const stop of stops)
+        for (const listener of [...stopListeners]) listener(userId, stop, version);
+      await announceDelta(userId, engine, latestById(updates), stops);
     }).catch(() => undefined);
   }
 
@@ -648,6 +662,14 @@ export function createOrderService({
       deltaListeners.add(listener);
       return () => {
         deltaListeners.delete(listener);
+      };
+    },
+
+    /** Every committed trailing stop change of every user (for the matcher, NSTOCK-0368). */
+    onTrailingStopUpdate(listener: TrailingStopUpdateListener): () => void {
+      stopListeners.add(listener);
+      return () => {
+        stopListeners.delete(listener);
       };
     },
 

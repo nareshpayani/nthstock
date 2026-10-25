@@ -109,10 +109,11 @@ streams, so apps/api stops matching in process.
   appends `ADD`, `MODIFY` or `CANCEL` for a LIMIT order to `nthstock:matcher:commands:v1:{shard}` (capped at
   100,000 entries), carrying the account version of that commit. Every matcher process for the shard reads the
   stream with `XREAD BLOCK` and applies each command to the instrument's book by the version rule, so a late or
-  replayed command never undoes a newer one; malformed entries are logged and skipped. `STOP_ADD` and
-  `STOP_CANCEL` are in the contract and applied by the worker; apps/api sends them with server-side trailing stops.
-- **Status:** the book, the worker and the order commands are built. The reconcile loop, fills, server-side
-  trailing stops, `MATCHER_MODE` and the benchmark are NSTOCK-0366 to 0370; until then the worker only logs what a
+  replayed command never undoes a newer one; malformed entries are logged and skipped. After each trailing stop
+  change apps/api also sends `STOP_ADD` (an `ARMED` or `TRAILING` stop with the state the book steps; a ratchet
+  is a `STOP_ADD` too) or `STOP_CANCEL` (any other status), at the same account version (NSTOCK-0368).
+- **Status:** the book, the worker and the order and stop commands are built. The reconcile loop, fills,
+  `MATCHER_MODE` and the benchmark are NSTOCK-0366 to 0370; until then the worker only logs what a
   tick crossed.
 
 ### Server-side trailing stops (NSTOCK-0368)
@@ -130,8 +131,8 @@ In api mode trailing stops run on the server with the same engine rules as the b
   their newest `seq`, positions and funds) on the user's order channel, after the order updates. apps/realtime sends it
   to that user's connections as an `accountDelta` frame with no quotes, so the web app's trading store runs in api mode
   exactly as on MSW: it loads the account state, applies frames, and reloads on a gap.
-- **Matcher:** ticks still step stops in apps/api's process. Once the matcher worker (NSTOCK-0364, 0365) is on
-  `develop`, apps/api sends `STOP_ADD` and `STOP_CANCEL` to it instead.
+- **Matcher:** apps/api sends every committed stop change to the matcher as `STOP_ADD` or `STOP_CANCEL`. Until
+  `MATCHER_MODE` hands the books to the worker, ticks still step stops in apps/api's own process.
 
 ### Market data and chart bars
 - `packages/marketData` generates each range's own bars (1D: 1-minute, 1W: 5-minute, 1M: hourly,
