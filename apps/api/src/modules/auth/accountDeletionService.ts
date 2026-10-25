@@ -45,7 +45,7 @@ export function createAccountDeletionService({
     for (const status of ['OPEN', 'AMO'] as const) {
       // Cancelling shrinks the list, so always read the first page again.
       for (;;) {
-        const { items } = orders.list(userId, { status, limit: 100 });
+        const { items } = await orders.list(userId, { status, limit: 100 });
         if (items.length === 0) break;
         for (const order of items) await orders.cancel(userId, order.id);
       }

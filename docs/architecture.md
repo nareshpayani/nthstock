@@ -47,6 +47,22 @@ CDN + WAF ─► Load balancer ─► apps/api (Fastify, stateless)     apps/rea
 - Auth: OTP (mock SMS provider until launch) + device PIN (Argon2id) + optional TOTP; 15-min JWT access token + rotating refresh token in httpOnly SameSite=Strict cookie, revocable in Redis.
 - Testing: Vitest, Supertest, Testcontainers, contract tests.
 
+### Paper accounts on PostgreSQL
+Spec `backend-core.md` §5.3, ADR 0007. The `AccountStore` (`apps/api/src/modules/orders/accountStore.ts`; memory in
+`repo.ts`, Postgres in `pgRepo.ts`) is the record of each paper account; the per-user `PaperEngine` on the `PaperDesk`
+is a cache of it.
+- **Load:** the first use of an account loads its working set (live orders, today's orders, positions, holdings and
+  today's ledger, with the earlier ledger carried as a balance) and its version.
+- **Commit:** every engine change is committed with its audit entries in one transaction against the version it was
+  read at. A commit that loses to another writer reloads the account and runs the action once more; losing twice
+  answers 409 `CONFLICT`. Any other failure answers 500 and the account is reloaded before its next use. Each user's
+  commits run in order on a per-user queue; users never wait for each other.
+- **Reads:** the order book, order history and funds ledger pages read from the store, so they cover every day.
+- **Restart:** at boot, and on the order sweep if the database was down then, apps/api loads every account with an
+  AMO or OPEN order, so a resting order fills on the first crossing tick after a restart.
+- **Reset and demo seed:** a reset clears the stored orders and their history (the ledger is append-only and keeps
+  every row); the demo seed replaces the whole account.
+
 ### Market data and chart bars
 - `packages/marketData` generates each range's own bars (1D: 1-minute, 1W: 5-minute, 1M: hourly,
   1Y: daily, 5Y: weekly) and `resampleCandles` groups them into a coarser bar size on request

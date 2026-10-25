@@ -528,6 +528,16 @@ export class PaperDesk {
     this.#reindex(userId, engine);
   }
 
+  /**
+   * Starts the user over with a new, empty engine (an account store that has no account for
+   * them), dropping the one in memory without any change callbacks.
+   */
+  forget(userId: string): void {
+    const engine = this.#newEngine(userId);
+    this.#engines.set(userId, engine);
+    this.#reindex(userId, engine);
+  }
+
   /** Drops every adapter subscription. */
   dispose(): void {
     this.#disposed = true;

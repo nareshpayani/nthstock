@@ -94,6 +94,14 @@ export function buildApp(options: AppOptions = {}): App {
   app.addHook('onClose', async () => {
     await deps.dispose();
   });
+  // Accounts with a resting order go back on the desk at boot, so those orders still fill on the
+  // ticks after a restart (spec backend-core §5.3). With the database down the API still starts
+  // (readiness says so) and the order sweep tries again.
+  app.addHook('onReady', async () => {
+    await deps.orders.hydrateLive().catch((error: unknown) => {
+      app.log.error({ error }, 'loading accounts with live orders failed');
+    });
+  });
   const publisher = options.tickPublisher;
   if (publisher) {
     let pump: TickPump | null = null;

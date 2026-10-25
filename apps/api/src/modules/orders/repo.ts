@@ -3,7 +3,12 @@ import { PAGE_LIMIT_DEFAULT } from '@nthstock/contracts';
 import type { PaperEngineWorkingSet } from '@nthstock/paperEngine';
 import { istDateKey } from '@nthstock/utils';
 import type { AuditRepo } from '../audit/index.js';
-import { AccountConflict, type AccountChange, type AccountStore } from './accountStore.js';
+import {
+  AccountConflict,
+  clearsOrders,
+  type AccountChange,
+  type AccountStore,
+} from './accountStore.js';
 
 type StoredAccount = {
   version: number;
@@ -26,10 +31,12 @@ export function createMemoryAccountStore({ audit }: { audit: AuditRepo }): Accou
   const accounts = new Map<string, StoredAccount>();
 
   /** The account with the change applied, leaving `current` untouched. */
-  function applied(current: StoredAccount | undefined, { after }: AccountChange): StoredAccount {
-    const orders = new Map(current?.orders);
+  function applied(current: StoredAccount | undefined, change: AccountChange): StoredAccount {
+    const { after } = change;
+    const cleared = clearsOrders(change);
+    const orders = new Map(cleared ? [] : current?.orders);
     for (const order of after.orders) orders.set(order.id, structuredClone(order));
-    const history = new Map(current?.history);
+    const history = new Map(cleared ? [] : current?.history);
     for (const [id, entries] of after.history) history.set(id, structuredClone(entries));
     const ledger = [...(current?.ledger ?? [])];
     const ledgerIds = new Set(current?.ledgerIds);

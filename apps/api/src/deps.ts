@@ -26,6 +26,7 @@ import {
 } from './modules/auth/index.js';
 import {
   createMemoryAccountStore,
+  createPgAccountStore,
   createOrderService,
   type AccountStore,
   type OrderService,
@@ -47,7 +48,7 @@ export type Repos = {
   users: UsersRepo;
   auth: AuthRepo;
   watchlists: WatchlistsRepo;
-  /** Paper accounts: the record behind each user's engine (T-202; the orders service uses it from T-204). */
+  /** Paper accounts: the record behind each user's engine (T-202); the orders service's engines are its cache (T-204). */
   accounts: AccountStore;
   /** The append-only audit log. */
   audit: AuditRepo;
@@ -187,12 +188,15 @@ export function createDeps(overrides: DepsOverrides = {}): AppDeps {
       overrides.repos?.watchlists ??
       (database ? createPgWatchlistsRepo({ database }) : createMemoryWatchlistsRepo()),
     audit,
-    accounts: overrides.repos?.accounts ?? createMemoryAccountStore({ audit }),
+    accounts:
+      overrides.repos?.accounts ??
+      (database ? createPgAccountStore({ database, audit }) : createMemoryAccountStore({ audit })),
   };
   const orders = createOrderService({
     clock,
     market,
     audit: repos.audit,
+    accounts: repos.accounts,
     ...(overrides.onAuditError ? { onAuditError: overrides.onAuditError } : {}),
     ...(overrides.newOrderId ? { newId: overrides.newOrderId } : {}),
   });

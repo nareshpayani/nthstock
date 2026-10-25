@@ -28,7 +28,8 @@ runScenarioSuite('apps/api (app.inject)', scenarioGroups, () => {
 });
 
 // And against apps/api as it runs with DB_DRIVER=postgres (T-196): users, auth, sessions, the
-// audit log and watchlists (T-198) in Postgres, OTPs and session revocations in Redis. The
+// audit log, watchlists (T-198) and the paper accounts behind the order, portfolio and funds
+// scenarios (T-204 to T-206) in Postgres, OTPs and session revocations in Redis. The
 // scenarios are unchanged; only the health group is left out, as it checks the
 // no-backing-service configuration above.
 const postgresGroups = scenarioGroups.filter((group) => group !== healthScenarios);

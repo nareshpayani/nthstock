@@ -395,6 +395,7 @@ export const strings = {
             'The ticket validates the order with the same Zod schema the server uses, then sends POST /v1/orders with an idempotency key.',
             'The orders module checks the funds, and the paper engine fills a market order at the current price, or keeps a limit order open until the price reaches it.',
             'The fill commits the order, its events, the funds ledger, the position and the audit entries in one Postgres transaction.',
+            'The engine in memory is only a cache of the account in Postgres. Each change commits against the version it was read at, so a second writer is caught, reloads and retries once. At boot apps/api loads every account with a resting order, so a limit order placed before a restart still fills on the tick that crosses it.',
             'The order update goes out over Redis and the WebSocket, and every screen updates from it.',
           ],
         },

@@ -38,6 +38,7 @@ import {
 import type { AuditRepo } from '../audit/index.js';
 import {
   AccountConflict,
+  clearsOrders,
   type AccountChange,
   type AccountStore,
   type LedgerPageQuery,
@@ -175,6 +176,12 @@ export function createPgAccountStore({ database, audit }: PgAccountStoreOptions)
     throw new AccountConflict(userId, expected, current?.version ?? 0);
   }
 
+  /** A reset or a replacing change clears the account's orders and their events; the ledger stays. */
+  async function clearOrders(tx: Tx, userId: string) {
+    await tx.delete(orderEvents).where(eq(orderEvents.userId, userId));
+    await tx.delete(orders).where(eq(orders.userId, userId));
+  }
+
   async function writeOrders(tx: Tx, userId: string, { before, after }: AccountChange) {
     const stored = new Map(before?.orders.map((order) => [order.id, order]));
     const rejectCodes = new Map(after.rejectCodes);
@@ -258,8 +265,18 @@ export function createPgAccountStore({ database, audit }: PgAccountStoreOptions)
     await inChunks(rows, (chunk) => tx.insert(orderEvents).values(chunk));
   }
 
-  async function writeLedger(tx: Tx, userId: string, { before, after }: AccountChange) {
-    const known = new Set(before?.ledger.entries.map((entry) => entry.id));
+  async function writeLedger(tx: Tx, userId: string, { before, after, replace }: AccountChange) {
+    // A replacing change does not know what the ledger holds: ask it.
+    const known = new Set(
+      replace
+        ? (
+            await tx
+              .select({ id: ledgerEntries.id })
+              .from(ledgerEntries)
+              .where(eq(ledgerEntries.userId, userId))
+          ).map((row) => row.id)
+        : before?.ledger.entries.map((entry) => entry.id),
+    );
     const fresh = after.ledger.entries.filter((entry) => !known.has(entry.id));
     if (fresh.length === 0) return;
     // The account row is held, so no other commit of this user can number entries meanwhile.
@@ -517,6 +534,7 @@ export function createPgAccountStore({ database, audit }: PgAccountStoreOptions)
     commit: (userId, change, expectedVersion, auditEntries) =>
       database.transaction(async (tx) => {
         const version = await claimVersion(tx, userId, change.after, expectedVersion);
+        if (clearsOrders(change)) await clearOrders(tx, userId);
         await writeOrders(tx, userId, change);
         await writeOrderEvents(tx, userId, change);
         await writeLedger(tx, userId, change);
