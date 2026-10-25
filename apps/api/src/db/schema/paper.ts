@@ -87,6 +87,8 @@ export const ledgerEntries = pgTable(
   (table) => [
     uniqueIndex('ledger_entries_user_id_seq_key').on(table.userId, table.seq),
     index('ledger_entries_user_id_seq_desc_idx').on(table.userId, sql`${table.seq} DESC`),
+    // The session and P&L jobs find the accounts with a movement on one IST day (T-209).
+    index('ledger_entries_created_at_idx').on(table.createdAt),
     check('ledger_entries_seq_check', sql`${table.seq} >= 1`),
     check('ledger_entries_type_check', sql`${table.type} IN (${sqlList(LEDGER_ENTRY_TYPES)})`),
   ],

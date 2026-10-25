@@ -157,4 +157,62 @@ describeWithPostgres('maintenance jobs on Postgres (integration)', () => {
       sessions: 0,
     });
   });
+
+  it('auth.tokenCleanup: deletes a backlog larger than one chunk, chunk by chunk', async () => {
+    const now = new Date('2026-12-01T21:30:00.000Z');
+    const days = (n: number) => new Date(now.getTime() + n * DAY_MS);
+    const users = createPgUsersRepo({
+      database,
+      clock: manualClock(),
+      pii: createPiiCrypto(devPiiKeys()),
+    });
+    await users.ensureSeeded({ ...DEMO_USER, id: 'usr_b', mobile: '9000000101' });
+    const repo = createPgAuthRepo({
+      database,
+      clock: manualClock(),
+      pii: createPiiCrypto(devPiiKeys()),
+      otp: createMemoryOtpStore(),
+      cleanupChunk: 2,
+    });
+    await repo.createDevice({
+      id: 'dev_b',
+      userId: 'usr_b',
+      label: 'Chrome on macOS',
+      trusted: true,
+      createdAt: days(-60),
+      lastSeenAt: days(-60),
+    });
+    // 5 expired tokens in a live session, 5 sessions expired over 30 days: three chunks each.
+    const session = (id: string, expiresAt: Date) => ({
+      id,
+      userId: 'usr_b',
+      deviceId: 'dev_b',
+      csrfToken: `csrf-${id}`,
+      createdAt: days(-60),
+      lastSeenAt: days(-60),
+      expiresAt,
+      steppedUpAt: null,
+      revokedAt: null,
+      revokedReason: null,
+    });
+    await repo.createSession(session('ses_keep', days(1)));
+    for (let i = 0; i < 5; i += 1) {
+      await repo.putRefreshToken(hashOf(`r_${i}`), {
+        sessionId: 'ses_keep',
+        expiresAt: days(-1),
+        usedAt: null,
+      });
+      await repo.createSession(session(`ses_old_${i}`, days(-40)));
+    }
+
+    expect(await runTokenCleanup(now, { database, auth: repo })).toEqual({
+      refreshTokens: 5,
+      deviceTokens: 0,
+      sessions: 5,
+    });
+    const count = async (table: string) =>
+      Number((await owner.query<{ n: string }>(`select count(*) as n from ${table}`)).rows[0]?.n);
+    expect(await count('refresh_tokens')).toBe(0);
+    expect(await count('sessions')).toBe(1);
+  });
 });

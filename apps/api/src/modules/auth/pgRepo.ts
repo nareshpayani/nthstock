@@ -58,8 +58,8 @@ const toDevice = (row: DeviceRow): DeviceRecord => ({
 export const CLEANUP_CHUNK = 5_000;
 const CLEANUP_STATEMENT_TIMEOUT_MS = 10_000;
 
-/** Runs a `… limit CLEANUP_CHUNK` delete until it deletes less than a chunk; the total deleted. */
-async function deleteInChunks(database: Database, statement: SQL): Promise<number> {
+/** Runs a `… limit <chunk>` delete until it deletes less than a chunk; the total deleted. */
+async function deleteInChunks(database: Database, chunk: number, statement: SQL): Promise<number> {
   let total = 0;
   for (;;) {
     const deleted = await database.transaction(
@@ -67,7 +67,7 @@ async function deleteInChunks(database: Database, statement: SQL): Promise<numbe
       { statementTimeoutMs: CLEANUP_STATEMENT_TIMEOUT_MS },
     );
     total += deleted;
-    if (deleted < CLEANUP_CHUNK) return total;
+    if (deleted < chunk) return total;
   }
 }
 
@@ -75,11 +75,14 @@ export function createPgDeviceStore({
   database,
   clock,
   pii,
+  cleanupChunk = CLEANUP_CHUNK,
 }: {
   database: Database;
   clock: Clock;
   /** Encrypts TOTP secrets at rest (NSTOCK-0215). */
   pii: PiiCrypto;
+  /** Rows per cleanup delete (default `CLEANUP_CHUNK`). */
+  cleanupChunk?: number;
 }): DeviceStore {
   const { db } = database;
   // The user id binds each ciphertext to its row: a secret copied to another user fails to decrypt.
@@ -186,7 +189,8 @@ export function createPgDeviceStore({
       // On device_tokens_expires_at_idx. The device row stays; an expired token already fails.
       return deleteInChunks(
         database,
-        sql`delete from device_tokens where token_hash in (select token_hash from device_tokens where expires_at < ${now} limit ${CLEANUP_CHUNK})`,
+        cleanupChunk,
+        sql`delete from device_tokens where token_hash in (select token_hash from device_tokens where expires_at < ${now} limit ${cleanupChunk})`,
       );
     },
 
@@ -303,7 +307,13 @@ const toSession = (row: SessionRow): SessionRecord => ({
  * `useRefreshToken` is one statement that locks the token row, sets `used_at` if it is unset, and
  * returns the value it had before, so of two concurrent uses exactly one sees it unused.
  */
-export function createPgSessionStore({ database }: { database: Database }): SessionStore {
+export function createPgSessionStore({
+  database,
+  cleanupChunk = CLEANUP_CHUNK,
+}: {
+  database: Database;
+  cleanupChunk?: number;
+}): SessionStore {
   const { db } = database;
   return {
     async createSession(session) {
@@ -400,11 +410,13 @@ export function createPgSessionStore({ database }: { database: Database }): Sess
       // an outage) never holds locks or a connection for long.
       const tokens = await deleteInChunks(
         database,
-        sql`delete from refresh_tokens where token_hash in (select token_hash from refresh_tokens where expires_at < ${now} limit ${CLEANUP_CHUNK})`,
+        cleanupChunk,
+        sql`delete from refresh_tokens where token_hash in (select token_hash from refresh_tokens where expires_at < ${now} limit ${cleanupChunk})`,
       );
       const gone = await deleteInChunks(
         database,
-        sql`delete from sessions where id in (select id from sessions where expires_at < ${sessionsBefore} limit ${CLEANUP_CHUNK})`,
+        cleanupChunk,
+        sql`delete from sessions where id in (select id from sessions where expires_at < ${sessionsBefore} limit ${cleanupChunk})`,
       );
       return { refreshTokens: tokens, sessions: gone };
     },
@@ -420,16 +432,24 @@ export type PgAuthRepoOptions = {
   pii: PiiCrypto;
   /** Where OTP challenges and the resend throttle live (Redis in apps/api, T-193). */
   otp: OtpStore;
+  /** Rows per cleanup delete (default `CLEANUP_CHUNK`); tests use a small one. */
+  cleanupChunk?: number;
 };
 
 /**
  * AuthRepo for `DB_DRIVER=postgres`: devices, device tokens and PINs (T-191) and sessions and
  * refresh tokens (T-192) in Postgres; OTPs in the given store.
  */
-export function createPgAuthRepo({ database, clock, pii, otp }: PgAuthRepoOptions): AuthRepo {
+export function createPgAuthRepo({
+  database,
+  clock,
+  pii,
+  otp,
+  cleanupChunk = CLEANUP_CHUNK,
+}: PgAuthRepoOptions): AuthRepo {
   return composeAuthRepo({
     otp,
-    devices: createPgDeviceStore({ database, clock, pii }),
-    sessions: createPgSessionStore({ database }),
+    devices: createPgDeviceStore({ database, clock, pii, cleanupChunk }),
+    sessions: createPgSessionStore({ database, cleanupChunk }),
   });
 }

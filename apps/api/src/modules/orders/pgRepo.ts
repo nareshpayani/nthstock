@@ -205,6 +205,9 @@ export type PgAccountStoreOptions = {
  * events, all holdings, the ledger as a carried balance plus today's entries, and the active and
  * today's trailing stops.
  */
+/** How far ahead an AMO's trade date can be from the day it was placed (a long holiday run). */
+const AMO_TRADE_DATE_DAYS = 8;
+
 export function createPgAccountStore({
   database,
   audit,
@@ -807,7 +810,16 @@ export function createPgAccountStore({
         database.db
           .selectDistinct({ userId: orders.userId })
           .from(orders)
-          .where(and(gte(orders.updatedAt, start), lt(orders.updatedAt, end))),
+          .where(
+            and(
+              // An order changed on day D trades on D, or later when it is an AMO placed after
+              // the close; the bound lets Postgres prune every older (and far later) partition.
+              gte(orders.tradeDate, tradeDate),
+              lt(orders.tradeDate, istDateKey(fromIst(year, month, day + AMO_TRADE_DATE_DAYS, 0))),
+              gte(orders.updatedAt, start),
+              lt(orders.updatedAt, end),
+            ),
+          ),
         database.db
           .selectDistinct({ userId: ledgerEntries.userId })
           .from(ledgerEntries)

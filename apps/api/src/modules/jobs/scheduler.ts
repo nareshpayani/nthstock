@@ -1,4 +1,10 @@
-import { Queue, Worker, type ConnectionOptions, type Job as BullJob } from 'bullmq';
+import {
+  Queue,
+  UnrecoverableError,
+  Worker,
+  type ConnectionOptions,
+  type Job as BullJob,
+} from 'bullmq';
 import type { HolidayTable } from '@nthstock/utils';
 import { JOB_TIME_ZONE, type Job } from './definitions.js';
 import { runJob, safeErrorMessage, type JobLog, type JobOutcome } from './runner.js';
@@ -72,7 +78,8 @@ export async function startJobScheduler(options: JobSchedulerOptions): Promise<J
     JOBS_QUEUE,
     async (bullJob) => {
       const job = byName.get(bullJob.name);
-      if (!job) throw new Error(`Unknown job ${bullJob.name}`);
+      // A job this worker does not know (an older or newer deployment's) is not retried.
+      if (!job) throw new UnrecoverableError(`Unknown job ${bullJob.name}`);
       const at = scheduledAt(bullJob);
       const outcome = await runJob(job, at, options.holidays ? { holidays: options.holidays } : {});
       log.info('job finished', {

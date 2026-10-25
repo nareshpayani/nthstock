@@ -42,7 +42,7 @@ const deps = createDeps({
   ...(config.databaseUrl ? { databaseUrl: config.databaseUrl } : {}),
   pgPoolMax: Math.min(config.pgPoolMax, 4),
   redis: stateRedis,
-  onDatabaseError: (error) => log.warn('postgres pool error', { error: error.message }),
+  onDatabaseError: (error) => log.warn('postgres pool error', { error: safeErrorMessage(error) }),
   marketAlwaysOpen: config.mockMarketAlwaysOpen,
   // Square-off fills at the prices the API sees: the quote service's, when it runs.
   ...(config.quoteShards !== null
@@ -51,7 +51,7 @@ const deps = createDeps({
   production: config.production,
   piiKeys: config.pii.keys,
   // Errors are reported as their classes and SQLSTATE only (no PII in logs).
-  onAuditError: (error) => log.warn('account write failed', { error: safeErrorMessage(error) }),
+  onAuditError: (error) => log.warn('orders background error', { error: safeErrorMessage(error) }),
 });
 
 // Orders the jobs release, fill or cancel reach open browsers as they do from the API.
@@ -119,7 +119,7 @@ const shutdown = (signal: string) => {
     .then(
       () => process.exit(0),
       (error: unknown) => {
-        log.warn('job worker shutdown failed', { error: String(error) });
+        log.warn('job worker shutdown failed', { error: safeErrorMessage(error) });
         process.exit(1);
       },
     );
