@@ -242,6 +242,21 @@ the chart shows after a reload.
   navigates to `/login?deleted=<purgeAfter>` first (its `beforeLoad` skips the session check), then
   clears the session, the query cache and the trusted-browser record.
 
+### Phase 2 sign-off (E21)
+- Demo seed: with `DB_DRIVER=postgres`, `DEMO_SEED=true` writes the demo user (upserted by the
+  mobile's blind index), their terms and privacy consent (`UsersRepo.ensureConsent`, idempotent),
+  the demo watchlists and the paper account (through the account store) to Postgres. Seeding twice
+  or across a restart gives the same state (`seed.integration.test.ts`), equal to MSW's `?demo=1`.
+- Local stack: `npm run dev:api` starts Postgres and Redis, migrates, then runs apps/api,
+  apps/realtime, apps/quotes and the web app; `db:psql` and `db:reset` cover the chores
+  (`docs/runbooks/local-demo.md`).
+- Proof: the api-mode Playwright job restarts apps/api mid-test and still sees the session,
+  watchlists, orders and holdings; the security settings journey (TOTP on, log in with TOTP, log out
+  another session, delete the account, axe on every step) runs in msw and api mode; a performance
+  smoke times order acks and PIN logins on 10,000 seeded users.
+- The ASVS L2 checklist with links to every test and the owner sign-off list:
+  [`docs/security/phase2-asvs-l2.md`](security/phase2-asvs-l2.md).
+
 ### Security baseline
 - Rate limits per IP and per user; OTP resend throttling; CAPTCHA after 3 failed OTP/PIN attempts; PIN lockout after 5, unlock via OTP.
 - TLS 1.2+ and HSTS; encryption at rest (KMS); phone/PII column-level encryption.

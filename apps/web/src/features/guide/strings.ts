@@ -939,10 +939,25 @@ export const strings = {
             'Exchange data: real-time NSE or BSE prices need a licence, so v1 uses a simulated feed.',
           ],
         },
+        { kind: 'heading', text: 'How Phase 2 is signed off' },
+        {
+          kind: 'list',
+          items: [
+            'An OWASP ASVS 4.0.3 Level 2 checklist maps every item the backend touches to the tests that prove it, and names the gaps that are left.',
+            'A restart test in the browser: log in, watch a stock, buy it, then restart apps/api. The session, the watchlist, the order and the holding are all still there, read back from Postgres.',
+            'A security journey runs in both modes, against the in-browser mock and against apps/api on Postgres and Redis: turn on two-factor, log out, log back in with the authenticator code, log out another device and delete the account, with an accessibility check on every step.',
+            'The demo account is written to Postgres with its consent, and seeding twice gives the same state.',
+            'A performance smoke on a database of 10,000 users times market-order acknowledgements and PIN logins and reads the slowest queries from pg_stat_statements.',
+          ],
+        },
         {
           kind: 'links',
           label: 'Read the code',
           items: [
+            {
+              label: 'Phase 2 ASVS L2 checklist',
+              href: repoLink('docs/security/phase2-asvs-l2.md'),
+            },
             { label: 'Security baseline', href: repoLink('docs/architecture.md') },
             { label: 'Auth module', href: repoLink('apps/api/src/modules/auth') },
             { label: 'Database roles', href: repoLink('infra/postgres/init.sql') },
