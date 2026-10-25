@@ -118,6 +118,27 @@ describe('startMatcherFills (NSTOCK-0367)', () => {
     await reader.close();
   });
 
+  it('creates the groups again when a read answers NOGROUP', async () => {
+    const { client, calls, acks } = scripted([
+      new Error('NOGROUP No such key or consumer group'),
+      [['k0', [entry('1-0', fill('u1', 100))]]],
+    ]);
+    const lines: string[] = [];
+    const reader = startMatcherFills({
+      orders: { applyMatcherFill: async () => undefined },
+      client,
+      shards: 1,
+      consumer: 'c1',
+      log: { info: (m) => lines.push(m), warn: (m) => lines.push(m) },
+      fillsKey: (shard) => `k${String(shard)}`,
+      blockMs: 10,
+    });
+    await vi.waitFor(() => expect(acks()).toEqual(['1-0']), { timeout: 5_000 });
+    expect(calls.filter(([c]) => c === 'XGROUP')).toHaveLength(2);
+    expect(lines[0]).toContain('NOGROUP');
+    await reader.close();
+  });
+
   it('stops at once when another group error comes back', async () => {
     const { client } = scripted([], { groupError: 'NOPERM no permissions' });
     const lines: string[] = [];

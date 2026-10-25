@@ -173,6 +173,7 @@ export function startMatcherFills(options: {
   async function run(): Promise<void> {
     let started = false;
     let failures = 0;
+    let lastMessage = '';
     while (!closed) {
       try {
         if (!started) {
@@ -185,11 +186,13 @@ export function startMatcherFills(options: {
         failures = 0;
       } catch (error) {
         if (closed) break;
-        if (failures === 0) {
-          log.warn(
-            `Reading matcher fills failed: ${error instanceof Error ? error.message : String(error)}`,
-          );
+        const message = error instanceof Error ? error.message : String(error);
+        // Redis lost the groups (restart without persistence, deleted stream): create them again.
+        if (message.includes('NOGROUP')) started = false;
+        if (failures === 0 || message !== lastMessage) {
+          log.warn(`Reading matcher fills failed: ${message}`);
         }
+        lastMessage = message;
         failures += 1;
         await sleep(Math.min(RETRY_MS * 2 ** (failures - 1), MAX_RETRY_MS));
       }

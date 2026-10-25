@@ -77,18 +77,23 @@ async function setup(onCommit: (call: number) => Error | null) {
     (await audit.list(USER)).filter(
       (entry) => entry.action === 'ORDER_UPDATE' && entry.detail['status'] === 'EXECUTED',
     );
-  return { service, fill, executed, calls: () => calls, orderId: placed.id, accounts };
+  const events: string[] = [];
+  service.onOrderUpdate((_userId, order) => events.push(`order:${order.status}`));
+  service.onAccountDelta(() => events.push('delta'));
+  return { events, service, fill, executed, calls: () => calls, orderId: placed.id, accounts };
 }
 
 describe('applyMatcherFill', () => {
   it('runs once more after losing a commit on version, and fills the order once', async () => {
-    const { service, fill, executed, calls, orderId, accounts } = await setup((call) =>
+    const { service, fill, executed, calls, orderId, accounts, events } = await setup((call) =>
       call === 1 ? new AccountConflict(USER, 1, 2) : null,
     );
 
     await service.applyMatcherFill(fill);
 
     expect(calls()).toBe(2);
+    // The lost commit published nothing; the retry published the fill once.
+    expect(events.filter((event) => event === 'order:EXECUTED')).toHaveLength(1);
     expect(await executed()).toHaveLength(1);
     const page = await accounts.ordersPage(USER);
     expect(page?.items.find((order) => order.id === orderId)).toMatchObject({
@@ -101,9 +106,11 @@ describe('applyMatcherFill', () => {
   });
 
   it('rejects when the commit fails, so the reader leaves the request pending', async () => {
-    const { service, fill, executed } = await setup(() => new Error('postgres is down'));
+    const { service, fill, executed, events } = await setup(() => new Error('postgres is down'));
 
     await expect(service.applyMatcherFill(fill)).rejects.toMatchObject({ status: 500 });
     expect(await executed()).toHaveLength(0);
+    // A socket never sees a fill the database does not have.
+    expect(events).toEqual([]);
   });
 });
