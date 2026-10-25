@@ -107,6 +107,13 @@ export type RefreshTokenRecord = {
  */
 export type RefreshTokenUse = RefreshTokenRecord & { sessionRevokedAt: Date | null };
 
+/** An expired session is deleted this many days after `expiresAt` (spec backend-core §9). */
+export const EXPIRED_SESSION_RETENTION_DAYS = 30;
+const EXPIRED_SESSION_RETENTION_MS = EXPIRED_SESSION_RETENTION_DAYS * 24 * 60 * 60 * 1000;
+
+/** What `deleteExpired` removed, as counts (the cleanup job logs them). */
+export type ExpiredAuthCleanup = { refreshTokens: number; deviceTokens: number; sessions: number };
+
 /**
  * Storage seam for auth state (ADR 0004 §3, ADR 0007). Callers see one interface; inside it is
  * three stores that live in different places (spec backend-core §5.2):
@@ -204,6 +211,13 @@ export interface AuthRepo {
    */
   useRefreshToken(hash: string, at: Date): Promise<RefreshTokenUse | null>;
 
+  /**
+   * The `auth.tokenCleanup` job (T-210): deletes refresh and trusted-device tokens expired before
+   * `now`, and sessions expired more than `EXPIRED_SESSION_RETENTION_DAYS` before it (with the
+   * refresh tokens still left in their families). Live rows are never touched.
+   */
+  deleteExpired(now: Date): Promise<ExpiredAuthCleanup>;
+
   /** Tests only: drops all state. Postgres stores refuse (tests truncate as the owner). */
   reset(): Promise<void>;
 }
@@ -244,8 +258,10 @@ export type DeviceStore = Pick<
   | 'listRecoveryCodes'
   | 'useRecoveryCode'
   | 'replaceRecoveryCodes'
-> &
-  Resettable;
+> & {
+  /** Deletes trusted-device tokens expired before `now`; resolves to how many. */
+  deleteExpiredDeviceTokens(now: Date): Promise<number>;
+} & Resettable;
 
 export type SessionStore = Pick<
   AuthRepo,
@@ -257,8 +273,16 @@ export type SessionStore = Pick<
   | 'stepUpSession'
   | 'putRefreshToken'
   | 'useRefreshToken'
-> &
-  Resettable;
+> & {
+  /**
+   * Deletes refresh tokens expired before `now`, then sessions expired before `sessionsBefore`
+   * together with their remaining refresh tokens (counted as sessions, not tokens).
+   */
+  deleteExpiredSessions(
+    now: Date,
+    sessionsBefore: Date,
+  ): Promise<Pick<ExpiredAuthCleanup, 'refreshTokens' | 'sessions'>>;
+} & Resettable;
 
 /** One AuthRepo from its three stores. */
 export function composeAuthRepo(stores: {
@@ -303,6 +327,14 @@ export function composeAuthRepo(stores: {
     stepUpSession: (id, at) => sessions.stepUpSession(id, at),
     putRefreshToken: (hash, token) => sessions.putRefreshToken(hash, token),
     useRefreshToken: (hash, at) => sessions.useRefreshToken(hash, at),
+    deleteExpired: async (now) => {
+      const sessionsBefore = new Date(now.getTime() - EXPIRED_SESSION_RETENTION_MS);
+      const [deviceTokens, removed] = await Promise.all([
+        devices.deleteExpiredDeviceTokens(now),
+        sessions.deleteExpiredSessions(now, sessionsBefore),
+      ]);
+      return { refreshTokens: removed.refreshTokens, deviceTokens, sessions: removed.sessions };
+    },
     reset: async () => {
       await Promise.all([otp.reset(), devices.reset(), sessions.reset()]);
     },
@@ -509,6 +541,13 @@ export function createMemoryDeviceStore(): DeviceStore {
       if (found) found.failures = 0;
       return Promise.resolve();
     },
+    deleteExpiredDeviceTokens: (now) => {
+      let deleted = 0;
+      for (const [hash, token] of deviceTokens) {
+        if (token.expiresAt < now && deviceTokens.delete(hash)) deleted += 1;
+      }
+      return Promise.resolve(deleted);
+    },
     reset: () => {
       devices.clear();
       deviceTokens.clear();
@@ -571,6 +610,21 @@ export function createMemorySessionStore(): SessionStore {
       };
       found.usedAt ??= new Date(at);
       return Promise.resolve(before);
+    },
+    deleteExpiredSessions: (now, sessionsBefore) => {
+      let tokensDeleted = 0;
+      for (const [hash, token] of refreshTokens) {
+        if (token.expiresAt < now && refreshTokens.delete(hash)) tokensDeleted += 1;
+      }
+      const gone = new Set<string>();
+      for (const [id, found] of sessions) {
+        if (found.expiresAt < sessionsBefore && sessions.delete(id)) gone.add(id);
+      }
+      // As the foreign key's ON DELETE CASCADE does in Postgres.
+      for (const [hash, token] of refreshTokens) {
+        if (gone.has(token.sessionId)) refreshTokens.delete(hash);
+      }
+      return Promise.resolve({ refreshTokens: tokensDeleted, sessions: gone.size });
     },
     reset: () => {
       sessions.clear();

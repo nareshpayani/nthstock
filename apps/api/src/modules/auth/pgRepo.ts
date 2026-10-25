@@ -165,6 +165,12 @@ export function createPgDeviceStore({
         .where(eq(pins.userId, userId));
     },
 
+    async deleteExpiredDeviceTokens(now) {
+      // On device_tokens_expires_at_idx. The device row stays; an expired token already fails.
+      const result = await db.delete(deviceTokens).where(lt(deviceTokens.expiresAt, now));
+      return result.rowCount ?? 0;
+    },
+
     async getTotpFactor(userId) {
       const [row] = await db.select().from(totpFactors).where(eq(totpFactors.userId, userId));
       return row ? toFactor(row) : null;
@@ -366,6 +372,14 @@ export function createPgSessionStore({ database }: { database: Database }): Sess
           sessionRevokedAt: before.sessionRevokedAt,
         });
       return row ?? null;
+    },
+
+    async deleteExpiredSessions(now, sessionsBefore) {
+      // Two statements on the expires_at indexes, each a pure delete, so a rerun finds nothing.
+      // Deleting a session cascades to the refresh tokens still in its family.
+      const tokens = await db.delete(refreshTokens).where(lt(refreshTokens.expiresAt, now));
+      const gone = await db.delete(sessions).where(lt(sessions.expiresAt, sessionsBefore));
+      return { refreshTokens: tokens.rowCount ?? 0, sessions: gone.rowCount ?? 0 };
     },
 
     reset: refuseReset('session store'),

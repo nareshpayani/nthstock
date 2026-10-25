@@ -63,7 +63,12 @@ if (deps.quoteStreams) {
 const scheduler = await startJobScheduler({
   // BullMQ's worker blocks on its connection and needs maxRetriesPerRequest: null.
   connection: new Redis(config.redisUrl, { maxRetriesPerRequest: null }),
-  jobs: createJobs({ orders: deps.orders, accounts: deps.repos.accounts }),
+  jobs: createJobs({
+    orders: deps.orders,
+    accounts: deps.repos.accounts,
+    database: deps.database,
+    auth: deps.repos.auth,
+  }),
   log,
   // Tests keep their queues apart; one deployment uses the default.
   ...(process.env.JOBS_PREFIX ? { prefix: process.env.JOBS_PREFIX } : {}),
