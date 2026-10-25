@@ -92,6 +92,8 @@ describe('route contract', () => {
         if (PUBLIC_ROUTES_ANSWERING_401[name] === undefined) {
           expect(response.statusCode, `Public route "${name}" asked for a session`).not.toBe(401);
         }
+        // Placeholder params make 400 and 404 fair answers; a crash is not.
+        expect(response.statusCode, `Public route "${name}" failed`).toBeLessThan(500);
         const body: unknown = response.body === '' ? null : response.json();
         expect(
           contractViolation(

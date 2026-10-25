@@ -81,15 +81,21 @@ export function contractViolation(
   if (!ok) {
     const parsed = ApiError.safeParse(response.body);
     if (parsed.success) return null;
-    return `${label} answered ${String(response.status)} without an ApiError body (${parsed.error.message}): ${JSON.stringify(response.body)}`;
+    return `${label} answered ${String(response.status)} without an ApiError body (${parsed.error.message}): ${bodyExcerpt(response.body)}`;
   }
   if (!match) {
     return `${label} answered ${String(response.status)} but no route in the map has that method and path`;
   }
   const parsed = match.def.response.safeParse(response.body);
   if (parsed.success) return null;
-  return `${label} answered ${String(response.status)} with a body that breaks its response schema (${parsed.error.message}): ${JSON.stringify(response.body)}`;
+  return `${label} answered ${String(response.status)} with a body that breaks its response schema (${parsed.error.message}): ${bodyExcerpt(response.body)}`;
 }
+
+/** At most 300 characters of a body for a failure message: CI logs are public (D9). */
+const bodyExcerpt = (body: unknown): string => {
+  const text = JSON.stringify(body) ?? String(body);
+  return text.length > 300 ? `${text.slice(0, 300)}…` : text;
+};
 
 export class ContractViolationError extends Error {
   constructor(readonly violations: readonly string[]) {
@@ -134,8 +140,13 @@ export function contractChecked(
     ...wrap(backend),
     violations,
     async close() {
-      await backend.close?.();
+      // The violations are reported even when the inner teardown fails.
+      let teardown: unknown = null;
+      await Promise.resolve(backend.close?.()).catch((error: unknown) => {
+        teardown = error ?? new Error('Backend close failed');
+      });
       if (violations.length > 0) throw new ContractViolationError(violations);
+      if (teardown !== null) throw teardown;
     },
   };
 }
