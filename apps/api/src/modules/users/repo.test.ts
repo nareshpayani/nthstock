@@ -147,6 +147,19 @@ describeRepoConformance(
       expect(await repo().listConsents(without.id)).toEqual([]);
     });
 
+    it('records a seed consent once, and only for a live user (NSTOCK-0239)', async () => {
+      const user = await repo().create({ mobile: '9123456784' });
+      const grant = { purpose: 'TERMS_AND_PRIVACY', policyVersion: '2026-09-25' } as const;
+      const at = new Date('2026-01-01T00:00:00.000Z');
+
+      expect(await repo().ensureConsent(user.id, grant, at)).toBe(true);
+      expect(await repo().ensureConsent(user.id, grant, new Date())).toBe(false);
+      expect(await repo().listConsents(user.id)).toEqual([
+        { ...grant, grantedAt: at, withdrawnAt: null },
+      ]);
+      expect(await repo().ensureConsent('usr_missing', grant, at)).toBe(false);
+    });
+
     it('hides a deleted user from every read, and finds it as deleted by mobile', async () => {
       const user = await repo().create({ mobile: '9123456783' });
       const at = new Date('2026-09-26T04:00:00.000Z');

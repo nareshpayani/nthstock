@@ -1,3 +1,4 @@
+import { CONSENT_POLICY_VERSION } from '@nthstock/contracts';
 import { MockMarketDataAdapter, type MarketDataAdapter } from '@nthstock/marketData';
 import {
   DEMO_SEED_USER,
@@ -10,10 +11,12 @@ import { DEMO_USER } from '../users/index.js';
 import type { WatchlistRecord } from '../watchlists/index.js';
 
 /**
- * The demo seed for api mode (T-174): `npm run seed:demo` starts apps/api with `DEMO_SEED=true`,
- * and `server.ts` calls this before listening. apps/api keeps its state in memory until Phase 3, so
- * the seed is loaded at start-up rather than written to a database. The state itself comes from
- * `@nthstock/paperEngine` (`demoSeed.ts`), the same one MSW loads for `?demo=1`.
+ * The demo seed for api mode (T-174, NSTOCK-0239): `npm run seed:demo` starts apps/api with
+ * `DEMO_SEED=true`, and `server.ts` calls this before listening. On `DB_DRIVER=postgres` it writes
+ * the demo user (upserted by its blind index), their sign-up consent, watchlists and paper account
+ * to Postgres through the repos and the account store, so the demo outlives a restart; seeding
+ * again gives the same state. The state itself comes from `@nthstock/paperEngine` (`demoSeed.ts`),
+ * the same one MSW loads for `?demo=1`.
  */
 
 /** The symbol master as the seed needs it. The demo is built on the mock market's master. */
@@ -32,7 +35,8 @@ export function demoInstrumentsOf(market: MarketDataAdapter): DemoInstrument[] {
 
 /**
  * Loads the demo watchlists and paper account for the seeded demo user, replacing theirs. On
- * Postgres the demo user is stored first if it is missing (the memory repo always has it).
+ * Postgres the demo user is stored first if it is missing (the memory repo always has it), and
+ * holds the current terms and privacy consent like any user who signed up.
  */
 export async function seedDemo(deps: Pick<AppDeps, 'market' | 'repos' | 'orders'>): Promise<void> {
   await deps.repos.users.ensureSeeded(DEMO_USER);
@@ -40,6 +44,11 @@ export async function seedDemo(deps: Pick<AppDeps, 'market' | 'repos' | 'orders'
   if (user?.mobile !== DEMO_SEED_USER.mobile) {
     throw new Error('The demo seed needs the seeded demo user');
   }
+  await deps.repos.users.ensureConsent(
+    DEMO_SEED_USER.id,
+    { purpose: 'TERMS_AND_PRIVACY', policyVersion: CONSENT_POLICY_VERSION },
+    DEMO_USER.createdAt,
+  );
   const instruments = demoInstrumentsOf(deps.market);
   const lists: WatchlistRecord[] = demoWatchlists(instruments).map((list) => ({
     id: list.id,

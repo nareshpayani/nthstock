@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { KycStatus } from '@nthstock/contracts';
 import type { Clock } from '@nthstock/utils';
-import { and, desc, eq, isNotNull, isNull } from 'drizzle-orm';
+import { and, desc, eq, isNotNull, isNull, sql } from 'drizzle-orm';
 import type { Database } from '../../db/client.js';
 import { mobileHash, type PiiCrypto } from '../../db/crypto.js';
 import { consents, users } from '../../db/schema/users.js';
@@ -202,6 +202,24 @@ export function createPgUsersRepo({
         .onConflictDoNothing()
         .returning({ id: users.id });
       return rows.length > 0;
+    },
+
+    async ensureConsent(userId, consent, grantedAt) {
+      // One statement: the insert happens only when the live user lacks this consent.
+      const result = await db.execute(sql`
+        INSERT INTO ${consents} (user_id, purpose, policy_version, granted_at)
+        SELECT ${userId}, ${consent.purpose}, ${consent.policyVersion}, ${grantedAt}
+        WHERE EXISTS (
+          SELECT 1 FROM ${users} WHERE ${users.id} = ${userId} AND ${users.deletedAt} IS NULL
+        )
+        AND NOT EXISTS (
+          SELECT 1 FROM ${consents}
+          WHERE ${consents.userId} = ${userId}
+            AND ${consents.purpose} = ${consent.purpose}
+            AND ${consents.policyVersion} = ${consent.policyVersion}
+            AND ${consents.withdrawnAt} IS NULL
+        )`);
+      return (result.rowCount ?? 0) > 0;
     },
 
     reset: () =>
