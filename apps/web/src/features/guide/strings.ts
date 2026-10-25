@@ -531,10 +531,13 @@ export const strings = {
         {
           kind: 'list',
           items: [
-            'AlertDesk in packages/paperEngine runs in both backends, beside the paper desk on the same market: it subscribes to an instrument only while some user has an active alert on it.',
-            'Every tick is checked: an ABOVE alert fires on the first LTP at or above its level, a BELOW alert at or below, once. A gap past the level fires with the LTP that crossed it. A level the price has already passed is refused, so nothing fires on the tick it was set.',
-            'A fired alert, an executed order and a triggered trailing stop each add a notification (the newest 100 are kept, with a read flag) and go to the owner at once as a notification message on the socket.',
-            'The web app toasts a fired alert on any page, refreshes the bell and the alerts list, and draws active alerts as dotted price lines on the chart. Routes: GET and POST /v1/alerts, DELETE /v1/alerts/:id, GET /v1/notifications, POST /v1/notifications/read.',
+            'Every notification is written in the same Postgres transaction as its cause: a fill, a rejection, an after-market order sent at the open, a square-off, a triggered trailing stop, a fired price alert, or a security event. So a notification exists exactly when its event does. The newest 100 per user are kept.',
+            'A transactional outbox carries it to the screen. The same transaction writes an outbox row; after commit apps/api publishes the notification on the user’s Redis channel and clears the row, and a relay re-publishes anything older than 5 seconds. A crash or a Redis blip only delays delivery, and the web app drops an id it already holds, so nothing shows twice.',
+            'apps/realtime subscribes each connected user’s channel and pushes to that user’s sockets only. The bell and the toast update with no polling; after a reconnect the list is re-read, so nothing sent while offline is lost.',
+            'Price alerts are stored in Postgres and sit on the matcher’s order book in two price heaps, so a tick reads only the alerts it fires. apps/api watches them too. Whichever process sees the crossing tick first wins one conditional UPDATE, so an alert fires exactly once.',
+            'An ABOVE alert fires on the first price at or above its level, a BELOW alert at or below. A gap fires with the price that crossed it. A level the price has already passed is refused.',
+            'Security notices: a sign-in from a new device, two-factor turned on or off, and logging out the other devices each tell the user at once, naming the device type and the IST time, with “Not you? Change your PIN.”',
+            'Routes: GET and POST /v1/alerts, DELETE /v1/alerts/:id, GET /v1/notifications, POST /v1/notifications/read.',
           ],
         },
         { kind: 'heading', text: 'Two-factor authentication and step-up' },
@@ -1338,7 +1341,7 @@ export const strings = {
             ],
             [
               '3 to 5',
-              'Order matching worker, TimescaleDB candles, notifications, hardening',
+              'Order matching worker, TimescaleDB candles, notifications service, hardening',
               'Planned',
             ],
             [
