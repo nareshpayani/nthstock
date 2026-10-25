@@ -2,14 +2,26 @@ import type { FastifyPluginAsync } from 'fastify';
 import type { AppDeps } from '../../deps.js';
 import { notFound } from '../../http/apiError.js';
 import { registerRoute } from '../../http/registerRoute.js';
+import { createCandleReader } from '../candles/index.js';
 
 /**
  * Public market routes over the boot-time market data adapter (T-061, T-062). Unknown ids answer
  * 404 NOT_FOUND with the same messages as the MSW handlers.
  */
 export const marketRoutes =
-  ({ market, quoteStreams }: Pick<AppDeps, 'market' | 'quoteStreams'>): FastifyPluginAsync =>
+  ({
+    market,
+    quoteStreams,
+    candleStore,
+    clock,
+  }: Pick<AppDeps, 'market' | 'quoteStreams' | 'candleStore' | 'clock'>): FastifyPluginAsync =>
   async (app) => {
+    // On Postgres, stored bars with the live quote as the forming bar (NSTOCK-0375); else, or for
+    // a symbol the store has no bars for, the adapter's generated bars.
+    const candles = candleStore
+      ? createCandleReader({ store: candleStore, market, quotes: quoteStreams, clock })
+      : market;
+
     registerRoute(app, 'marketIndices', async () => ({ items: await market.getIndices() }));
 
     registerRoute(app, 'marketLists', async () => ({ items: await market.getStockLists() }));
@@ -53,7 +65,7 @@ export const marketRoutes =
       app,
       'instrumentCandles',
       async ({ params, query }) =>
-        (await market.getCandles(params.symbol, query.range, query.exchange, query.interval)) ??
+        (await candles.getCandles(params.symbol, query.range, query.exchange, query.interval)) ??
         notFound(`Symbol ${params.symbol}`),
     );
 

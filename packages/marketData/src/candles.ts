@@ -142,20 +142,36 @@ function wick(rng: Rng, price: number, sigmaBar: number): number {
   return Math.abs(randomNormal(rng)) * sigmaBar * price * 0.5;
 }
 
+export type BridgeInput = {
+  /** Bar open times, oldest first. */
+  times: readonly Date[];
+  /** Open of the first bar. */
+  startPrice: number;
+  /** Close of the last bar, exactly. */
+  endPrice: number;
+  /** Annualised volatility for the bar-to-bar noise. */
+  volatility: number;
+  /** Minutes of trading each bar spans, which scales the noise and the volume. */
+  barMinutes: number;
+  seed: number;
+  /** Average volume per full session; spread across bars. 0 for indices. */
+  sessionVolume?: number;
+  /** Price step: 5 paise for equities, 1 for index levels. */
+  tick?: number;
+};
+
 /**
- * Generates OHLCV bars on trading days only (weekends and `holidays` skipped). Closes follow a
- * seeded Brownian bridge in log space from `startPrice` to `endPrice`, so the last close equals the
- * LTP; every bar satisfies low ≤ open, close ≤ high, and every price is on `tick`.
+ * OHLCV bars at `times` whose closes follow a seeded Brownian bridge in log space from
+ * `startPrice` to `endPrice`: the first bar opens at `startPrice` (on tick), the last closes at
+ * `endPrice`, each bar opens at the previous close, and low ≤ open, close ≤ high on `tick`.
  */
-export function generateCandles(input: CandleInput): CandleOutput {
+export function bridgeCandles(input: BridgeInput): Candle[] {
   const tick = input.tick ?? TICK_SIZE_PAISE;
-  const holidays = input.holidays ?? nseHolidays2026;
-  const spec = CANDLE_SPECS[input.range];
-  const times = candleTimes(input.range, input.clock, holidays);
+  const { times } = input;
   const rng = mulberry32(input.seed);
   const n = times.length;
 
-  const barYears = spec.barMinutes / SESSION_MINUTES / TRADING_DAYS_PER_YEAR;
+  const barYears = input.barMinutes / SESSION_MINUTES / TRADING_DAYS_PER_YEAR;
   const sigmaBar = input.volatility * Math.sqrt(barYears);
   const start = Math.log(Math.max(input.startPrice, tick));
   const end = Math.log(Math.max(input.endPrice, tick));
@@ -169,7 +185,7 @@ export function generateCandles(input: CandleInput): CandleOutput {
   }
   const shift = w - (end - start);
 
-  const barVolume = (input.sessionVolume ?? 0) * (spec.barMinutes / SESSION_MINUTES);
+  const barVolume = (input.sessionVolume ?? 0) * (input.barMinutes / SESSION_MINUTES);
   const candles: Candle[] = [];
   let prevClose = roundToTick(input.startPrice, tick);
   for (let k = 0; k < n; k += 1) {
@@ -183,6 +199,27 @@ export function generateCandles(input: CandleInput): CandleOutput {
     candles.push({ t: time.toISOString(), o, h, l, c, v });
     prevClose = c;
   }
+  return candles;
+}
+
+/**
+ * Generates OHLCV bars on trading days only (weekends and `holidays` skipped). Closes follow a
+ * seeded Brownian bridge in log space from `startPrice` to `endPrice`, so the last close equals the
+ * LTP; every bar satisfies low ≤ open, close ≤ high, and every price is on `tick`.
+ */
+export function generateCandles(input: CandleInput): CandleOutput {
+  const spec = CANDLE_SPECS[input.range];
+  const times = candleTimes(input.range, input.clock, input.holidays ?? nseHolidays2026);
+  const candles = bridgeCandles({
+    times,
+    startPrice: input.startPrice,
+    endPrice: input.endPrice,
+    volatility: input.volatility,
+    barMinutes: spec.barMinutes,
+    seed: input.seed,
+    ...(input.sessionVolume === undefined ? {} : { sessionVolume: input.sessionVolume }),
+    ...(input.tick === undefined ? {} : { tick: input.tick }),
+  });
   return { interval: spec.interval, candles };
 }
 

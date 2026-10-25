@@ -92,6 +92,36 @@ export type ApiConfig = {
   pii: { keys: PiiKeys; devKeys: boolean };
 };
 
+const CandleWriterEnvSchema = z.object({
+  DATABASE_URL: EnvSchema.shape.DATABASE_URL,
+  REDIS_URL: EnvSchema.shape.REDIS_URL,
+  SHARDS: z.coerce.number().int().min(1).max(64).default(1),
+});
+
+/** The candle writer entry (`src/candleWriter.ts`, spec market-data-and-matching §7.2). */
+export type CandleWriterConfig = {
+  /** `DATABASE_URL`, as the DML-only `nthstock_app` role. */
+  databaseUrl: string;
+  /** `REDIS_URL`, the Redis apps/quotes writes its tick streams to. */
+  redisUrl: string;
+  /** `SHARDS`: how many shards apps/quotes writes (its own `SHARDS`); default 1. */
+  shards: number;
+};
+
+/** Reads and validates the candle writer's environment; throws at startup on a bad value. */
+export function loadCandleWriterConfig(
+  env: Readonly<Record<string, string | undefined>>,
+): CandleWriterConfig {
+  const parsed = CandleWriterEnvSchema.safeParse(env);
+  if (!parsed.success) {
+    throw new Error(`Invalid candle writer environment: ${z.prettifyError(parsed.error)}`);
+  }
+  const { DATABASE_URL: databaseUrl, REDIS_URL: redisUrl, SHARDS: shards } = parsed.data;
+  if (!databaseUrl) throw new Error('Invalid candle writer environment: DATABASE_URL must be set');
+  if (!redisUrl) throw new Error('Invalid candle writer environment: REDIS_URL must be set');
+  return { databaseUrl, redisUrl, shards };
+}
+
 /** Reads and validates the environment; throws at startup on a bad value. */
 export function loadConfig(env: Readonly<Record<string, string | undefined>>): ApiConfig {
   const parsed = EnvSchema.safeParse(env);

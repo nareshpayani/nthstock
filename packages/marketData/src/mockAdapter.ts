@@ -51,7 +51,8 @@ import { profileAbout } from './profile.js';
 import { changeBasisPoints, circuitBand, clamp, roundToTick } from './price.js';
 import { hashSeed, mulberry32, randomNormal, type Rng } from './prng.js';
 import { SearchIndex, toSearchHit } from './search.js';
-import { SECTOR_GBM, type GbmParams } from './sectors.js';
+import { DAILY_TURNOVER, INDEX_GBM, equityGbm } from './candleHistory.js';
+import type { GbmParams } from './sectors.js';
 import {
   generateSymbolMaster,
   type MasterEquity,
@@ -119,11 +120,6 @@ export const NUDGE_TICKS = 4;
 const DEFAULT_FOCUS_INTERVAL_MS = 250;
 const DEFAULT_REPLAY_LIMIT_MS = 30 * 60_000;
 
-/** Volatility used for index candles (constituents are diversified). */
-const INDEX_VOLATILITY = 0.15;
-const INDEX_DRIFT = 0.11;
-/** Rough share of a company's shares traded per session. */
-const DAILY_TURNOVER = 0.004;
 /** Minimum session fraction simulated at start-up, so an early open still shows an opening gap. */
 const MIN_ELAPSED_FRACTION = 0.15;
 const SPARKLINE_STEP = 5;
@@ -811,9 +807,7 @@ export class MockMarketDataAdapter implements MarketDataAdapter {
   }
 
   private gbmFor(master: MasterEquity): GbmParams {
-    const params = SECTOR_GBM[master.sector];
-    const scale = master.capBucket === 'SMALL' ? 1.4 : master.capBucket === 'MID' ? 1.2 : 1;
-    return { drift: params.drift, volatility: params.volatility * scale };
+    return equityGbm(master);
   }
 
   /** Session fraction elapsed at `now` (0 at 9:15, 1 at 15:30), at least MIN_ELAPSED_FRACTION. */
@@ -937,8 +931,8 @@ export class MockMarketDataAdapter implements MarketDataAdapter {
     const { symbol } = entry.master.instrument;
     const { state } = entry;
     const isIndex = entry.kind === 'index';
-    const volatility = isIndex ? INDEX_VOLATILITY : entry.gbm.volatility;
-    const drift = isIndex ? INDEX_DRIFT : entry.gbm.drift;
+    const volatility = isIndex ? INDEX_GBM.volatility : entry.gbm.volatility;
+    const drift = isIndex ? INDEX_GBM.drift : entry.gbm.drift;
     const anchorKey = istDateKey(latestSessionOpen(this.clock.now(), this.holidays));
     const seed = hashSeed(this.seed, 'candles', symbol, range, anchorKey);
     const years = RANGE_YEARS[range];

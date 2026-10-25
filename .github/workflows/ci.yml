@@ -34,9 +34,12 @@ jobs:
     # a superuser: the test helper creates the roles and one database per worker). Never skipped.
     services:
       postgres:
-        image: postgres:16-alpine
+        # TimescaleDB for the stored candles (migration 0014), like Compose and Testcontainers.
+        image: timescale/timescaledb:2.17.2-pg16
         env:
           POSTGRES_PASSWORD: postgres_ci
+          TIMESCALEDB_TELEMETRY: 'off'
+          NO_TS_TUNE: 'true'
         ports:
           - 5432:5432
         options: >-
@@ -210,9 +213,12 @@ jobs:
       # T-181: apps/api's database, set up like `npm run infra:up`: roles from init.sql, then the
       # migrations as nthstock_owner.
       postgres:
-        image: postgres:16-alpine
+        # TimescaleDB for the stored candles (migration 0014), like Compose and Testcontainers.
+        image: timescale/timescaledb:2.17.2-pg16
         env:
           POSTGRES_PASSWORD: postgres_ci
+          TIMESCALEDB_TELEMETRY: 'off'
+          NO_TS_TUNE: 'true'
           POSTGRES_DB: nthstock
         ports:
           - 5432:5432
@@ -238,6 +244,11 @@ jobs:
       - run: npm run db:migrate -w @nthstock/api
         env:
           DATABASE_MIGRATION_URL: postgres://nthstock_owner:nthstock_owner_dev@127.0.0.1:5432/nthstock
+      # NSTOCK-0376: the migrated database matches the schema files and hand-written relations,
+      # TimescaleDB's own catalog objects skipped.
+      - run: npm run db:check -w @nthstock/api
+        env:
+          DB_CHECK_URL: postgres://nthstock_app:nthstock_app_dev@127.0.0.1:5432/nthstock
       - run: npx turbo run build --filter=@nthstock/web^... --filter=@nthstock/api --filter=@nthstock/realtime --filter=@nthstock/quotes
       # T-171 and NSTOCK-0355: tick-to-screen p95 < 500 ms over this job's Redis, from the API's tick
       # pump and from apps/quotes through the tick streams, run alone so it measures the pipeline.

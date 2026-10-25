@@ -7,8 +7,9 @@ import { runMigrations } from '../db/migrate.js';
 /**
  * Real Postgres for integration tests (T-180), in the same shape as `testRedis.ts`.
  *
- * - Default (any machine with Docker): starts `postgres:16-alpine` with Testcontainers, once per
- *   test worker process. Testcontainers' reaper removes it when the run ends.
+ * - Default (any machine with Docker): starts `POSTGRES_TEST_IMAGE` (Postgres 16 with TimescaleDB,
+ *   as Compose and CI run it) with Testcontainers, once per test worker process. Testcontainers'
+ *   reaper removes it when the run ends.
  * - `POSTGRES_TEST_URL=postgres://postgres:…@127.0.0.1:5432/postgres`: uses that server instead
  *   (CI's service container, `npm run infra:up`, or a local cluster). It must be a superuser: the
  *   helper creates the roles and one database per worker.
@@ -40,7 +41,7 @@ export type TestPostgres = {
   truncate(): Promise<void>;
 };
 
-export const POSTGRES_TEST_IMAGE = 'postgres:16-alpine';
+export const POSTGRES_TEST_IMAGE = 'timescale/timescaledb:2.17.2-pg16';
 
 /** The non-secret local passwords from infra/postgres/init.sql. */
 export const ROLE_PASSWORDS = {
@@ -94,7 +95,12 @@ async function startServer(): Promise<string> {
   const { GenericContainer, Wait } = await import('testcontainers');
   try {
     const container = await new GenericContainer(POSTGRES_TEST_IMAGE)
-      .withEnvironment({ POSTGRES_PASSWORD: 'postgres_test', TZ: 'UTC' })
+      .withEnvironment({
+        POSTGRES_PASSWORD: 'postgres_test',
+        TZ: 'UTC',
+        TIMESCALEDB_TELEMETRY: 'off',
+        NO_TS_TUNE: 'true',
+      })
       .withExposedPorts(5432)
       // The image starts, runs its init, restarts: ready is logged twice.
       .withWaitStrategy(Wait.forLogMessage(/database system is ready to accept connections/, 2))
