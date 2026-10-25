@@ -1,4 +1,19 @@
-import type { Redis } from 'ioredis';
+/**
+ * The Redis calls the lease makes, so this package needs no Redis client of its own: an ioredis
+ * client fits it.
+ */
+export type LeaseClient = {
+  eval(script: string, numKeys: number, ...args: (string | number)[]): Promise<unknown>;
+  set(key: string, value: string, px: 'PX', ttlMs: number, nx: 'NX'): Promise<string | null>;
+};
+
+type IntervalGlobal = {
+  setInterval(run: () => void, ms: number): { unref?: () => void } | number;
+  clearInterval(handle: unknown): void;
+};
+
+/** This package has no DOM or Node types, so the timers are looked up on `globalThis`. */
+const timers = globalThis as unknown as IntervalGlobal;
 
 /** Extends the lease only while `holder` still owns it. */
 const RENEW = `if redis.call('get', KEYS[1]) == ARGV[1] then
@@ -18,8 +33,8 @@ export type LeaseLog = {
 };
 
 export type LeaseOptions = {
-  redis: Redis;
-  /** For example `lease:quotes:0` (spec market-data-and-matching §3). */
+  redis: LeaseClient;
+  /** For example `lease:quotes:0` or `lease:matcher:0` (spec market-data-and-matching §3). */
   key: string;
   /** Who this process is; unique per process. */
   holder: string;
@@ -47,14 +62,21 @@ export type Lease = {
 
 /**
  * One writer per shard (spec market-data-and-matching §3): `SET key holder NX PX ttl` takes the
- * lease, and the holder renews it every `renewMs`. A second process for the same shard keeps
+ * lease, and the holder renews it every `renewMs`. apps/quotes and apps/matcher both hold one. A second process for the same shard keeps
  * trying and takes over when the holder stops or dies (after at most the TTL).
  */
 export function startLease(options: LeaseOptions): Lease {
   const { redis, key, holder, ttlMs, renewMs, log } = options;
   const now = options.now ?? Date.now;
-  const schedule = options.setInterval ?? ((run, ms) => setInterval(run, ms).unref());
-  const cancel = options.clearInterval ?? ((handle) => clearInterval(handle as NodeJS.Timeout));
+  const schedule =
+    options.setInterval ??
+    ((run, ms) => {
+      const handle = timers.setInterval(run, ms);
+      // Node: a lease timer alone does not keep the process alive.
+      if (typeof handle === 'object') handle.unref?.();
+      return handle;
+    });
+  const cancel = options.clearInterval ?? ((handle) => timers.clearInterval(handle));
   /** When the lease was last taken or renewed, or null while another process holds it. */
   let confirmedAt: number | null = null;
   let stopped = false;

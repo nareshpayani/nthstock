@@ -1,8 +1,7 @@
 import { randomUUID } from 'node:crypto';
-import { MockMarketDataAdapter } from '@nthstock/marketData';
+import { MockMarketDataAdapter, startLease } from '@nthstock/marketData';
 import { Redis } from 'ioredis';
 import { loadConfig } from './config.js';
-import { startLease } from './lease.js';
 import { jsonLogger } from './logger.js';
 import { startQuoteWriter } from './quoteWriter.js';
 import { createRedisTickSink } from './tickStream.js';
