@@ -8,7 +8,7 @@ import { describe } from 'vitest';
 /**
  * Real Postgres for the matcher's integration tests, the same way apps/api's `testPostgres.ts`
  * gets it: `POSTGRES_TEST_URL` (a superuser URL: CI's service, `npm run infra:up`, a local
- * cluster) or a Testcontainers `postgres:16-alpine`. The database is built by the real
+ * cluster) or a Testcontainers TimescaleDB image (the migrations create the extension). The database is built by the real
  * `infra/postgres/init.sql` and apps/api's migrations, so the matcher reads the schema it will
  * meet. `SKIP_PG_INTEGRATION=1` skips the suites, loudly.
  */
@@ -23,6 +23,9 @@ const INIT_SQL = fileURLToPath(new URL('../../../../infra/postgres/init.sql', im
 const MIGRATIONS = fileURLToPath(new URL('../../../api/drizzle', import.meta.url));
 /** The non-secret local passwords from infra/postgres/init.sql. */
 const PASSWORDS = { nthstock_owner: 'nthstock_owner_dev', nthstock_app: 'nthstock_app_dev' };
+
+/** The same image as apps/api's tests, CI and Compose. */
+const POSTGRES_TEST_IMAGE = 'timescale/timescaledb:2.17.2-pg16';
 
 const skip = process.env.SKIP_PG_INTEGRATION === '1';
 
@@ -47,7 +50,7 @@ async function serverUrl(): Promise<string> {
   const external = process.env.POSTGRES_TEST_URL;
   if (external) return external;
   const { GenericContainer, Wait } = await import('testcontainers');
-  const container = await new GenericContainer('postgres:16-alpine')
+  const container = await new GenericContainer(POSTGRES_TEST_IMAGE)
     .withEnvironment({ POSTGRES_PASSWORD: 'postgres_test', TZ: 'UTC' })
     .withExposedPorts(5432)
     .withWaitStrategy(Wait.forLogMessage(/database system is ready to accept connections/, 2))

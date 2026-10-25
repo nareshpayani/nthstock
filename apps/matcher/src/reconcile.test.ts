@@ -37,8 +37,8 @@ function harness() {
     }
     return found;
   };
-  const reconcile = (snapshot: LiveOrderSnapshot) =>
-    reconcileBooks({ snapshot, shard: 1, shards: SHARDS, books, book });
+  const reconcile = (snapshot: LiveOrderSnapshot, asked: readonly string[] = ['u1', 'u9']) =>
+    reconcileBooks({ snapshot, shard: 1, shards: SHARDS, books, book, asked: new Set(asked) });
   return { books, book, reconcile };
 }
 
@@ -94,6 +94,34 @@ describe('reconcileBooks (NSTOCK-0366)', () => {
 });
 
 describe('startReconcileLoop (NSTOCK-0366)', () => {
+  it('does not tombstone an order from a user who joined the books while the read was pending', async () => {
+    const { books, book } = harness();
+    let finish: () => void = () => undefined;
+    const loop = startReconcileLoop({
+      source: {
+        read: async () => {
+          await new Promise<void>((resolve) => (finish = resolve));
+          return { orders: [], versions: new Map() };
+        },
+      },
+      shard: 1,
+      shards: SHARDS,
+      books,
+      book,
+      log: { info: () => undefined, warn: () => undefined },
+      timer: null,
+    });
+    await Promise.resolve();
+    // An ADD for a user the books did not hold when the read began.
+    book(T1).upsertOrder({ orderId: 'n1', userId: 'u7', version: 1, side: 'BUY', price: 90_00 });
+    finish();
+    await loop.ready();
+    expect(book(T1).hasOrder('n1')).toBe(true);
+    // It can still be cancelled afterwards.
+    expect(book(T1).removeOrder('n1', 2)).toBe(true);
+    await loop.stop();
+  });
+
   it('runs on start, one round at a time, and logs a failing read once', async () => {
     const { books, book } = harness();
     let calls = 0;

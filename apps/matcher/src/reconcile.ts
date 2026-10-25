@@ -36,8 +36,10 @@ export function reconcileBooks(options: {
   shards: number;
   books: ReadonlyMap<number, OrderBook>;
   book: (token: number) => OrderBook;
+  /** The users whose versions were requested for the read; only these can be known erased. */
+  asked: ReadonlySet<string>;
 }): ReconcileResult {
-  const { snapshot, shard, shards, books, book } = options;
+  const { snapshot, shard, shards, books, book, asked } = options;
   let added = 0;
   let removed = 0;
   const live = new Set<string>();
@@ -52,8 +54,14 @@ export function reconcileBooks(options: {
   for (const held of books.values()) {
     for (const order of [...held.orders()]) {
       if (live.has(order.orderId)) continue;
-      // An erased account has no version left to compare: nothing can be newer than its removal.
-      const version = snapshot.versions.get(order.userId) ?? Number.MAX_SAFE_INTEGER;
+      let version = snapshot.versions.get(order.userId);
+      if (version === undefined) {
+        // A user who joined the books after the read was asked was never looked up: leave them
+        // for the next round. Only a user asked about and missing is erased, and nothing can be
+        // newer than an erased account's removal.
+        if (!asked.has(order.userId)) continue;
+        version = Number.MAX_SAFE_INTEGER;
+      }
       if (held.removeOrder(order.orderId, version)) removed += 1;
     }
   }
@@ -102,9 +110,17 @@ export function startReconcileLoop(options: {
 
   async function round(): Promise<ReconcileResult | null> {
     try {
-      const snapshot = await source.read(shard, heldUsers(books));
+      const users = heldUsers(books);
+      const snapshot = await source.read(shard, users);
       if (stopped) return null;
-      const result = reconcileBooks({ snapshot, shard, shards, books, book });
+      const result = reconcileBooks({
+        snapshot,
+        shard,
+        shards,
+        books,
+        book,
+        asked: new Set(users),
+      });
       if (failing) log.info('Reconcile recovered', { shard });
       failing = false;
       // A repaired book means a command was lost; worth a line every time.
