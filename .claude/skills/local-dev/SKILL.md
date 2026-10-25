@@ -13,6 +13,10 @@ Always Node 22 first (see the `run-checks` skill), then `npm install` after pull
 | Full stack | `npm run dev:api` | http://localhost:5173 | Docker (Postgres, Redis) |
 | Demo data | add `?demo=1` to the URL (mock) or `npm run seed:demo` (API) | | log in as 9000000001, OTP 123456 |
 | Storybook | `npm run storybook` | http://localhost:6006 | |
+| Candle writer | `npm run dev -w @nthstock/quotes`, then `npm run dev:candles -w @nthstock/api` | | `infra:up` and `db:migrate`; `SHARDS` as apps/quotes |
+
+The candle writer is not part of `dev:api`: it folds apps/quotes' tick streams into `candles_1m`,
+so run it beside apps/quotes when you need stored 1-minute bars.
 
 Stop: Ctrl+C in its terminal, or `kill $(lsof -ti :5173)`.
 
