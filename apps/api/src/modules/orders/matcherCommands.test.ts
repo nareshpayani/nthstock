@@ -1,8 +1,18 @@
-import { MatcherCommand, matcherCommandsKey, type Order } from '@nthstock/contracts';
+import {
+  MatcherCommand,
+  matcherCommandsKey,
+  type Order,
+  type TrailingStop,
+} from '@nthstock/contracts';
 import { shardOf } from '@nthstock/utils';
 import { describe, expect, it } from 'vitest';
-import { commandFor, startMatcherCommands, type CommandStream } from './matcherCommands.js';
-import type { OrderUpdateListener } from './service.js';
+import {
+  commandFor,
+  startMatcherCommands,
+  stopCommandFor,
+  type CommandStream,
+} from './matcherCommands.js';
+import type { OrderUpdateListener, TrailingStopUpdateListener } from './service.js';
 
 const limit: Order = {
   id: 'pe_1',
@@ -24,9 +34,43 @@ const limit: Order = {
   updatedAt: '2026-09-28T04:30:00.000Z',
 };
 
+const trailing: TrailingStop = {
+  id: 'ts_1',
+  token: 1594,
+  symbol: 'INFY',
+  exchange: 'NSE',
+  product: 'DELIVERY',
+  direction: 'LONG',
+  trail: { unit: 'PERCENT', basisPoints: 200 },
+  activationPrice: null,
+  exitOrderType: 'MARKET',
+  exitLimitOffset: null,
+  status: 'TRAILING',
+  statusReason: null,
+  watermarkPrice: 1_500_00,
+  stopPrice: 1_470_00,
+  protectedQty: 4,
+  entryOrderId: null,
+  exitOrderId: null,
+  seq: 2,
+  createdAt: '2026-09-28T04:30:00.000Z',
+  updatedAt: '2026-09-28T04:30:00.000Z',
+};
+
 function fakeOrders() {
   const listeners = new Set<OrderUpdateListener>();
+  const stopListeners = new Set<TrailingStopUpdateListener>();
   return {
+    onTrailingStopUpdate(listener: TrailingStopUpdateListener) {
+      stopListeners.add(listener);
+      return () => {
+        stopListeners.delete(listener);
+      };
+    },
+    emitStop: (userId: string, stop: TrailingStop, version: number) => {
+      for (const listener of stopListeners) listener(userId, stop, version);
+    },
+    stopListeners,
     onOrderUpdate(listener: OrderUpdateListener) {
       listeners.add(listener);
       return () => {
@@ -86,7 +130,83 @@ describe('commandFor (NSTOCK-0365)', () => {
   });
 });
 
+describe('stopCommandFor (NSTOCK-0368)', () => {
+  it('adds an ARMED or TRAILING stop with the state the matcher steps', () => {
+    expect(stopCommandFor('usr_a', trailing, 5)).toEqual({
+      v: 1,
+      type: 'STOP_ADD',
+      token: 1594,
+      version: 5,
+      stopId: 'ts_1',
+      userId: 'usr_a',
+      state: {
+        status: 'TRAILING',
+        direction: 'LONG',
+        trail: { unit: 'PERCENT', basisPoints: 200 },
+        activationPrice: null,
+        watermarkPrice: 1_500_00,
+        stopPrice: 1_470_00,
+      },
+    });
+    const armed = { ...trailing, status: 'ARMED' as const, activationPrice: 1_520_00 };
+    expect(stopCommandFor('usr_a', armed, 6)).toMatchObject({
+      type: 'STOP_ADD',
+      state: { status: 'ARMED', activationPrice: 1_520_00 },
+    });
+  });
+
+  it('builds commands the matcher accepts, and a ratchet is a newer STOP_ADD', () => {
+    const first = stopCommandFor('usr_a', trailing, 5);
+    const raised = stopCommandFor(
+      'usr_a',
+      { ...trailing, watermarkPrice: 1_520_00, stopPrice: 1_490_00, seq: 3 },
+      6,
+    );
+    expect(MatcherCommand.parse(first)).toEqual(first);
+    expect(MatcherCommand.parse(raised)).toMatchObject({
+      type: 'STOP_ADD',
+      version: 6,
+      state: { stopPrice: 1_490_00 },
+    });
+  });
+
+  it('cancels a stop in any other status', () => {
+    for (const status of [
+      'PENDING_ENTRY',
+      'TRIGGERED',
+      'EXECUTED',
+      'CANCELLED',
+      'REJECTED',
+    ] as const)
+      expect(stopCommandFor('usr_a', { ...trailing, status }, 7)).toEqual({
+        v: 1,
+        type: 'STOP_CANCEL',
+        token: 1594,
+        version: 7,
+        stopId: 'ts_1',
+      });
+  });
+});
+
 describe('startMatcherCommands (NSTOCK-0365)', () => {
+  it("sends trailing stop changes to the instrument's shard (NSTOCK-0368)", async () => {
+    const orders = fakeOrders();
+    const { stream, sent } = fakeStream();
+    const log = { info: () => undefined, warn: () => undefined };
+    const running = startMatcherCommands({ orders, stream, shards: 4, log });
+
+    orders.emitStop('usr_a', trailing, 1);
+    orders.emitStop('usr_a', { ...trailing, status: 'CANCELLED' }, 2);
+    await flush();
+    expect(sent.map((s) => [s.key, s.command.type, s.command.version])).toEqual([
+      [matcherCommandsKey(shardOf(1594, 4)), 'STOP_ADD', 1],
+      [matcherCommandsKey(shardOf(1594, 4)), 'STOP_CANCEL', 2],
+    ]);
+
+    running.stop();
+    expect(orders.stopListeners.size).toBe(0);
+  });
+
   it("sends each command to its instrument's shard and stops on request", async () => {
     const orders = fakeOrders();
     const { stream, sent } = fakeStream();

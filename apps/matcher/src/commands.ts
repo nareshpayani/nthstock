@@ -5,11 +5,12 @@ import type { MatcherLog } from './matcher.js';
 /** The Redis calls the command reader makes; an ioredis client fits it. `XREAD BLOCK` holds it. */
 export type CommandStreamClient = {
   xread(...args: (string | number)[]): Promise<unknown>;
+  xrevrange(key: string, end: '+', start: '-', count: 'COUNT', limit: number): Promise<unknown>;
   disconnect(): void;
 };
 
 export type CommandReader = {
-  /** Resolves once the first read is waiting on the stream, or when it is closed first. */
+  /** Resolves once the reader's position in the stream is fixed, or when it is closed first. */
   ready(): Promise<void>;
   /** Stops reading and disconnects the client. */
   close(): Promise<void>;
@@ -69,7 +70,10 @@ export function readMatcherCommands(options: {
   const { client, shard, onCommand, log } = options;
   const key = (options.commandsKey ?? matcherCommandsKey)(shard);
   const blockMs = options.blockMs ?? 5_000;
-  let cursor = '$';
+  // The id of the newest entry when reading starts. Never `$`: it means "newer than now" on every
+  // call, so entries written before the server handled the first read, or between two empty reads,
+  // would be lost.
+  let cursor: string | undefined;
   let closed = false;
 
   let markReady: () => void = () => undefined;
@@ -91,9 +95,13 @@ export function readMatcherCommands(options: {
     });
 
   async function step(): Promise<void> {
-    const reading = client.xread('COUNT', 500, 'BLOCK', blockMs, 'STREAMS', key, cursor);
-    // The first read is in flight: anything written from here on is read.
+    if (cursor === undefined) {
+      const newest = (await client.xrevrange(key, '+', '-', 'COUNT', 1)) as StreamRecord[];
+      cursor = newest[0]?.[0] ?? '0-0';
+    }
+    // The position is fixed: anything written from here on is read.
     markReady();
+    const reading = client.xread('COUNT', 500, 'BLOCK', blockMs, 'STREAMS', key, cursor);
     reading.catch(() => undefined);
     const read = (await Promise.race([reading, closing])) as [string, StreamRecord[]][] | null;
     if (closed) return;
