@@ -1,5 +1,10 @@
 import { MockMarketDataAdapter } from '@nthstock/marketData';
-import { healthScenarios, runScenarioSuite, scenarioGroups } from '@nthstock/contracts/testing';
+import {
+  contractChecked,
+  healthScenarios,
+  runScenarioSuite,
+  scenarioGroups,
+} from '@nthstock/contracts/testing';
 import { systemClock } from '@nthstock/utils';
 import { Redis } from 'ioredis';
 import { buildApp } from '../app.js';
@@ -20,11 +25,14 @@ runScenarioSuite('apps/api (app.inject)', scenarioGroups, () => {
   app.addHook('onClose', async () => {
     market.dispose();
   });
-  return injectBackend(app, {
-    advanceTime: clock.advance,
-    setTime: clock.set,
-    setPrice: app.deps.orders.pinPrice,
-  });
+  // Every response, raw sends included, must match the route map (NSTOCK-0238).
+  return contractChecked(
+    injectBackend(app, {
+      advanceTime: clock.advance,
+      setTime: clock.set,
+      setPrice: app.deps.orders.pinPrice,
+    }),
+  );
 });
 
 // And against apps/api as it runs with DB_DRIVER=postgres (T-196): users, auth, sessions, the
@@ -61,11 +69,13 @@ describeWithPostgres('apps/api on Postgres', () => {
       });
       // As server.ts does at boot outside production.
       await app.deps.repos.users.ensureSeeded(DEMO_USER);
-      return injectBackend(app, {
-        advanceTime: clock.advance,
-        setTime: clock.set,
-        setPrice: app.deps.orders.pinPrice,
-      });
+      return contractChecked(
+        injectBackend(app, {
+          advanceTime: clock.advance,
+          setTime: clock.set,
+          setPrice: app.deps.orders.pinPrice,
+        }),
+      );
     });
   });
 });
