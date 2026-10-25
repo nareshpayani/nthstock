@@ -62,6 +62,7 @@ describe('pnl.snapshot (T-209)', () => {
       accounts: deps.repos.accounts,
       database: null,
       auth: deps.repos.auth,
+      purgeDatabase: null,
     });
     const job = jobs.find((candidate) => candidate.name === 'pnl.snapshot');
     expect(job?.schedule).toEqual({ cron: '45 15 * * 1-5', tradingDaysOnly: true });

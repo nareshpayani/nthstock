@@ -1,10 +1,11 @@
+import { runAccountPurge, type AccountPurgeDeps } from './accountPurge.js';
 import { JOB_SCHEDULES, type Job, type JobName, type JobResult } from './definitions.js';
 import { runOrderPartitions, runTokenCleanup, type MaintenanceJobDeps } from './maintenanceJobs.js';
 import { runPnlSnapshot, type PnlSnapshotDeps } from './pnlSnapshot.js';
 import { runAmoRelease, runDayClose, runSquareOff, type SessionJobDeps } from './sessionJobs.js';
 
 /** Everything the jobs read and write, taken from the worker's `AppDeps`. */
-export type JobsDeps = SessionJobDeps & PnlSnapshotDeps & MaintenanceJobDeps;
+export type JobsDeps = SessionJobDeps & PnlSnapshotDeps & MaintenanceJobDeps & AccountPurgeDeps;
 
 function job(name: JobName, run: (at: Date) => Promise<JobResult>): Job {
   return { name, schedule: JOB_SCHEDULES[name], run };
@@ -19,5 +20,6 @@ export function createJobs(deps: JobsDeps): Job[] {
     job('pnl.snapshot', (at) => runPnlSnapshot(at, deps)),
     job('db.orderPartitions', (at) => runOrderPartitions(at, deps)),
     job('auth.tokenCleanup', (at) => runTokenCleanup(at, deps)),
+    job('account.purge', (at) => runAccountPurge(at, deps)),
   ];
 }

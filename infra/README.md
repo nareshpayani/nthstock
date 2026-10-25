@@ -21,7 +21,7 @@ once with `docker compose -f infra/docker-compose.yml down -v` (local data only)
 | --- | --- | --- |
 | `nthstock_owner` | migrations (`DATABASE_MIGRATION_URL`) | own and change the schema |
 | `nthstock_app` | apps/api (`DATABASE_URL`) | read and write rows; no DDL, no temp tables |
-| `nthstock_purge` | the account purge job | like the app role, plus deleting ledger rows (later migration) |
+| `nthstock_purge` | the account purge job (`PURGE_DATABASE_URL` on the job worker) | like the app role, plus deleting ledger rows |
 
 The passwords (`nthstock_app_dev` and so on, superuser `postgres_dev`) are non-secret local values,
 also in `apps/api/.env.example`. Never reuse them anywhere else.

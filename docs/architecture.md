@@ -867,7 +867,7 @@ codebase as the API so jobs share repos, the engine and quote-service prices.
 | `pnl.snapshot` | 15:45, trading days | One `pnl_snapshots` row per account touched today or holding stock |
 | `db.orderPartitions` | 00:30 daily | Keeps 14 days of `orders` and `order_events` partitions ahead |
 | `auth.tokenCleanup` | 03:00 daily | Deletes expired refresh and device tokens and sessions expired over 30 days |
-| `account.purge` | 02:00 daily | Defined; the job that erases the PII of accounts past their 30-day window lands with T-230, until then nothing is scheduled for it |
+| `account.purge` | 02:00 daily | Purges accounts past `purge_after`, one transaction each, as `nthstock_purge` (`PURGE_DATABASE_URL`): deletes the user's rows from every table but `audit_log`, nulls the PII columns, sets `purged_at` last and audits `ACCOUNT_PURGED` |
 
 - Each job is a plain `run(at, deps)` function of its due time, unit-tested with a fixed clock;
   BullMQ (queue `jobs`, prefix `nthstock:bull`) only schedules and retries it (3 attempts, exponential
@@ -935,8 +935,11 @@ refused (400); it logs out from the profile menu.
   with `purge_after` = now + 30 days, revokes every session (`ACCOUNT_DELETED`, tokens and sockets end
   at once), cancels OPEN and AMO orders, audits `ACCOUNT_DELETION_REQUESTED`, and clears the cookies.
   Until the purge an OTP login answers 403 `ACCOUNT_DELETED` with `purgeAfter`, and every read hides
-  the user. The purge job (T-230, scheduled as `account.purge`) then erases the PII columns as
-  `nthstock_purge` and leaves a tombstone; the mobile can then sign up as a new user.
+  the user. The purge job (T-230, `account.purge`, `apps/api/src/modules/jobs/accountPurge.ts`) then
+  runs as `nthstock_purge`: it deletes the user's rows from every table in `PURGED_TABLES` (an
+  integration test checks that list against the live catalog), nulls the PII columns, sets
+  `purged_at` and writes `ACCOUNT_PURGED`, leaving a tombstone that audit rows still name. The mobile
+  can then sign up as a new user.
 - **Web:** the app navigates to `/login?deleted=<purgeAfter>` first, then clears the session, query
   cache and trusted-browser record.
 

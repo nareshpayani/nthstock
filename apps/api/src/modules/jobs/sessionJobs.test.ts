@@ -191,7 +191,7 @@ describe('market-session jobs (T-208)', () => {
 });
 
 describe('createJobs', () => {
-  it('registers every scheduled job except the account purge, which T-230 adds', () => {
+  it('registers every scheduled job', () => {
     const clock = manualClock(MORNING);
     const worker = processOn(newStore(clock), clock);
     const jobs = createJobs({
@@ -200,9 +200,8 @@ describe('createJobs', () => {
       pnlSnapshots: worker.repos.pnlSnapshots,
       database: null,
       auth: worker.repos.auth,
+      purgeDatabase: null,
     });
-    expect(jobs.map((job) => job.name).sort()).toEqual(
-      JOB_NAMES.filter((name) => name !== 'account.purge').sort(),
-    );
+    expect(jobs.map((job) => job.name).sort()).toEqual([...JOB_NAMES].sort());
   });
 });
