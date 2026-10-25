@@ -1,6 +1,6 @@
 import { isApiError, type TradingState } from '@nthstock/apiClient';
 import type { Position } from '@nthstock/contracts';
-import { Button, IconAlert, SegmentedControl, useToast } from '@nthstock/ui';
+import { Button, Field, IconAlert, NumberInput, SegmentedControl, useToast } from '@nthstock/ui';
 import { formatInr } from '@nthstock/utils';
 import { useQuery } from '@tanstack/react-query';
 import { useCallback, useState } from 'react';
@@ -18,10 +18,12 @@ import { useCancelTrailingStop } from '../hooks/useCancelTrailingStop';
 import { useModifyTrailingStop } from '../hooks/useModifyTrailingStop';
 import { usePlaceTrailingStop } from '../hooks/usePlaceTrailingStop';
 import {
+  canMoveStop,
   defaultTrailValue,
   isActiveStop,
   isChangeableStop,
   sheetValues,
+  toTermsModify,
   toTrailModify,
 } from '../model/trailingSheet';
 import {
@@ -39,6 +41,12 @@ import { TrailingParamsFields } from './TrailingParamsFields';
 export type TrailingStopSheetProps = {
   target: TrailingSheetTarget;
   onClose: () => void;
+  /**
+   * The position editor's stop section (NSTOCK-0395): every term (activation price, exit type),
+   * moving the stop to a typed price, and only the target's product. The editor states the
+   * position above it, so the sheet's own summary and "More options" are left out.
+   */
+  full?: boolean | undefined;
 };
 
 const samePositions = (a: readonly Position[], b: readonly Position[]) =>
@@ -64,13 +72,17 @@ const failureText = (error: unknown) =>
  * the stop in one tap. "More options" opens the full ticket for the activation price and exit
  * type. Nothing is sent until a button is tapped.
  */
-export function TrailingStopSheet({ target, onClose }: TrailingStopSheetProps) {
+export function TrailingStopSheet({ target, onClose, full = false }: TrailingStopSheetProps) {
+  const only = full ? target.product : undefined;
   const select = useCallback(
     (state: TradingState) =>
       state.positions.filter(
-        (position) => position.token === target.token && position.netQty !== 0,
+        (position) =>
+          position.token === target.token &&
+          position.netQty !== 0 &&
+          (only === undefined || position.product === only),
       ),
-    [target.token],
+    [target.token, only],
   );
   const positions = useTradingSelector(select, samePositions);
   const first = positions.find((p) => p.product === target.product) ?? positions[0];
@@ -91,6 +103,7 @@ export function TrailingStopSheet({ target, onClose }: TrailingStopSheetProps) {
       positions={positions}
       onProduct={setProduct}
       onClose={onClose}
+      full={full}
     />
   );
 }
@@ -101,12 +114,14 @@ function SheetBody({
   positions,
   onProduct,
   onClose,
+  full,
 }: {
   target: TrailingSheetTarget;
   position: Position;
   positions: readonly Position[];
   onProduct: (product: Position['product']) => void;
   onClose: () => void;
+  full: boolean;
 }) {
   const toast = useToast();
   const openTicket = useOpenTicket();
@@ -142,7 +157,13 @@ function SheetBody({
   // An update applies from the best price so far (§6.5); a new stop from the LTP.
   const preview = previewText(values, active?.watermarkPrice ?? ltp, direction);
   const busy = place.isPending || modify.isPending || cancel.isPending;
-  const changes = active ? toTrailModify(values, active) : null;
+  const changes = active
+    ? full
+      ? toTermsModify(values, active)
+      : toTrailModify(values, active)
+    : null;
+  const movable = full && canMoveStop(stop) ? stop : null;
+  const [stopPrice, setStopPrice] = useState<number | null>(stop?.stopPrice ?? null);
 
   const onChange = (patch: Partial<TrailingFormValues>, typed?: boolean) => {
     // Switching the unit starts from that unit's default rather than an empty field (§8.4).
@@ -183,7 +204,30 @@ function SheetBody({
         onSuccess: (updated) => {
           toast.show({
             title: strings.sheet.updated,
-            description: strings.sheet.updatedDescription(trailText(updated.trail)),
+            description: full
+              ? strings.editor.updatedDescription(
+                  trailText(updated.trail),
+                  formatInr(updated.stopPrice ?? 0),
+                )
+              : strings.sheet.updatedDescription(trailText(updated.trail)),
+            tone: 'success',
+          });
+          onClose();
+        },
+        onError: (error) => setFailure(failureText(error)),
+      },
+    );
+  };
+
+  const onMove = () => {
+    if (!movable || stopPrice === null) return;
+    modify.mutate(
+      { id: movable.id, body: { stopPrice } },
+      {
+        onSuccess: (updated) => {
+          toast.show({
+            title: strings.editor.moved,
+            description: strings.editor.movedDescription(formatInr(updated.stopPrice ?? stopPrice)),
             tone: 'success',
           });
           onClose();
@@ -236,32 +280,37 @@ function SheetBody({
         />
       ) : null}
 
-      <dl className="grid grid-cols-2 gap-3 rounded-md bg-canvas p-3" data-testid="sheet-position">
-        <div className="grid gap-0.5">
-          <dt className="text-label text-ink-muted">{strings.products[position.product]}</dt>
-          <dd className="font-mono text-body font-semibold text-ink tabular-nums">
-            {live.avgPrice === null ? qty : strings.sheet.position(qty, formatInr(live.avgPrice))}
-          </dd>
-        </div>
-        <div className="grid gap-0.5 text-right">
-          <dt className="text-label text-ink-muted">{strings.sheet.pnl}</dt>
-          <dd data-testid="sheet-pnl">
-            <PnlAmount value={live.pnl} size="md" />
-          </dd>
-        </div>
-        <div className="col-span-2 grid gap-0.5">
-          <dt className="text-label text-ink-muted">{strings.sheet.status}</dt>
-          <dd className="text-body font-medium text-ink" data-testid="sheet-status">
-            {active ? trailingStopSummary(active) : strings.sheet.none}
-          </dd>
-        </div>
-      </dl>
+      {full ? null : (
+        <dl
+          className="grid grid-cols-2 gap-3 rounded-md bg-canvas p-3"
+          data-testid="sheet-position"
+        >
+          <div className="grid gap-0.5">
+            <dt className="text-label text-ink-muted">{strings.products[position.product]}</dt>
+            <dd className="font-mono text-body font-semibold text-ink tabular-nums">
+              {live.avgPrice === null ? qty : strings.sheet.position(qty, formatInr(live.avgPrice))}
+            </dd>
+          </div>
+          <div className="grid gap-0.5 text-right">
+            <dt className="text-label text-ink-muted">{strings.sheet.pnl}</dt>
+            <dd data-testid="sheet-pnl">
+              <PnlAmount value={live.pnl} size="md" />
+            </dd>
+          </div>
+          <div className="col-span-2 grid gap-0.5">
+            <dt className="text-label text-ink-muted">{strings.sheet.status}</dt>
+            <dd className="text-body font-medium text-ink" data-testid="sheet-status">
+              {active ? trailingStopSummary(active) : strings.sheet.none}
+            </dd>
+          </div>
+        </dl>
+      )}
 
       {active && !changeable ? (
         <p className="text-body text-ink">{strings.sheet.triggered}</p>
       ) : (
         <TrailingParamsFields
-          compact
+          compact={!full}
           values={values}
           onChange={onChange}
           errorFor={errorFor}
@@ -297,7 +346,9 @@ function SheetBody({
               {strings.sheet.update}
             </Button>
             {changes === null ? (
-              <p className="text-center text-label text-ink-muted">{strings.sheet.unchanged}</p>
+              <p className="text-center text-label text-ink-muted">
+                {full ? strings.editor.unchanged : strings.sheet.unchanged}
+              </p>
             ) : null}
             <Button
               variant="secondary"
@@ -317,11 +368,42 @@ function SheetBody({
         </Button>
       )}
 
+      {movable ? (
+        <div className="grid gap-2 border-t border-line pt-4" data-testid="editor-move-stop">
+          <Field label={strings.editor.stopPrice} hint={strings.editor.stopPriceHint}>
+            <NumberInput
+              className="w-full min-w-0"
+              mode="price"
+              name="stopPrice"
+              step={5}
+              min={5}
+              value={stopPrice}
+              onChange={(next) => {
+                setStopPrice(next);
+                setFailure(null);
+              }}
+            />
+          </Field>
+          <Button
+            variant="secondary"
+            size="lg"
+            block
+            loading={modify.isPending && modify.variables?.body.stopPrice !== undefined}
+            disabled={busy || stopPrice === null || stopPrice === movable.stopPrice}
+            onClick={onMove}
+          >
+            {strings.editor.move}
+          </Button>
+        </div>
+      ) : null}
+
       <div className="flex items-center justify-between gap-2">
         <p className="text-label text-ink-muted">{strings.form.paperNote}</p>
-        <Button variant="ghost" size="sm" onClick={onMore}>
-          {strings.sheet.moreOptions}
-        </Button>
+        {full ? null : (
+          <Button variant="ghost" size="sm" onClick={onMore}>
+            {strings.sheet.moreOptions}
+          </Button>
+        )}
       </div>
     </div>
   );

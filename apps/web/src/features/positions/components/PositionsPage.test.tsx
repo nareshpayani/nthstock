@@ -7,6 +7,10 @@ import { OrderTicketHost } from '@/features/orderTicket';
 import { createMockServer } from '@/mocks/node';
 import type { MarketSession } from '@/shared/lib/marketSessionContext';
 import { initialSearchFocusState, useSearchFocusStore } from '@/shared/lib/searchFocusStore';
+import {
+  initialPositionEditorState,
+  usePositionEditorStore,
+} from '@/shared/lib/positionEditorStore';
 import { initialTicketIntentState, useTicketIntentStore } from '@/shared/lib/ticketIntentStore';
 import { createTestQuoteStore, testQuote } from '@/test/quotes';
 import { renderWithProviders } from '@/test/renderWithProviders';
@@ -79,6 +83,7 @@ beforeEach(() => {
 afterEach(() => {
   resetSession();
   useTicketIntentStore.setState(initialTicketIntentState);
+  usePositionEditorStore.setState(initialPositionEditorState);
   useSearchFocusStore.setState(initialSearchFocusState);
 });
 afterAll(() => {
@@ -106,6 +111,7 @@ describe('positions (T-149)', () => {
       const tcs = row('TCS');
       expect(tcs).toHaveTextContent('Closed');
       expect(within(tcs as HTMLElement).queryByRole('button', { name: /Exit/ })).toBeNull();
+      expect(within(tcs as HTMLElement).queryByRole('button', { name: /Edit/ })).toBeNull();
       const bar = screen.getByRole('region', { name: 'Total P&L' });
       expect(bar).toHaveTextContent('no profit or loss');
 
@@ -154,6 +160,30 @@ describe('positions (T-149)', () => {
         exchange: 'NSE',
         side: 'SELL',
         qty: 10,
+        product: 'INTRADAY',
+      });
+    },
+    HEAVY,
+  );
+});
+
+describe('positions Edit (NSTOCK-0395)', () => {
+  it(
+    'Edit on an open position opens its position editor',
+    async () => {
+      const { api, tokens } = await setup();
+      await place(api, tokens.infy, { qty: 10, product: 'INTRADAY' });
+      renderPage(api);
+      await table();
+      fireEvent.click(
+        screen.getByRole('button', {
+          name: 'Edit INFY intraday position: trailing stop, exit or add',
+        }),
+      );
+      expect(usePositionEditorStore.getState().target).toEqual({
+        symbol: 'INFY',
+        exchange: 'NSE',
+        token: tokens.infy,
         product: 'INTRADAY',
       });
     },

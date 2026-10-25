@@ -69,6 +69,8 @@ export const strings = {
     modifyLabel: (what: string) => `Modify ${what}`,
     cancel: 'Cancel',
     cancelLabel: (what: string) => `Cancel ${what}`,
+    editStop: 'Edit stop',
+    editStopLabel: (what: string) => `Edit the trailing stop of ${what}`,
   },
   /** "BUY 10 INFY" names an order in button labels and dialogs. */
   orderName: (side: OrderSide, qty: number, symbol: string) =>
