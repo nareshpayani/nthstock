@@ -243,6 +243,7 @@ export const strings = {
     updatedDescription: (trail: string, stop: string | null) =>
       stop === null ? `Trails by ${trail}.` : `Trails by ${trail}, stop ${stop}.`,
     unchanged: 'Change a term to update the stop.',
+    setNoPrice: 'The stop is set and follows the price.',
     armedDescription: (activation: string) =>
       `Starts trailing once the price reaches ${activation}.`,
     exitCap: (held: number) =>

@@ -345,4 +345,123 @@ describe('position editor (NSTOCK-0395)', () => {
     },
     HEAVY,
   );
+
+  /** Mounts the host on a trading store whose account load is held by `loadState`. */
+  async function renderWithLoad(loadState: () => Promise<never>) {
+    const api = await loginOnMock(nextMobile(), 'http://editor.test');
+    const token = await infyToken();
+    const tradingStore = createTradingStore({
+      loadState,
+      schedule: (flush) => queueMicrotask(flush),
+    });
+    void tradingStore.start();
+    renderWithProviders(<PositionEditorHost />, {
+      apiClient: api,
+      quoteStore: createTestQuoteStore().store,
+      marketSession: session,
+      tradingStore,
+    });
+    return token;
+  }
+
+  it(
+    'waits for the account state instead of calling the position closed',
+    async () => {
+      const token = await renderWithLoad(() => new Promise<never>(() => {}));
+      const editor = await openEditor(token);
+      expect(
+        await within(editor).findByRole('status', { name: 'Loading the order ticket' }),
+      ).toBeInTheDocument();
+      expect(within(editor).queryByText(/This position is closed/)).toBeNull();
+    },
+    HEAVY,
+  );
+
+  it(
+    'says when the account state failed to load, and Retry loads it again',
+    async () => {
+      let calls = 0;
+      const token = await renderWithLoad(() => {
+        calls += 1;
+        return Promise.reject(new Error('offline'));
+      });
+      const editor = await openEditor(token);
+      expect(await within(editor).findByText('Your positions could not load')).toBeInTheDocument();
+      expect(calls).toBe(1);
+      fireEvent.click(within(editor).getByRole('button', { name: 'Retry' }));
+      await waitFor(() => expect(calls).toBe(2));
+    },
+    HEAVY,
+  );
+
+  it(
+    'a position closed since Edit was tapped says there is nothing to edit',
+    async () => {
+      const { api, token, tradingStore } = await renderEditor(3);
+      await api.request('orderPlace', {
+        body: { token, side: 'SELL', type: 'MARKET', product: 'DELIVERY', qty: 3 },
+      });
+      await tradingStore.resync();
+      const editor = await openEditor(token);
+      expect(
+        await within(editor).findByText('This position is closed. Nothing is left to edit.'),
+      ).toBeInTheDocument();
+    },
+    HEAVY,
+  );
+
+  it(
+    'a fill while the editor is open refreshes the exit quantity and its cap',
+    async () => {
+      const { api, token, tradingStore } = await renderEditor(10);
+      const editor = await openEditor(token, 'exit');
+      expect(await within(editor).findByRole('textbox', { name: 'Quantity' })).toHaveValue('10');
+      await api.request('orderPlace', {
+        body: { token, side: 'SELL', type: 'MARKET', product: 'DELIVERY', qty: 4 },
+      });
+      await act(() => tradingStore.resync());
+      const qty = await within(editor).findByRole('textbox', { name: 'Quantity' });
+      await waitFor(() => expect(qty).toHaveValue('6'));
+      fireEvent.change(qty, { target: { value: '7' } });
+      fireEvent.click(within(editor).getByRole('button', { name: 'Sell INFY' }));
+      expect(await within(editor).findByText(/^You hold 6\./)).toBeInTheDocument();
+    },
+    HEAVY,
+  );
+
+  it(
+    'Move stop follows the ratcheting stop until a price is typed, then keeps it',
+    async () => {
+      const { api, token, tradingStore } = await renderEditor(10);
+      await api.request('trailingStopPlace', {
+        body: {
+          token,
+          product: 'DELIVERY',
+          trail: { unit: 'PERCENT', basisPoints: 100 },
+          activationPrice: null,
+          exitOrderType: 'MARKET',
+          exitLimitOffset: null,
+        },
+      });
+      await tradingStore.resync();
+      const editor = await openEditor(token);
+      const field = await within(editor).findByRole('textbox', { name: 'Move stop to (₹)' });
+      const before = (await stopsOf(api))[0]?.stopPrice ?? 0;
+      expect(field).toHaveValue(rupees(before));
+
+      // A rally ratchets the stop: the untouched field follows it.
+      mock.adapter.gap('INFY', 0.02);
+      await act(() => tradingStore.resync());
+      const after = (await stopsOf(api))[0]?.stopPrice ?? 0;
+      expect(after).toBeGreaterThan(before);
+      await waitFor(() => expect(field).toHaveValue(rupees(after)));
+
+      // A typed price stays put through the next ratchet.
+      fireEvent.change(field, { target: { value: rupees(after - 500) } });
+      mock.adapter.gap('INFY', 0.02);
+      await act(() => tradingStore.resync());
+      expect(field).toHaveValue(rupees(after - 500));
+    },
+    HEAVY,
+  );
 });

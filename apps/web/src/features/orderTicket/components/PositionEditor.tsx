@@ -1,15 +1,23 @@
 import type { TradingState } from '@nthstock/apiClient';
 import type { Order, Position } from '@nthstock/contracts';
-import { Button, Tabs, TabsContent, TabsList, TabsTrigger, useToast } from '@nthstock/ui';
+import {
+  Button,
+  ErrorState,
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+  useToast,
+} from '@nthstock/ui';
 import { formatInr } from '@nthstock/utils';
 import { useCallback, useState } from 'react';
-import { ErrorState } from '@nthstock/ui';
 import { useCancelOrder } from '@/features/orders';
 import { livePosition } from '@/features/positions';
 import { PnlAmount } from '@/shared/components/PnlAmount';
 import { useQuote } from '@/shared/hooks/useQuote';
 import { usePositionTrailingStop } from '@/shared/hooks/useTrailingStops';
 import { useTradingSelector } from '@/shared/hooks/useTradingSelector';
+import { useTradingStore } from '@/shared/lib/tradingStoreContext';
 import type { PositionEditorTab, PositionEditorTarget } from '@/shared/lib/positionEditorStore';
 import { useTicketIntentStore, type TicketIntent } from '@/shared/lib/ticketIntentStore';
 import { trailingStopSummary } from '@/shared/lib/trailingStopView';
@@ -67,6 +75,7 @@ export function PositionEditor({ target, onClose }: PositionEditorProps) {
   );
   const position = useTradingSelector(selectPosition, samePosition);
   const status = useTradingSelector(tradingStatus);
+  const store = useTradingStore();
   const [tab, setTab] = useState<PositionEditorTab>(target.tab ?? 'stop');
   // Until the account state has loaded, "closed" would be a guess: wait, or say it failed.
   if (!position && (status === 'idle' || status === 'loading')) return <TicketSkeleton />;
@@ -76,7 +85,7 @@ export function PositionEditor({ target, onClose }: PositionEditorProps) {
         title={strings.editor.loadError}
         description={strings.loadError.body}
         retryLabel={strings.loadError.retry}
-        onRetry={onClose}
+        onRetry={() => void store.start()}
       />
     );
   }
@@ -225,11 +234,10 @@ function OpenOrderLine({ order, onClose }: { order: Order; onClose: () => void }
     <li className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-line p-2">
       <span className="font-mono text-label text-ink tabular-nums">{line}</span>
       <span className="flex gap-1">
-        {confirming ? (
-          <span className="sr-only" role="status">
-            {strings.editor.confirmCancelHint}
-          </span>
-        ) : null}
+        {/* Always mounted, so screen readers hear the text when it appears. */}
+        <span className="sr-only" role="status">
+          {confirming ? strings.editor.confirmCancelHint : ''}
+        </span>
         <Button
           size="sm"
           variant="secondary"

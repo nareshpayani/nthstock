@@ -190,9 +190,11 @@ function SheetBody({
           title: strings.sheet.setDone,
           // An armed stop has no price until the activation price is reached.
           description:
-            placed.stopPrice === null
-              ? strings.editor.armedDescription(formatInr(placed.activationPrice ?? 0))
-              : strings.trailing.placedDescription(formatInr(placed.stopPrice)),
+            placed.stopPrice !== null
+              ? strings.trailing.placedDescription(formatInr(placed.stopPrice))
+              : placed.activationPrice !== null
+                ? strings.editor.armedDescription(formatInr(placed.activationPrice))
+                : strings.editor.setNoPrice,
           tone: 'success',
         });
         onClose();
@@ -233,7 +235,10 @@ function SheetBody({
         onSuccess: (updated) => {
           toast.show({
             title: strings.editor.moved,
-            description: strings.editor.movedDescription(formatInr(updated.stopPrice ?? stopPrice)),
+            description:
+              updated.stopPrice === null
+                ? strings.editor.setNoPrice
+                : strings.editor.movedDescription(formatInr(updated.stopPrice)),
             tone: 'success',
           });
           onClose();
