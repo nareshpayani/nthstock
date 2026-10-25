@@ -69,6 +69,9 @@ jobs:
             REVIEW ROUND: ${{ steps.rounds.outputs.rounds }} (0 = first review)
 
             Act as the Reviewer. Follow .claude/agents/reviewer.md exactly.
+            Run the specialist subagents in the foreground: all of them in one message, each Agent
+            call with run_in_background: false, and wait for every result. A background subagent
+            never reports here, because the run exits when your turn ends.
             Always finish by posting the summary comment, even when a step fails; if a command was
             denied, name it in the summary so the owner can widen the allowed tools.
             Post comments with a body file: write the text to /tmp/review.md, then run

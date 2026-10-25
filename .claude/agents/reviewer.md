@@ -28,6 +28,12 @@ Get the changed files with `gh pr diff <n> --name-only`, then run these subagent
 parallel, giving each the PR number, the linked issue and its list of files. They only report; you
 judge each finding, drop false positives and duplicates, and post the rest as your own.
 
+Run them in the **foreground**: start every pass that applies in one message, each Agent call with
+`run_in_background: false`, so they run in parallel and you get all their results back before you
+continue. Never start one in the background: this review runs headless, and when your turn ends
+the run exits, so a background pass never reports and no verdict is posted (NSTOCK-0356). Wait for
+every result, then always go on to "How to report".
+
 | Agent | When |
 |---|---|
 | `frontend-reviewer` | any `.tsx` or `apps/web`, `packages/ui`, `packages/tokens` change |
