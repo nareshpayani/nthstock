@@ -111,8 +111,14 @@ streams, so apps/api stops matching in process.
   stream with `XREAD BLOCK` and applies each command to the instrument's book by the version rule, so a late or
   replayed command never undoes a newer one; malformed entries are logged and skipped. `STOP_ADD` and
   `STOP_CANCEL` are in the contract and applied by the worker; apps/api sends them with server-side trailing stops.
-- **Status:** the book, the worker and the order commands are built. The reconcile loop, fills, server-side
-  trailing stops, `MATCHER_MODE` and the benchmark are NSTOCK-0366 to 0370; until then the worker only logs what a
+- **Reconcile** (NSTOCK-0366): on start and every 60 s the matcher reads its shard's OPEN LIMIT orders and the
+  account versions from Postgres in one REPEATABLE READ snapshot, through the `orders_shard_live_idx` partial
+  index on `orders.shard` (migration 0015, set on insert as `shardOf(token, QUOTE_SHARDS)`). It upserts every
+  live order and takes off any order Postgres no longer has live, each at the account version, so a lost command
+  is repaired within a minute while a command newer than the read stands. An upsert at the same price keeps the
+  order's heap entry, so the rounds leave nothing stale. Rows from before the column are matched by token.
+- **Status:** the book, the worker, the order commands and the reconcile loop are built. Fills, server-side
+  trailing stops, `MATCHER_MODE` and the benchmark are NSTOCK-0367 to 0370; until then the worker only logs what a
   tick crossed.
 
 ### Market data and chart bars

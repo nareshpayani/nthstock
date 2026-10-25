@@ -38,6 +38,8 @@ export const orders = pgTable(
     status: text('status').notNull(),
     statusReason: text('status_reason'),
     rejectCode: text('reject_code'),
+    /** The matcher shard of `token` (migration 0015); null when apps/api runs without shards. */
+    shard: smallint('shard'),
     placedAt: instant('placed_at').notNull(),
     updatedAt: instant('updated_at').notNull(),
   },

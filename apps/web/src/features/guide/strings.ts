@@ -406,7 +406,8 @@ export const strings = {
             'apps/matcher runs one process per shard of instruments. A Redis lease picks the one that acts; the others follow the same streams, so a standby is current the moment it takes over.',
             'After each order commit, apps/api appends an ADD, MODIFY or CANCEL command to the shard’s command stream, stamped with the account version. A late or replayed command never undoes a newer one.',
             'Each instrument has an order book: limit orders and trailing stops sit in price heaps, so a tick reads only what it fills, triggers or moves, not every resting order. A property test checks it against a full walk.',
-            'Still to come: the reconcile loop from Postgres, fills committed through the account store, server-side trailing stops, a switch to turn it on, and a benchmark.',
+            'Every minute, and on start, the matcher reads its shard’s live orders from Postgres, the record, and repairs its books, so a lost command is fixed within a minute.',
+            'Still to come: fills committed through the account store, server-side trailing stops, a switch to turn it on, and a benchmark.',
           ],
         },
         {

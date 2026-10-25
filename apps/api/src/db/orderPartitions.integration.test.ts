@@ -161,7 +161,16 @@ describeWithPostgres('order partitions (integration)', () => {
         where tablename in ('orders_20261201', 'orders_default')
           and indexdef like '%status%'`,
     );
-    expect(rows.map((row) => row.tablename).sort()).toEqual(['orders_20261201', 'orders_default']);
+    // By user (0011) and by matcher shard (0015, NSTOCK-0366), on each partition.
+    const keyed = rows.map(
+      (row) => `${row.tablename} ${/\((\w+)\)/.exec(row.indexdef)?.[1] ?? ''}`,
+    );
+    expect(keyed.sort()).toEqual([
+      'orders_20261201 shard',
+      'orders_20261201 user_id',
+      'orders_default shard',
+      'orders_default user_id',
+    ]);
     for (const row of rows) expect(row.indexdef).toMatch(/AMO.*OPEN/);
   });
 
