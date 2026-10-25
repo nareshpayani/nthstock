@@ -1,12 +1,12 @@
 import { spawn, type ChildProcess } from 'node:child_process';
 import { existsSync } from 'node:fs';
-import { createServer } from 'node:net';
 import { fileURLToPath } from 'node:url';
-import { WS_PROTOCOL_VERSION, createQuoteFrameDecoder, type Quote } from '@nthstock/contracts';
+import { WS_PROTOCOL_VERSION } from '@nthstock/contracts';
 import { afterAll, beforeAll, expect, it } from 'vitest';
 import { createRealtimeServer, WS_PATH, type RealtimeServer } from './app.js';
 import { createRedisQuoteFeed } from './feeds/feed.js';
 import { connectAuthed, testAuthenticator } from './test/auth.js';
+import { describeSample, freePort, percentile, sampleTickToScreen } from './test/latency.js';
 import { describeWithRedis, startTestRedis, type TestRedis } from './test/testRedis.js';
 import type { TestClient } from './test/wsTestClient.js';
 
@@ -31,20 +31,7 @@ import type { TestClient } from './test/wsTestClient.js';
 const API_SERVER = fileURLToPath(new URL('../../api/dist/server.js', import.meta.url));
 const SYMBOLS = ['RELIANCE', 'HDFCBANK', 'TCS', 'INFY', 'ICICIBANK', 'SBIN', 'ITC', 'LT'];
 const MEASURE_MS = 10_000;
-/** One frame at 60 Hz: the quote store paints on the next animation frame. */
-const FRAME_MS = 1000 / 60;
 const TARGET_P95_MS = 500;
-
-const freePort = () =>
-  new Promise<number>((resolve, reject) => {
-    const probe = createServer();
-    probe.once('error', reject);
-    probe.listen(0, '127.0.0.1', () => {
-      const address = probe.address();
-      const port = typeof address === 'object' && address ? address.port : 0;
-      probe.close(() => resolve(port));
-    });
-  });
 
 async function waitForHealth(url: string, api: ChildProcess, timeoutMs = 30_000): Promise<void> {
   const deadline = Date.now() + timeoutMs;
@@ -58,13 +45,6 @@ async function waitForHealth(url: string, api: ChildProcess, timeoutMs = 30_000)
     await new Promise((resolve) => setTimeout(resolve, 100));
   }
   throw new Error(`apps/api did not answer ${url} within ${String(timeoutMs)} ms`);
-}
-
-function percentile(values: readonly number[], p: number): number {
-  if (values.length === 0) return Number.NaN;
-  const sorted = [...values].sort((a, b) => a - b);
-  const index = Math.min(sorted.length - 1, Math.ceil((p / 100) * sorted.length) - 1);
-  return sorted[Math.max(0, index)] ?? Number.NaN;
 }
 
 describeWithRedis('tick-to-screen: apps/api → Redis → apps/realtime → client (T-171)', () => {
@@ -129,34 +109,10 @@ describeWithRedis('tick-to-screen: apps/api → Redis → apps/realtime → clie
       context.skip();
       return;
     }
-    const decoder = createQuoteFrameDecoder();
-    const latencies: number[] = [];
-    const seen = new Set<string>();
-    const until = Date.now() + MEASURE_MS;
-    while (Date.now() < until) {
-      const frame = await Promise.race([
-        client.next(),
-        new Promise<null>((resolve) => setTimeout(() => resolve(null), until - Date.now())),
-      ]);
-      if (!frame) break;
-      const receivedAt = Date.now();
-      let quotes: Quote[] = [];
-      if (frame.kind === 'binary') quotes = decoder.decode(frame.data);
-      else if (frame.message.type === 'instruments') decoder.learn(frame.message.instruments);
-      else if (frame.message.type === 'quotes') quotes = frame.message.quotes;
-      for (const quote of quotes) {
-        seen.add(quote.symbol);
-        latencies.push(receivedAt - Date.parse(quote.ts) + FRAME_MS);
-      }
-    }
-
-    const p50 = percentile(latencies, 50);
+    const sample = await sampleTickToScreen(client, MEASURE_MS);
+    const { latencies, seen } = sample;
     const p95 = percentile(latencies, 95);
-    const max = Math.max(...latencies);
-    process.stdout.write(
-      `\n[tick-to-screen] ${String(latencies.length)} quotes, ${String(seen.size)} symbols: ` +
-        `p50 ${p50.toFixed(1)} ms, p95 ${p95.toFixed(1)} ms, max ${max.toFixed(1)} ms\n`,
-    );
+    process.stdout.write(describeSample('tick-to-screen', sample));
     // The mock market ticks every symbol once a second, so 10 s gives dozens of samples.
     expect(latencies.length).toBeGreaterThanOrEqual(SYMBOLS.length * 3);
     expect([...seen].sort()).toEqual([...SYMBOLS].sort());
