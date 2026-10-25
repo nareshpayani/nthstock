@@ -556,7 +556,7 @@ export const strings = {
           items: [
             'packages/contracts builds an OpenAPI 3.1 document from the same route map that types the client, validates the server and drives the mocks, using Zod 4’s own z.toJSONSchema. Nothing is written by hand and no extra library is needed.',
             'Every route appears once with its method, path, path and query parameters, request body, response schema, its auth (cookie or Bearer JWT) and the ApiError envelope for every error. Response types are shared component schemas, so Order is described once.',
-            'apps/api serves it at GET /v1/docs/openapi.json, public and cacheable for an hour with an ETag. npm run openapi writes the same text to docs/api/openapi.json, ready for Postman, Swagger Editor or a client generator.',
+            'apps/api serves it at GET /v1/docs/openapi.json, public and cacheable, revalidated by ETag so a deploy shows at once. npm run openapi writes the same text to docs/api/openapi.json, ready for Postman, Swagger Editor or a client generator.',
             'CI regenerates the file on every pull request, uploads it as a build artifact and fails when the committed copy is stale, so the published API description can never drift from the code. A new route joins automatically.',
           ],
         },

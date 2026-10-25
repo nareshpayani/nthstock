@@ -256,7 +256,7 @@ the chart shows after a reload.
   plus the CSRF header) and `bearerAuth` security schemes. Response types are named component
   schemas taken from the contracts' exports.
 - `apps/api` serves it at `GET /v1/docs/openapi.json` (outside the route map, public,
-  `Cache-Control: public, max-age=3600` with an ETag). No Swagger UI (spec backend-core §2).
+  `Cache-Control: public, no-cache` with an ETag, so a revalidation is a 304). No Swagger UI (spec backend-core §2).
 - `npm run openapi` writes the same text to `docs/api/openapi.json`. CI regenerates it, uploads it
   as the `openapi` artifact and fails when the committed copy is stale; the docs route test checks
   the same thing in `npm run check`. A new route in the map joins with no extra wiring: regenerate

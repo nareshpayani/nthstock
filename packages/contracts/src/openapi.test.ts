@@ -1,4 +1,7 @@
 import { describe, expect, it } from 'vitest';
+import { z } from 'zod';
+import { AUTH_COOKIES } from './auth.js';
+import { OkResponse } from './primitives.js';
 import {
   OPENAPI_PATH,
   buildOpenApiDocument,
@@ -92,6 +95,47 @@ describe('OpenAPI document (T-235)', () => {
     expect(text).not.toContain('"$id"');
     expect(Object.keys(doc.paths).some((path) => path.includes(':'))).toBe(false);
     expect(doc.paths[OPENAPI_PATH]).toBeUndefined();
+  });
+
+  it('points responses at named component schemas', () => {
+    const place = operations.find((entry) => entry.op.operationId === 'orderPlace')?.op;
+    expect(place?.responses['200']).toEqual({
+      description: 'Success',
+      content: { 'application/json': { schema: { $ref: '#/components/schemas/Order' } } },
+    });
+  });
+
+  it('names the access cookie and the bearer scheme the API reads', () => {
+    expect(doc.components.securitySchemes['cookieAuth']).toMatchObject({
+      in: 'cookie',
+      name: AUTH_COOKIES.access,
+    });
+    expect(doc.components.securitySchemes['bearerAuth']).toMatchObject({ scheme: 'bearer' });
+  });
+
+  it('leaves out the test-control routes', () => {
+    expect(Object.keys(doc.paths).some((path) => path.startsWith('/v1/__test'))).toBe(false);
+  });
+
+  it('refuses two routes on the same method and path', () => {
+    const routeMap = {
+      first: { method: 'GET', path: '/v1/x', auth: 'public', response: OkResponse },
+      second: { method: 'GET', path: '/v1/x', auth: 'user', response: OkResponse },
+    } as const;
+    expect(() => buildOpenApiDocument({ routeMap })).toThrow('Two routes share GET /v1/x');
+  });
+
+  it('fails, naming the route, on a schema JSON Schema cannot express', () => {
+    const routeMap = {
+      broken: {
+        method: 'POST',
+        path: '/v1/broken',
+        auth: 'public',
+        body: z.object({ when: z.date() }),
+        response: OkResponse,
+      },
+    } as const;
+    expect(() => buildOpenApiDocument({ routeMap })).toThrow('broken body');
   });
 
   it('renders the same text every time', () => {

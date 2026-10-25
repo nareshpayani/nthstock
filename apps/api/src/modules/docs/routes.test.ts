@@ -3,7 +3,7 @@ import { OPENAPI_PATH, routes, toOpenApiPath } from '@nthstock/contracts';
 import { afterAll, describe, expect, it } from 'vitest';
 import { buildApp } from '../../app.js';
 import { API_VERSION } from '../health/index.js';
-import { OPENAPI_CACHE_CONTROL, openApiText } from './routes.js';
+import { OPENAPI_CACHE_CONTROL, matchesEtag, openApiText } from './routes.js';
 
 const COMMITTED = new URL('../../../../../docs/api/openapi.json', import.meta.url);
 
@@ -45,6 +45,26 @@ describe(`GET ${OPENAPI_PATH} (T-236)`, () => {
 
     expect(again.statusCode).toBe(304);
     expect(again.body).toBe('');
+  });
+
+  it('answers 200 with the document to a stale ETag', async () => {
+    const response = await app.inject({
+      method: 'GET',
+      url: OPENAPI_PATH,
+      headers: { 'if-none-match': '"stale"' },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.body).toBe(openApiText());
+  });
+
+  it('matches weak, listed and wildcard ETags', () => {
+    expect(matchesEtag('"a"', '"a"')).toBe(true);
+    expect(matchesEtag('W/"a"', '"a"')).toBe(true);
+    expect(matchesEtag('"b", W/"a"', '"a"')).toBe(true);
+    expect(matchesEtag('*', '"a"')).toBe(true);
+    expect(matchesEtag('"b"', '"a"')).toBe(false);
+    expect(matchesEtag(undefined, '"a"')).toBe(false);
   });
 
   // T-237: the committed copy must follow the contracts. CI also regenerates it and diffs.

@@ -68,7 +68,8 @@ jobs:
       - name: OpenAPI document is up to date
         run: |
           npm run openapi -w @nthstock/api
-          if ! git diff --exit-code --stat -- docs/api/openapi.json; then
+          if [ -n "$(git status --porcelain -- docs/api/openapi.json)" ]; then
+            git diff --stat -- docs/api/openapi.json
             echo "::error file=docs/api/openapi.json::Stale OpenAPI document. Run 'npm run openapi' and commit docs/api/openapi.json."
             exit 1
           fi

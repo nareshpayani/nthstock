@@ -6,8 +6,16 @@ import { API_VERSION } from '../health/index.js';
 /** The OpenAPI document this build serves and `npm run openapi` writes (T-236). */
 export const openApiText = (): string => renderOpenApiDocument({ version: API_VERSION });
 
-/** Clients and CDNs may keep it for an hour; the ETag makes a revalidation a 304. */
-export const OPENAPI_CACHE_CONTROL = 'public, max-age=3600';
+/** Cacheable, but revalidated on every use so a deploy shows at once; the ETag makes that a 304. */
+export const OPENAPI_CACHE_CONTROL = 'public, no-cache';
+
+/** `If-None-Match` holds our ETag: `*`, a list, and weak `W/` forms count (RFC 9110 §13.1.2). */
+export const matchesEtag = (header: string | undefined, etag: string): boolean =>
+  header !== undefined &&
+  header.split(',').some((tag) => {
+    const value = tag.trim();
+    return value === '*' || value.replace(/^W\//, '') === etag;
+  });
 
 /**
  * `GET /v1/docs/openapi.json` (T-236): the generated OpenAPI 3.1 document, public and cacheable.
@@ -20,7 +28,7 @@ export const docsRoutes = (): FastifyPluginAsync => async (app) => {
 
   app.get(OPENAPI_PATH, async (request, reply) => {
     reply.header('cache-control', OPENAPI_CACHE_CONTROL).header('etag', etag);
-    if (request.headers['if-none-match'] === etag) return reply.code(304).send();
+    if (matchesEtag(request.headers['if-none-match'], etag)) return reply.code(304).send();
     return reply.type('application/json; charset=utf-8').send(text);
   });
 };

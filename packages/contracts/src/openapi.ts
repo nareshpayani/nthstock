@@ -59,6 +59,8 @@ export type OpenApiDocument = {
 export type OpenApiOptions = {
   /** `info.version`, e.g. the API version `GET /v1/health` reports. */
   version?: string;
+  /** The routes to describe; the real route map unless a test passes its own. */
+  routeMap?: Readonly<Record<string, RouteDef>>;
 };
 
 /** Security schemes: the httpOnly access cookie the web app uses, or the same JWT as a Bearer. */
@@ -113,6 +115,18 @@ function namedSchemas(): Map<z.ZodType, string> {
 const stripDialect = (schema: JsonSchema): JsonSchema =>
   Object.fromEntries(Object.entries(schema).filter(([key]) => key !== '$schema' && key !== '$id'));
 
+/**
+ * One schema as JSON Schema. A Zod type JSON Schema cannot express (a transform, a custom type)
+ * fails generation with the route and part named, instead of turning into an empty schema.
+ */
+function jsonSchemaOf(schema: z.ZodType, io: 'input' | 'output', where: string): JsonSchema {
+  try {
+    return stripDialect(z.toJSONSchema(schema, { io, unrepresentable: 'throw' }) as JsonSchema);
+  } catch (error) {
+    throw new Error(`OpenAPI: ${where} has no JSON Schema form`, { cause: error });
+  }
+}
+
 /** `/v1/watchlists/:id/items/:token` → `/v1/watchlists/{id}/items/{token}`. */
 export const toOpenApiPath = (path: string) => path.replace(/:([A-Za-z]+)/g, '{$1}');
 
@@ -129,9 +143,13 @@ const tagOf = (path: string) => path.split('/')[2] ?? 'root';
  * Path and query parameters from a params or query object schema: one parameter per property,
  * required as the schema says (path parameters are always required).
  */
-function parametersOf(schema: z.ZodType | undefined, where: 'path' | 'query'): OpenApiParameter[] {
+function parametersOf(
+  schema: z.ZodType | undefined,
+  where: 'path' | 'query',
+  route: string,
+): OpenApiParameter[] {
   if (!schema) return [];
-  const json = z.toJSONSchema(schema, { io: 'input', unrepresentable: 'any' }) as JsonSchema;
+  const json = jsonSchemaOf(schema, 'input', `${route} ${where} parameters`);
   const properties = (json['properties'] ?? {}) as Record<string, JsonSchema>;
   const required = new Set((json['required'] ?? []) as string[]);
   return Object.entries(properties).map(([name, property]) => {
@@ -148,12 +166,13 @@ function parametersOf(schema: z.ZodType | undefined, where: 'path' | 'query'): O
 
 /** Builds the OpenAPI 3.1 document for every route in the map. Deterministic for a given map. */
 export function buildOpenApiDocument(options: OpenApiOptions = {}): OpenApiDocument {
+  const routeMap: Readonly<Record<string, RouteDef>> = options.routeMap ?? routes;
   const names = namedSchemas();
   // Responses are documented as the client receives them (io: output) and point at the named
   // component schemas; params, query and bodies as the client sends them (io: input), inline.
   const registry = z.registry<{ id: string }>();
   const used = new Set<string>(['ApiError']);
-  for (const def of Object.values(routes) as RouteDef[]) {
+  for (const def of Object.values(routeMap)) {
     const name = names.get(def.response);
     if (name) used.add(name);
   }
@@ -162,26 +181,30 @@ export function buildOpenApiDocument(options: OpenApiOptions = {}): OpenApiDocum
   }
   const components = z.toJSONSchema(registry, {
     io: 'output',
-    unrepresentable: 'any',
+    unrepresentable: 'throw',
     uri: schemaRef,
   }) as { schemas: Record<string, JsonSchema> };
   const schemas: Record<string, JsonSchema> = {};
   for (const id of Object.keys(components.schemas).sort()) {
     schemas[id] = stripDialect(components.schemas[id] ?? {});
   }
+  for (const name of used) {
+    if (!schemas[name]) throw new Error(`OpenAPI: component schema ${name} was not generated`);
+  }
 
   const paths: OpenApiDocument['paths'] = {};
   const tags = new Set<string>();
-  for (const [name, def] of Object.entries(routes) as Array<[string, RouteDef]>) {
+  for (const [name, def] of Object.entries(routeMap)) {
     const tag = tagOf(def.path);
     tags.add(tag);
     const responseName = names.get(def.response);
     const responseSchema = responseName
       ? { $ref: schemaRef(responseName) }
-      : stripDialect(
-          z.toJSONSchema(def.response, { io: 'output', unrepresentable: 'any' }) as JsonSchema,
-        );
-    const parameters = [...parametersOf(def.params, 'path'), ...parametersOf(def.query, 'query')];
+      : jsonSchemaOf(def.response, 'output', `${name} response`);
+    const parameters = [
+      ...parametersOf(def.params, 'path', name),
+      ...parametersOf(def.query, 'query', name),
+    ];
     const operation: OpenApiOperation = {
       operationId: name,
       tags: [tag],
@@ -194,9 +217,7 @@ export function buildOpenApiDocument(options: OpenApiOptions = {}): OpenApiDocum
               required: true,
               content: {
                 'application/json': {
-                  schema: stripDialect(
-                    z.toJSONSchema(def.body, { io: 'input', unrepresentable: 'any' }) as JsonSchema,
-                  ),
+                  schema: jsonSchemaOf(def.body, 'input', `${name} body`),
                 },
               },
             },
