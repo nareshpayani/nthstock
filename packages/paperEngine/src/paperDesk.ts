@@ -457,6 +457,30 @@ export class PaperDesk {
   }
 
   /**
+   * One tick the matcher worker saw cross something of these users' (ADR 0013, NSTOCK-0367):
+   * takes `ltp` as the instrument's price and syncs only these users' engines, at the tick's own
+   * time when it is recent, as `ingest` does. The engine re-checks every order and stop, so a
+   * request for an order that has since changed fills only what still crosses.
+   */
+  async ingestFor(
+    userIds: Iterable<string>,
+    tick: { token: InstrumentToken; ltp: number; ts: string },
+  ): Promise<void> {
+    if (this.#disposed || tick.ltp <= 0) return;
+    await this.#prepare(tick.token);
+    this.#ticks.set(tick.token, tick.ltp);
+    this.#countTick(tick.token);
+    const at = Date.parse(tick.ts);
+    const now = this.#options.clock.now().getTime();
+    this.#tickAt = at <= now && now - at <= REPLAY_WINDOW_MS ? new Date(at) : null;
+    try {
+      for (const userId of userIds) this.#syncUser(userId);
+    } finally {
+      this.#tickAt = null;
+    }
+  }
+
+  /**
    * Symbols with a live order or an active trailing stop, for any user: the instruments the mock
    * market replays tick by tick after a paused tab (SPEC-TFC-1 §6.7).
    */

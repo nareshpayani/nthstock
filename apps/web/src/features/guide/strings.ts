@@ -411,7 +411,8 @@ export const strings = {
             'After each order commit, apps/api appends an ADD, MODIFY or CANCEL command to the shard’s command stream, stamped with the account version, and a STOP_ADD or STOP_CANCEL after each trailing stop change. A late or replayed command never undoes a newer one.',
             'Each instrument has an order book: limit orders and trailing stops sit in price heaps, so a tick reads only what it fills, triggers or moves, not every resting order. A property test checks it against a full walk.',
             'Every minute, and on start, the matcher reads its shard’s live orders from Postgres, the record, and repairs its books, so a lost command is fixed within a minute.',
-            'Still to come: fills committed through the account store, reconciling trailing stops, a switch to turn it on, and a benchmark. Until then apps/api steps trailing stops in its own process.',
+            'When a tick crosses an order, the matcher sends a fill request per user to a Redis stream. Every API process reads it in one consumer group, runs the user’s paper engine at that price, commits with the account version and only then acknowledges it. A request sent twice fills nothing twice, and one a crashed process held is picked up by another (ADR 0013).',
+            'Still to come: reconciling trailing stops, a switch that moves all matching to the worker, and a benchmark. Until then apps/api also steps trailing stops in its own process.',
           ],
         },
         {
