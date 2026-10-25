@@ -3,6 +3,7 @@ import type { Order, Position } from '@nthstock/contracts';
 import { Button, Tabs, TabsContent, TabsList, TabsTrigger, useToast } from '@nthstock/ui';
 import { formatInr } from '@nthstock/utils';
 import { useCallback, useState } from 'react';
+import { ErrorState } from '@nthstock/ui';
 import { useCancelOrder } from '@/features/orders';
 import { livePosition } from '@/features/positions';
 import { PnlAmount } from '@/shared/components/PnlAmount';
@@ -15,6 +16,7 @@ import { trailingStopSummary } from '@/shared/lib/trailingStopView';
 import { isActiveStop } from '../model/trailingSheet';
 import { strings } from '../strings';
 import { OrderTicket } from './OrderTicket';
+import { TicketSkeleton } from './TicketSkeleton';
 import { TrailingStopSheet } from './TrailingStopSheet';
 
 export type PositionEditorProps = {
@@ -23,6 +25,7 @@ export type PositionEditorProps = {
 };
 
 const OPEN_STATUSES: ReadonlySet<string> = new Set(['OPEN', 'AMO']);
+const tradingStatus = (state: TradingState) => state.status;
 
 const samePosition = (a: Position | null, b: Position | null) =>
   a === b ||
@@ -63,7 +66,20 @@ export function PositionEditor({ target, onClose }: PositionEditorProps) {
     [target.token, target.product],
   );
   const position = useTradingSelector(selectPosition, samePosition);
+  const status = useTradingSelector(tradingStatus);
   const [tab, setTab] = useState<PositionEditorTab>(target.tab ?? 'stop');
+  // Until the account state has loaded, "closed" would be a guess: wait, or say it failed.
+  if (!position && (status === 'idle' || status === 'loading')) return <TicketSkeleton />;
+  if (!position && status === 'error') {
+    return (
+      <ErrorState
+        title={strings.editor.loadError}
+        description={strings.loadError.body}
+        retryLabel={strings.loadError.retry}
+        onRetry={onClose}
+      />
+    );
+  }
   if (!position) {
     return (
       <p className="p-4 text-body text-ink" role="status">
@@ -104,10 +120,11 @@ export function PositionEditor({ target, onClose }: PositionEditorProps) {
           <TrailingStopSheet target={target} onClose={onClose} full />
         </TabsContent>
         <TabsContent value="exit" className="pt-0">
-          <OrderTicket intent={exit} onClose={onClose} />
+          {/* Re-keyed on the held quantity, so a fill while open refreshes the prefill and cap. */}
+          <OrderTicket key={`exit:${String(held)}`} intent={exit} onClose={onClose} />
         </TabsContent>
         <TabsContent value="add" className="pt-0">
-          <OrderTicket intent={add} onClose={onClose} />
+          <OrderTicket key={`add:${String(held)}`} intent={add} onClose={onClose} />
         </TabsContent>
       </Tabs>
     </div>
@@ -208,6 +225,11 @@ function OpenOrderLine({ order, onClose }: { order: Order; onClose: () => void }
     <li className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-line p-2">
       <span className="font-mono text-label text-ink tabular-nums">{line}</span>
       <span className="flex gap-1">
+        {confirming ? (
+          <span className="sr-only" role="status">
+            {strings.editor.confirmCancelHint}
+          </span>
+        ) : null}
         <Button
           size="sm"
           variant="secondary"
@@ -227,9 +249,14 @@ function OpenOrderLine({ order, onClose }: { order: Order; onClose: () => void }
         <Button
           size="sm"
           variant="secondary"
-          aria-label={strings.editor.cancelLabel(line)}
+          aria-label={
+            confirming ? strings.editor.confirmCancelLabel(line) : strings.editor.cancelLabel(line)
+          }
           loading={cancel.isPending}
           onClick={onCancel}
+          onBlur={() => {
+            if (!cancel.isPending) setConfirming(false);
+          }}
         >
           {confirming ? strings.editor.confirmCancel : strings.editor.cancel}
         </Button>

@@ -163,7 +163,9 @@ function SheetBody({
       : toTrailModify(values, active)
     : null;
   const movable = full && canMoveStop(stop) ? stop : null;
-  const [stopPrice, setStopPrice] = useState<number | null>(stop?.stopPrice ?? null);
+  // The stop keeps ratcheting while the editor is open: follow it until a price is typed.
+  const [typedStop, setTypedStop] = useState<number | null | undefined>(undefined);
+  const stopPrice = typedStop === undefined ? (stop?.stopPrice ?? null) : typedStop;
 
   const onChange = (patch: Partial<TrailingFormValues>, typed?: boolean) => {
     // Switching the unit starts from that unit's default rather than an empty field (§8.4).
@@ -186,7 +188,11 @@ function SheetBody({
       onSuccess: (placed) => {
         toast.show({
           title: strings.sheet.setDone,
-          description: strings.trailing.placedDescription(formatInr(placed.stopPrice ?? 0)),
+          // An armed stop has no price until the activation price is reached.
+          description:
+            placed.stopPrice === null
+              ? strings.editor.armedDescription(formatInr(placed.activationPrice ?? 0))
+              : strings.trailing.placedDescription(formatInr(placed.stopPrice)),
           tone: 'success',
         });
         onClose();
@@ -207,7 +213,7 @@ function SheetBody({
             description: full
               ? strings.editor.updatedDescription(
                   trailText(updated.trail),
-                  formatInr(updated.stopPrice ?? 0),
+                  updated.stopPrice === null ? null : formatInr(updated.stopPrice),
                 )
               : strings.sheet.updatedDescription(trailText(updated.trail)),
             tone: 'success',
@@ -379,7 +385,7 @@ function SheetBody({
               min={5}
               value={stopPrice}
               onChange={(next) => {
-                setStopPrice(next);
+                setTypedStop(next);
                 setFailure(null);
               }}
             />

@@ -229,6 +229,9 @@ export const strings = {
     cancel: 'Cancel',
     cancelLabel: (line: string) => `Cancel ${line}`,
     confirmCancel: 'Confirm cancel',
+    confirmCancelLabel: (line: string) => `Confirm cancel of ${line}`,
+    confirmCancelHint: 'Press again to cancel the order.',
+    loadError: 'Your positions could not load',
     cancelled: 'Order cancelled',
     cancelFailed: 'The order could not be cancelled. It may have filled.',
     noPosition: 'This position is closed. Nothing is left to edit.',
@@ -237,8 +240,11 @@ export const strings = {
     move: 'Move stop',
     moved: 'Stop moved',
     movedDescription: (stop: string) => `The stop is now ${stop}.`,
-    updatedDescription: (trail: string, stop: string) => `Trails by ${trail}, stop ${stop}.`,
+    updatedDescription: (trail: string, stop: string | null) =>
+      stop === null ? `Trails by ${trail}.` : `Trails by ${trail}, stop ${stop}.`,
     unchanged: 'Change a term to update the stop.',
+    armedDescription: (activation: string) =>
+      `Starts trailing once the price reaches ${activation}.`,
     exitCap: (held: number) =>
       `You hold ${String(held)}. Exit up to ${String(held)}, or use Add to trade more.`,
   },

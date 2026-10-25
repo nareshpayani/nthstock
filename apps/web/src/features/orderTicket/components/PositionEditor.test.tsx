@@ -1,4 +1,5 @@
 import { createTradingStore, type ApiClient } from '@nthstock/apiClient';
+import type { OrderSide, ProductType } from '@nthstock/contracts';
 import { fixedClock, fromIst } from '@nthstock/utils';
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
@@ -37,12 +38,18 @@ async function infyToken(): Promise<number> {
   return quote.token;
 }
 
-/** Signs in, buys `qty` INFY for delivery and mounts the editor host on a live trading store. */
-async function renderEditor(qty: number) {
+/**
+ * Signs in, opens a position of `qty` INFY (a delivery buy by default) and mounts the editor host
+ * on a live trading store.
+ */
+async function renderEditor(
+  qty: number,
+  { side = 'BUY', product = 'DELIVERY' }: { side?: OrderSide; product?: ProductType } = {},
+) {
   const api = await loginOnMock(nextMobile(), 'http://editor.test');
   const token = await infyToken();
   await api.request('orderPlace', {
-    body: { token, side: 'BUY', type: 'MARKET', product: 'DELIVERY', qty },
+    body: { token, side, type: 'MARKET', product, qty },
   });
   const tradingStore = createTradingStore({
     loadState: () => api.request('accountState'),
@@ -58,22 +65,30 @@ async function renderEditor(qty: number) {
   return { api, token, tradingStore };
 }
 
-async function openEditor(token: number, tab?: PositionEditorTab) {
+async function openEditor(
+  token: number,
+  tab?: PositionEditorTab,
+  product: ProductType = 'DELIVERY',
+) {
   act(() => {
     usePositionEditorStore.getState().openEditor({
       symbol: 'INFY',
       exchange: 'NSE',
       token,
-      product: 'DELIVERY',
+      product,
       ...(tab ? { tab } : {}),
     });
   });
-  return screen.findByRole('dialog', { name: 'Edit INFY · Delivery' });
+  return screen.findByRole('dialog', {
+    name: `Edit INFY · ${product === 'DELIVERY' ? 'Delivery' : 'Intraday'}`,
+  });
 }
 
 const stopsOf = async (api: ApiClient) => (await api.request('trailingStopsList', {})).items;
-const heldQty = async (api: ApiClient) =>
-  (await api.request('positionsList', {})).items.find((p) => p.product === 'DELIVERY')?.netQty;
+const heldQty = async (api: ApiClient, product: ProductType = 'DELIVERY') =>
+  (await api.request('positionsList', {})).items.find((p) => p.product === product)?.netQty;
+const infyLtp = async () => (await mock.adapter.getQuote('INFY'))?.ltp ?? 0;
+const rupees = (paise: number) => (paise / 100).toFixed(2);
 
 beforeAll(() => mock.server.listen({ onUnhandledFrame: 'error' }));
 beforeEach(() => {
@@ -200,10 +215,133 @@ describe('position editor (NSTOCK-0395)', () => {
       const cancel = within(orders).getByRole('button', { name: /^Cancel Buy Limit/ });
       fireEvent.click(cancel);
       expect(cancel).toHaveTextContent('Confirm cancel');
+      // The second step is announced, and the name says so too (WCAG 2.5.3).
+      expect(cancel).toHaveAccessibleName(/^Confirm cancel of Buy Limit/);
+      expect(within(orders).getByRole('status')).toHaveTextContent('Press again to cancel');
+      // Leaving the button disarms it.
+      fireEvent.blur(cancel);
+      expect(cancel).toHaveAccessibleName(/^Cancel Buy Limit/);
+      fireEvent.click(cancel);
       fireEvent.click(cancel);
       expect(await screen.findByText('Order cancelled')).toBeInTheDocument();
       const book = await api.request('ordersList', {});
       expect(book.items.find((order) => order.type === 'LIMIT')?.status).toBe('CANCELLED');
+    },
+    HEAVY,
+  );
+
+  it(
+    'sets a rupee trail with an activation price, changes both, then cancels the stop',
+    async () => {
+      const { api, token } = await renderEditor(10);
+      const activation = Math.round(((await infyLtp()) * 1.02) / 5) * 5;
+
+      let editor = await openEditor(token);
+      fireEvent.click(await within(editor).findByRole('radio', { name: '₹' }));
+      fireEvent.change(within(editor).getByRole('textbox', { name: 'Trail (₹)' }), {
+        target: { value: '12' },
+      });
+      fireEvent.change(within(editor).getByRole('textbox', { name: /Activation price/ }), {
+        target: { value: rupees(activation) },
+      });
+      fireEvent.click(within(editor).getByRole('button', { name: 'Set trailing stop' }));
+      // An armed stop has no price yet: the toast names the activation price, never ₹0.00.
+      expect(
+        await screen.findByText(
+          `Starts trailing once the price reaches ₹${rupees(activation).replace(/\B(?=(\d{3})+(?!\d))/g, ',')}.`,
+        ),
+      ).toBeInTheDocument();
+      await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+      let [stop] = await stopsOf(api);
+      expect(stop).toMatchObject({
+        status: 'ARMED',
+        trail: { unit: 'AMOUNT', amount: 1_200 },
+        activationPrice: activation,
+      });
+
+      // Both the trail and the activation price change in one update.
+      editor = await openEditor(token);
+      const trail = await within(editor).findByRole('textbox', { name: 'Trail (₹)' });
+      expect(trail).toHaveValue('12.00');
+      fireEvent.change(trail, { target: { value: '15' } });
+      fireEvent.change(within(editor).getByRole('textbox', { name: /Activation price/ }), {
+        target: { value: rupees(activation + 500) },
+      });
+      fireEvent.click(within(editor).getByRole('button', { name: 'Update trailing stop' }));
+      expect(await screen.findByText('Trailing stop updated')).toBeInTheDocument();
+      await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+      [stop] = await stopsOf(api);
+      expect(stop).toMatchObject({
+        trail: { unit: 'AMOUNT', amount: 1_500 },
+        activationPrice: activation + 500,
+      });
+
+      editor = await openEditor(token);
+      fireEvent.click(await within(editor).findByRole('button', { name: 'Cancel trailing stop' }));
+      expect(await screen.findByText('Trailing stop cancelled')).toBeInTheDocument();
+      [stop] = await stopsOf(api);
+      expect(stop?.status).toBe('CANCELLED');
+    },
+    HEAVY,
+  );
+
+  it(
+    'exits the whole quantity; a product switch keeps the cap and a side switch lifts it',
+    async () => {
+      const { api, token } = await renderEditor(10);
+      const editor = await openEditor(token, 'exit');
+      const qty = await within(editor).findByRole('textbox', { name: 'Quantity' });
+
+      // Switching product does not lift the cap.
+      fireEvent.click(within(editor).getByRole('radio', { name: 'Intraday' }));
+      fireEvent.change(qty, { target: { value: '12' } });
+      fireEvent.click(within(editor).getByRole('button', { name: 'Sell INFY' }));
+      expect(await within(editor).findByText(/^You hold 10\./)).toBeInTheDocument();
+      fireEvent.click(within(editor).getByRole('radio', { name: 'Delivery' }));
+
+      // The other side is a new order, not an exit: no cap.
+      fireEvent.click(within(editor).getByRole('radio', { name: 'Buy' }));
+      fireEvent.change(qty, { target: { value: '12' } });
+      fireEvent.click(within(editor).getByRole('button', { name: 'Buy INFY' }));
+      expect(
+        await within(editor).findByRole('heading', { name: 'Review your order' }),
+      ).toBeInTheDocument();
+      fireEvent.click(within(editor).getByRole('button', { name: 'Edit' }));
+
+      // Exactly what is held passes and closes the position.
+      fireEvent.click(await within(editor).findByRole('radio', { name: 'Sell' }));
+      fireEvent.change(within(editor).getByRole('textbox', { name: 'Quantity' }), {
+        target: { value: '10' },
+      });
+      fireEvent.click(within(editor).getByRole('button', { name: 'Sell INFY' }));
+      fireEvent.click(await within(editor).findByRole('button', { name: 'Confirm' }));
+      await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+      await waitFor(async () => expect(await heldQty(api)).toBe(0));
+    },
+    HEAVY,
+  );
+
+  it(
+    'exits a short position with a buy, capped at the shorted quantity',
+    async () => {
+      const { api, token } = await renderEditor(5, { side: 'SELL', product: 'INTRADAY' });
+      const editor = await openEditor(token, 'exit', 'INTRADAY');
+      expect(await within(editor).findByTestId('editor-summary')).toHaveTextContent(
+        'Executed qty-5',
+      );
+      const qty = await within(editor).findByRole('textbox', { name: 'Quantity' });
+      expect(qty).toHaveValue('5');
+      expect(within(editor).getByRole('radio', { name: 'Buy' })).toHaveAttribute(
+        'aria-checked',
+        'true',
+      );
+      fireEvent.change(qty, { target: { value: '6' } });
+      fireEvent.click(within(editor).getByRole('button', { name: 'Buy INFY' }));
+      expect(await within(editor).findByText(/^You hold 5\./)).toBeInTheDocument();
+      fireEvent.change(qty, { target: { value: '2' } });
+      fireEvent.click(within(editor).getByRole('button', { name: 'Buy INFY' }));
+      fireEvent.click(await within(editor).findByRole('button', { name: 'Confirm' }));
+      await waitFor(async () => expect(await heldQty(api, 'INTRADAY')).toBe(-3));
     },
     HEAVY,
   );

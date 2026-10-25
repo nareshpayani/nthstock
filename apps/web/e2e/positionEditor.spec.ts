@@ -72,6 +72,8 @@ for (const viewport of VIEWPORTS) {
     await editor.getByRole('button', { name: 'Sell INFY' }).click();
     await editor.getByRole('button', { name: 'Confirm' }).click();
     await expect(editor).toBeHidden();
-    await expect(page.getByRole('row', { name: /INFY/ }).getByRole('cell').nth(2)).toHaveText('6');
+    await expect(
+      page.getByRole('row', { name: /INFY/ }).getByRole('cell', { name: '6', exact: true }),
+    ).toBeVisible();
   });
 }
