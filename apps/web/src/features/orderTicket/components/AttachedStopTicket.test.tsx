@@ -137,7 +137,7 @@ describe('"Add trailing stop" on an entry (T14, SPEC-TFC-1 §6.4, §7)', () => {
   );
 
   it(
-    'is shown as not available where the backend has no trailing stops (api mode)',
+    'is shown as not available until the account has loaded',
     async () => {
       const { dialog } = await openBuyTicket(false);
       const section = within(dialog).getByTestId('attach-trailing');

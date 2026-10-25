@@ -1,4 +1,9 @@
-import { fetchBackend, runScenarioSuite, scenarioGroups } from '@nthstock/contracts/testing';
+import {
+  contractChecked,
+  fetchBackend,
+  runScenarioSuite,
+  scenarioGroups,
+} from '@nthstock/contracts/testing';
 import { TEST_API_ORIGIN, createMockServer } from './node';
 
 // The same scenario files run against apps/api through app.inject (ADR 0004, T-060).
@@ -11,7 +16,8 @@ runScenarioSuite('MSW node server', scenarioGroups, () => {
   });
   server.listen({ onUnhandledFrame: 'error' });
   const { hostname } = new URL(TEST_API_ORIGIN);
-  return fetchBackend(TEST_API_ORIGIN, fetch, {
+  // Every response, raw sends included, must match the route map (NSTOCK-0238).
+  const backend = fetchBackend(TEST_API_ORIGIN, fetch, {
     onClose: () => {
       server.close();
       orders.dispose();
@@ -27,4 +33,5 @@ runScenarioSuite('MSW node server', scenarioGroups, () => {
     },
     setPrice: orders.pinPrice,
   });
+  return contractChecked(backend);
 });

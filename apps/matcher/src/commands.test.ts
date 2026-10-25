@@ -69,6 +69,7 @@ function scriptedClient(answers: (() => unknown)[]) {
         release = () => resolve(null);
       });
     },
+    xrevrange: () => Promise.resolve([]),
     disconnect: () => release(),
   };
   return { client, calls };
@@ -128,8 +129,23 @@ describe('readMatcherCommands (NSTOCK-0365)', () => {
     await vi.waitFor(() => expect(calls).toHaveLength(2));
     expect(seen.map((c) => c.version)).toEqual([1, 3]);
     expect(warnings).toHaveLength(3);
-    expect(calls[0]).toEqual(['COUNT', 500, 'BLOCK', 5_000, 'STREAMS', 'k2', '$']);
+    expect(calls[0]).toEqual(['COUNT', 500, 'BLOCK', 5_000, 'STREAMS', 'k2', '0-0']);
     expect(calls[1]?.at(-1)).toBe('5-0');
+    await reader.close();
+  });
+
+  it('starts after the newest existing entry and never reads from $', async () => {
+    const { client, calls } = scriptedClient([() => null, () => null]);
+    client.xrevrange = () => Promise.resolve([entry('7-3', add(1, 100_00))]);
+    const reader = readMatcherCommands({
+      client,
+      shard: 0,
+      onCommand: () => undefined,
+      log: { info: () => undefined, warn: () => undefined },
+    });
+    await reader.ready();
+    await vi.waitFor(() => expect(calls).toHaveLength(3));
+    expect(calls.map((call) => call.at(-1))).toEqual(['7-3', '7-3', '7-3']);
     await reader.close();
   });
 
