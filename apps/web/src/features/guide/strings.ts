@@ -1022,8 +1022,8 @@ export const strings = {
             ],
             [
               'Contract',
-              'Shared Zod schemas and adapter suites',
-              'Every market adapter must pass the shared contract suite; mocks are typed from the same schemas',
+              'Shared Zod schemas, route contract tests, adapter suites',
+              'Every route in the map is registered in Fastify with its method, path and auth, and has an MSW handler; every scenario response on both backends is checked against its route schema, every error against ApiError; every market adapter passes the shared suite',
             ],
             [
               'End to end',

@@ -270,6 +270,18 @@ the chart shows after a reload.
 - `.env` locally (only `.env.example` committed); AWS Secrets Manager in cloud.
 - CI: Dependabot, `npm audit`, CodeQL, gitleaks.
 
+### Contract tests (E20)
+- `apps/api/src/test/contract.test.ts` walks the route map: every route is registered in Fastify
+  with the same method and path, `user` routes answer 401 with an `ApiError` body without a session
+  and `public` ones do not (the one listed exception is `sessionRefresh`, which needs its cookie),
+  and nothing under `/v1` is registered outside the map apart from `ROUTES_OUTSIDE_THE_MAP` (the
+  OpenAPI document and the test controls). `findContractGaps` names the route key on a gap.
+- `contractChecked(backend)` in `packages/contracts/src/testing` wraps every scenario backend
+  (app.inject, apps/api on Postgres + Redis, the MSW node server). Each response, raw sends
+  included, must parse with its route's response schema on 2xx and with `ApiError` otherwise.
+- `apps/web/src/mocks/routeParity.test.ts`: every route in the map has an MSW handler.
+- All three iterate the map, so a route added by any epic joins with no wiring.
+
 ### Observability
 OpenTelemetry → Grafana (Prometheus, Loki, Tempo); Sentry for frontend errors; real-user Web Vitals with regression alerts.
 
