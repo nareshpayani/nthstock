@@ -1,4 +1,4 @@
-import { NotificationEvent, type Quote } from '@nthstock/contracts';
+import { NOTIFICATIONS_KEPT, NotificationEvent, type Quote } from '@nthstock/contracts';
 import type { TickStreamClient } from '@nthstock/marketData';
 import { shardOf } from '@nthstock/utils';
 import { Redis } from 'ioredis';
@@ -161,6 +161,31 @@ describeWithPostgres('matcher price alerts (integration, NSTOCK-0383)', () => {
         'u-race',
       ]);
       expect(outbox.rowCount).toBe(1);
+    });
+
+    it('keeps only the newest notifications of a user when an alert fires', async () => {
+      await seedUser('u-trim');
+      await seedAlert('u-trim', 'al-trim', 1_000_00);
+      await owner.query(
+        `INSERT INTO notifications (user_id, kind, ref_id, title, body, created_at)
+         SELECT 'u-trim', 'PRICE_ALERT', 'old-' || n, 'old ' || n, 'body', $1
+           FROM generate_series(1, $2::int) AS n`,
+        [AT, NOTIFICATIONS_KEPT],
+      );
+      const fired = await createPgAlertStore(app).fire(
+        'al-trim',
+        1_001_00,
+        new Date('2026-09-28T05:30:00.000Z'),
+      );
+      const rows = await owner.query<{ id: string; ref_id: string }>(
+        'SELECT id::text, ref_id FROM notifications WHERE user_id = $1 ORDER BY notifications.id',
+        ['u-trim'],
+      );
+      expect(rows.rows).toHaveLength(NOTIFICATIONS_KEPT);
+      // The oldest is gone, the new one is the newest and still present.
+      expect(rows.rows[0]?.ref_id).toBe('old-2');
+      expect(rows.rows.at(-1)?.ref_id).toBe('al-trim');
+      expect(rows.rows.at(-1)?.id).toBe(fired?.notification.id);
     });
   });
 });
