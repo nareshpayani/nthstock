@@ -1,6 +1,6 @@
+import { startLease, type Lease } from '@nthstock/marketData';
 import { Redis } from 'ioredis';
 import { afterAll, afterEach, beforeAll, expect, it } from 'vitest';
-import { startLease, type Lease } from './lease.js';
 import {
   describeWithRedis,
   startTestRedis,

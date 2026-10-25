@@ -100,8 +100,13 @@ streams, so apps/api stops matching in process.
   fills, triggers, ratchets or activates, and moves every stop with `stepTrailingStop`, the rule the engine and the
   browser mock run, so it leaves each stop where stepping every stop would (property-tested against that full walk).
   A change applies only when its version is newer than the one held.
-- **Status:** the book is built. The worker, commands, reconcile loop, fills, server-side trailing stops,
-  `MATCHER_MODE` and the benchmark are NSTOCK-0364 to 0370.
+- **Worker** (`apps/matcher`, NSTOCK-0364): one process per shard holds `lease:matcher:{shard}` (the same
+  `startLease` as apps/quotes, now in `packages/marketData`) and follows that shard's tick stream with
+  `followTickStreams`. Every process for the shard keeps following, so a standby is current when it takes over;
+  only the holder runs ticks through the books, and only in market hours (`MOCK_MARKET_ALWAYS_OPEN` for demos).
+  `npm run dev:api` starts it.
+- **Status:** the book and the worker are built. Commands, the reconcile loop, fills, server-side trailing stops,
+  `MATCHER_MODE` and the benchmark are NSTOCK-0365 to 0370; until then the worker only logs what a tick crossed.
 
 ### Market data and chart bars
 - `packages/marketData` generates each range's own bars (1D: 1-minute, 1W: 5-minute, 1M: hourly,
