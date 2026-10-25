@@ -26,7 +26,7 @@ import {
   type LedgerCarried,
   type PaperEngineWorkingSet,
 } from '@nthstock/paperEngine';
-import { fromIst, istDateKey, toIstParts } from '@nthstock/utils';
+import { fromIst, istDateKey, shardOf, toIstParts } from '@nthstock/utils';
 import { and, desc, eq, gte, inArray, lt, or, sql, type SQL } from 'drizzle-orm';
 import { isDeepStrictEqual } from 'node:util';
 import type { Database, Tx } from '../../db/client.js';
@@ -173,7 +173,15 @@ function pageOf<T extends { id: string }>(rows: readonly T[], limit: number) {
   return { items, nextCursor: rows.length > limit && last ? last.id : null };
 }
 
-export type PgAccountStoreOptions = { database: Database; audit: AuditRepo };
+export type PgAccountStoreOptions = {
+  database: Database;
+  audit: AuditRepo;
+  /**
+   * `QUOTE_SHARDS`, when the matcher runs: each order row records `shardOf(token, shards)` so the
+   * matcher reads only its own shard's live orders (NSTOCK-0366). Without it the column stays null.
+   */
+  shards?: number;
+};
 
 /**
  * The paper account store in Postgres (T-203, spec backend-core §4.3 and §5.3).
@@ -190,7 +198,11 @@ export type PgAccountStoreOptions = { database: Database; audit: AuditRepo };
  * events, all holdings, the ledger as a carried balance plus today's entries, and the active and
  * today's trailing stops.
  */
-export function createPgAccountStore({ database, audit }: PgAccountStoreOptions): AccountStore {
+export function createPgAccountStore({
+  database,
+  audit,
+  shards,
+}: PgAccountStoreOptions): AccountStore {
   /** Takes the account row at `expected` and moves it to the next version; AccountConflict if not. */
   async function claimVersion(
     tx: Tx,
@@ -338,6 +350,7 @@ export function createPgAccountStore({ database, audit }: PgAccountStoreOptions)
       status: order.status,
       statusReason: order.statusReason,
       rejectCode: rejectCodes.get(order.id) ?? null,
+      shard: shards === undefined ? null : shardOf(order.token, shards),
       placedAt: new Date(order.placedAt),
       updatedAt: new Date(order.updatedAt),
     }));

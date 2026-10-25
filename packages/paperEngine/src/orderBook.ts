@@ -89,11 +89,23 @@ export class OrderBook {
     return this.#stops.has(stopId);
   }
 
+  /** The resting LIMIT orders, in no particular order (the reconcile loop compares them). */
+  *orders(): IterableIterator<BookOrder> {
+    for (const { order } of this.#orders.values()) yield order;
+  }
+
   /** `ADD` or `MODIFY`: rests the order at its price. False when the version is not newer. */
   upsertOrder(order: BookOrder): boolean {
     if (!newer(this.#orderVersions.get(order.orderId), order.version)) return false;
     assertPositivePaise(order.price, 'Limit price');
     this.#orderVersions.set(order.orderId, { version: order.version, crossed: false });
+    // Same side and price (a partial fill, or the reconcile loop at a newer version): the heap
+    // entry stays where it is, so repeated upserts do not pile up stale entries.
+    const resting = this.#orders.get(order.orderId);
+    if (resting && resting.order.side === order.side && resting.order.price === order.price) {
+      this.#orders.set(order.orderId, { order, seq: resting.seq });
+      return true;
+    }
     const seq = this.#next();
     this.#orders.set(order.orderId, { order, seq });
     const entry = { id: order.orderId, seq, key: order.price };
