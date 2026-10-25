@@ -667,7 +667,9 @@ export function createOrderService({
      * and skipped, so the rest still get their session event; the job retries the run when any
      * failed.
      */
-    syncAccounts: async (userIds: Iterable<string>): Promise<{ synced: number; failed: number }> => {
+    syncAccounts: async (
+      userIds: Iterable<string>,
+    ): Promise<{ synced: number; failed: number }> => {
       let synced = 0;
       let failed = 0;
       for (const userId of new Set(userIds)) {

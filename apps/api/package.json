@@ -9,6 +9,8 @@
     "build": "tsc -p tsconfig.build.json",
     "start": "node dist/server.js",
     "candles": "node dist/candleWriter.js",
+    "worker": "node dist/worker.js",
+    "dev:worker": "JOBS_MODE=bullmq DB_DRIVER=postgres DATABASE_URL=${DATABASE_URL:-postgres://nthstock_app:nthstock_app_dev@127.0.0.1:5432/nthstock} REDIS_URL=${REDIS_URL:-redis://127.0.0.1:6379} QUOTE_SHARDS=${QUOTE_SHARDS:-1} tsx watch src/worker.ts",
     "dev:candles": "DATABASE_URL=${DATABASE_URL:-postgres://nthstock_app:nthstock_app_dev@127.0.0.1:5432/nthstock} REDIS_URL=${REDIS_URL:-redis://127.0.0.1:6379} tsx watch src/candleWriter.ts",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",

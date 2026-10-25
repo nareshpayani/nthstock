@@ -7,8 +7,7 @@ export type JobLog = {
 };
 
 export type JobOutcome =
-  | { status: 'done'; result: JobResult }
-  | { status: 'skipped'; reason: 'notTradingDay' };
+  { status: 'done'; result: JobResult } | { status: 'skipped'; reason: 'notTradingDay' };
 
 /**
  * Runs one job for its scheduled time `at`, skipping a market-session job on a weekend or NSE

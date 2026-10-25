@@ -65,6 +65,8 @@ const scheduler = await startJobScheduler({
   connection: new Redis(config.redisUrl, { maxRetriesPerRequest: null }),
   jobs: createJobs({ orders: deps.orders, accounts: deps.repos.accounts }),
   log,
+  // Tests keep their queues apart; one deployment uses the default.
+  ...(process.env.JOBS_PREFIX ? { prefix: process.env.JOBS_PREFIX } : {}),
 });
 log.info('job worker started', { jobs: (await scheduler.queue.getJobSchedulers()).length });
 
