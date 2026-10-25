@@ -341,8 +341,13 @@ export const strings = {
       id: 'architecture',
       label: 'Architecture',
       title: 'Architecture: how the app works',
-      summary: 'The parts, what each one owns, and how a price and an order travel between them.',
+      summary:
+        'The processes, what each one owns, and how a price, an order, a fill and an alert travel between them.',
       blocks: [
+        {
+          kind: 'text',
+          text: 'nthstock is a modular monolith with specialised workers. One Fastify API holds every business module; a WebSocket gateway, a quote service and a matcher run beside it and talk through Redis Streams, with PostgreSQL as the record. The full high-level design, with sequence diagrams for every flow, is docs/architecture.md (linked below).',
+        },
         { kind: 'diagram', id: 'system' },
         { kind: 'heading', text: 'The parts' },
         {
@@ -352,40 +357,59 @@ export const strings = {
           rows: [
             [
               'apps/web',
-              'Every screen; the live quote store and the trading store',
-              'React 19, Vite, TanStack Router and Query',
+              'Every screen; the live quote store and the trading store; the whole mock backend in demo mode',
+              'React 19, Vite, TanStack Router and Query, MSW',
             ],
             [
               'apps/api',
-              'REST under /v1: auth, users, watchlists, orders, portfolio, funds, market, audit',
-              'Fastify 5 modular monolith',
+              'REST under /v1: auth, users, watchlists, orders, trailing stops, portfolio, funds, market, alerts, notifications, audit; commits the matcher’s fills',
+              'Fastify 5 modular monolith, stateless',
             ],
             [
               'apps/realtime',
-              'WebSocket fan-out of quotes and per-user order updates',
+              'Authenticated WebSocket fan-out: binary quote frames, per-user order updates, account deltas and notifications',
               'Node ws server, scales on its own',
             ],
             [
+              'apps/quotes',
+              'The one source of ticks: one writer per shard of instruments, picked by a Redis lease',
+              'Redis Streams with a sequence number and a snapshot',
+            ],
+            [
+              'apps/matcher',
+              'Price-indexed order books per instrument: fills, trailing stop triggers, price alerts; repairs itself from Postgres every minute',
+              'One active process per shard, standbys follow',
+            ],
+            [
+              'Job worker and candle writer',
+              'Market-session jobs at 9:15, 3:20, 3:30 and 3:45 IST; 1-minute bars into TimescaleDB',
+              'Same codebase as apps/api, other entries; BullMQ',
+            ],
+            [
               'packages/marketData',
-              'The mock market: symbol master, ticks, candles, depth',
+              'The mock market: symbol master, ticks, candles, depth, leases, stream follower',
               'Pure TypeScript, runs in Node and the browser',
             ],
             [
               'packages/paperEngine',
-              'Orders, fills, funds ledger, positions, P&L, trailing stops',
-              'Pure TypeScript, one engine for both modes',
+              'Orders, fills, funds ledger, positions, P&L, trailing stops, order books',
+              'Pure TypeScript, one engine for the browser, the API and the matcher',
             ],
             [
               'packages/contracts',
-              'Every REST and WS message, as Zod schemas',
+              'Every REST, WebSocket and Redis message, as Zod schemas; the OpenAPI document',
               'Zod 4; types and runtime checks',
             ],
             [
-              'PostgreSQL 16',
-              'Users, sessions, orders, ledger, holdings, audit log',
+              'PostgreSQL 16 + TimescaleDB',
+              'Users, sessions, orders (partitioned by day), ledger, holdings, stops, alerts, notifications, audit log, candles',
               'Drizzle migrations, three roles',
             ],
-            ['Redis 7', 'Tick and order pub/sub, OTPs, session revocation, rate limits', 'ioredis'],
+            [
+              'Redis 7',
+              'Tick, command and fill streams; per-user pub/sub; leases; OTPs; session revocation; rate limits; job queues',
+              'ioredis, BullMQ',
+            ],
           ],
         },
         { kind: 'heading', text: 'Two ways to run' },
@@ -393,15 +417,16 @@ export const strings = {
           kind: 'list',
           items: [
             'Hosted demo (what you are using): the whole backend runs in your browser. Mock Service Worker answers the same REST and WebSocket contracts, with the same market and paper engine packages. So the demo needs no server and costs nothing to host.',
-            'Full stack (npm run dev:api): the SPA talks to apps/api and apps/realtime on PostgreSQL and Redis. This is the mode the load test measures.',
+            'Full stack (npm run dev:api): the SPA talks to apps/api and apps/realtime on PostgreSQL and Redis, with apps/quotes as the price source and the job worker running the session events. Add the matcher and MATCHER_MODE=worker for the topology that scales out. This is the mode the load test measures.',
           ],
         },
         { kind: 'heading', text: 'A price, from tick to screen' },
         {
           kind: 'steps',
           items: [
-            'The mock market steps each instrument’s price (every second, or every 250 ms for the one on screen).',
-            'apps/api’s tick pump publishes each batch to Redis.',
+            'apps/quotes steps each instrument’s price (every second, or every 250 ms for the one on screen) while it holds its shard’s lease.',
+            'Each batch is appended to the shard’s Redis stream with a sequence number, and the newest quotes are written to a snapshot in the same transaction.',
+            'apps/api, apps/realtime, the matcher and the candle writer all follow the stream. A gap in the sequence, or a restarted writer, makes a reader re-read the snapshot, so nobody drifts.',
             'apps/realtime keeps only what each socket subscribed to, conflates it to at most 4 updates a second per symbol, and sends compact binary frames.',
             'The browser’s quote store updates only the cells for that symbol, batched into one paint per animation frame.',
           ],
@@ -410,24 +435,56 @@ export const strings = {
         {
           kind: 'steps',
           items: [
-            'The ticket validates the order with the same Zod schema the server uses, then sends POST /v1/orders with an idempotency key.',
-            'The orders module checks the funds, and the paper engine fills a market order at the current price, or keeps a limit order open until the price reaches it.',
-            'The fill commits the order, its events, the funds ledger, the position and the audit entries in one Postgres transaction.',
+            'The ticket validates the order with the same Zod schema the server uses, marks it as a pending intent, then sends POST /v1/orders with a client order id, so a retry never places it twice.',
+            'The orders module runs the user’s paper engine: it checks the funds, fills a market order at the current price, or keeps a limit order open until the price reaches it.',
+            'The change commits the order, its events, the funds ledger, the position, the audit entries and any notification in one Postgres transaction.',
             'The engine in memory is only a cache of the account in Postgres. Each change commits against the version it was read at, so a second writer is caught, reloads and retries once. At boot apps/api loads every account with a resting order, so a limit order placed before a restart still fills on the tick that crosses it.',
-            'The order update goes out over Redis and the WebSocket, and every screen updates from it.',
+            'Only after the commit, the order update and an account delta go out over Redis and the WebSocket, and a command goes to the matcher. Every screen updates from the same frame.',
           ],
         },
-        { kind: 'heading', text: 'Matching off the API process (being built)' },
+        { kind: 'heading', text: 'Matching on its own worker' },
         {
           kind: 'steps',
           items: [
             'apps/matcher runs one process per shard of instruments. A Redis lease picks the one that acts; the others follow the same streams, so a standby is current the moment it takes over.',
             'After each order commit, apps/api appends an ADD, MODIFY or CANCEL command to the shard’s command stream, stamped with the account version, and a STOP_ADD or STOP_CANCEL after each trailing stop change. A late or replayed command never undoes a newer one.',
-            'Each instrument has an order book: limit orders and trailing stops sit in price heaps, so a tick reads only what it fills, triggers or moves, not every resting order. A property test checks it against a full walk.',
-            'Every minute, and on start, the matcher reads its shard’s live orders and active trailing stops from Postgres, the record, and repairs its books, so a lost command is fixed within a minute.',
-            'When a tick crosses an order, the matcher sends a fill request per user to a Redis stream. Every API process reads it in one consumer group, runs the user’s paper engine at that price, commits with the account version and only then acknowledges it. A request sent twice fills nothing twice, and one a crashed process held is picked up by another (ADR 0013).',
+            'Each instrument has an order book: limit orders, trailing stops and price alerts sit in price heaps, so a tick reads only what it fills, triggers or moves, not every resting order. A property test checks it against a full walk.',
+            'Every minute, and on start, the matcher reads its shard’s live orders and active trailing stops from Postgres, the record, in one consistent snapshot, and repairs its books, so a lost command is fixed within a minute.',
+            'When a tick crosses an order, the matcher sends a fill request per user to a Redis stream. Every API process reads it in one consumer group, runs the user’s paper engine at that price, commits with the account version and only then acknowledges it. A request sent twice fills nothing twice, one a crashed process held is picked up by another after 30 seconds, and one that keeps failing goes to a dead-letter stream (ADR 0013).',
             'MATCHER_MODE=worker moves all matching to the worker: the API process then follows no ticks at all and reads the live quote only when an order action needs a price. The default, inline, keeps matching in the API process for tests and scripted demos.',
             'All of it is built and measured: the matcher’s benchmark is in the Performance tab.',
+          ],
+        },
+        { kind: 'heading', text: 'Other flows, end to end' },
+        {
+          kind: 'table',
+          caption: 'How the other key flows work',
+          head: ['Flow', 'What happens'],
+          rows: [
+            [
+              'Log in',
+              'OTP request (hashed, 5 minutes, one per mobile, 30 s resend) → verify (CAPTCHA after 3 misses, burnt after 5) → TOTP challenge if on → a session row, a 15-minute access cookie and a rotating 30-day refresh cookie, both httpOnly and SameSite=Strict → the socket opens with the same cookie.',
+            ],
+            [
+              'Trailing stop triggers',
+              'The stop’s heap entry pops when the price reaches it → the fill request carries it → the engine marks it TRIGGERED, places one reduce-only exit, commits with a notification → the chart’s stop line becomes a filled exit on the next frame.',
+            ],
+            [
+              'Price alert fires',
+              'The alert sits on the matcher’s book → the crossing tick wins one conditional UPDATE … WHERE status = ACTIVE, written with its notification and outbox row → published to the user’s channel → bell and toast. It fires exactly once.',
+            ],
+            [
+              '1-minute bar stored',
+              'The candle writer folds ticks into the forming bar → at the minute boundary it upserts every closed bar in one statement → acknowledges the stream only then, so a restart loses no minute.',
+            ],
+            [
+              'AMO released at 9:15',
+              'BullMQ hands the job to one worker → each account with an AMO is loaded, synced to the open and committed at its version → order updates and notifications go out. A retry changes nothing twice.',
+            ],
+            [
+              'Session revoked',
+              'Marked in Postgres and audited → a Redis key and event reach every API instance and realtime node at once → the device’s next request answers 401 and its sockets close with 4401.',
+            ],
           ],
         },
         {
@@ -435,12 +492,14 @@ export const strings = {
           label: 'Read the code',
           items: [
             {
-              label: 'Architecture (docs/architecture.md)',
+              label: 'High-level design (docs/architecture.md)',
               href: repoLink('docs/architecture.md'),
             },
             { label: 'Decision records (docs/adr)', href: repoLink('docs/adr') },
             { label: 'API app (apps/api/src/app.ts)', href: repoLink('apps/api/src/app.ts') },
             { label: 'Realtime hub', href: repoLink('apps/realtime/src/connections/hub.ts') },
+            { label: 'Quote writer', href: repoLink('apps/quotes/src/quoteWriter.ts') },
+            { label: 'Matcher', href: repoLink('apps/matcher/src/matcher.ts') },
           ],
         },
       ],
@@ -979,7 +1038,7 @@ export const strings = {
           kind: 'list',
           items: [
             'The API keeps no state in the process: sessions, OTPs and rate limits are in Redis, data in Postgres. More API tasks behind the load balancer add capacity, about 1,300 requests a second each on this hardware.',
-            'One honest caveat: until Phase 4, order matching and the mock tick pump run inside the API process, so only one API process may run them. Phase 4 moves them into their own worker; then API tasks scale freely.',
+            'Matching no longer pins the API to one process: with the quote service and MATCHER_MODE=worker, apps/quotes and apps/matcher run one active process per shard behind Redis leases, the API follows no ticks, and every API process joins the fill consumer group, so API tasks scale freely.',
             'Realtime nodes scale on their own: each takes its share of sockets and reads the same Redis channel. At scale the channel moves from Redis pub/sub to NATS JetStream.',
             'Postgres: PgBouncer in transaction mode (already in Docker Compose), read replicas for portfolio and order history, and day partitions for orders (the tables are already partitioned).',
             'On AWS Mumbai (Phase 6): ECS Fargate tasks with a scheduled pre-scale at 8:45 AM IST, autoscaling through the day and scale-down after 3:45 PM, a CDN for static files and public market snapshots, and a warm standby in Hyderabad.',
@@ -1086,7 +1145,7 @@ export const strings = {
         {
           kind: 'code',
           label: 'nthstock/',
-          text: 'CLAUDE.md               project rules every agent reads first\nWRITEUP.md              design rationale for the assignment\napps/\n  web/                  React SPA\n    e2e/                Playwright specs: journeys, phone, perf, a11y\n    scripts/            build budgets, no raw colours, import rules\n    src/\n      main.tsx          boot: config, mocks, providers, router\n      app/              app-wide wiring: layouts, live quotes, router\n      routes/           file routes; thin, they load a feature page\n      features/<name>/  dashboard, stockDetail, orderTicket, chartTrading,\n                        scalper, orders, positions, holdings, funds,\n                        watchlist, search, guide, …\n      shared/           cross-feature components and hooks\n      mocks/            MSW handlers and the in-browser market\n  api/                  Fastify modular monolith\n    drizzle/            SQL migrations\n    src/\n      app.ts server.ts config.ts deps.ts\n      db/               Postgres client, migrator, column crypto\n      http/             errors, cookies, CSRF, security headers\n      modules/<name>/   auth, users, watchlists, orders, portfolio,\n                        funds, market, audit, health, docs, demo\n      ticks/            tick pump and Redis publisher\n  realtime/             WebSocket server\n    src/connections/    auth, hub, subscription registry\n    src/feeds/          Redis quote, order and revocation feeds\n  quotes/               tick writer, one per shard behind a Redis lease\npackages/\n  ui/                   design system components and Storybook\n  tokens/               design tokens → CSS variables and Tailwind\n  contracts/            Zod schemas for every REST and WS message\n  marketData/           the mock market\n  paperEngine/          orders, fills, ledger, P&L, trailing stops\n  apiClient/            REST and WS clients, quote and trading stores\n  config/               shared ESLint, TypeScript, Vitest presets\n  utils/                INR formatting, market hours, IST dates, shards\ninfra/                  Docker Compose, PgBouncer, k6\ntools/                  issue keys, release checks, load test\ndocs/                   product, architecture, ADRs, specs, runbooks,\n                        api/openapi.json (generated)\n.claude/                agents, rules, skills, hooks\n.github/                workflows, PR template, CODEOWNERS',
+          text: 'CLAUDE.md               project rules every agent reads first\nWRITEUP.md              design rationale for the assignment\napps/\n  web/                  React SPA\n    e2e/                Playwright specs: journeys, phone, perf, a11y\n    scripts/            build budgets, no raw colours, import rules\n    src/\n      main.tsx          boot: config, mocks, providers, router\n      app/              app-wide wiring: layouts, live quotes, router\n      routes/           file routes; thin, they load a feature page\n      features/<name>/  dashboard, stockDetail, orderTicket, chartTrading,\n                        scalper, orders, positions, holdings, funds,\n                        watchlist, search, guide, …\n      shared/           cross-feature components and hooks\n      mocks/            MSW handlers and the in-browser market\n  api/                  Fastify modular monolith\n    drizzle/            SQL migrations\n    src/\n      app.ts server.ts worker.ts candleWriter.ts\n      config.ts deps.ts\n      db/               Postgres client, migrator, column crypto\n      http/             errors, cookies, CSRF, security headers\n      modules/<name>/   auth, users, watchlists, orders, portfolio,\n                        funds, market, alerts, notifications, candles,\n                        jobs, audit, health, docs, demo\n      ticks/            tick pump, publisher, quote-stream follower\n  realtime/             WebSocket server\n    src/connections/    auth, hub, subscription registry\n    src/feeds/          Redis quote, order and revocation feeds\n  quotes/               tick writer, one per shard behind a Redis lease\n  matcher/              order books per shard: commands, reconcile, fills\npackages/\n  ui/                   design system components and Storybook\n  tokens/               design tokens → CSS variables and Tailwind\n  contracts/            Zod schemas for every REST and WS message\n  marketData/           the mock market\n  paperEngine/          orders, fills, ledger, P&L, trailing stops\n  apiClient/            REST and WS clients, quote and trading stores\n  config/               shared ESLint, TypeScript, Vitest presets\n  utils/                INR formatting, market hours, IST dates, shards\ninfra/                  Docker Compose, PgBouncer, k6\ntools/                  issue keys, release checks, load test\ndocs/                   product, architecture, ADRs, specs, runbooks,\n                        api/openapi.json (generated)\n.claude/                agents, rules, skills, hooks\n.github/                workflows, PR template, CODEOWNERS',
         },
         {
           kind: 'list',
@@ -1411,7 +1470,7 @@ export const strings = {
     system: {
       title: 'System architecture',
       description:
-        'The browser app talks to apps/api over REST and receives live data from apps/realtime over a WebSocket. apps/api stores data in PostgreSQL and publishes ticks and order events to Redis, which apps/realtime fans out. In the hosted demo, Mock Service Worker answers the same contracts inside the browser.',
+        'The browser app calls apps/api over REST and receives live data from apps/realtime over a WebSocket. apps/quotes writes every tick to Redis Streams; apps/api, apps/realtime, the matcher and the candle writer follow them. apps/api sends order commands to the matcher and commits its fills in PostgreSQL. In the hosted demo, Mock Service Worker answers the same contracts inside the browser.',
       groups: { browser: 'Your browser', servers: 'Full stack (npm run dev:api)' },
       nodes: {
         spa: ['React SPA', 'routes · features · ui'],
@@ -1419,32 +1478,40 @@ export const strings = {
         msw: ['Hosted demo', 'Mock Service Worker,', 'market and engine in browser'],
         realtime: ['apps/realtime', 'WebSocket fan-out'],
         api: ['apps/api', 'Fastify modular monolith'],
-        engine: ['Mock market + paper engine', 'marketData + paperEngine'],
-        redis: ['Redis 7', 'pub/sub, OTPs, limits'],
-        postgres: ['PostgreSQL 16', 'system of record'],
+        postgres: ['PostgreSQL 16', '+ TimescaleDB, the record'],
+        workers: ['Job worker, candle writer', 'BullMQ · 1-minute bars'],
+        quotes: ['apps/quotes', 'ticks, 1 writer per shard'],
+        redis: ['Redis 7', 'streams, pub/sub, leases'],
+        matcher: ['apps/matcher', 'order books per shard'],
       },
       edges: {
         rest: 'REST /v1',
         ws: 'WSS live',
         stores: 'updates',
         demo: 'same contracts',
-        pubsub: 'pub/sub',
-        publish: 'ticks, orders',
+        ticks: 'tick streams',
+        fanout: 'ticks, events',
+        streams: 'orders, fills',
+        matcher: 'ticks, fills',
+        reconcile: 'reconcile',
         sql: 'SQL',
-        engine: 'ticks, fills',
+        workerSql: 'SQL',
+        jobs: 'jobs, ticks',
       },
       inWords: [
         'The React app in your browser calls apps/api over HTTPS REST under /v1.',
-        'Live quotes and order updates arrive from apps/realtime over a secure WebSocket and land in the quote and trading stores.',
-        'apps/api runs the mock market and the paper engine, stores data in PostgreSQL, and publishes ticks and order events to Redis.',
-        'apps/realtime subscribes to Redis and sends each socket only what it subscribed to.',
+        'Live quotes, order updates, account deltas and notifications arrive from apps/realtime over a secure WebSocket and land in the quote and trading stores.',
+        'apps/quotes is the one source of prices: one writer per shard appends each tick batch to a Redis stream with a sequence number and a snapshot.',
+        'apps/api, apps/realtime, the matcher and the candle writer follow those streams. apps/realtime sends each socket only what it subscribed to.',
+        'apps/api commits every change in PostgreSQL, then sends order commands to the matcher; the matcher finds what a tick fills and apps/api commits those fills. Every minute the matcher repairs its books from PostgreSQL.',
+        'The job worker runs the market-session events on BullMQ, and the candle writer stores 1-minute bars in TimescaleDB.',
         'In the hosted demo, Mock Service Worker answers the same REST and WebSocket contracts inside the browser, with the same market and engine packages.',
       ],
     },
     ticks: {
       title: 'Tick pipeline',
       description:
-        'A seeded symbol master feeds a GBM price step per instrument inside the mock market adapter. In the hosted demo the in-browser paper engine turns ticks into accountDelta frames for the trading store. On the full stack the API tick pump publishes to Redis, apps/realtime sends conflated binary frames to the quote store, and the engine in apps/api sends accountDelta frames through apps/realtime after each commit.',
+        'A seeded symbol master feeds a GBM price step per instrument inside the mock market adapter. In the hosted demo the in-browser paper engine turns ticks into accountDelta frames for the trading store. On the full stack apps/quotes writes each batch to a Redis stream per shard, apps/realtime sends conflated binary frames to the quote store, and apps/api sends accountDelta frames through apps/realtime after each commit.',
       groups: { demo: 'Hosted demo, in the browser', stack: 'Full stack' },
       nodes: {
         master: ['Symbol master', '5,000 equities, seeded'],
@@ -1453,7 +1520,7 @@ export const strings = {
         engine: ['Paper engine', 'match orders, step stops'],
         delta: ['accountDelta frame', 'every 250 ms, with seq'],
         store: ['Trading store', 'chart, ticket, pad, orders'],
-        pump: ['apps/api tick pump', 'Redis TICKS_CHANNEL'],
+        pump: ['apps/quotes writer', 'Redis Streams per shard'],
         hub: ['apps/realtime hub', '4 updates/s, binary frames'],
         quotes: ['Quote store', 'per-symbol cells, one paint'],
       },
@@ -1463,7 +1530,7 @@ export const strings = {
         'Each instrument steps its price with geometric Brownian motion: the one on screen every 250 ms, the rest every second.',
         'The mock market adapter turns the steps into quotes, 1-minute bars, candles and depth, and can replay missed ticks after a pause.',
         'In the hosted demo, the paper engine matches orders and steps trailing stops on each tick, and sends one accountDelta frame every 250 ms to the trading store. On the full stack the same engine runs in apps/api, which sends an accountDelta frame after each commit.',
-        'On the full stack, the apps/api tick pump publishes each batch to Redis, and apps/realtime sends each socket its subscribed symbols, at most 4 updates a second, as binary frames to the quote store.',
+        'On the full stack, apps/quotes appends each batch to its shard’s Redis stream with a sequence number, and apps/realtime sends each socket its subscribed symbols, at most 4 updates a second, as binary frames to the quote store.',
       ],
     },
     tslo: {

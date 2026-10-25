@@ -1,411 +1,1362 @@
-# Architecture and stack
+# nthstock: architecture and high-level design
 
-Moved out of CLAUDE.md on 2026-10-07 so CLAUDE.md stays short. Section numbers match the CLAUDE.md
-sections that ADRs and specs cite (CLAUDE.md §4 and §5). Decisions live in [`adr/`](adr/).
+| | |
+|---|---|
+| Document | HLD-1, the high-level design of nthstock |
+| Version | 2.0 |
+| Date | 2026-10-25 |
+| Owner and approver | Naresh Payani |
+| Status | Describes the code on `develop` as of 2026-10-25 (Phase 2 done, Wave 3 epics E22 to E25 built) |
+| Audience | Engineering leadership, reviewers, and every engineer or agent changing the system |
+| Related | [CLAUDE.md](../CLAUDE.md) · [product.md](product.md) · [ADRs](adr/) · [specs](specs/) · [runbooks](runbooks/) · [OpenAPI](api/openapi.json) · the in-app guide at `/guide` |
+
+**Version history**
+
+| Version | Date | Change |
+|---|---|---|
+| 1.x | 2026-10-07 to 2026-10-24 | Module-level notes, grown one epic at a time |
+| 2.0 | 2026-10-25 | Rewritten as a full high-level design: context, containers, every component, data model, key flows as sequence diagrams, deployment, CI/CD, security, performance, resilience (NSTOCK-0392) |
+
+Section numbers §4 and §5 are stable: CLAUDE.md, ADRs, specs and code comments cite them
+(`CLAUDE.md §4`, `architecture.md §5`). Subsections are numbered §4.1 to §4.27 so a review comment
+can point at one. Diagrams are Mermaid and render on GitHub. Where the design has a target that is
+not built yet (AWS, OpenTelemetry), the section says so in a **Planned** line; everything else is in
+the code today, with the file that implements it.
+
+## Contents
+
+- [1. Executive summary](#1-executive-summary)
+- [2. Goals, constraints and quality targets](#2-goals-constraints-and-quality-targets)
+- [3. Architectural principles](#3-architectural-principles)
+- [4. Architecture](#4-architecture)
+  - [4.1 System context](#41-system-context) · [4.2 Containers](#42-containers-the-running-processes) ·
+    [4.3 Runtime modes and switches](#43-runtime-modes-and-switches) ·
+    [4.4 Shared packages](#44-shared-packages-and-dependency-rules)
+  - [4.5 Frontend](#45-frontend-appsweb) · [4.6 Live data in the browser](#46-live-data-in-the-browser) ·
+    [4.7 Mock mode and demo mode](#47-mock-mode-msw-and-demo-mode)
+  - [4.8 API](#48-api-appsapi) · [4.9 Contracts, OpenAPI and contract tests](#49-contracts-openapi-and-contract-tests)
+  - [4.10 Market data](#410-market-data-packagesmarketdata) · [4.11 Quote service](#411-quote-service-appsquotes-and-the-tick-streams) ·
+    [4.12 Realtime gateway](#412-realtime-gateway-appsrealtime)
+  - [4.13 Paper engine](#413-paper-engine-packagespaperengine) · [4.14 Paper accounts on Postgres](#414-paper-accounts-on-postgresql) ·
+    [4.15 Matcher](#415-matcher-appsmatcher) · [4.16 Trailing stops on the server](#416-trailing-stops-on-the-server)
+  - [4.17 Candle store](#417-candle-store-timescaledb) · [4.18 Background jobs](#418-background-jobs-bullmq) ·
+    [4.19 Notifications and price alerts](#419-notifications-and-price-alerts)
+  - [4.20 Identity and access](#420-identity-and-access) · [4.21 Privacy and DPDP](#421-privacy-consent-and-account-deletion-dpdp-act-2023)
+  - [4.22 Data architecture](#422-data-architecture) · [4.23 Key flows](#423-key-flows-end-to-end)
+  - [4.24 Deployment and environments](#424-deployment-and-environments) · [4.25 CI/CD and the agent team](#425-cicd-and-the-agent-team)
+  - [4.26 Security architecture](#426-security-architecture) · [4.27 Observability](#427-observability)
+  - [Performance and capacity](#performance-and-capacity) · [Scalability rules](#scalability-rules) ·
+    [Resilience and failure modes](#resilience-and-failure-modes)
+- [5. Monorepo structure](#5-monorepo-structure)
+- [6. Decisions, risks and open questions](#6-decisions-risks-and-open-questions)
+
+## 1. Executive summary
+
+nthstock is an Indian stock-market investing and paper-trading platform with the information
+architecture of the Paytm Money stocks dashboard and its own light theme. Users sign in with an OTP,
+a device PIN and optional TOTP, watch live NSE and BSE prices, keep watchlists, and trade with
+₹10,00,000 of virtual cash: market, limit and after-market orders, intraday and delivery, partial
+fills, trailing stop-losses, trading from the chart, and a one-tap scalper pad. Market data is
+simulated (no exchange licence, D3) behind an adapter a licensed feed can replace.
+
+The system is a **modular monolith with specialised workers**:
+
+- a React 19 + TypeScript SPA (`apps/web`) that runs against either a real backend or a complete
+  in-browser mock of it;
+- a Fastify API (`apps/api`) holding every business module, stateless, on PostgreSQL 16 and Redis 7;
+- a WebSocket gateway (`apps/realtime`) that fans prices and per-user events out to browsers;
+- a quote service (`apps/quotes`), the one source of ticks, sharded behind Redis leases;
+- a matcher (`apps/matcher`) that fills resting orders and triggers stops and alerts from the tick
+  streams, while `apps/api` commits the fills;
+- a job worker and a candle writer, two more entries of the `apps/api` codebase.
+
+Three decisions carry the design:
+
+1. **One contract, two backends.** Every REST route and WebSocket message is a Zod schema in
+   `packages/contracts`. The API, the mock backend in the browser (MSW) and the typed client all
+   derive from it, and a contract suite runs the same scenarios against both backends. The hosted
+   demo therefore needs no server, and the full stack behaves the same.
+2. **One engine, one state.** Order, fill, position and trailing-stop rules live only in the pure
+   `packages/paperEngine`. The browser mock, the API and the matcher run the same code; Postgres is
+   the record and every engine is a cache committed with optimistic concurrency.
+3. **Streams between processes, not shared memory.** Ticks, matcher commands and fills travel on
+   Redis Streams with sequence numbers, consumer groups and version rules, and each worker repairs
+   itself from Postgres. So every process can restart, fail over or scale out without losing an
+   order or filling one twice.
+
+Measured on one 4-core machine: 10,000 concurrent logged-in users and 10,000 sockets with zero
+errors, tick to screen p95 under 500 ms, the API inside its 200 ms p95 up to about 1,300 requests a
+second per process, and the matcher's book work at p95 0.06 ms per tick over 1,00,000 resting
+orders ([Performance and capacity](#performance-and-capacity)).
+
+## 2. Goals, constraints and quality targets
+
+**Product scope (v1, [product.md §2](product.md)):** market pages (dashboard, indices, movers, lists,
+search, instrument page with charts and depth), accounts (OTP, PIN, TOTP, active sessions, consent
+and deletion), watchlists, portfolio (holdings, positions, P&L), paper trading with ₹10,00,000
+virtual cash, live quotes, notifications and price alerts, Trade from Charts, trailing stop-loss
+orders and the scalper pad (SPEC-TFC-1). Out until approved: real money, real KYC, MF, IPO, F&O and
+the mobile app.
+
+**Constraints (owner decisions, CLAUDE.md §0):**
+
+| # | Constraint | Consequence in the design |
+|---|---|---|
+| D2 | Paper trading only | No broker or exchange connectivity; the paper engine is the exchange |
+| D3 | Mock market data behind an adapter | `MarketDataAdapter` interface; `apps/quotes` is the only process a vendor feed replaces |
+| D4 | Vite + React + TS SPA, light theme, Chrome (latest 2) and iPhone Safari for the trading surfaces | No SSR; CSP-friendly bundle; touch gestures designed per zone (ADR 0012) |
+| D5 | Modular monolith on Fastify plus a separate realtime server | Module seams inside one deployable; sockets scale apart from REST |
+| D6 | PostgreSQL 16 (+ TimescaleDB) and Redis 7 | Postgres is the record; Redis carries only short-lived or rebuildable state |
+| D7 | Docker Compose locally, AWS Mumbai from Phase 6 | Twelve-factor processes configured by environment; no cloud SDK in app code |
+| D9 | Public repository | No secrets in code; dev keys are derived from public strings and refused in production |
+| D10 | Mobile app later | Contracts, API client, stores, tokens and utils live in framework-free `packages/*` |
+| D11 | npm workspaces + Turborepo, Conventional Commits, CI as the gate | One `npm run check` quality gate locally and in CI |
+
+**Quality targets ([product.md §3](product.md)):**
+
+| Attribute | Target | Where it is checked |
+|---|---|---|
+| Tick to screen | p95 < 500 ms | `test:latency` in CI on every PR; the load test |
+| API latency | p95 < 200 ms | Load test; perf smoke in CI (order ack, PIN login, slowest query) |
+| Page load | LCP < 2.0 s, INP < 150 ms, CLS < 0.05 | Web vitals job and Lighthouse CI |
+| Initial JS | < 200 KB gzipped | `apps/web/scripts/checkBuild.mjs` after every build |
+| Chart frame time | p95 ≤ 16.7 ms on a 390 px phone | `chartTradingPerf.spec.ts` |
+| Availability | 99.95% in market hours | Design target for Phase 6 (multi-AZ, warm standby) |
+| Security | OWASP ASVS L2 | [phase2-asvs-l2.md](security/phase2-asvs-l2.md) with a test per control |
+| Privacy | DPDP Act 2023 | Consent records, 30-day erasure, no PII in logs or events |
+| Accessibility | WCAG 2.2 AA | axe in E2E and Storybook; colour is never the only up/down signal |
+
+## 3. Architectural principles
+
+1. **Contract first.** A route or message exists once, in `packages/contracts`, and everything else
+   is typed and validated from it.
+2. **Pure core, thin shells.** Business rules (engine, trailing stops, TOTP, market calendar, money)
+   are pure functions with an injected clock; Fastify, Redis, Postgres and React are adapters
+   around them.
+3. **Postgres is the record; everything else is a cache or a pipe.** Engines in memory, Redis
+   snapshots, matcher books and browser stores can all be rebuilt from Postgres.
+4. **Commit, then announce.** No event leaves a process before the transaction that caused it
+   commits. Notifications ride a transactional outbox.
+5. **Version every hand-off.** Account versions, engine `seq`, tick `seq` and message `v` fields let
+   every consumer drop what is stale and resync on a gap.
+6. **At-least-once delivery, idempotent consumers.** Streams are acked after the work is durable;
+   replays change nothing twice.
+7. **Single writer per shard.** A Redis lease (`SET NX PX`) picks the one quote writer and the one
+   matcher per shard; standbys stay current and take over within the lease TTL.
+8. **Integer paise and UTC.** Money is the `Paise` integer type, never a float; time is stored in
+   UTC and shown in IST.
+9. **Fail closed on security, fail open on convenience.** A missing CSRF header, token or key is a
+   refusal; a Redis outage disables the shared rate-limit counter (`skipOnError`) rather than the API.
+10. **Every change is tested where it can break.** Unit tests beside code, contract scenarios on
+    both backends, Testcontainers for Postgres and Redis, Playwright in two modes, budgets in CI.
 
 ## 4. Architecture
 
+### 4.1 System context
+
+```mermaid
+flowchart LR
+  investor(["Investor<br/>desktop Chrome or iPhone Safari"])
+  reviewer(["Reviewer<br/>hosted demo"])
+  owner(["Owner<br/>Naresh Payani"])
+  subgraph nthstock["nthstock"]
+    web["Web app<br/>apps/web"]
+    backend["Backend<br/>api · realtime · quotes · matcher · workers"]
+  end
+  sms["SMS provider<br/>mock until launch"]
+  captcha["CAPTCHA provider<br/>mock until launch"]
+  totp["Authenticator app<br/>RFC 6238"]
+  vendor["Licensed market data vendor<br/>later, replaces apps/quotes"]
+  gh["GitHub<br/>repo, Actions, agent team"]
+  fb["Firebase Hosting<br/>development and live sites"]
+
+  investor --> web
+  reviewer --> web
+  web -- "REST /v1, WSS /ws" --> backend
+  backend -. "OTP text" .-> sms
+  backend -. "token check" .-> captcha
+  investor -. "6-digit code" .-> totp
+  vendor -. "ticks, later" .-> backend
+  owner --> gh
+  gh -- "build, test, deploy" --> fb
+  fb -- "serves the SPA" --> web
 ```
-Browser (Vite React SPA, PWA shell cache)
-   │  HTTPS REST /v1            WSS (live prices)
-   ▼                            ▼
-CDN + WAF ─► Load balancer ─► apps/api (Fastify, stateless)     apps/realtime (WS nodes)
-                               │  modules: auth, users,            ▲ per-symbol subscriptions,
-                               │  watchlists, orders,              │ max 4 updates/sec/symbol
-                               │  portfolio, market                │
-                               ▼                                   │ pub/sub: Redis → NATS JetStream at scale
-                  PostgreSQL primary + replicas (PgBouncer)   Redis Cluster (quotes, sessions, BullMQ)
-                                                                   ▲
-                                              packages/marketData feed adapters (mock | vendor later)
+
+| Actor or system | Interaction |
+|---|---|
+| Investor | Uses the SPA. Desktop is primary; the instrument page, Trade from Charts and the scalper are phone-first (360 to 414 px) |
+| Reviewer | Opens the hosted demo (`?demo=1`, login 9000000001, OTP 123456). The whole backend runs in the browser |
+| Owner | Approves specs and phases, asks for releases; agents on GitHub Actions build, review, fix and merge |
+| SMS and CAPTCHA | Behind `SmsProvider` and `CaptchaVerifier` interfaces. The mocks accept only dev values and **fail closed in production**, so a real provider must be wired before launch |
+| Market data vendor | Not connected (D3). `apps/quotes` is the only component it replaces; nothing else reads market data from outside Redis |
+| Firebase Hosting | Serves the msw-mode build: the `dev` channel (development) and the live site (production) |
+
+### 4.2 Containers (the running processes)
+
+```mermaid
+flowchart LR
+  subgraph browser["Browser"]
+    spa["React SPA<br/>TanStack Router + Query"]
+    stores["Quote + trading stores<br/>packages/apiClient"]
+    msw["MSW service worker<br/>msw mode only"]
+  end
+
+  subgraph edge["Edge"]
+    cdn["Static hosting / CDN<br/>Firebase today"]
+    lb["Load balancer + WAF<br/>Phase 6"]
+  end
+
+  subgraph compute["Application processes, Node 22, stateless"]
+    api["apps/api<br/>REST /v1, port 4000"]
+    rt["apps/realtime<br/>WebSocket, port 8081"]
+    quotes["apps/quotes<br/>1 writer per shard"]
+    matcher["apps/matcher<br/>1 matcher per shard"]
+    worker["job worker<br/>BullMQ"]
+    candles["candle writer"]
+  end
+
+  subgraph data["Data"]
+    redis[("Redis 7")]
+    pg[("PostgreSQL 16<br/>+ TimescaleDB")]
+  end
+
+  spa -.- msw
+  spa --- stores
+  spa -- "assets" --> cdn
+  spa -- "REST" --> lb
+  stores -- "WSS" --> lb
+  lb --> api
+  lb --> rt
+
+  quotes -- "ticks, snapshots" --> redis
+  api <-- "ticks, commands, fills,<br/>per-user events" --> redis
+  matcher <-- "ticks, commands, fills" --> redis
+  redis -- "ticks, per-user events" --> rt
+  redis -- "ticks" --> candles
+  worker <-- "jobs, events" --> redis
+
+  api -- "SQL" --> pg
+  worker -- "SQL" --> pg
+  matcher -- "reconcile, alerts" --> pg
+  candles -- "minute bars" --> pg
 ```
+
+| Process | Entry | Responsibility | State it holds | Scales by |
+|---|---|---|---|---|
+| `apps/web` | `src/main.tsx` | Every screen; live quote and trading stores; the MSW mock in msw mode | Per tab: query cache, stores; msw mode: the paper account in sessionStorage | CDN |
+| `apps/api` | `src/server.ts` | REST `/v1`: auth, users, watchlists, orders, trailing stops, portfolio, funds, market, alerts, notifications, audit, OpenAPI; commits matcher fills; publishes per-user events | Engines as a cache of Postgres; nothing that cannot be reloaded | More processes behind the load balancer (stateless) |
+| `apps/realtime` | `src/server.ts` | Authenticated WebSocket fan-out: conflated binary quote frames, per-user order updates, account deltas, notifications; closes revoked sessions | Connections and subscriptions only | More nodes; each reads the same streams and subscribes only its users' channels |
+| `apps/quotes` | `src/server.ts` | The one tick source per shard: GBM ticks, appended to the shard stream with a snapshot hash | The shard's last prices (rebuildable) | `SHARDS` processes, one active per shard by lease, plus standbys |
+| `apps/matcher` | `src/server.ts` | Price-indexed books per instrument: crossings, trailing-stop triggers, price alerts; writes fill requests; reconciles with Postgres every 60 s | Books (rebuilt from Postgres on start) | One active per shard by lease, plus standbys |
+| Job worker | `apps/api/src/worker.ts` | BullMQ schedules in IST: AMO release, square-off, day close, P&L snapshot, partitions, token cleanup, account purge | None | Several workers; BullMQ hands each run to one |
+| Candle writer | `apps/api/src/candleWriter.ts` | Folds ticks into 1-minute bars and upserts them to TimescaleDB | Forming bars (re-read on restart) | One per deployment (fixed consumer name) |
+| PostgreSQL 16 + TimescaleDB | Compose / CI service | Users, sessions, consents, watchlists, paper accounts, orders (partitioned), ledger, positions, holdings, trailing stops, alerts, notifications, audit log, candles | The record | Read replicas and PgBouncer; partitions; Citus by `user_id` only if needed |
+| Redis 7 | Compose / CI service | Tick streams and snapshots, matcher commands and fills, per-user pub/sub, leases, OTP challenges, revocations, rate-limit counters, BullMQ queues | Short-lived or rebuildable | Redis Cluster (keys are already per shard or per user) |
+
+### 4.3 Runtime modes and switches
+
+The same code runs in five useful configurations. Every switch is parsed and cross-checked at
+start-up (`apps/api/src/config.ts`, `apps/web/src/app/config/runtimeConfig.ts`); an inconsistent
+combination refuses to start rather than half-working.
+
+| Switch | Values (default first) | What it changes |
+|---|---|---|
+| `VITE_API_MODE` (web, build time) | `msw` · `api` | `msw`: the mock backend runs in a service worker and the build contains MSW; `api`: the MSW chunk is removed from the bundle entirely and the SPA calls `/v1` and `/ws` |
+| `DB_DRIVER` (api) | `memory` · `postgres` | Repos in process (unit tests) or Postgres + Redis (`dev:api`, E2E, perf). `postgres` requires `DATABASE_URL` and `REDIS_URL` |
+| `QUOTE_SHARDS` (api, realtime) | unset · 1 to 64 | Unset: the API's adapter ticks in process and its tick pump publishes on pub/sub. Set: prices come only from `apps/quotes` streams; `GET /v1/market/quotes` reads the snapshot hashes |
+| `MATCHER_MODE` (api) | `inline` · `worker` | `inline`: the API desk follows ticks and matches in process, with a 15 s sweep. `worker` (needs `QUOTE_SHARDS`): the API follows no ticks, reads the live quote only when an action needs a price, and fills only from the matcher's requests |
+| `JOBS_MODE` (api) | `inline` · `bullmq` · `off` | `inline`: the 15 s in-process sweep runs session events; `bullmq` (needs `postgres`): the job worker runs them; `off`: neither (tests). The API warns at start if `MATCHER_MODE=worker` without `bullmq` |
+| `MOCK_MARKET_ALWAYS_OPEN` | false · true | Lets the mock market tick and match outside NSE hours, for demos |
+| `ENABLE_TEST_CONTROLS` | false · true | Registers `/v1/__test` clock and price routes; refused unless `NODE_ENV=test`, and the web build drops them unless `VITE_TEST_CONTROLS` |
+
+| Configuration | Used by | Web | API | Prices | Matching | Session events |
+|---|---|---|---|---|---|---|
+| Hosted demo | Reviewers, the live and dev sites | msw | none | In-browser adapter | In-browser engine | In-browser engine |
+| Unit tests | `npm run check` | jsdom | `buildApp` + `app.inject`, memory | In-process adapter or pinned | Inline | Manual clock |
+| Local full stack | `npm run dev:api` | api | postgres, `QUOTE_SHARDS=1`, `JOBS_MODE=bullmq` | `apps/quotes` | Inline (default) | Job worker |
+| Wave 3 topology | `MATCHER_MODE=worker npm run dev:api` plus the matcher and candle writer | api | postgres, worker mode | `apps/quotes` | `apps/matcher` → API commits | Job worker |
+| E2E api mode | CI `e2e-api` job | api | postgres, test controls | Scripted ticks | Inline | Test clock |
+
+### 4.4 Shared packages and dependency rules
+
+```mermaid
+flowchart BT
+  utils["utils<br/>money, IST time, NSE calendar,<br/>TOTP, shardOf, device label"]
+  contracts["contracts<br/>Zod schemas: REST route map,<br/>WS messages, pub/sub, streams, OpenAPI"]
+  tokens["tokens<br/>design tokens → CSS variables"]
+  marketData["marketData<br/>adapter, mock market, candles,<br/>leases, stream follower"]
+  paperEngine["paperEngine<br/>engine, desk, order book,<br/>trailing stops, alert desk"]
+  apiClient["apiClient<br/>REST client, WS client,<br/>quote store, trading store"]
+  ui["ui<br/>components on Radix,<br/>Tailwind, Storybook"]
+  web["apps/web"]
+  api["apps/api"]
+  rt["apps/realtime"]
+  quotes["apps/quotes"]
+  matcher["apps/matcher"]
+
+  contracts --> utils
+  marketData --> contracts
+  paperEngine --> contracts
+  apiClient --> contracts
+  ui --> tokens
+  web --> apiClient & ui & marketData & paperEngine
+  api --> marketData & paperEngine
+  rt --> contracts & marketData
+  quotes --> marketData
+  matcher --> marketData & paperEngine
+```
+
+- Every package exposes only `src/index.ts`, ships ESM with types, and has no React or Node-only API
+  unless it is `ui` (React) or uses Web Crypto and `fetch`, which both runtimes have. That keeps them
+  usable by the React Native app later (D10).
+- `paperEngine` does not import `marketData`: the desk declares the slice of the adapter it reads
+  (`DeskMarket`), so the engine stays testable with a hand-written price source.
+- Web imports go `routes → features → shared → packages`; a feature is imported only through its
+  `index.ts` and features never import each other's internals. ESLint and
+  `apps/web/scripts/checkFeatureCycles.mjs` enforce both.
+
+### 4.5 Frontend (`apps/web`)
+
+**Stack:** React 19, TypeScript strict, Vite, TanStack Router (file routes, typed search params,
+loaders), TanStack Query (server state), Zustand (shell UI state), React Hook Form + Zod (forms),
+TanStack Virtual (long lists), TradingView Lightweight Charts 5 (lazy), Tailwind CSS 4 on design
+tokens, Radix primitives in `packages/ui`, MSW 3 (mock mode). ADR 0005 is the UI architecture; ADR
+0012 amends it for trading state.
+
+**Layers:**
+
+```mermaid
+flowchart LR
+  main["main.tsx<br/>boot"] --> app["app/<br/>providers, router, layouts,<br/>live pipeline, shell store"]
+  app --> routes["routes/<br/>thin file routes:<br/>search schema, loader prefetch"]
+  routes --> features["features/&lt;feature&gt;/<br/>api · components · hooks ·<br/>model · store · strings"]
+  features --> shared["shared/<br/>cross-feature components,<br/>hooks, session client"]
+  shared --> packages["packages/*"]
+```
+
+**Boot sequence (`src/main.tsx`):**
+
+1. Parse the runtime config; an invalid `VITE_API_MODE` or URL fails fast.
+2. In msw mode only, start the mock worker beside the first render (the shell and header do not
+   wait). REST requests wait on its promise and call `ensureActive` first, because Chrome can stop
+   an idle service worker; after a hard reload the page reloads once so the worker controls it.
+   `?demo=1` is read and removed here, before the router starts.
+3. Create the query client, the session-aware REST client (sends the CSRF token, refreshes once on
+   a 401), and the router with `{ queryClient, apiClient }` as loader context.
+4. Create the live pipeline: one WebSocket client, the quote store and the trading store
+   (`app/live/liveQuotes.ts`), bind the trading store to the session, and start visibility sync.
+5. Render `AppProviders` and the router.
+
+**Routes:**
+
+| Path | Guard | Feature page | Loader prefetch |
+|---|---|---|---|
+| `/` | none | redirects to `/dashboard` | |
+| `/login` | none (`?deleted=` skips the session check) | `auth/LoginPage` (lazy) | |
+| `/dashboard` | public | `dashboard` | indices, lists, movers, watchlists when signed in |
+| `/stocks/$symbol` | public; upper-cases the symbol | `stockDetail` with `chartTrading`, `orderTicket`, `scalper`, depth, alerts | instrument first; quote, stats, candles in parallel; `range`, `interval`, `exchange`, `chart` in the URL |
+| `/portfolio`, `/positions`, `/orders`, `/funds` | `_authed`: session or `/login?redirect=` | `holdings`, `positions`, `orders`, `funds` | the page's query |
+| `/settings/security` | `_authed` | `security`: PIN, TOTP, recovery codes, active sessions, account deletion | |
+| `/guide` | public | `guide`: the multi-tab documentation | |
+| `/dev/prices` | public | live price test page used by the latency and E2E suites | |
+
+Every route has an error boundary and a skeleton (`routeDefaults`); heavy pages split their loader,
+component and not-found component into one lazy chunk.
+
+**Feature catalogue:**
+
+| Feature | What the user gets | Key parts |
+|---|---|---|
+| `auth` | OTP login, PIN set and PIN login on a trusted browser, TOTP challenge, step-up dialog, profile menu, Try demo | `LoginPage`, `RequireSession`, `StepUpDialog`, `useStepUp` |
+| `dashboard` | Indices row, index chart, lists, movers, watchlist rail | `DashboardPage`, `prefetchDashboard` |
+| `marketTicker` | Header index tickers and the NSE session pill | `HeaderTickers`, `MarketStatusPill` |
+| `indices`, `movers`, `collections` | Index levels, top gainers and losers by index, curated lists | queries on `/v1/market/*` |
+| `search` | Instrument search with popular picks and keyboard navigation | `SearchBox` |
+| `watchlist` | Several watchlists, add from anywhere, reorder (drag and keyboard), sort | `WatchlistSection`, `WatchlistStar` |
+| `stockDetail` | Instrument page: live price, stats, profile, depth, chart, actions | `StockDetailPage`, `MarketDepthCard` |
+| `charts` | Area and candle charts, ranges 1D to 5Y, bar sizes 1m to 1w, live last bar | `PriceChart`, `candlesQuery` |
+| `chartTrading` | Trade from Charts: order, position and stop lines; place from the price gutter; drag to modify; cancel | `ChartTrading`, `ChartOverlay` |
+| `orderTicket` | Buy/sell ticket with review, estimate, depth, attached trailing stop; trailing stop sheet | `OrderTicketHost`, `TrailingStopSheetHost` |
+| `scalper` | One-tap pad, armed by a switch, hold-to-confirm buttons | `ScalperPad`, `HoldButton` |
+| `orders`, `positions`, `holdings`, `funds` | Order book and history, live P&L positions, holdings, funds and ledger, reset | pages plus `OrderUpdatesBridge`, `useLivePositions`, `useLiveHoldings` |
+| `notifications` | Bell, toasts, price alerts with lines on the chart | `NotificationBell`, `NotificationsBridge`, `PriceAlertButton`, `AlertLines` |
+| `security` | Settings, Security page | `SecurityPage` |
+| `guide` | `/guide` documentation with diagrams | `GuidePage`, `strings.ts`, `diagrams.ts` |
+
+**State, by kind:**
+
+| State | Where | Why |
+|---|---|---|
+| Server state (lists, history, profile) | TanStack Query; `staleTime` 30 s, no refetch on focus | Caching, dedupe, loader prefetch; live data comes over the socket |
+| Live prices | Quote store (`packages/apiClient/src/quoteStore.ts`) outside React | 100 ticks in a frame cost one render of each changed cell |
+| Orders, positions, stops, funds, focused depth | Trading store (`tradingStore.ts`, ADR 0012) | One commit per frame for every surface; sequence-checked |
+| Shell UI (rail, dialogs) | Zustand (`app/store/shellStore.ts`) | Small, synchronous UI state |
+| URL state (range, interval, tab, filters) | Router search params, Zod-validated | Shareable links; invalid values are dropped, not fatal |
+| Session | `shared/lib/sessionStore` + cookies | The SPA never reads a token; cookies are httpOnly |
+
+**Performance design:** route-level code splitting; lazy Lightweight Charts and `qrcode`; self-hosted
+subset fonts under 100 KB; virtualised lists; skeletons sized to the content (CLS); ticks bypass
+React; the build fails above the 200 KB gzipped initial JS budget. `z.config({ jitless: true })`
+keeps Zod inside a `script-src 'self'` CSP.
+
+**Design system:** `packages/tokens` generates CSS variables (single light theme, palette with
+primary `#1463D8`, contrast checked in tests); `packages/ui` builds components on Radix with
+`class-variance-authority`; Storybook is the design source and its CI job runs axe on every story
+(a deliberately low-contrast canary story must fail). A lint rule bans raw hex colours in the app.
+
+### 4.6 Live data in the browser
+
+```mermaid
+flowchart LR
+  ws["WS client<br/>reconnect with jittered backoff,<br/>resubscribe, 20 s ping"]
+  qs["Quote store<br/>pending map, last wins"]
+  ts["Trading store<br/>seq check, intents"]
+  raf["requestAnimationFrame<br/>one flush per frame"]
+  cells["Price cells<br/>subscribe per symbol"]
+  surfaces["Chart lines, ticket, pad,<br/>orders, positions"]
+  qc["TanStack Query cache<br/>write-through"]
+  ws -- "binary quote frames<br/>or JSON quotes (msw)" --> qs
+  ws -- "accountDelta,<br/>orderUpdate, notification" --> ts
+  qs --> raf
+  ts --> raf
+  raf --> cells
+  raf --> surfaces
+  ts -- "commit" --> qc
+```
+
+- **WebSocket client** (`wsClient.ts`): opens on the first subscription, reconnects with equal-jitter
+  exponential backoff (500 ms to 30 s) so a crowd dropped at 09:15 does not reconnect in lockstep,
+  resends every subscription after a reconnect, and pings every 20 s. A 4401 close refreshes the
+  session once, then reconnects. Quotes arrive as 24-byte binary records from `apps/realtime` or as
+  JSON from MSW; listeners see the same `Quote[]`.
+- **Quote store:** ticks land in a pending map; one animation-frame flush commits them and notifies
+  only the listeners of symbols that changed.
+- **Trading store** (ADR 0012, SPEC-TFC-1 §10.1): loads `GET /v1/account/state`, then applies each
+  `accountDelta` frame in one commit on the same frame as that frame's quotes, so no surface shows a
+  fill another has not. Every engine change has a `seq`: a frame older than the store is stale; a
+  newer frame that does not carry its own newest change, or a socket that reopened, means frames
+  were lost, so the store re-reads the state, holds frames meanwhile and applies the newer ones on
+  top. **Pending intents** (place, modify, cancel, close) show as "Updating…" until a response or a
+  frame covers them; after 5 s with neither the store drops the intent, re-reads, and tells the user.
+- **Visibility sync** (`visibilitySync.ts`): a background tab keeps only the active watchlist live;
+  focus and reconnects take a REST snapshot to catch up.
+- **Focus:** the instrument page sends `{ type: 'focus', symbol }`, which switches the connection to
+  account frames with that instrument's depth and, in the mock market, ticks it every 250 ms.
+
+### 4.7 Mock mode (MSW) and demo mode
+
+The hosted site is the msw-mode build, so a reviewer gets the full product with no server.
+
+- `apps/web/src/mocks/browser.ts` starts MSW with handlers for **every** route in the contracts map
+  (`routeParity.test.ts` fails on a missing one) and a mock WebSocket. Handlers run the same
+  `MockMarketDataAdapter` and `PaperDesk` as the API, so prices, fills and refusals match; the paper
+  account is kept per tab in sessionStorage.
+- `mocks/workerKeeper.ts` and `workerControl.ts` keep the worker in control when Chrome restarts it
+  after idling, and reload once after a hard reload.
+- **Demo mode** (`nthstock.demoMode` in sessionStorage, or `?demo=1` at load) seeds the demo account
+  (watchlists, holdings, ledger from `paperEngine/demoSeed`) and registers the Demo simulator, whose
+  Rally, Pull back and Gap buttons move one instrument's real feed, so every screen and every
+  trailing stop sees the same move. **Try demo** on `/login` gives the same from a cold load and
+  opens RELIANCE.
+- In api mode the MSW chunk is absent (`checkBuild.mjs` verifies), and Try demo only logs in.
+- The walkthrough video is recorded by Playwright on a 390 px touch phone against the production
+  build (`docs/runbooks/demo-walkthrough.md`).
+
+### 4.8 API (`apps/api`)
+
+**Request pipeline.** Fastify 5, one process, hooks in this order:
+
+```mermaid
+flowchart LR
+  req["Request"] --> rl["Rate limit<br/>600/min per IP global,<br/>tighter on auth routes;<br/>Redis-shared counters"]
+  rl --> csrf["CSRF presence<br/>every state-changing /v1"]
+  csrf --> route["Route from the contracts map<br/>Zod-validated params, query, body"]
+  route --> authn["authenticate (auth: user)<br/>JWT, revocation, CSRF value"]
+  authn --> handler["Module handler<br/>service → engine → repo"]
+  handler --> resp["Response schema check<br/>in tests; ApiError on failure"]
+  resp --> hdr["Security headers<br/>CSP none, DENY, nosniff, HSTS"]
+```
+
+- **Errors:** every failure is an `ApiError` envelope (`code`, `message`, optional `details`) from
+  one error handler (`http/errorHandler.ts`); a 429 becomes `RATE_LIMITED`; a database error's row
+  detail is dropped before logging.
+- **Route registration:** `http/registerRoute.ts` takes a route key from the contracts map, so method,
+  path, schemas and auth cannot drift from the client.
+- **Lifecycle hooks (`app.ts`):** on ready, load every account with a resting order (so it fills on
+  the first crossing tick after a restart), reload active price alerts, wait up to 5 s for the quote
+  snapshots, start the order-update and notification publishers (with the outbox relay), and start
+  the 15 s order sweep only in `inline` mode. On close, dispose the desk, timers, pools and Redis
+  clients.
+
+**Modules** (`apps/api/src/modules/<module>/`):
+
+| Module | Owns | Routes | Storage |
+|---|---|---|---|
+| `health` | Liveness and readiness (Postgres ping, Redis ping) | `GET /v1/health`, `/v1/health/ready` | |
+| `auth` | OTP, PIN, sessions, refresh rotation, TOTP, step-up, active sessions, account deletion, CAPTCHA, SMS, rate limits | 18 routes under `/v1/auth/*` and `/v1/account/deletion` | `devices`, `device_tokens`, `pins`, `sessions`, `refresh_tokens`, `totp_*`; Redis OTP challenges and revocations |
+| `users` | Users, consent records, the demo user, PII crypto | (used by auth) | `users`, `consents` |
+| `watchlists` | Watchlists and items, ordering | 8 routes under `/v1/watchlists` | `watchlists`, `watchlist_items` |
+| `market` | Indices, lists, movers, quotes, search, instrument, candles, depth, profile, stats | 11 public routes under `/v1/market` | Adapter in memory; snapshots in Redis; candles in TimescaleDB |
+| `orders` | Order service on the paper desk, account store, matcher commands and fills, order and delta publisher, trailing stops, position close, account state | `/v1/orders*`, `/v1/trailing-stops*`, `/v1/positions/close`, `/v1/account/state` | `paper_accounts`, `orders`, `order_events`, `ledger_entries`, `positions`, `holdings`, `holding_sales`, `trailing_stops` |
+| `portfolio` | Positions, holdings, summary, P&L snapshots | `/v1/positions`, `/v1/holdings`, `/v1/portfolio/summary` | reads the account; `pnl_snapshots` |
+| `funds` | Funds summary, paged ledger, account reset | `/v1/funds`, `/v1/funds/ledger`, `/v1/funds/reset` | `ledger_entries` (append-only) |
+| `alerts` | Price alerts: create, cancel, watch, fire once | `/v1/alerts`, `/v1/alerts/:id` | `price_alerts` |
+| `notifications` | Notification centre, outbox, publisher, security notices | `/v1/notifications`, `/v1/notifications/read` | `notifications`, `notification_outbox` |
+| `audit` | Append-only audit log with a detail deny-list | (written by every module) | `audit_log` (trigger rejects UPDATE and DELETE) |
+| `candles` | Candle store, minute aggregator, writer, seed, reader | (backs the market candles route) | `candles_1m` + continuous aggregates |
+| `jobs` | Scheduled job definitions, runner, BullMQ scheduler | (worker entry) | BullMQ in Redis |
+| `demo` | Demo seed on Postgres (`DEMO_SEED=true`) | | through the repos |
+| `docs` | OpenAPI document | `GET /v1/docs/openapi.json` | generated |
+| `testControls` | E2E clock and price controls (test only) | `/v1/__test/*` | |
+
+**Module anatomy:** `index.ts` (the only import surface), `routes.ts`, `service.ts` (rules; calls the
+engine), `repo.ts` (interface + in-memory driver), `pgRepo.ts` (Drizzle on Postgres), `schema.ts`,
+with tests beside them. `deps.ts` wires each module's repo to the memory or Postgres driver by
+`DB_DRIVER`, so the same service tests run against both (ADR 0004 §3, ADR 0007).
+
+**Dependency injection:** `createDeps` builds the clock, repos, market adapter, SMS, CAPTCHA, JWT key,
+Argon2id hasher, order service, alert service, notifier, quote streams, matcher commands and fills,
+and the candle store. Tests override any part; the app disposes only what it created.
+
+### 4.9 Contracts, OpenAPI and contract tests
+
+- **Route map** (`packages/contracts/src/routes.ts`): 60+ routes, each `{ method, path, auth,
+  params?, query?, body?, response }`. The REST client (`createApiClient`) is typed from it, the API
+  registers from it, MSW handlers are keyed by it.
+- **WebSocket protocol** (`ws.ts`, version 1): client `subscribe`, `unsubscribe` (max 200 symbols),
+  `ping`, `focus`; server `instruments`, `quotes`, `orderUpdate`, `accountDelta`, `notification`,
+  `pong`, `error`. Close codes 4401 (unauthorised or revoked) and 4408 (idle 60 s).
+- **Binary quote frame** (`quoteFrame.ts`): 12-byte header (magic `0x51`, version, count, base time)
+  and 24-byte records (token, LTP, high, low, volume as u32; change in basis points as i16; age as
+  u16), little-endian; symbol, exchange, open and previous close come once per token in an
+  `instruments` message. A value that does not fit falls back to a JSON `quotes` message.
+- **Server-to-server messages** (`pubsub.ts`, `matcherCommands.ts`): tick batches and stream entries,
+  order updates, account deltas, notifications, session revocations, matcher commands and fills,
+  each versioned and validated on read.
+- **OpenAPI 3.1** is generated from the route map with Zod 4's `z.toJSONSchema()`, served at
+  `GET /v1/docs/openapi.json` (ETag, 304 on revalidation) and committed as `docs/api/openapi.json`;
+  CI fails when the committed copy is stale.
+- **Contract tests:** `apps/api/src/test/contract.test.ts` checks every route is registered with the
+  same method, path and auth, and nothing under `/v1` exists outside the map; `contractChecked()`
+  wraps every scenario backend (Fastify inject, API on Postgres + Redis, MSW in Node) and parses
+  every response with its schema; the scenario suite (`packages/contracts/src/testing/scenarios`)
+  runs the same journeys against both backends.
+
+### 4.10 Market data (`packages/marketData`)
+
+- **Adapter** (`adapter.ts`): `MarketDataAdapter` exposes instruments, quotes, subscriptions,
+  candles, depth, lists, movers, search, profile and stats. `MockMarketDataAdapter` implements it;
+  a vendor adapter would too. Contract tests (`contractTests.ts`) hold any implementation to it.
+- **Symbol master** (`symbolMaster.ts`): about 5,000 equities plus the major indices from a fixed
+  seed (20260925); real large caps keep their names; faker generates the rest.
+- **Ticks** (`ticks.ts`): geometric Brownian motion per instrument,
+  `next = price × exp((μ − σ²/2)·Δt + σ·√Δt·z)`, with sector drift and volatility, each instrument on
+  its own seeded random stream; rounded to the 5-paise tick and clamped to the ±20% circuit band.
+  The focused instrument ticks every 250 ms, the rest every second, only while subscribed. After a
+  paused tab, instruments with working orders replay missed ticks in order (up to 30 minutes).
+- **Candles** (`candles.ts`, `candleHistory.ts`, `minuteBars.ts`): each range's own bars (1D 1-minute,
+  1W 5-minute, 1M hourly, 1Y daily, 5Y weekly); `resampleCandles` groups to `1m|5m|15m|30m|1h|1d|1w`
+  (allowed pairs in `CANDLE_INTERVALS`); intraday bars start at 09:15 IST.
+- **Depth, lists, index levels** (`depth.ts`, `lists.ts`, `indexLevels.ts`): five levels of depth;
+  index levels computed from constituents.
+- **Distributed helpers:** `startLease` (`shardLease.ts`) and `followTickStreams`
+  (`tickStreamFollower.ts`) are shared by the quote service, the API, realtime and the matcher.
+
+### 4.11 Quote service (`apps/quotes`) and the tick streams
+
+The quote service is the single source of prices, so every API process, realtime node, matcher and
+the candle writer see the same tick. It depends on nothing but Redis because it is what a licensed
+feed replaces.
+
+- **Shards:** an instrument's shard is `shardOf(token, SHARDS)` (FNV-1a, `packages/utils`). Locally
+  `SHARDS=1`.
+- **One writer per shard:** a process writes only while it holds `lease:quotes:{shard}`
+  (`SET … NX PX 5000`, renewed every 2 s; renew interval must be at most half the TTL). A standby
+  takes over when the holder stops, or within the TTL when it dies.
+- **Stream and snapshot:** each batch is one `XADD nthstock:ticks:v1:{shard} MAXLEN ~ 2400` entry
+  (about 10 minutes at 4 a second) with a per-shard `seq`, and its quotes go to the snapshot hash
+  `nthstock:quotes:last:v1:{shard}` in the same `MULTI`.
+- **Consumers:** each reads the snapshot at start, then follows with blocking `XREAD`. Any `seq`
+  other than last + 1 (a restarted writer starts again at 1, or a trimmed stream) triggers a
+  snapshot re-read (`tickStreamStep`); a malformed entry is logged and skipped. A failed write is
+  dropped (the next tick supersedes it) and logged once until writing recovers.
+
+```mermaid
+sequenceDiagram
+  autonumber
+  participant Q as apps/quotes (lease holder)
+  participant R as Redis
+  participant A as apps/api
+  participant RT as apps/realtime
+  participant M as apps/matcher
+  participant C as candle writer
+  loop every tick batch
+    Q->>R: MULTI · XADD ticks:v1:{shard} {seq, quotes} · HSET quotes:last:v1:{shard} · EXEC
+  end
+  A->>R: XREAD BLOCK ticks (from snapshot)
+  RT->>R: XREAD BLOCK ticks
+  M->>R: XREAD BLOCK ticks
+  C->>R: XREADGROUP candles ticks
+  R-->>A: entry seq=n
+  alt seq = last + 1
+    A->>A: apply quotes to adapter
+  else gap or restart
+    A->>R: HGETALL quotes:last:v1:{shard}
+    A->>A: resync, then apply
+  end
+```
+
+Without `QUOTE_SHARDS` the API's adapter ticks in process and its tick pump publishes each batch on
+the pub/sub channel `nthstock:ticks:v1`, which `apps/realtime` reads instead (unit tests, older
+set-ups).
+
+### 4.12 Realtime gateway (`apps/realtime`)
+
+```mermaid
+sequenceDiagram
+  autonumber
+  participant B as Browser
+  participant RT as apps/realtime
+  participant R as Redis
+  B->>RT: GET /ws Upgrade (cookie nth_at)
+  RT->>RT: verify JWT (HS256, iss, aud, exp)
+  RT->>R: EXISTS sess:revoked:{sessionId}
+  alt invalid or revoked
+    RT-->>B: accept, then close 4401
+  else valid
+    RT->>R: SUBSCRIBE orders:v1:{userId}, notify:v1:{userId} (first socket of this user)
+    B->>RT: {subscribe, symbols[≤200]}
+    RT-->>B: {instruments} once per token
+    loop every 250 ms flush
+      RT-->>B: binary frame: latest quote per subscribed symbol
+    end
+    R-->>RT: order update / account delta / notification for userId
+    RT-->>B: {orderUpdate} / {accountDelta} / {notification} (never conflated)
+    R-->>RT: auth:sessionRevoked {sessionId}
+    RT-->>B: close 4401 (only that session's sockets)
+  end
+```
+
+- **Authentication:** every upgrade is checked against the `nth_at` cookie with the shared
+  `JWT_SECRET`. A bad token is accepted and closed with 4401 so the browser sees why (a refused
+  upgrade shows only as 1006).
+- **Subscriptions:** a registry maps `exchange:symbol` to connections, up to 200 per connection
+  (more is refused with `SUBSCRIPTION_LIMIT`); a malformed or unsupported message gets an `error`
+  frame and the connection stays open.
+- **Conflation:** per connection, the latest quote per key since the last flush (last value wins),
+  flushed every 250 ms, so at most 4 updates a second per symbol, in one binary frame.
+- **Private channels:** a node subscribes a user's order and notify channels only while it holds a
+  connection for that user, and checks each event's `userId` against its channel and contract
+  before delivering. Order updates, account deltas and notifications are never conflated or dropped.
+- **Backpressure:** above 1 MB buffered for a client, its quote frames are dropped (counted in
+  `droppedFrames`); private messages still go.
+- **Heartbeat:** every 5 s idle checks, a protocol ping every 20 s, close 4408 after 60 s of silence.
+- **Revocation:** `auth:sessionRevoked` closes that session's sockets with 4401 and leaves the user's
+  other sessions open.
+
+### 4.13 Paper engine (`packages/paperEngine`)
+
+The engine is one user's account: orders, positions, holdings, funds ledger and trailing stops.
+It is pure and deterministic: time only from `ctx.now()`, prices only from `ctx.ltp()`, instruments
+from an injected source. The browser mock, the API and the matcher run it unchanged.
+
+**Order lifecycle** (`orderStateMachine.ts`):
+
+```mermaid
+stateDiagram-v2
+  [*] --> REJECTED: validation fails
+  [*] --> AMO: placed while market closed
+  [*] --> OPEN: placed in market hours
+  AMO --> OPEN: RELEASE at the 9.15 IST open
+  AMO --> AMO: MODIFY
+  AMO --> CANCELLED: CANCEL
+  AMO --> REJECTED: REJECT on release (cash, price, holdings moved)
+  OPEN --> OPEN: PARTIAL_FILL / MODIFY
+  OPEN --> EXECUTED: FILL
+  OPEN --> CANCELLED: CANCEL (user, 3.20 pm square-off, 3.30 pm close, IOC remainder)
+  EXECUTED --> [*]
+  CANCELLED --> [*]
+  REJECTED --> [*]
+```
+
+**Rules:**
+
+- **Validation** (`orderValidation.ts`): a known instrument, a positive quantity, a price on the
+  5-paise tick and inside today's circuit band, intraday only in market hours up to the 15:20
+  square-off, enough holdings for a delivery SELL, enough cash for a BUY (blocked on placement). A failed new order is stored as
+  REJECTED with a plain-language reason.
+- **Fills:** a MARKET order fills at the LTP; a marketable LIMIT at the better of its limit and the
+  LTP; a resting LIMIT when the price crosses it, in parts under a per-tick cap (SPEC-TFC-1 §10.3),
+  with a volume-weighted `avgFillPrice` and each part releasing its share of blocked cash. IOC
+  cancels what did not fill.
+- **Session events on IST trading days** (holidays from `packages/utils/src/nseHolidays2026.ts`):
+  09:15 release AMOs; 15:20 square off intraday positions and cancel live intraday orders; 15:30
+  cancel open day orders and move delivery buys into holdings.
+- **Funds ledger** (`fundsLedger.ts`): append-only signed entries (`OPENING_CREDIT`, `ORDER_BLOCK`,
+  `ORDER_RELEASE`, `TRADE_DEBIT`, `TRADE_CREDIT`, `RESET`), each with the available cash after it, in
+  integer paise.
+- **`seq`:** rises by one with every order or trailing-stop change; each changed record carries it,
+  which is what the trading store and `accountDelta` frames order by (ADR 0012).
+- **`PaperDesk`:** one engine per user fed by one market. Accounts are separate by construction and
+  one user's work never waits on another's. `ingestFor` runs one user's engine at a given tick (the
+  matcher's fills).
+- **`OrderBook`** (`orderBook.ts`, NSTOCK-0363): per instrument, BUY and SELL limits in price heaps
+  and trailing stops in heaps on stop, watermark and activation prices, plus price alerts in two
+  heaps; a tick pops only what it fills, triggers, ratchets, activates or fires. Property-tested
+  against a full walk. A change applies only when its version is newer than the one held.
+
+**Trailing stop lifecycle** (`trailingStop.ts`, SPEC-TFC-1 §6):
+
+```mermaid
+stateDiagram-v2
+  [*] --> PENDING_ENTRY: attached to an entry order
+  [*] --> ARMED: placed on a position with an activation price
+  [*] --> TRAILING: placed on a position without activation
+  PENDING_ENTRY --> ARMED: entry fills
+  ARMED --> TRAILING: price reaches activation (watermark starts there)
+  TRAILING --> TRAILING: price improves, so watermark and stop ratchet, never back
+  TRAILING --> TRIGGERED: price at or through the stop (gaps included), once
+  TRIGGERED --> EXECUTED: reduce-only exit order fills
+  TRIGGERED --> REJECTED: exit could not be placed
+  PENDING_ENTRY --> CANCELLED: user, or entry cancelled
+  ARMED --> CANCELLED: user, position closed or flipped, or expiry at 3.20 pm or the close
+  TRAILING --> CANCELLED: user, position closed or flipped, or expiry at 3.20 pm or the close
+  EXECUTED --> [*]
+  CANCELLED --> [*]
+  REJECTED --> [*]
+```
+
+The trail is a rupee amount or a percentage (integer basis-point arithmetic, so no float can move a
+stop by a tick); a long floors the stop below the watermark, a short ceils it above. Dragging the
+stop line becomes a rupee trail measured from the watermark at the moment it applies. The ticket,
+the chart and the engine call the same `validateTrailingStop` and `previewTrailingStop`, so they
+never disagree.
+
+### 4.14 Paper accounts on PostgreSQL
+
+Spec `backend-core.md` §5.3, ADR 0007. The `AccountStore` (`modules/orders/accountStore.ts`; memory in
+`repo.ts`, Postgres in `pgRepo.ts`) is the record of each account; the per-user `PaperEngine` on the
+desk is a cache of it.
+
+- **Load:** the first use of an account loads its **working set** (live orders, today's orders,
+  positions, holdings, today's trailing stops and active ones, today's ledger with earlier entries
+  carried as a balance, the engine `seq`) and its **version**.
+- **Commit:** every engine change is committed with its audit entries and notifications in one
+  transaction against the version it was read at (`UPDATE paper_accounts … WHERE version = $n`).
+  A commit that loses reloads the account and runs the action once more; losing twice answers
+  409 `CONFLICT`. Any other failure answers 500 and the account is reloaded before its next use.
+- **Per-user queue:** each user's commits run in order on their own promise chain; users never wait
+  for each other.
+- **Reads:** order book, history and ledger pages read from the store, so they cover every day.
+- **Restart:** at boot, and on the sweep if the database was down then, the API loads every account
+  with an AMO or OPEN order.
+- **After commit:** listeners publish the order updates and the account delta on the user's channel,
+  send matcher commands for changed LIMIT orders and stops, and hand stored notifications to the
+  publisher.
+- **Reset and demo seed:** a reset clears stored orders and history (the ledger is append-only and
+  keeps every row); the demo seed replaces the whole account.
+
+### 4.15 Matcher (`apps/matcher`)
+
+Spec `market-data-and-matching.md` §5, ADR 0013. The matcher finds what a tick fills; `apps/api`
+commits it. That keeps one writer per account (the account store) while matching scales per shard.
+
+```mermaid
+flowchart LR
+  subgraph api["apps/api, every process"]
+    commit["Account store commit"]
+    cmds["Matcher commands<br/>ADD, MODIFY, CANCEL,<br/>STOP_ADD, STOP_CANCEL,<br/>ALERT_ADD, ALERT_CANCEL"]
+    fillsReader["Fill reader<br/>consumer group api"]
+  end
+  subgraph matcher["apps/matcher, per shard"]
+    books["OrderBook per instrument"]
+    reconcile["Reconcile<br/>start + every 60 s"]
+    alertDesk["Alert desk"]
+  end
+  redis[("Redis")]
+  pg[("Postgres")]
+  commit --> cmds -- "XADD commands:v1:{shard}" --> redis -- "XREAD" --> books
+  redis -- "ticks:v1:{shard}" --> books
+  books -- "XADD fills:v1:{shard}<br/>one MatcherFill per user" --> redis -- "XREADGROUP" --> fillsReader
+  fillsReader -- "PaperDesk.ingestFor + commit<br/>at expected version" --> commit
+  reconcile -- "REPEATABLE READ snapshot:<br/>OPEN limits, stops, versions" --> pg
+  reconcile --> books
+  alertDesk -- "UPDATE … WHERE status='ACTIVE'<br/>+ notification + outbox" --> pg
+  fillsReader -. "malformed or > 5 deliveries" .-> dead["fills:dead:v1"]
+```
+
+- **Lease and standbys:** one process per shard holds `lease:matcher:{shard}`; every process for the
+  shard keeps following the tick stream, so a standby is current when it takes over. Only the holder
+  acts, and only in market hours (or `MOCK_MARKET_ALWAYS_OPEN`).
+- **Commands:** after each commit the API appends commands to `nthstock:matcher:commands:v1:{shard}`
+  (capped at 1,00,000 entries) stamped with the account version; every matcher process applies them
+  by the version rule, so a late or replayed command never undoes a newer one.
+- **Reconcile** (NSTOCK-0366, 0387): on start and every 60 s, one REPEATABLE READ snapshot of the
+  shard's OPEN LIMIT orders (partial index `orders_shard_live_idx` on `orders.shard`, migration 0016),
+  ARMED and TRAILING stops and account versions; upsert what is live and remove what is not, at the
+  account version, and put back a stop a tick triggered whose fill never committed. Reads are bounded
+  by connection and query timeouts so a stalled Postgres cannot wedge it.
+- **Fills** (NSTOCK-0367, 0388): for each tick that crosses an order or triggers a stop, the holder
+  writes one `MatcherFill` per user to `nthstock:matcher:fills:v1:{shard}`. Every API process reads
+  all fill streams in the `api` consumer group, runs the user's engine at the tick's price and time,
+  commits with the expected version, publishes, then `XACK`s. The engine re-checks every order, so a
+  replay fills nothing twice. An unacked request is claimed by another process after 30 s
+  (`XAUTOCLAIM`); a version conflict retries up to 3 times; a malformed request or one delivered more
+  than 5 times goes to `nthstock:matcher:fills:dead:v1` with its reason and is acked, and the next
+  reconcile puts its order back on the book.
+- **Price alerts:** active alerts sit on the books in two heaps (ABOVE lowest first, BELOW highest
+  first), reloaded every 60 s; a firing is one conditional UPDATE plus its notification and outbox
+  row, so it fires exactly once whoever sees the tick first.
+- **Running it:** `npm run dev -w @nthstock/matcher` with `REDIS_URL`, `DATABASE_URL` (the
+  `nthstock_app` role), `SHARD`, `SHARDS`, beside `MATCHER_MODE=worker npm run dev:api`. `dev:api`
+  does not start it, so the default local stack keeps inline matching.
+
+### 4.16 Trailing stops on the server
+
+In api mode trailing stops run on the server with the same engine rules as the browser mock.
+
+- **Store:** working set version 4 carries the stops, the engine `seq`, exit order ids and idempotency
+  keys. Migration 0015 adds `trailing_stops` (trail as unit plus amount or basis points, CHECKed
+  against the contract lists) and `paper_accounts.seq` and `exit_order_ids`.
+- **Routes:** `GET/POST /v1/trailing-stops`, `PATCH/DELETE /v1/trailing-stops/:id`,
+  `POST /v1/positions/close`, `GET /v1/account/state`. Every action is audited
+  (`TRAILING_STOP_PLACE`, `_MODIFY`, `_CANCEL`, `POSITION_CLOSE`, `TRAILING_STOP_UPDATE`).
+- **Frames:** after each commit the orders module publishes an `AccountDeltaEvent` (changed orders and
+  stops at their newest `seq`, positions, funds) on the user's channel after the order updates;
+  `apps/realtime` forwards it as an `accountDelta` frame.
+- **Matching:** `inline` steps stops in the API's desk on its ticks; `worker` leaves stepping and
+  triggering to the matcher's books, which receive `STOP_ADD` / `STOP_CANCEL` after every change.
+
+### 4.17 Candle store (TimescaleDB)
+
+Spec `market-data-and-matching.md` §7. Chart bars are stored, so the 1-minute bar a user watched form
+is the bar the chart shows after a reload.
+
+- **Database:** `timescale/timescaledb:2.17.2-pg16` in Compose, CI and Testcontainers. Migration
+  `0014_timescaledb_candles` creates the extension as `nthstock_owner`; `nthstock_app` may read and
+  upsert bars, never delete them or run DDL.
+- **Storage:** `candles_1m (token, bucket, open, high, low, close, volume)`, prices in paise, primary
+  key `(token, bucket)`, a hypertable in 1-day chunks, compressed by `token` after 7 days.
+- **Aggregates:** `candles_5m`, `_15m`, `_30m`, `_1h`, `_1d` are continuous aggregates on
+  `time_bucket(…, origin => 09:15 IST)`, so bars start at the NSE open and a daily bar is one session;
+  real-time aggregation includes minutes not yet materialised. Weekly bars group `candles_1d`.
+- **Writer:** reads every tick stream in the `candles` consumer group, keeps each instrument's
+  forming bar in memory, and on a minute boundary writes every closed bar in one multi-row
+  `INSERT … ON CONFLICT (token, bucket) DO UPDATE`, then acks. A restart re-reads what was not stored:
+  no minute is lost and a replayed one overwrites itself with the same values.
+- **Reader:** 1-minute bars from the hypertable, 5 minutes to 1 hour and daily from the aggregates,
+  weekly by grouping daily, and the forming bar finished with the live price from the snapshot. A
+  symbol with no stored bars in the window falls back to generated bars, so nothing regresses.
+- **History:** `npm run db:seed:candles` writes 2 years of daily bars and 30 days of 1-minute bars
+  from the deterministic generator (66 instruments, about 5.8 lakh rows, `--all` for every symbol).
+- **Running it:** `npm run dev:candles -w @nthstock/api` beside `npm run dev:api`.
+- **Planned (Phase 6):** RDS has no TimescaleDB; the spec's open question 1 chooses between
+  self-managed Postgres on EC2, Timescale Cloud, or native partitions with rollup tables. The queries
+  are plain `time_bucket` reads, so the fallback is contained.
+
+### 4.18 Background jobs (BullMQ)
+
+Spec `backend-core.md` §3 and §9, ADR 0007 §11. Code: `modules/jobs/`, entry `worker.ts`, the same
+codebase as the API so jobs share repos, the engine and quote-service prices.
+
+| Job | Cron (Asia/Kolkata) | What it does |
+|---|---|---|
+| `session.amoRelease` | 09:15, Mon to Fri, trading days | Syncs every account with an AMO to the open: AMOs are released and market AMOs fill |
+| `session.squareOff` | 15:20, trading days | Squares off intraday positions, cancels live intraday orders, expires intraday stops |
+| `session.dayClose` | 15:30, trading days | Cancels open day orders, settles delivery buys into holdings |
+| `pnl.snapshot` | 15:45, trading days | One `pnl_snapshots` row per account touched today or holding stock |
+| `db.orderPartitions` | 00:30 daily | Keeps 14 days of `orders` and `order_events` partitions ahead |
+| `auth.tokenCleanup` | 03:00 daily | Deletes expired refresh and device tokens and sessions expired over 30 days |
+| `account.purge` | 02:00 daily | Defined; the job that erases the PII of accounts past their 30-day window lands with T-230, until then nothing is scheduled for it |
+
+- Each job is a plain `run(at, deps)` function of its due time, unit-tested with a fixed clock;
+  BullMQ (queue `jobs`, prefix `nthstock:bull`) only schedules and retries it (3 attempts, exponential
+  backoff from 30 s). The job id (scheduler id plus due time) keeps one run per time across workers.
+- **Idempotent:** a session job reloads each account, syncs it to now and commits against its
+  version, so a rerun, a retry or the API committing the same event first changes nothing twice.
+- **Shutdown:** SIGTERM waits for the running job, flushes audit writes and order updates, closes pools.
+- **No PII in logs:** a result is counts only; a failure is job, attempt and error class.
+
+### 4.19 Notifications and price alerts
+
+Spec `market-data-and-matching.md` §6 (E24, NSTOCK-0379 to 0385).
+
+- **Notifications:** a `notifications` row (kinds `PRICE_ALERT`, `ORDER_FILLED`, `ORDER_REJECTED`,
+  `TRAILING_STOP`, `AMO_RELEASED`, `SQUARED_OFF`, `SECURITY`) is written **in the same transaction as
+  its cause**: the account store derives them from each order change (`changeNotifications.ts`). The
+  newest 100 per user are kept. Bodies never hold a mobile number or a name.
+- **Transactional outbox:** each row gets a `notification_outbox` row in the same transaction. After
+  commit the API publishes a `NotificationEvent` on `nthstock:notify:v1:{userId}` and deletes the
+  outbox row; a relay republishes rows older than 5 s every 5 s. Delivery is at least once; the web
+  app drops an id it already holds.
+- **Fan-out:** `apps/realtime` pushes `{ type: 'notification' }` to that user's sockets only; the bell
+  and toasts update with no poll; after a reconnect the list and alerts are re-read.
+- **Price alerts:** `price_alerts` (migration 0019), at most 50 active per user. An ABOVE alert fires
+  on the first price at or above its level, BELOW at or below; a gap fires with the LTP that crossed;
+  a level already passed is refused. Watched by the API and by the matcher's books; whichever sees
+  the tick first wins one `UPDATE … WHERE status = 'ACTIVE' RETURNING`, so it fires exactly once.
+- **Security notices:** a sign-in from a new device, two-factor turned on or off, and logging out the
+  other sessions raise a `SECURITY` notification with the device type and IST time ("Not you? Change
+  your PIN."). Raising one never fails the action it reports.
+
+### 4.20 Identity and access
+
+**Factors and tokens:**
+
+| Element | Design |
+|---|---|
+| OTP | 6 digits, hashed (never stored plain), 5-minute TTL, one live challenge per mobile, 30 s resend throttle, CAPTCHA after 3 wrong attempts, burnt after 5. Redis hash per mobile keyed by the mobile's blind index; failure counting and consumption are Lua scripts, so concurrent verifies count exactly. Outside production the OTP is always `123456` and the mock SMS provider logs it |
+| PIN | Argon2id (`@node-rs/argon2`); valid only on a trusted browser (`nth_dev` cookie bound to a device token); lock after 5 wrong, unlock by OTP |
+| TOTP | RFC 6238 on Web Crypto (`packages/utils/src/totp.ts`), 30 s step, ±1 step; secret AES-GCM encrypted per user; `last_used_step` refuses replay; 10 recovery codes stored as hashes, shown once |
+| Access token | HS256 JWT (`jose`), 15 minutes, `iss`/`aud`/`exp` checked; cookie `nth_at` (Path=/, httpOnly, Secure in production, SameSite=Strict), also read by `apps/realtime`; or `Authorization: Bearer` |
+| Refresh token | Opaque, 30 days, stored as SHA-256, cookie `nth_rt` (Path=`/v1/auth` only); rotates on every refresh. The session id is the token family: presenting a rotated token revokes the family (`REFRESH_REUSE_DETECTED`) |
+| CSRF | Every state-changing `/v1` request must carry `X-CSRF-Token`; with a session it must equal `Session.csrfToken` (constant-time compare). No CORS is granted, so a cross-site page cannot add the header |
+| Step-up | Sensitive routes (TOTP on/off, recovery codes, revoking sessions, account deletion) answer 403 `STEP_UP_REQUIRED` unless the session re-proved the user in the last 10 minutes with the PIN or a `STEP_UP` OTP (never usable as a login), plus TOTP when on. `useStepUp` opens one shared dialog and retries once |
+| Revocation | Postgres `sessions.revoked_at` is the record; Redis `sess:revoked:{id}` (TTL = access token life) and `auth:sessionRevoked:v1` make it reach every API instance and realtime node at once |
+| Rate limits | Global 600/min per IP; per IP per minute: OTP request 20, OTP verify 30, PIN verify 30, PIN set 10, refresh 60, TOTP verify 30, step-up 20; counters shared in Redis |
+| Audit | `LOGIN_SUCCESS`, `LOGIN_FAILED` (method and code, never the mobile or OTP), `PIN_SET`, `PIN_LOCKED`, `LOGOUT`, `REFRESH_REUSE_DETECTED`, `SESSION_REVOKED`, `STEP_UP`, `TOTP_ENABLED`, `TOTP_DISABLED`, `RECOVERY_CODE_USED`, `RECOVERY_CODES_REGENERATED`, `CONSENT_GRANTED`, `ACCOUNT_DELETION_REQUESTED` |
+
+**Active sessions:** `GET /v1/auth/sessions` lists live sessions with a device label derived from
+the user agent (never the raw string) and no IP address; revoking one or all others needs a step-up
+and goes through `SessionService.revoke` (marked, audited, published). The current session is
+refused (400); it logs out from the profile menu.
+
+### 4.21 Privacy, consent and account deletion (DPDP Act 2023)
+
+- **Consent:** the first OTP login sends `consentVersion` (`CONSENT_POLICY_VERSION`). A sign-up
+  without the current version answers 400 `CONSENT_REQUIRED`; the user and its `consents` row are
+  written in one transaction, then `CONSENT_GRANTED` is audited.
+- **PII at rest:** the mobile is AES-256-GCM encrypted with the column name as authenticated data
+  (`[key id][IV][tag][ciphertext]`, rotatable keys from `PII_ENC_KEYS`) and found by an HMAC-SHA256
+  blind index (`PII_HMAC_KEY`). Production refuses to start without real keys.
+- **PII in motion:** events, notifications, audit details and logs carry opaque ids only; the audit
+  writer refuses detail keys on a deny-list (for example anything containing `token`).
+- **Deletion:** `POST /v1/account/deletion` (`{ confirm: 'DELETE' }`, step-up) marks the user deleted
+  with `purge_after` = now + 30 days, revokes every session (`ACCOUNT_DELETED`, tokens and sockets end
+  at once), cancels OPEN and AMO orders, audits `ACCOUNT_DELETION_REQUESTED`, and clears the cookies.
+  Until the purge an OTP login answers 403 `ACCOUNT_DELETED` with `purgeAfter`, and every read hides
+  the user. The purge job (T-230, scheduled as `account.purge`) then erases the PII columns as
+  `nthstock_purge` and leaves a tombstone; the mobile can then sign up as a new user.
+- **Web:** the app navigates to `/login?deleted=<purgeAfter>` first, then clears the session, query
+  cache and trusted-browser record.
+
+### 4.22 Data architecture
+
+**Entity relationships (PostgreSQL):**
+
+```mermaid
+erDiagram
+  users ||--o{ consents : grants
+  users ||--o{ devices : uses
+  devices ||--o{ device_tokens : trusts
+  users ||--o| pins : sets
+  users ||--o{ sessions : opens
+  sessions ||--o{ refresh_tokens : rotates
+  users ||--o| totp_factors : enrols
+  users ||--o{ totp_recovery_codes : holds
+  users ||--o{ watchlists : owns
+  watchlists ||--o{ watchlist_items : lists
+  users ||--|| paper_accounts : has
+  paper_accounts ||--o{ orders : places
+  orders ||--o{ order_events : records
+  paper_accounts ||--o{ ledger_entries : books
+  paper_accounts ||--o{ positions : holds_today
+  paper_accounts ||--o{ holdings : carries
+  paper_accounts ||--o{ holding_sales : sells
+  paper_accounts ||--o{ trailing_stops : protects
+  paper_accounts ||--o{ pnl_snapshots : snapshots
+  users ||--o{ price_alerts : sets
+  users ||--o{ notifications : receives
+  notifications ||--o| notification_outbox : queues
+  users ||--o{ audit_log : acts
+```
+
+| Area | Tables | Notes |
+|---|---|---|
+| Identity | `users`, `consents`, `devices`, `device_tokens`, `pins`, `sessions`, `refresh_tokens`, `totp_factors`, `totp_recovery_codes` | Mobile encrypted + blind index; tokens stored as hashes |
+| Watchlists | `watchlists`, `watchlist_items` | Deferrable unique positions for reordering in one statement |
+| Paper trading | `paper_accounts` (version, seq, exit order ids), `orders`, `order_events`, `ledger_entries`, `positions`, `holdings`, `holding_sales`, `trailing_stops`, `pnl_snapshots` | Money as `bigint` paise with CHECKs (price on the 5-paise tick); ledger append-only |
+| Orders partitioning | `orders`, `order_events` range-partitioned by IST `trade_date` with a DEFAULT partition | Hand-written migration 0011; partial indexes for live orders by user and by shard |
+| Notifications | `notifications`, `notification_outbox`, `price_alerts` | Kinds CHECKed against the contract list |
+| Audit | `audit_log` | Append-only: privileges revoked and a trigger rejects UPDATE and DELETE |
+| Candles | `candles_1m` hypertable, `candles_5m` … `candles_1d` continuous aggregates | TimescaleDB, compressed after 7 days |
+
+**Roles** (`infra/postgres/init.sql`): `nthstock_owner` owns the schema and runs migrations
+(`DATABASE_MIGRATION_URL`); `nthstock_app` is what the API, matcher and writers connect as (DML only,
+never DDL); `nthstock_purge` is the purge job (DML plus deleting a purged user's ledger rows, never
+audit rows).
+
+**Migrations:** Drizzle, `apps/api/drizzle/0000` to `0019`, plain SQL reviewed in PRs, applied by
+`npm run db:migrate`. Partitioned and TimescaleDB objects are hand-written; `db:check` compares a
+migrated database with the schema files plus the hand-written relations in CI.
+
+**Redis keyspace** (namespace `nthstock:` unless stated):
+
+| Key or channel | Type | Writer → readers | Lifetime |
+|---|---|---|---|
+| `ticks:v1:{shard}` | Stream | quotes → api, realtime, matcher, candle writer | `MAXLEN ~ 2400` |
+| `quotes:last:v1:{shard}` | Hash token → Quote | quotes → api (`/market/quotes`), every follower on resync | Overwritten per batch |
+| `lease:quotes:{shard}`, `lease:matcher:{shard}` (no namespace) | String | lease holder | `PX 5000`, renewed every 2 s |
+| `matcher:commands:v1:{shard}` | Stream | api → matcher | `MAXLEN ~ 100000` |
+| `matcher:fills:v1:{shard}` | Stream, group `api` | matcher → api | Acked after commit |
+| `matcher:fills:dead:v1` | Stream | api | `MAXLEN ~ 10000`, for inspection |
+| `orders:v1:{userId}` | Pub/sub | api, worker → realtime | Fire and forget (state is re-read on gap) |
+| `notify:v1:{userId}` | Pub/sub | api, matcher → realtime | Outbox covers misses |
+| `auth:sessionRevoked:v1` | Pub/sub | api → api, realtime | |
+| `sess:revoked:{sessionId}` | String | api | TTL 15 minutes |
+| `otp:{blindIndex}`, `otp:resend:{blindIndex}`, `otp:totp:{challengeId}` | Hash / string | api | 5 minutes / 30 s / 5 minutes |
+| `rate-limit:*` | Counters | api | 1 minute windows |
+| `bull:jobs:*` (prefix `nthstock:bull`) | BullMQ | worker | Per BullMQ retention |
+| `ticks:v1` | Pub/sub | api tick pump → realtime | Only without `QUOTE_SHARDS` |
+
+### 4.23 Key flows, end to end
+
+**Login with OTP (and TOTP when on):**
+
+```mermaid
+sequenceDiagram
+  autonumber
+  actor U as User
+  participant W as Web app
+  participant A as apps/api
+  participant R as Redis
+  participant P as Postgres
+  U->>W: mobile number, ticks consent
+  W->>A: POST /v1/auth/otp/request (X-CSRF-Token)
+  A->>R: throttle check, HSET otp:{blind} {hash, ttl 5 min}
+  A-->>U: SMS (mock: dev OTP 123456)
+  W->>A: POST /v1/auth/otp/verify {otp, consentVersion}
+  A->>R: Lua: compare hash, count failure or consume
+  A->>P: find user by blind index, or create user + consents (one tx)
+  alt two-factor on
+    A->>R: HSET otp:totp:{challenge} (5 min)
+    A-->>W: 401 TOTP_REQUIRED {challengeId}
+    W->>A: POST /v1/auth/totp/verify {code}
+  end
+  A->>P: INSERT sessions, refresh_tokens(hash), audit LOGIN_SUCCESS
+  A-->>W: Session {user, csrfToken} · Set-Cookie nth_at (15 min), nth_rt (30 d, /v1/auth)
+  W->>W: open WebSocket, load account state
+  opt first login on this browser
+    W->>A: POST /v1/auth/pin/set → nth_dev trusted-device cookie
+  end
+```
+
+**Place an order (inline matching):**
+
+```mermaid
+sequenceDiagram
+  autonumber
+  participant W as Web (ticket, chart or pad)
+  participant A as apps/api orders
+  participant E as PaperEngine (cache)
+  participant P as Postgres
+  participant R as Redis
+  participant RT as apps/realtime
+  W->>W: validate with the contract schema, add pending intent
+  W->>A: POST /v1/orders {clientOrderId, side, type, qty, price}
+  A->>A: authenticate, per-user queue
+  A->>E: place(): validate, block cash, fill MARKET at LTP or rest LIMIT
+  A->>P: BEGIN · orders, order_events, ledger, positions, audit, notifications+outbox · UPDATE paper_accounts SET version=v+1 WHERE version=v · COMMIT
+  alt version moved
+    A->>P: reload working set, run once more (409 CONFLICT on a second loss)
+  end
+  A-->>W: 200 Order (or REJECTED with its reason)
+  A->>R: PUBLISH orders:v1:{user} orderUpdate + accountDelta(seq)
+  A->>R: XADD matcher:commands:v1:{shard} ADD (LIMIT only)
+  A->>R: PUBLISH notify:v1:{user} (then delete outbox row)
+  R-->>RT: per-user events
+  RT-->>W: accountDelta frame → trading store commit → every surface
+```
+
+**Resting order filled by the matcher (worker mode):**
+
+```mermaid
+sequenceDiagram
+  autonumber
+  participant Q as apps/quotes
+  participant R as Redis
+  participant M as apps/matcher
+  participant A as apps/api (any process)
+  participant P as Postgres
+  participant RT as apps/realtime
+  participant W as Web
+  Q->>R: XADD ticks:v1:{shard} (LTP crosses a BUY limit)
+  R-->>M: tick
+  M->>M: OrderBook pops crossed orders and triggered stops
+  M->>R: XADD matcher:fills:v1:{shard} {userId, token, ltp, ts, orderIds, stopIds}
+  R-->>A: XREADGROUP api
+  A->>P: load account (if not cached)
+  A->>A: PaperDesk.ingestFor(user, ltp, ts) re-checks every order
+  A->>P: commit at expected version (retry ≤ 3)
+  A->>R: XACK · PUBLISH orderUpdate + accountDelta · notification
+  R-->>RT: per-user events
+  RT-->>W: accountDelta + notification "Order filled"
+  Note over A,R: unacked over 30 s, XAUTOCLAIM by another process<br/>over 5 deliveries, fills:dead:v1 and reconcile restores the order
+```
+
+**Trailing stop triggers:** the stop's heap entry is popped when the price is at or through it; the
+fill request carries the stop, the API's engine re-runs the step at that price, marks it TRIGGERED,
+places one reduce-only MARKET exit, commits (with a `TRAILING_STOP` notification), and the chart's
+stop line turns into a filled exit on the next frame.
+
+**Price alert fires:**
+
+```mermaid
+sequenceDiagram
+  autonumber
+  participant W as Web
+  participant A as apps/api alerts
+  participant P as Postgres
+  participant R as Redis
+  participant M as apps/matcher
+  participant RT as apps/realtime
+  W->>A: POST /v1/alerts {symbol, ABOVE, level}
+  A->>P: INSERT price_alerts (≤ 50 active)
+  A->>R: XADD matcher:commands:v1:{shard} ALERT_ADD
+  R-->>M: put alert on the ABOVE heap
+  Note over M: tick ≥ level
+  M->>P: BEGIN · UPDATE price_alerts SET status='FIRED' WHERE id=$1 AND status='ACTIVE' RETURNING · INSERT notification + outbox · COMMIT
+  M->>R: PUBLISH notify:v1:{user}
+  R-->>RT: notification
+  RT-->>W: bell and toast, the alert line leaves the chart
+```
+
+**Candle write:**
+
+```mermaid
+sequenceDiagram
+  autonumber
+  participant R as Redis
+  participant C as candle writer
+  participant P as TimescaleDB
+  participant A as apps/api
+  R-->>C: XREADGROUP candles ticks:v1:{shard}
+  C->>C: fold quotes into the forming 1-minute bar per token
+  Note over C: minute boundary
+  C->>P: INSERT INTO candles_1m … ON CONFLICT (token, bucket) DO UPDATE (one multi-row statement)
+  C->>R: XACK the entries of that minute
+  A->>P: GET candles → candles_1m or candles_15m … (real-time aggregation)
+  A->>R: HGET quotes:last (finish the forming bar)
+```
+
+**Session revoked on another device:** `DELETE /v1/auth/sessions/:id` (step-up) → `sessions.revoked_at`
+→ audit `SESSION_REVOKED` → `SET sess:revoked:{id} EX 900` + `PUBLISH auth:sessionRevoked:v1` → every
+API instance refuses that session's access token on the next request (refresh reads the row) →
+every realtime node closes that session's sockets with 4401.
+
+**AMO release at 09:15:** BullMQ fires `session.amoRelease` on one worker → the job lists accounts
+with AMOs → for each: load, `sync(at)` (AMO → OPEN, MARKET AMOs fill at the open price, rejected AMOs
+are REJECTED with a reason), commit at version → publish order updates and `AMO_RELEASED`
+notifications → users online see them at once, others on next load.
+
+**Dashboard page load:** router loader prefetches indices, lists and movers into the query cache in
+parallel → the shell renders skeletons → price cells subscribe to their symbols → the socket opens
+and the first binary frame fills them → background tabs keep only the active watchlist live.
+
+### 4.24 Deployment and environments
+
+**Today:**
+
+| Environment | What runs | Where | Deployed by |
+|---|---|---|---|
+| Local (developer) | Full stack: Postgres + TimescaleDB, Redis (Compose, loopback only), api, realtime, quotes, job worker, web (Turborepo); matcher and candle writer on demand | Laptop or cloud dev container | `npm run dev:api` (`docs/runbooks/local-demo.md`) |
+| PR preview | msw-mode build | Firebase preview channel, 7 days | `web-hosting.yml` on each PR |
+| development | msw-mode build of `develop` | Firebase `dev` channel | Automatically after green CI on `develop`; smoke-tested |
+| production | msw-mode build of `production` | https://nthstock-a13a5.web.app | Promote to production (develop CI green + dev smoke test) → green CI on `production` → live deploy, smoke-tested, rolled back on failure |
+
+The hosted sites run the backend in the browser, so they need no servers or database
+(`docs/runbooks/environments.md`, ADR 0010, 0011).
+
+**Planned (Phase 6, AWS Mumbai, D7):**
+
+```mermaid
+flowchart TB
+  user(["Users"]) --> r53["Route 53"] --> cf["CloudFront + WAF<br/>SPA, public market snapshots 1–5 s"]
+  cf --> alb["Application Load Balancer<br/>TLS 1.2+, HSTS"]
+  subgraph vpc["VPC, ap-south-1, 3 AZs"]
+    subgraph ecs["ECS Fargate services"]
+      api["apps/api × N<br/>autoscaled, pre-scale 08:45 IST"]
+      rt["apps/realtime × N"]
+      quotes["apps/quotes × shards × 2"]
+      matcher["apps/matcher × shards × 2"]
+      worker["job worker × 2"]
+      candles["candle writer × 1"]
+    end
+    pgb["PgBouncer"]
+    pg[("Postgres primary + replicas<br/>TimescaleDB option per §4.17")]
+    redis[("ElastiCache Redis cluster")]
+    sm["Secrets Manager / KMS"]
+  end
+  dr["Warm standby<br/>ap-south-2 Hyderabad"]
+  alb --> api & rt
+  api & worker & matcher & candles --> pgb --> pg
+  api & rt & quotes & matcher & worker & candles --> redis
+  ecs -.-> sm
+  pg -. "replication" .-> dr
+```
+
+Terraform provisions it; each environment gets its own variables and secrets; EKS only if Fargate
+limits are reached.
+
+### 4.25 CI/CD and the agent team
+
+**Branching (ADR 0010, 0011):** `develop` is the default branch and the development environment;
+`production` is the live site. Feature branches → PR into `develop` → squash merge. Only Promote to
+production moves `production` (fast-forward, or a merge commit with develop's exact tree; never a
+force push). Conventional Commits scoped by issue key (`feat(NSTOCK-0001): …`), enforced by a check.
+
+```mermaid
+flowchart LR
+  dev["Branch<br/>feat/…, fix/…, agent/issue-…"] --> pr["PR into develop"]
+  pr --> ci["CI<br/>checks · storybook · e2e · perf · e2e-api ·<br/>audit · secrets · CodeQL · PR title"]
+  pr --> rev["Reviewer agent<br/>+ specialists"]
+  pr --> shots["PR screenshots<br/>1440 and 390 px"]
+  ci & rev --> merge["Squash merge<br/>auto when green + ready-to-merge"]
+  merge --> develop["develop"] --> ci2["CI on develop"] --> devsite["development site<br/>+ smoke test"]
+  devsite --> promote["Promote to production<br/>(on request)"] --> prod["production"] --> ci3["CI on production"] --> live["live site<br/>+ smoke test, rollback"]
+```
+
+**CI pipeline (`.github/workflows/ci.yml`):**
+
+| Job | What it proves |
+|---|---|
+| Lint, typecheck, test, build | Prettier, ESLint (incl. jsx-a11y, import boundaries, no raw hex), `tsc` strict, Vitest with coverage across every workspace (Postgres/TimescaleDB service for integration tests), `db:check`, production builds in both web modes, the bundle budget, OpenAPI freshness |
+| Storybook build and a11y | Every story renders and passes axe; the low-contrast canary must fail |
+| Playwright smoke (Chrome, WebKit) | msw-mode journeys, screenshots, the dev server without package `dist` |
+| Web vitals and render budgets | LCP, INP, CLS, long animation frames, chart frame time, Lighthouse CI |
+| Playwright golden path (api mode) | Full stack on Postgres + Redis: migrations, `db:check`, tick-to-screen latency, the golden path with an API restart mid-test, security journey, perf smoke with `pg_stat_statements` |
+| Dependency audit · Secret scan · CodeQL | `npm audit --audit-level=high`, gitleaks, static analysis |
+
+Scheduled CI runs on `develop` at 09:20 and 12:30 IST on weekdays and 20:00 IST daily; a red run
+starts the Fixer.
+
+**Agent team** (ADR 0003, 0006; roles in `.claude/agents/`, procedures in
+[agent-workflow.md](agent-workflow.md)): Claude Code agents on GitHub Actions.
+
+| Role | Trigger | Does |
+|---|---|---|
+| Planner | Issue labelled `plan:approved` | Writes the spec PR (`spec`) and story issues (`agent:backlog`) |
+| Developer | Story labelled `agent:ready` | Implements one story on `agent/issue-<n>-<slug>`, opens a PR with `Closes #N` |
+| Reviewer | PR opened or updated | Reviews with specialists (`frontend-reviewer`, `security-reviewer`, `database-reviewer`, `silent-failure-hunter`, `test-gap-analyzer`); labels `ready-to-merge` or `agent:fix-needed` |
+| Fixer | `agent:fix-needed`, red CI on a PR, or red CI on `develop` | Pushes the root-cause fix to the same PR, or opens `agent/fix-develop-*` |
+| Merge-conflict resolver | Push to `develop` that conflicts with an open PR | Merges `develop` into the PR branch; hands real conflicts to the Fixer |
+| Auto-merge | Green PR with `ready-to-merge` | Squash-merges; spec PRs and PRs touching `.github/`, `.claude/`, `CLAUDE.md` wait for the owner |
+| Housekeeping | PR events, schedules | Close done issues and epics, sync labels, key issues `NSTOCK-NNNN`, promote stories after a spec merges, delete merged branches |
+
+Claude Code hooks (`.claude/hooks/`) give local and cloud agent sessions the same checks while they
+edit: format and lint after each edit, typecheck at the end of a turn, guards against pushing to
+`develop` or `production` and editing secrets or generated files.
+
+### 4.26 Security architecture
+
+**Trust boundaries and controls:**
+
+| Boundary | Threats | Controls (where) |
+|---|---|---|
+| Browser ↔ edge | XSS, clickjacking, MITM | Strict CSP on the SPA (`script-src 'self'`), `X-Frame-Options DENY`, HSTS preload, no inline scripts, React escaping, `nosniff`, `Referrer-Policy no-referrer` (`app/config/securityHeaders.ts`, `http/securityHeaders.ts`) |
+| Browser ↔ API | CSRF, session theft, brute force, enumeration | SameSite=Strict httpOnly cookies, CSRF header + per-session token, refresh rotation with reuse detection, rate limits, CAPTCHA after 3, PIN lock after 5, OTP burn after 5, uniform 401s |
+| Browser ↔ realtime | Unauthenticated streams, cross-user leakage | JWT on upgrade, revocation check, per-user channels with `userId` cross-check, 200-symbol cap, 1 MB backpressure |
+| API ↔ data | SQL injection, privilege misuse, tampering | Drizzle parameterised queries, DML-only app role, append-only audit (privileges + trigger), CHECK constraints on every enum and money column, optimistic concurrency |
+| Process ↔ process | Forged or malformed messages | Every Redis message parsed with its Zod contract; malformed entries skipped or dead-lettered; user ids checked against channels |
+| Secrets | Leaks in a public repo | `.env.example` only; dev keys derived from public strings and refused in production; `JWT_SECRET`, `PII_*` required in production; gitleaks in CI; Secrets Manager in Phase 6 |
+| Supply chain | Vulnerable or hostile dependencies | Exact versions (`save-exact`), Dependabot, `npm audit`, CodeQL, images pinned by version or digest |
+| Test-only surfaces | Test routes reaching production | `/v1/__test` refused unless `NODE_ENV=test`; dropped from web builds; `checkBuild.mjs` verifies |
+
+The ASVS L2 checklist links every control to its test: [phase2-asvs-l2.md](security/phase2-asvs-l2.md).
+**Planned:** TLS termination and WAF at the ALB, KMS encryption at rest, real SMS and CAPTCHA
+providers before launch, MFA-protected admin access.
+
+### 4.27 Observability
+
+**Built:**
+
+- Structured JSON logs from every process (Fastify's pino in the API; one JSON line per event in
+  realtime, quotes, matcher, worker and writer), with no PII: ids only, database row values dropped,
+  error class and attempt for jobs.
+- Health: `GET /v1/health` (liveness) and `/v1/health/ready` (Postgres and Redis); readiness reports
+  a degraded dependency while the process keeps serving what it can.
+- Runtime counters: realtime `stats()` (connections, dropped frames, idle closes); matcher per-tick
+  log (crossed, triggered, moved); fill reader errors logged at most once a minute; dead-letter
+  stream for poison fills.
+- Performance evidence in CI: latency tests, web vitals, Lighthouse, perf smoke with
+  `pg_stat_statements`, all uploaded as artifacts.
+
+**Planned (Phase 6):** OpenTelemetry traces and metrics → Grafana (Prometheus, Loki, Tempo); Sentry
+for frontend errors; real-user Web Vitals with regression alerts; SLO dashboards for tick-to-screen,
+API p95, fill latency and stream lag; alerts on lease churn, dead-letter growth and outbox age.
+
+### Performance and capacity
+
+| Measure | Result | Source |
+|---|---|---|
+| Concurrent users on one API + one realtime process (4 vCPU) | 10,000 logged in, 10,000 sockets, zero errors | [load-test.md](runbooks/load-test.md) |
+| API inside 200 ms p95 | 7,500 users at 1 call / 5 s (1,326 req/s); 10,000 users at 1 call / 15 s (88 ms p95) | load test |
+| Login burst | about 550 logins a second, p95 under 0.5 s | load test |
+| Realtime | 10,000 sockets, about 10,900 frames a second, 40% of one core, 456 MB, no dropped frames | load test |
+| Tick to screen | p95 240 to 260 ms via the quote service; 86 to 106 ms via the tick pump | `test:latency` in CI |
+| Matcher book work | p95 0.06 ms per tick at 2,000 ticks/s over 1,00,000 resting orders and 10,000 stops; 6.8 heap entries read per tick vs 220 for a full walk | `tools/loadTest/matcher.mjs` |
+| Tick to fill commit | about 10 ms p95 (Redis hop 3.1 ms, Postgres commit 6.5 ms); one API process commits 550 to 650 fills a second | `matcherFill.latency.test.ts` |
+| Perf smoke (10,000 seeded users) | order ack p95 29.6 ms, PIN login p95 42.1 ms, slowest query p95 0.6 ms | [perf-smoke.md](runbooks/perf-smoke.md) |
+| Chart on a 390 px phone | frame p95 16.7 ms, no dropped frame in 488, no long frame at 4× CPU throttle | `chartTradingPerf.spec.ts` |
 
 ### Scalability rules
-- API servers hold no state; scale horizontally behind the load balancer.
-- Scheduled pre-scale at 8:45 AM IST, reactive autoscaling during the day, scale down after 3:45 PM.
-- Realtime nodes send only subscribed symbols, conflated to 4 updates/sec, compact binary frames.
-- Postgres: read replicas + PgBouncer; orders partitioned by day; shard by user_id (Citus) only when needed.
-- CDN caches static assets and public market snapshots (1–5 s TTL); Redis caches quotes, sessions, hot lists.
-- Under overload, shed non-critical features first (promos, movers, chart history); login, prices and orders stay up.
-- Load tests with k6: 1 lakh → 10 lakh concurrent sockets, 50k logins/sec; one large test near 1 crore before launch.
-- Measured so far (2026-10-24, [runbooks/load-test.md](runbooks/load-test.md)): one API process and one
-  realtime process on a 4-core machine held 10,000 logged-in users and 10,000 sockets with zero errors;
-  the API stays inside its 200 ms p95 up to about 1,300 requests a second per process.
 
-### Frontend stack
-- React 19 + TypeScript strict, Vite SPA, TanStack Router.
-- Server state: TanStack Query. UI state: Zustand. Live prices: a dedicated quote store outside React render; each price cell subscribes to its own symbol; updates batched per animation frame.
-- Styling: our own design tokens (CSS variables in `packages/tokens`) → Tailwind CSS preset generated from them; Radix UI primitives; single light theme.
-- Charts: TradingView Lightweight Charts (lazy-loaded); SVG sparklines.
-- Lists: TanStack Virtual. Forms: React Hook Form + Zod.
-- Assets: self-hosted subset fonts, SVG icons, AVIF/WebP images, skeleton loaders. Service worker caches the app shell.
-- Testing: Vitest, React Testing Library, Playwright (Chrome), Storybook, axe (WCAG 2.2 AA).
-- Mocking: MSW, typed from `packages/contracts`.
+- **API:** no state in the process (sessions, OTPs, revocations and rate limits in Redis, data in
+  Postgres); add processes behind the load balancer, about 1,300 requests a second each on the test
+  hardware. With `MATCHER_MODE=worker` and the quote service, API processes follow no ticks, and
+  every one joins the fill consumer group, so fill capacity grows with them.
+- **Realtime:** add nodes; each reads the tick streams and subscribes only the channels of users it
+  holds. Only subscribed symbols are sent, conflated to 4 updates a second, in binary frames.
+- **Quotes and matcher:** raise `SHARDS`; keys, leases and the `orders.shard` column are already per
+  shard. Run two processes per shard for failover within the lease TTL.
+- **Postgres:** PgBouncer in transaction mode (in Compose, profile `pool`); read replicas for history
+  pages; `orders` partitioned by trade date; shard by `user_id` (Citus) only when needed.
+- **Redis:** Redis Cluster; every key is per shard or per user, so it spreads without cross-slot work.
+- **Schedule:** pre-scale at 08:45 IST, reactive autoscaling through the day, scale down after 15:45.
+- **Caching:** CDN for static assets and public market snapshots (1 to 5 s TTL); Redis for quotes,
+  sessions and hot lists.
+- **Load shedding:** under overload shed non-critical features first (promos, movers, chart history);
+  login, prices and orders stay up.
+- **Load-test plan:** k6 from 1 lakh to 10 lakh concurrent sockets and 50k logins a second, and one
+  test near 1 crore before launch.
 
-### Backend stack
-- Node.js 22 LTS + TypeScript, Fastify. REST under `/v1`, OpenAPI generated from Zod schemas in `packages/contracts`.
-- Drizzle ORM, PostgreSQL 16, Redis 7, BullMQ jobs (session events, EOD settlement, P&L snapshots, maintenance; see Background jobs).
-- Auth: OTP (mock SMS provider until launch) + device PIN (Argon2id) + optional TOTP; 15-min JWT access token + rotating refresh token in httpOnly SameSite=Strict cookie, revocable in Redis.
-- Testing: Vitest, Supertest, Testcontainers, contract tests.
+### Resilience and failure modes
 
-### Paper accounts on PostgreSQL
-Spec `backend-core.md` §5.3, ADR 0007. The `AccountStore` (`apps/api/src/modules/orders/accountStore.ts`; memory in
-`repo.ts`, Postgres in `pgRepo.ts`) is the record of each paper account; the per-user `PaperEngine` on the `PaperDesk`
-is a cache of it.
-- **Load:** the first use of an account loads its working set (live orders, today's orders, positions, holdings and
-  today's ledger, with the earlier ledger carried as a balance) and its version.
-- **Commit:** every engine change is committed with its audit entries in one transaction against the version it was
-  read at. A commit that loses to another writer reloads the account and runs the action once more; losing twice
-  answers 409 `CONFLICT`. Any other failure answers 500 and the account is reloaded before its next use. Each user's
-  commits run in order on a per-user queue; users never wait for each other.
-- **Reads:** the order book, order history and funds ledger pages read from the store, so they cover every day.
-- **Restart:** at boot, and on the order sweep if the database was down then, apps/api loads every account with an
-  AMO or OPEN order, so a resting order fills on the first crossing tick after a restart.
-- **Reset and demo seed:** a reset clears the stored orders and their history (the ledger is append-only and keeps
-  every row); the demo seed replaces the whole account.
-
-### Quote service (Wave 3, E22)
-Spec `market-data-and-matching.md` §4. `apps/quotes` will be the one source of ticks, so every API instance,
-apps/realtime, the matcher and the candle writer see the same prices. It depends on nothing but Redis, because it
-is the piece a licensed vendor feed replaces (D3).
-- **Shards:** an instrument's shard is `shardOf(token, SHARDS)` (`@nthstock/utils`, FNV-1a). Locally `SHARDS=1`.
-- **One writer per shard:** a process writes only while it holds `lease:quotes:{shard}` (`SET … NX PX 5000`, renewed
-  every 2 s). A second process waits and takes over when the holder stops, or within the TTL when it dies.
-- **Streams:** each batch is appended to `nthstock:ticks:v1:{shard}` (`XADD MAXLEN ~ 2400`, about 10 minutes) with a
-  per-shard `seq`, and its quotes go to the snapshot hash `nthstock:quotes:last:v1:{shard}` in the same MULTI. A
-  consumer that sees any `seq` other than the next one re-reads the snapshot (`tickStreamStep` in
-  `packages/contracts`).
-- **apps/realtime reads the streams** when `QUOTE_SHARDS` is set (`feeds/streamFeed.ts`): at start it loads each
-  shard's snapshot, then follows every stream with one blocking `XREAD`. A gap or a restarted writer (its `seq` starts
-  again at 1) triggers a snapshot re-read; a malformed entry is logged and skipped. Without `QUOTE_SHARDS` it keeps
-  the pub/sub feed from the API's tick pump.
-- **apps/api on the quote service** (`QUOTE_SHARDS` with `REDIS_URL`, `ticks/quoteStreams.ts`): the adapter is built
-  with `externalTicks`, so it never runs its own random walk; it starts from the snapshots and moves on every stream
-  batch (`MockMarketDataAdapter.applyQuotes`), so the paper desk, alerts, lists, movers and candles all follow the one
-  quote service, and the tick pump does not start. `GET /v1/market/quotes` reads the snapshot hashes directly, so
-  two instances answer the same LTP at the same moment. Both apps read the streams through `followTickStreams` in
-  `packages/marketData`. Without `QUOTE_SHARDS` nothing changes: the adapter ticks in process.
-- **Locally:** `npm run dev:api` starts apps/quotes beside apps/api, apps/realtime and the web app, with
-  `QUOTE_SHARDS=1`, so the full stack runs on the quote service by default (Compose runs Postgres and Redis; the apps
-  run under Turborepo).
-- **Latency (NSTOCK-0355):** `npm run test:latency -w @nthstock/realtime` measures tick-to-screen across apps/quotes,
-  Redis Streams, apps/realtime and a WebSocket client (plus one frame to paint), beside the API tick-pump path.
-  Locally: p95 240 to 260 ms on the quote service against 86 to 106 ms on the pump, both under the 500 ms target. The
-  difference is the 250 ms batch window of the writer; CI asserts the p95 on every PR.
-
-### Matcher (Wave 3, E23)
-Spec `market-data-and-matching.md` §5. A matcher worker will fill resting orders and trigger trailing stops off the tick
-streams, so apps/api stops matching in process.
-- **Order book** (`OrderBook` in `packages/paperEngine`, NSTOCK-0363): per instrument, BUY and SELL LIMIT orders sit
-  in price heaps and trailing stops in heaps on their stop, watermark and activation prices. A tick pops only what it
-  fills, triggers, ratchets or activates, and moves every stop with `stepTrailingStop`, the rule the engine and the
-  browser mock run, so it leaves each stop where stepping every stop would (property-tested against that full walk).
-  A change applies only when its version is newer than the one held.
-- **Worker** (`apps/matcher`, NSTOCK-0364): one process per shard holds `lease:matcher:{shard}` (the same
-  `startLease` as apps/quotes, now in `packages/marketData`) and follows that shard's tick stream with
-  `followTickStreams`. Every process for the shard keeps following, so a standby is current when it takes over;
-  only the holder runs ticks through the books, and only in market hours (`MOCK_MARKET_ALWAYS_OPEN` for demos).
-  `npm run dev:api` starts it.
-- **Order commands** (`MatcherCommand` in `packages/contracts`, NSTOCK-0365): after each order commit apps/api
-  appends `ADD`, `MODIFY` or `CANCEL` for a LIMIT order to `nthstock:matcher:commands:v1:{shard}` (capped at
-  100,000 entries), carrying the account version of that commit. Every matcher process for the shard reads the
-  stream with `XREAD BLOCK` and applies each command to the instrument's book by the version rule, so a late or
-  replayed command never undoes a newer one; malformed entries are logged and skipped. After each trailing stop
-  change apps/api also sends `STOP_ADD` (an `ARMED` or `TRAILING` stop with the state the book steps; a ratchet
-  is a `STOP_ADD` too) or `STOP_CANCEL` (any other status), at the same account version (NSTOCK-0368).
-- **Reconcile** (NSTOCK-0366): on start and every 60 s the matcher reads its shard's OPEN LIMIT orders and the
-  account versions from Postgres in one REPEATABLE READ snapshot, through the `orders_shard_live_idx` partial
-  index on `orders.shard` (migration 0016, set on insert as `shardOf(token, QUOTE_SHARDS)`). It upserts every
-  live order and takes off any order Postgres no longer has live, each at the account version, so a lost command
-  is repaired within a minute while a command newer than the read stands. An upsert at the same price keeps the
-  order's heap entry, so the rounds leave nothing stale. Rows from before the column are matched by token.
-  The same round reconciles trailing stops: it reads the ARMED and TRAILING rows of `trailing_stops` (what
-  `STOP_ADD` puts on a book) in that snapshot, keeps those whose token maps to the shard (the table has no shard
-  column), upserts or removes them at the account version, and puts back a stop a tick triggered whose fill never
-  committed.
-- **Fills** (NSTOCK-0367, [ADR 0013](adr/0013-matcher-fills-commit-in-api.md)): the matcher finds fills, apps/api
-  commits them. For each tick that crosses an order or triggers a stop the lease holder writes one `MatcherFill` per
-  user to `nthstock:matcher:fills:v1:{shard}`; every apps/api process reads those streams in the `api` consumer
-  group, runs the user's engine at the tick's price and time (`PaperDesk.ingestFor`), commits through the account
-  store with the expected version, publishes the order update and only then acks. The engine re-checks every
-  order, so a replayed request fills nothing twice and a request for an order modified since fills only what still
-  crosses. A request a crashed process held is claimed after 30 s; an unsent one puts its orders and triggered stops
-  back on the book. A commit that loses on version runs again up to 3 times. A malformed request, or one delivered
-  more than 5 times without committing, is copied to `nthstock:matcher:fills:dead:v1` (with its source stream, id
-  and reason) and acked; the reconcile puts its order back on the book (NSTOCK-0388).
-- **`MATCHER_MODE`** (NSTOCK-0369, spec §5.4): `inline`, the default, keeps today's in-process desk (unit tests, the
-  `/v1/__test` scripted ticks, the E2E suites); a request that arrives after an inline fill finds nothing to do.
-  `worker` (needs `QUOTE_SHARDS`) builds the desk with `followTicks: false`: it subscribes to no ticks, reads the
-  adapter's current quote whenever an order action or a valuation needs a price (so a MARKET order fills at the live
-  price), and fills resting orders only from the matcher's requests. apps/api then runs no 15 s sweep, so AMO
-  release, square-off and day close run on each user's next request or fill until the E16 session jobs take them
-  over; apps/api warns at start-up when `JOBS_MODE` is not `bullmq`. Try it with `MATCHER_MODE=worker npm run dev:api`.
-- **Benchmark** (NSTOCK-0370, `tools/loadTest/matcher.mjs`, [load-test runbook](runbooks/load-test.md#matcher-nstock-0370)):
-  1,00,000 resting orders and 10,000 trailing stops over 500 instruments at 2,000 ticks a second take p95
-  0.06 ms of book time per tick and read 6.8 heap entries a tick on average, against 220 for a full walk; every
-  entry read is a fill, a trigger, a ratchet or an entry a ratchet left behind. Tick to fill commit is about
-  10 ms at p95 at a steady rate (Redis hop p95 3.1 ms, Postgres commit p95 6.5 ms). One apps/api process commits
-  550 to 650 fills a second, so a burst queues; more API processes in the consumer group add fill capacity.
-- **Status:** the book, the worker, the order and stop commands, the reconcile loop (orders, and trailing stops
-  with NSTOCK-0387), fills, `MATCHER_MODE`, server-side trailing stops (NSTOCK-0368) and the benchmark are built.
-
-### Server-side trailing stops (NSTOCK-0368)
-In api mode trailing stops run on the server with the same engine rules as the browser mock (SPEC-TFC-1 §6, §10.6).
-- **Store:** the engine's working set is version 4: it carries the trailing stops (active ones and today's), the
-  engine `seq`, the exit order ids and the stops' idempotency keys. Migration 0015 adds `trailing_stops` (one row per
-  `TrailingStop`, trail as unit plus amount or basis points, CHECKed against the contract lists) and
-  `paper_accounts.seq` and `exit_order_ids`. A commit upserts the stops that changed; a reset clears them with the
-  orders. So a stop survives a restart, keeps its stop price, and `seq` never goes back.
-- **Routes:** apps/api serves `GET/POST /v1/trailing-stops`, `PATCH/DELETE /v1/trailing-stops/:id`,
-  `POST /v1/positions/close` and `GET /v1/account/state`, with refusals mapped by `trailingStopApiError` like the
-  mock. Every action is audited (`TRAILING_STOP_PLACE`, `_MODIFY`, `_CANCEL`, `POSITION_CLOSE`) and every state change
-  as `TRAILING_STOP_UPDATE`.
-- **Frames:** after each commit the orders module publishes an `AccountDeltaEvent` (the changed orders and stops at
-  their newest `seq`, positions and funds) on the user's order channel, after the order updates. apps/realtime sends it
-  to that user's connections as an `accountDelta` frame with no quotes, so the web app's trading store runs in api mode
-  exactly as on MSW: it loads the account state, applies frames, and reloads on a gap.
-- **Matcher:** apps/api sends every committed stop change to the matcher as `STOP_ADD` or `STOP_CANCEL`. Until
-  `MATCHER_MODE` hands the books to the worker, ticks still step stops in apps/api's own process.
-
-### Market data and chart bars
-- `packages/marketData` generates each range's own bars (1D: 1-minute, 1W: 5-minute, 1M: hourly,
-  1Y: daily, 5Y: weekly) and `resampleCandles` groups them into a coarser bar size on request
-  (`?interval=1m|5m|15m|30m|1h|1d|1w`, the allowed sizes per range are `CANDLE_INTERVALS` in
-  `packages/contracts`). An unknown pair, such as 1D with weekly bars, is a 400.
-- Intraday bars start at the 9:15 IST open (`sessionBarStart` in `packages/utils`), as NSE charts do.
-  The web chart keeps the bar size in the URL and folds live ticks into the current bar of that size.
-- On the full stack the API serves stored bars from TimescaleDB (next section); the contract stays.
-  The mock backend (MSW) and the memory driver keep the generated bars.
-
-### Candle store (Wave 3, E25)
-Spec `market-data-and-matching.md` §7. Chart bars are stored, so the 1-minute bar a user watched form is the bar
-the chart shows after a reload.
-- **Database:** Compose, CI and Testcontainers run `timescale/timescaledb:2.17.2-pg16` (Postgres 16 with the
-  Apache core and the free community features). Migration `0014_timescaledb_candles` (hand-written, like the
-  partitioned orders) creates the extension as `nthstock_owner`; `nthstock_app` may read and upsert bars, never
-  delete them or run DDL.
-- **Storage:** `candles_1m (token, bucket, open, high, low, close, volume)`, prices in paise, primary key
-  `(token, bucket)`, a hypertable in 1-day chunks, compressed by `token` after 7 days.
-- **Aggregates:** `candles_5m`, `candles_15m`, `candles_30m`, `candles_1h` and `candles_1d` are continuous
-  aggregates on `time_bucket(…, origin => 09:15 IST)`, so bars start at the NSE open and a daily bar is one
-  session. Each has a refresh policy of one bucket (window of three, so a replayed minute is folded in) and
-  real-time aggregation on, so a read includes minutes not yet materialised. Weekly bars group `candles_1d`.
-- **Writer:** the candle writer (`apps/api/src/candleWriter.ts`) reads the tick streams in its own consumer group
-  and keeps each instrument's forming bar in memory. On a minute boundary it writes every closed bar of that minute
-  in one multi-row `INSERT … ON CONFLICT (token, bucket) DO UPDATE`, records the minute as written, and only then
-  acknowledges the stream entries, so a restart re-reads what was not stored: no minute is lost and a replayed one
-  overwrites itself with the same values.
-- **History:** `npm run db:seed:candles` (also run by `seed:demo`) writes 2 years of daily bars and 30 days (at least
-  22 sessions) of 1-minute bars from the deterministic generator, so charts have depth on day one and every machine
-  stores the same rows. Because `candles_1d` aggregates `candles_1m`, a day older than the minute window is stored
-  as one 09:15 IST row carrying that day's OHLCV. Minute bars go to the indices and their large-cap members
-  (66 instruments, about 577k rows, 23 s locally); `--all` adds daily history for every symbol. The seed must refresh
-  the aggregates as the owner (`DATABASE_MIGRATION_URL`; the app role may not): real-time aggregation only covers
-  minutes after an aggregate's watermark, so history never materialised would drop out once a policy runs. One-row
-  days are inserted only where nothing is stored, so a later seed keeps the minute bars of sessions that left the
-  window.
-- **Running the writer:** `npm run dev:candles -w @nthstock/api` beside `npm run dev:api` (one process per
-  deployment: it uses a fixed consumer name).
-- **Reads:** `GET /v1/market/instruments/:symbol/candles` reads 1-minute bars from the hypertable, 5 minutes to an
-  hour and daily bars from the aggregates, weekly bars by grouping the daily ones, and finishes the forming bar with
-  the live price from the quote snapshot. A symbol with no stored bars in the window (not seeded, or only daily
-  history on an intraday range) keeps the generated bars, so nothing regresses.
-- **Schema check:** `db:check` with `DB_CHECK_URL` compares a migrated database with the schema files and the
-  hand-written relations, skipping TimescaleDB's catalog, chunks and internal schemas; CI runs it.
-- **AWS (Phase 6):** RDS does not offer TimescaleDB; the spec's open question 1 decides between self-managed
-  Postgres on EC2, Timescale Cloud, or native partitions with rollup tables. The queries are plain `time_bucket`
-  reads, so the fallback is contained.
-
-### Price alerts and notifications
-Spec `market-data-and-matching.md` §6 (E24, NSTOCK-0379 to 0385). The mock backend keeps `AlertDesk`
-(`packages/paperEngine/src/alertDesk.ts`) in the browser; api mode stores everything in Postgres.
-- **Notifications** (NSTOCK-0379): a `notifications` row (migration 0017; kinds `PRICE_ALERT`, `ORDER_FILLED`,
-  `ORDER_REJECTED`, `TRAILING_STOP`, `AMO_RELEASED`, `SQUARED_OFF`, `SECURITY`) is written in the same
-  transaction as its cause: the account store derives fill, rejection, AMO release, square-off and trailing stop
-  notices from each order change (`orders/changeNotifications.ts`) and appends them beside the audit entries. The
-  newest 100 per user are kept. Bodies are built from contract types and never hold a mobile number or a name.
-- **Outbox** (NSTOCK-0379): each row gets a `notification_outbox` row in the same transaction. After commit apps/api
-  publishes a `NotificationEvent` on `nthstock:notify:v1:{userId}` and clears the outbox row; a relay publishes
-  rows older than 5 s every 5 s, so a crash or a Redis outage only delays delivery. Delivery is at least once and
-  the web app drops an id it already holds.
-- **Fan-out** (NSTOCK-0379): apps/realtime subscribes each connected user's notify channel beside their order
-  channel and sends `{ type: 'notification' }` to that user's sockets only; an event whose `userId` does not match
-  its channel, or that fails the contract, is dropped.
-- **Price alerts** (NSTOCK-0383): alerts live in `price_alerts` (migration 0018), at most 50 active per user. A
-  firing is one transaction, `UPDATE … WHERE status = 'ACTIVE' RETURNING` plus the notification and its outbox
-  row, so an alert fires exactly once whoever sees the tick first. apps/api watches the active alerts' instruments
-  (reloaded at start) and sends `ALERT_ADD` and `ALERT_CANCEL` to the shard's matcher command stream; the matcher
-  holds alerts on its `OrderBook` in two price heaps (ABOVE lowest first, BELOW highest first), reloads the active
-  ones every 60 s, and fires through the same transaction, then publishes. A level the price has already passed is
-  refused; a gap fires with the LTP that crossed it.
-- **Security notices** (NSTOCK-0382): a sign-in from a new device, two-factor turned on or off, and logging out the
-  other sessions raise a `SECURITY` notification naming the device type and the IST time ("Not you? Change your
-  PIN."). Raising one never fails the action it reports.
-- **Web** (NSTOCK-0384): the bell and the toasts update from the socket push with no poll; a pushed id already held
-  is dropped, and the list and the alerts are re-read after a reconnect. Routes: `/v1/alerts` (GET, POST),
-  `/v1/alerts/:id` (DELETE), `/v1/notifications` (GET), `/v1/notifications/read` (POST).
-
-### Two-factor authentication and step-up
-- TOTP is RFC 6238 (HMAC-SHA1, 6 digits, 30 s step, ±1 step) in `packages/utils/src/totp.ts`, on
-  Web Crypto, so apps/api and the MSW mock compute the same codes with no library. Any authenticator
-  app reads the `otpauth://` URI (a QR code drawn as one SVG path; `qrcode` is loaded only on the
-  Security page) or the grouped setup key.
-- Secrets are stored encrypted (`totp_factors.secret_enc`, PII envelope keyed per user);
-  `last_used_step` refuses a replayed code. Ten single-use recovery codes are stored only as hashes
-  (`totp_recovery_codes`) and shown once, with Copy and Download.
-- Login: an OTP or PIN login for a user with two-factor on answers 401 `TOTP_REQUIRED` with a
-  5-minute challenge (Redis in api mode); `POST /v1/auth/totp/verify` takes the code or a recovery
-  code and issues the session. Five wrong codes end the challenge.
-- Step-up: sensitive routes (turning two-factor on or off, new recovery codes) answer 403
-  `STEP_UP_REQUIRED` unless the session re-proved the user in the last 10 minutes with the PIN or
-  a `STEP_UP` OTP to the own mobile (`/v1/auth/step-up/otp`, never usable as a login), plus the
-  code when two-factor is on. The web app's `useStepUp` opens one shared dialog and retries the
-  action once. Every change is in the audit log (`STEP_UP`, `TOTP_ENABLED`, `TOTP_DISABLED`,
-  `RECOVERY_CODE_USED`, `RECOVERY_CODES_REGENERATED`).
-
-### Active sessions
-- `GET /v1/auth/sessions` lists the user's live sessions (neither revoked nor expired), most
-  recently active first, each with its device label (`deviceLabel` in `packages/utils`, shared by
-  both backends, never the raw user agent), the trusted flag and `current`. No IP address is stored
-  or shown.
-- `DELETE /v1/auth/sessions/:id` and `POST /v1/auth/sessions/revoke-others` need a step-up. Each
-  revoke goes through `SessionService.revoke`: the row is marked `USER_REVOKED`, audited as
-  `SESSION_REVOKED` and published on `auth:sessionRevoked`, so that session's access and refresh
-  tokens answer 401 at once and apps/realtime closes its sockets. The current session is refused
-  (400); it logs out from the profile menu.
-- Turning two-factor on or off offers "Log out all other devices" (ASVS 3.3.3).
-
-### Consent and account deletion (DPDP Act 2023)
-- Consent: the first OTP login sends `consentVersion` (`CONSENT_POLICY_VERSION` in
-  `packages/contracts`). A sign-up without the current version answers 400 `CONSENT_REQUIRED`; the
-  user and its `consents` row (purpose `TERMS_AND_PRIVACY`, policy version, time) are written in one
-  transaction, then `CONSENT_GRANTED` is audited. Existing users are not asked again.
-- Deletion: `POST /v1/account/deletion` (`{ confirm: 'DELETE' }`, step-up) runs
-  `accountDeletionService`: mark the user deleted with `purge_after` = now + 30 days (so no login
-  can start a session), revoke every live session with reason `ACCOUNT_DELETED` (audited and
-  published, so tokens and sockets end at once), cancel OPEN and AMO paper orders, and audit
-  `ACCOUNT_DELETION_REQUESTED`. The response clears the auth cookies.
-- Until the purge, an OTP login for the mobile answers 403 `ACCOUNT_DELETED` with `purgeAfter`, and
-  `findById` hides the user from every read. The purge job (T-230, with the BullMQ jobs of E16)
-  erases the PII columns and leaves a tombstone; the mobile can then sign up as a new user.
-- Web: Settings, Security has a danger card (DELETE typed, then step-up). On success the app
-  navigates to `/login?deleted=<purgeAfter>` first (its `beforeLoad` skips the session check), then
-  clears the session, the query cache and the trusted-browser record.
-
-### Background jobs (Phase 2, E16)
-Spec `backend-core.md` §3 and §9, ADR 0007 §11. Code: `apps/api/src/modules/jobs/`, entry `apps/api/src/worker.ts`.
-- **Worker:** the same codebase as the API with another entry (`npm run worker -w @nthstock/api`; `npm run dev:api`
-  starts it as `dev:worker` with `JOBS_MODE=bullmq`), so jobs share the repos, the paper engine and the quote-service prices.
-  It publishes the order updates its jobs make, and sends them to the matcher as the API does.
-- **`JOBS_MODE`:** `inline` (default) keeps the API's in-process order sweep, which unit tests and the `/v1/__test`
-  clock routes drive; `bullmq` (needs `DB_DRIVER=postgres`) turns the sweep off and leaves session events to the
-  worker; `off` runs neither. Lazy sync stays either way: every read syncs the engine first.
-- **Schedules (IST, BullMQ job schedulers with `tz: 'Asia/Kolkata'`):** `session.amoRelease` 09:15,
-  `session.squareOff` 15:20, `session.dayClose` 15:30 and `pnl.snapshot` 15:45 on trading days (each checks the NSE
-  holiday table in `packages/utils` and exits on a holiday or weekend); `db.orderPartitions` 00:30 and
-  `auth.tokenCleanup` 03:00 daily. `account.purge` (02:00) is scheduled once T-230 adds it.
-- **Jobs are plain functions:** each is `run(at, deps)`, unit-tested with a fixed clock; BullMQ only schedules and
-  retries it (3 attempts, exponential backoff from 30 s). `at` is the run's due time, not when it started.
-- **Idempotency:** a session job reloads each account from Postgres, syncs it to now and commits against its
-  version (`OrderService.syncAccounts`), so a rerun, a retry or the API committing the same event first changes
-  nothing twice. The snapshot upserts on `(user_id, trade_date)`, partitions use `CREATE TABLE IF NOT EXISTS`, the
-  cleanup is a plain delete. The job id (scheduler id plus due time) keeps one run per scheduled time across workers.
-- **P&L snapshot:** one `pnl_snapshots` row per account touched today or holding stock: invested, current value
-  and day P&L over holdings (from the portfolio summary), total P&L (current value − invested) and realised P&L
-  since the account opened or was reset (the close clears the day's realised figure, so a day's realised P&L is the
-  difference between two snapshots).
-- **Shutdown:** SIGTERM closes the worker, which waits for the running job, then flushes audit writes and order
-  updates and closes the pools.
-- **No PII in logs:** a run's result is counts only, and a failure is logged as job, attempt and error class; a
-  Postgres error's `detail` (row values) is dropped.
-
-### OpenAPI (E20)
-- `packages/contracts/src/openapi.ts` builds an OpenAPI 3.1 document from the route map with Zod 4's
-  `z.toJSONSchema()` (no extra library): one operation per route (`operationId` = route key,
-  `x-auth` = its auth), path and query parameters and bodies as the client sends them, responses as
-  it receives them, the `ApiError` response on every route, and `cookieAuth` (the `nth_at` cookie
-  plus the CSRF header) and `bearerAuth` security schemes. Response types are named component
-  schemas taken from the contracts' exports.
-- `apps/api` serves it at `GET /v1/docs/openapi.json` (outside the route map, public,
-  `Cache-Control: public, no-cache` with an ETag, so a revalidation is a 304). No Swagger UI (spec backend-core §2).
-- `npm run openapi` writes the same text to `docs/api/openapi.json`. CI regenerates it, uploads it
-  as the `openapi` artifact and fails when the committed copy is stale; the docs route test checks
-  the same thing in `npm run check`. A new route in the map joins with no extra wiring: regenerate
-  and commit the file.
-
-### Demo mode and Try demo (TFC-12, REQ-DEL-02)
-The hosted site is the msw-mode build: the mock backend runs in the browser's service worker
-(`apps/web/src/mocks/browser.ts`) and each tab keeps its own paper account in sessionStorage.
-- **Demo mode** is a sessionStorage flag (`nthstock.demoMode`). It loads the demo account
-  (watchlists, holdings, ledger from `@nthstock/paperEngine`) and registers the Demo simulator,
-  whose Rally, Pull back and Gap buttons move one instrument's feed, so every screen sees the same
-  move. The instrument page shows it on desktop and on the phone layout, labelled "Simulated".
-- **`?demo=1`** turns it on at load: the seed is written before the mocks read their saved state.
-- **Try demo** on /login gives the same thing from a cold load. Outside demo mode it reloads to
-  `/login?demo=1` with a pending flag, then logs in as the demo user and opens RELIANCE without a
-  second tap (`startDemo` in `shared/lib/demoSimulator.ts`, `TryDemo.tsx`). In api mode nothing
-  registers a starter, so Try demo only logs in.
-- **Walkthrough video:** a Playwright script plays the five journeys on a 390 px touch phone
-  against the production build and encodes `public/demo/walkthrough.mp4`
-  (`docs/runbooks/demo-walkthrough.md`).
-
-### Phase 2 sign-off (E21)
-- Demo seed: with `DB_DRIVER=postgres`, `DEMO_SEED=true` writes the demo user (upserted by the
-  mobile's blind index), their terms and privacy consent (`UsersRepo.ensureConsent`, idempotent),
-  the demo watchlists and the paper account (through the account store) to Postgres. Seeding twice
-  or across a restart gives the same state (`seed.integration.test.ts`), equal to MSW's `?demo=1`.
-- Local stack: `npm run dev:api` starts Postgres and Redis, migrates, then runs apps/api,
-  apps/realtime, apps/quotes, the web app and the BullMQ jobs worker (`JOBS_MODE=bullmq`);
-  `db:psql` and `db:reset` cover the chores (`docs/runbooks/local-demo.md`).
-- Proof: the api-mode Playwright job restarts apps/api mid-test and still sees the session,
-  watchlists, orders and holdings; the security settings journey (TOTP on, log in with TOTP, log out
-  another session, delete the account, axe on every step) runs in msw and api mode; a performance
-  smoke times order acks and PIN logins on 10,000 seeded users (first CI run: order ack p95
-  29.6 ms, PIN login p95 42.1 ms, slowest query p95 0.6 ms; budgets 300, 200 and 50 ms).
-- The ASVS L2 checklist with links to every test and the owner sign-off list:
-  [`docs/security/phase2-asvs-l2.md`](security/phase2-asvs-l2.md).
-
-### Security baseline
-- Rate limits per IP and per user; OTP resend throttling; CAPTCHA after 3 failed OTP/PIN attempts; PIN lockout after 5, unlock via OTP.
-- TLS 1.2+ and HSTS; encryption at rest (KMS); phone/PII column-level encryption.
-- Strict CSP, X-Frame-Options DENY, CSRF tokens on state-changing requests.
-- Append-only audit log for logins, orders, fund movements.
-- `.env` locally (only `.env.example` committed); AWS Secrets Manager in cloud.
-- CI: Dependabot, `npm audit`, CodeQL, gitleaks.
-
-### Contract tests (E20)
-- `apps/api/src/test/contract.test.ts` walks the route map: every route is registered in Fastify
-  with the same method and path, `user` routes answer 401 with an `ApiError` body without a session
-  and `public` ones do not (the one listed exception is `sessionRefresh`, which needs its cookie),
-  and nothing under `/v1` is registered outside the map apart from `ROUTES_OUTSIDE_THE_MAP` (the
-  OpenAPI document and the test controls). `findContractGaps` names the route key on a gap.
-- `contractChecked(backend)` in `packages/contracts/src/testing` wraps every scenario backend
-  (app.inject, apps/api on Postgres + Redis, the MSW node server). Each response, raw sends
-  included, must parse with its route's response schema on 2xx and with `ApiError` otherwise.
-- `apps/web/src/mocks/routeParity.test.ts`: every route in the map has an MSW handler.
-- All three iterate the map, so a route added by any epic joins with no wiring.
-
-### Observability
-OpenTelemetry → Grafana (Prometheus, Loki, Tempo); Sentry for frontend errors; real-user Web Vitals with regression alerts.
+| Failure | Effect | Recovery |
+|---|---|---|
+| API process dies | Its in-flight requests fail; clients retry | Stateless restart; accounts reload from Postgres on first use; resting orders reloaded at boot; its unacked fills claimed by another process after 30 s |
+| Commit loses to another writer | Second writer's change would be lost | Optimistic version check; reload and retry once (3 times for matcher fills), else 409 |
+| Postgres down | Writes fail with 500; readiness reports it | API keeps serving market data; sweep and matcher reconcile retry; reads bounded by timeouts |
+| Redis down | No ticks, no fan-out; shared rate limits fail open | Followers retry; on return they resync from snapshots on the `seq` gap; outbox republishes notifications; commands missed are repaired by the 60 s reconcile |
+| Quote writer dies | Ticks stop for its shard | Standby takes the lease within 5 s; consumers resync on the restarted `seq` |
+| Matcher dies | Crossings in its shard wait | Standby is already following and takes the lease; reconcile on start rebuilds books |
+| Lost matcher command | A book misses an order change | Reconcile from a REPEATABLE READ snapshot within 60 s |
+| Poison fill request | Could block a consumer | Dead-lettered after 5 deliveries; reconcile restores the order |
+| Realtime node dies | Its sockets drop | Clients reconnect with jitter to another node, resubscribe, the trading store re-reads state |
+| Lost WebSocket frames | A surface could lag | `seq` gap detection re-reads account state; visibility sync takes a REST snapshot |
+| Candle writer dies | Minutes not stored yet | Unacked entries re-read on restart; upserts are idempotent |
+| Job worker dies mid-job | A session event half done | BullMQ retries; jobs are idempotent by account version; one run per scheduled time |
+| Chrome stops the MSW worker (demo) | Mock requests would fail | `ensureActive` before each request; reload once after a hard reload |
 
 ## 5. Monorepo structure
 
 npm workspaces + Turborepo. Node 22 pinned in `.nvmrc`; `.npmrc` sets `engine-strict=true` and
-`save-exact=true`. Updated 2026-10-07.
+`save-exact=true`. Updated 2026-10-25.
 
 ```
 nthstock/
 ├── CLAUDE.md                     # short project memory for Claude; links everything below
 ├── apps/
-│   ├── web/                      # Vite React SPA (ADR 0005)
-│   │   ├── e2e/                  # Playwright specs (msw and api mode, perf)
-│   │   ├── public/               # static files, MSW worker (generated)
-│   │   ├── scripts/              # post-build budget checks and guards (no raw hex, import boundaries)
+│   ├── web/                      # Vite React SPA (ADR 0005, 0012)
+│   │   ├── e2e/                  # Playwright specs (msw and api mode, perf, walkthrough, screens)
+│   │   ├── public/               # static files, MSW worker (generated), demo video
+│   │   ├── scripts/              # post-build budget checks and guards (no raw hex, import cycles)
 │   │   └── src/
 │   │       ├── main.tsx          # boot: runtime config, mocks, providers, router
 │   │       ├── app/              # app-wide wiring, never imported by features
 │   │       │   ├── config/       # runtime config, dev proxy, security headers
 │   │       │   ├── layouts/      # AppShell, Header, LeftRail
-│   │       │   ├── live/         # live quotes socket, background-tab sync
+│   │       │   ├── live/         # quote socket, trading store binding, visibility sync
 │   │       │   ├── providers/    # AppProviders and contexts
 │   │       │   ├── router/       # router factory and route guards
 │   │       │   ├── store/        # app-shell UI state (Zustand)
@@ -421,44 +1372,81 @@ nthstock/
 │   │       │   ├── model/        # pure logic and types
 │   │       │   └── store/        # Zustand slices (only when needed)
 │   │       ├── shared/           # cross-feature components, hooks, lib
-│   │       ├── mocks/            # MSW handlers and the in-browser mock market
+│   │       ├── mocks/            # MSW handlers, the in-browser mock market, demo simulator
 │   │       ├── styles/           # global CSS (token imports, Tailwind base layer)
 │   │       └── test/             # render wrappers, fixtures, browser API stubs
-│   ├── api/                      # Fastify modular monolith
-│   │   ├── drizzle/              # SQL migrations (NNNN_name.sql) and Drizzle metadata
+│   ├── api/                      # Fastify modular monolith (+ job worker and candle writer entries)
+│   │   ├── drizzle/              # SQL migrations 0000–0019 and Drizzle metadata
 │   │   └── src/
-│   │       ├── app.ts            # buildApp: plugins, modules, error handler
-│   │       ├── server.ts         # process entry
-│   │       ├── config.ts         # env parsing (Zod)
-│   │       ├── deps.ts           # storage seams: in-memory or Postgres repos
-│   │       ├── db/               # Postgres client, migrations runner, column crypto
+│   │       ├── app.ts            # buildApp: plugins, hooks, modules, error handler
+│   │       ├── server.ts         # API process entry
+│   │       ├── worker.ts         # BullMQ job worker entry
+│   │       ├── candleWriter.ts   # candle writer entry
+│   │       ├── config.ts         # env parsing and cross-checks (Zod)
+│   │       ├── deps.ts           # storage seams and wiring: memory or Postgres, streams
+│   │       ├── db/               # Postgres client, migrations runner, column crypto, schema check
 │   │       │   └── schema/       # Drizzle tables, one file per area
 │   │       ├── http/             # errors, cookies, CSRF, security headers, route registration
 │   │       ├── modules/<module>/ # index.ts (public API), routes.ts, service.ts, repo.ts
 │   │       │                     # (interface + memory), pgRepo.ts (Postgres), schema.ts, tests
-│   │       │                     # beside them; others import a module only via index.ts
-│   │       ├── ticks/            # mock tick pump and quote publisher
-│   │       └── test/             # injected backend, test Postgres/Redis, cross-module suites
-│   ├── quotes/                   # tick writer: one process per shard behind a Redis lease (Wave 3, E22)
-│   ├── realtime/                 # WebSocket server
+│   │       ├── ticks/            # tick pump, publisher, quote-stream follower
+│   │       ├── perf/             # perf smoke
+│   │       └── test/             # injected backend, test Postgres/Redis, contract suites
+│   ├── quotes/                   # tick writer: one process per shard behind a Redis lease (E22)
+│   ├── matcher/                  # order books per shard: commands, reconcile, fills, alerts (E23)
+│   ├── realtime/                 # WebSocket gateway
 │   │   └── src/
 │   │       ├── app.ts, server.ts, config.ts, logger.ts, protocol.ts, timers.ts
 │   │       ├── connections/      # auth, per-connection hub, subscription registry
-│   │       ├── feeds/            # Redis quote, order and session-revocation feeds
+│   │       ├── feeds/            # quote (pub/sub or streams), order, session-revocation feeds
 │   │       └── test/             # fake sockets, WS test client, test Redis
 │   └── mobile/                   # (later) React Native + Expo
 ├── packages/                     # each: src/index.ts is the public API; tests beside the code
 │   ├── ui/                       # design system components + Storybook
 │   ├── tokens/                   # design tokens → CSS variables + Tailwind theme
-│   ├── contracts/                # Zod schemas, REST routes, WS messages
-│   ├── marketData/               # feed adapters: mock (faker + GBM), vendor (later)
-│   ├── paperEngine/              # order state machine, fills, funds ledger, P&L (ADR 0004)
-│   ├── apiClient/                # typed REST + WS client (web and mobile)
+│   ├── contracts/                # Zod schemas: REST routes, WS, pub/sub, streams, OpenAPI, scenarios
+│   ├── marketData/               # adapter, mock market (faker + GBM), leases, stream follower
+│   ├── paperEngine/              # engine, desk, order book, trailing stops, alerts (ADR 0004)
+│   ├── apiClient/                # typed REST + WS client, quote and trading stores (web and mobile)
 │   ├── config/                   # eslint, tsconfig, prettier, vitest presets
-│   └── utils/                    # INR formatting, market hours, IST dates
-├── infra/                        # docker-compose, k6, (later) terraform
-├── tools/github/                 # issueKey.sh: NSTOCK issue keys for agents and workflows
+│   └── utils/                    # INR formatting, IST time, NSE calendar, TOTP, shardOf
+├── infra/                        # docker-compose (Postgres+TimescaleDB, Redis, PgBouncer), k6
+├── tools/                        # github/issueKey.sh, loadTest/, demo/ walkthrough recorder
 ├── docs/                         # see docs/README.md
 ├── .claude/                      # see "Claude Code setup" in CLAUDE.md
 └── .github/                      # workflows, PR template, CODEOWNERS, Dependabot
 ```
+
+## 6. Decisions, risks and open questions
+
+**Decision records** ([`adr/`](adr/)):
+
+| ADR | Decision |
+|---|---|
+| [0001](adr/0001-monorepo-npm-turborepo.md) | npm workspaces + Turborepo monorepo |
+| [0002](adr/0002-core-stack.md) | Core stack: React/Vite SPA, Fastify, Postgres, Redis |
+| [0003](adr/0003-agent-team-on-github-actions.md) | Agent team on GitHub Actions |
+| [0004](adr/0004-mock-backend-and-paper-engine.md) | Mock backend (MSW and API) on one paper engine and market adapter |
+| [0005](adr/0005-web-ui-architecture.md) | Web UI architecture: layers, state, live prices |
+| [0006](adr/0006-auto-merge-and-self-healing.md) | Auto-merge and self-healing CI |
+| [0007](adr/0007-postgres-persistence-and-jobs.md) | Postgres persistence, roles, PII crypto, jobs |
+| [0008](adr/0008-repository-structure-and-claude-setup.md) | Repository structure and Claude Code setup |
+| [0009](adr/0009-agent-driven-releases.md) | Agent-driven releases (superseded by 0011) |
+| [0010](adr/0010-develop-and-main-branches.md) | `develop` and `production` branches and environments |
+| [0011](adr/0011-agent-promoted-releases.md) | Agent-promoted releases with gates |
+| [0012](adr/0012-trading-state-and-chart-gestures.md) | One trading state for every surface; chart gesture zones |
+| [0013](adr/0013-matcher-fills-commit-in-api.md) | The matcher finds fills, the API commits them |
+
+**Risks and how they are contained:**
+
+| Risk | Containment |
+|---|---|
+| TimescaleDB is not on RDS | Queries are plain `time_bucket` reads; three fallbacks listed in the spec |
+| One API process commits 550 to 650 fills a second, so a burst queues | Fill reader is a consumer group: more API processes add capacity linearly |
+| Pub/sub for per-user events is fire and forget | Every consumer resyncs on a `seq` gap or reconnect; notifications ride an outbox |
+| Mock SMS and CAPTCHA fail closed in production | A launch checklist item; interfaces are in place |
+| Simulated data could be mistaken for real | Paper trading only; the Demo simulator is labelled "Simulated" |
+
+**Open questions:** the TimescaleDB hosting choice for AWS (spec market-data-and-matching, question
+1); when to make `MATCHER_MODE=worker` the default for the local stack; the observability vendor
+for Phase 6.

@@ -39,20 +39,22 @@ export type FlowGeometry = {
 export const FLOW_DIAGRAMS = {
   system: {
     width: 720,
-    height: 380,
+    height: 440,
     groups: {
-      browser: { x: 8, y: 8, w: 236, h: 364 },
-      servers: { x: 268, y: 8, w: 444, h: 364 },
+      browser: { x: 8, y: 8, w: 236, h: 424 },
+      servers: { x: 268, y: 8, w: 444, h: 424 },
     },
     nodes: {
       spa: { x: 24, y: 40, w: 204, h: 64, tone: 'brand' },
       stores: { x: 24, y: 150, w: 204, h: 64, tone: 'brand' },
       msw: { x: 24, y: 262, w: 204, h: 82, tone: 'neutral', dashed: true },
-      realtime: { x: 290, y: 40, w: 190, h: 64, tone: 'brand' },
-      api: { x: 290, y: 160, w: 190, h: 64, tone: 'brand' },
-      engine: { x: 290, y: 280, w: 190, h: 64, tone: 'neutral' },
-      redis: { x: 530, y: 40, w: 166, h: 64, tone: 'data' },
-      postgres: { x: 530, y: 160, w: 166, h: 64, tone: 'data' },
+      realtime: { x: 290, y: 40, w: 160, h: 64, tone: 'brand' },
+      api: { x: 290, y: 150, w: 160, h: 64, tone: 'brand' },
+      postgres: { x: 290, y: 280, w: 160, h: 64, tone: 'data' },
+      workers: { x: 290, y: 370, w: 160, h: 56, tone: 'neutral' },
+      quotes: { x: 540, y: 40, w: 160, h: 64, tone: 'brand' },
+      redis: { x: 540, y: 150, w: 160, h: 90, tone: 'data' },
+      matcher: { x: 540, y: 280, w: 160, h: 64, tone: 'brand' },
     },
     edges: {
       ws: {
@@ -66,8 +68,8 @@ export const FLOW_DIAGRAMS = {
         points: [
           [228, 96],
           [252, 96],
-          [252, 192],
-          [290, 192],
+          [252, 182],
+          [290, 182],
         ],
         label: { at: [256, 140], anchor: 'start' },
       },
@@ -86,35 +88,65 @@ export const FLOW_DIAGRAMS = {
         label: { at: [134, 242], anchor: 'start' },
         dashed: true,
       },
-      pubsub: {
+      ticks: {
         points: [
-          [530, 58],
-          [480, 58],
+          [620, 104],
+          [620, 150],
         ],
-        label: { at: [505, 50] },
+        label: { at: [628, 131], anchor: 'start' },
       },
-      publish: {
+      fanout: {
         points: [
-          [480, 176],
-          [505, 176],
-          [505, 90],
-          [530, 90],
+          [540, 166],
+          [495, 166],
+          [495, 88],
+          [450, 88],
         ],
-        label: { at: [500, 133], anchor: 'end' },
+        label: { at: [490, 128], anchor: 'end' },
+      },
+      streams: {
+        points: [
+          [450, 200],
+          [540, 200],
+        ],
+        label: { at: [495, 192] },
+      },
+      matcher: {
+        points: [
+          [620, 280],
+          [620, 240],
+        ],
+        label: { at: [628, 264], anchor: 'start' },
+      },
+      reconcile: {
+        points: [
+          [540, 312],
+          [450, 312],
+        ],
+        label: { at: [486, 304] },
       },
       sql: {
         points: [
-          [480, 208],
-          [530, 208],
+          [370, 214],
+          [370, 280],
         ],
-        label: { at: [505, 200] },
+        label: { at: [378, 251], anchor: 'start' },
       },
-      engine: {
+      workerSql: {
         points: [
-          [385, 280],
-          [385, 224],
+          [370, 370],
+          [370, 344],
         ],
-        label: { at: [393, 256], anchor: 'start' },
+        label: { at: [378, 361], anchor: 'start' },
+      },
+      jobs: {
+        points: [
+          [450, 398],
+          [525, 398],
+          [525, 228],
+          [540, 228],
+        ],
+        label: { at: [517, 390], anchor: 'end' },
       },
     },
   },
