@@ -1,7 +1,7 @@
 import { ErrorState, Skeleton, buttonVariants } from '@nthstock/ui';
 import { Link, useRouter, type ErrorComponentProps } from '@tanstack/react-router';
 import { useEffect } from 'react';
-import { isChunkLoadError, reloadForNewBuild } from '../staleBuild';
+import { isChunkLoadError, reloadForNewBuild, reloadWhenOnline } from '../staleBuild';
 import { strings } from '../strings';
 
 /** Centres a route-level state card in the content area, both ways, on every screen size. */
@@ -27,7 +27,7 @@ export function RouteError({ error, reset }: ErrorComponentProps) {
           retryLabel={strings.errors.retry}
           onRetry={() => {
             if (staleBuild) {
-              window.location.reload();
+              reloadWhenOnline();
               return;
             }
             reset();

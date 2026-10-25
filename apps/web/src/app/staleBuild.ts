@@ -27,9 +27,13 @@ export type StaleBuildEnv = {
   whenOnline: (run: () => void) => void;
   storage: Pick<Storage, 'getItem' | 'setItem'> | undefined;
   now: () => number;
+  warn: (message: string) => void;
 };
 
-function defaultEnv(): StaleBuildEnv {
+/** One reload waits for the network at a time, however many chunk errors arrive offline. */
+let waitingForNetwork = false;
+
+export function defaultStaleBuildEnv(): StaleBuildEnv {
   let storage: Storage | undefined;
   try {
     storage = window.sessionStorage;
@@ -46,45 +50,70 @@ function defaultEnv(): StaleBuildEnv {
     },
     storage,
     now: () => Date.now(),
+    warn: (message) => {
+      console.warn(message);
+    },
   };
 }
 
 /**
- * Reloads the page to pick up the current build, unless it already did so in the last minute.
- * Returns whether it reloaded (or will, once back online). Offline, it waits for the network, so
- * the tab does not land on the browser's offline page. Without session storage it still reloads,
- * since one reload is the only way out and the browser's own reload limits stop a loop.
+ * Reloads now, or once the browser is back online, so the tab never lands on the browser's offline
+ * page. Returns true, since a reload either ran or is queued. The queued one has no once-a-minute
+ * guard, so it always recovers the tab; this is also Try again's reload.
  */
-export function reloadForNewBuild(env: StaleBuildEnv = defaultEnv()): boolean {
-  if (!env.online()) {
-    env.whenOnline(() => {
-      reloadForNewBuild(env);
-    });
+export function reloadWhenOnline(env: StaleBuildEnv = defaultStaleBuildEnv()): boolean {
+  if (env.online()) {
+    env.reload();
     return true;
   }
+  if (!waitingForNetwork) {
+    waitingForNetwork = true;
+    env.whenOnline(() => {
+      waitingForNetwork = false;
+      env.reload();
+    });
+  }
+  return true;
+}
+
+/**
+ * Reloads the page to pick up the current build, unless it already did so in the last minute.
+ * Offline, the reload waits for the network. Returns whether a reload ran or is queued; false
+ * means the error should still reach the route's error card. Without session storage it still
+ * reloads, since one reload is the only way out and the browser's own reload limits stop a loop.
+ */
+export function reloadForNewBuild(env: StaleBuildEnv = defaultStaleBuildEnv()): boolean {
   let last: number;
   try {
     last = Number(env.storage?.getItem(KEY) ?? 0);
   } catch {
     last = 0;
   }
+  if (!Number.isFinite(last)) last = 0;
   const now = env.now();
-  if (now - last < MIN_GAP_MS) return false;
+  if (now - last < MIN_GAP_MS) {
+    env.warn('A code chunk failed to load again within a minute of reloading; not reloading.');
+    return false;
+  }
   try {
     env.storage?.setItem(KEY, String(now));
   } catch {
     // A convenience only: the reload still happens.
   }
-  env.reload();
-  return true;
+  return reloadWhenOnline(env);
 }
 
 /**
  * Vite fires `vite:preloadError` when a chunk's preload fails. Reload to the current build instead
- * of letting the import throw into a route's error boundary.
+ * of letting the import throw. Offline the error is swallowed too, with the reload queued: thrown,
+ * it would reach TanStack Router's own reload, which would land on the browser's offline page.
+ * When the minute's reload is spent, the error goes on to the route's card.
  */
-export function installStaleBuildReload(target: Pick<Window, 'addEventListener'> = window): void {
+export function installStaleBuildReload(
+  target: Pick<Window, 'addEventListener'> = window,
+  env: StaleBuildEnv = defaultStaleBuildEnv(),
+): void {
   target.addEventListener('vite:preloadError', (event) => {
-    if (reloadForNewBuild()) event.preventDefault();
+    if (reloadForNewBuild(env)) event.preventDefault();
   });
 }
