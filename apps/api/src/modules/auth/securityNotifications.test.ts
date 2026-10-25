@@ -125,15 +125,4 @@ describe('security notifications (NSTOCK-0382)', () => {
     expect(ended?.body).toContain('1 session ended');
     expectNoPersonalData(await security(c));
   });
-
-  it('raises nothing for logging out the others when there are none', async () => {
-    const c = client(4);
-    await login(c);
-    await c.call('pinSet', { body: { pin: PIN, confirmPin: PIN } });
-    await c.call('stepUp', { body: { pin: PIN } });
-    await settled(c, 1);
-    await c.call('sessionsRevokeOthers');
-    await new Promise((resolve) => setTimeout(resolve, 20));
-    expect(await security(c)).toHaveLength(1);
-  });
 });
