@@ -15,6 +15,11 @@ export type TicketIntent = {
   qty?: number;
   /** Product to prefill, e.g. the position's own when exiting it (T-150). */
   product?: ProductType;
+  /**
+   * The most an exit may close (NSTOCK-0395): the position's executed quantity. An order on this
+   * side and product above it is refused in the ticket, so an exit never flips the position.
+   */
+  maxQty?: number;
   /** A limit price to prefill, in paise: the ticket opens as a limit order at it (T17). */
   price?: number;
   /**

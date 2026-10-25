@@ -29,6 +29,9 @@ export const strings = {
   products: { DELIVERY: 'Delivery', INTRADAY: 'Intraday' } satisfies Record<ProductType, string>,
   closed: 'Closed',
   noAverage: '–',
+  edit: 'Edit',
+  editLabel: (symbol: string, product: string) =>
+    `Edit ${symbol} ${product} position: trailing stop, exit or add`,
   exit: 'Exit',
   exitLabel: (symbol: string, product: string) => `Exit ${symbol} ${product} position`,
   total: {

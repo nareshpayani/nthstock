@@ -62,3 +62,37 @@ export function toTrailModify(
   if (trail === null || sameTrail(trail, stop.trail)) return null;
   return ModifyTrailingStopRequest.parse({ trail });
 }
+
+/**
+ * The `PATCH` body for an Update from the position editor (NSTOCK-0395): every term that differs
+ * from the stop's own, the trail, activation price and exit type with its offset. Null while the
+ * trail is empty or nothing changed.
+ */
+export function toTermsModify(
+  values: TrailingFormValues,
+  stop: TrailingStop,
+): ModifyTrailingStopRequest | null {
+  const trail = trailOf(values);
+  if (trail === null) return null;
+  const body: {
+    trail?: Trail;
+    activationPrice?: number | null;
+    exitOrderType?: TrailingFormValues['exitOrderType'];
+    exitLimitOffset?: number | null;
+  } = {};
+  if (!sameTrail(trail, stop.trail)) body.trail = trail;
+  if (values.activationPrice !== stop.activationPrice)
+    body.activationPrice = values.activationPrice;
+  if (values.exitOrderType !== stop.exitOrderType) body.exitOrderType = values.exitOrderType;
+  if (values.exitLimitOffset !== stop.exitLimitOffset)
+    body.exitLimitOffset = values.exitLimitOffset;
+  if (Object.keys(body).length === 0) return null;
+  return ModifyTrailingStopRequest.parse(body);
+}
+
+/**
+ * Whether the stop can be moved to a typed price (NSTOCK-0395), as dragging its line does: the
+ * engine needs a best price or an activation price to measure the trail from.
+ */
+export const canMoveStop = (stop: TrailingStop | null): stop is TrailingStop =>
+  isChangeableStop(stop) && (stop.watermarkPrice !== null || stop.activationPrice !== null);

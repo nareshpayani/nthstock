@@ -1,4 +1,8 @@
-import type { Order, TrailingStop } from '@nthstock/contracts';
+import {
+  TERMINAL_TRAILING_STOP_STATUSES,
+  type Order,
+  type TrailingStop,
+} from '@nthstock/contracts';
 import {
   Button,
   Table,
@@ -15,6 +19,7 @@ import type { ReactNode } from 'react';
 import { PendingPrice } from '@/shared/components/PendingPrice';
 import { TrailingStopBadge } from '@/shared/components/TrailingStopBadge';
 import type { PendingOrderPrice } from '@/shared/hooks/usePendingOrderPrices';
+import { usePositionEditorStore } from '@/shared/lib/positionEditorStore';
 import { isLive, isPartlyFilled, orderName, orderTimeLabel, priceLabel } from '../model/orderBook';
 import { strings } from '../strings';
 import { OrderSideLabel, OrderStatusBadge } from './OrderStatusBadge';
@@ -22,6 +27,7 @@ import { OrderSideLabel, OrderStatusBadge } from './OrderStatusBadge';
 /** Above this many rows the book is virtualised (ADR 0005: TanStack Virtual over 50 rows). */
 export const VIRTUAL_ORDER_ROWS = 50;
 const ROW_HEIGHT = 48;
+const TERMINAL: ReadonlySet<string> = new Set(TERMINAL_TRAILING_STOP_STATUSES);
 const VIRTUAL_COLUMNS =
   'minmax(104px,1.1fr) minmax(88px,1fr) 56px 64px 80px 88px minmax(96px,1fr) 96px minmax(220px,1.4fr)';
 
@@ -48,7 +54,8 @@ type Column = {
 
 /**
  * The order rows (T-144): time in IST, stock, side, type, product, filled/total quantity, price
- * and status, with Details on every row and Modify and Cancel on open orders (T-145). Up to 50
+ * and status, with Details on every row, Modify and Cancel on open orders (T-145), and Edit stop on
+ * an order whose trailing stop is still active, which opens the position editor (NSTOCK-0395). Up to 50
  * rows render as a table; a longer book scrolls in a virtualised grid.
  */
 export function OrderTable({
@@ -61,6 +68,7 @@ export function OrderTable({
   stops,
   pendingPrices,
 }: OrderTableProps) {
+  const openEditor = usePositionEditorStore((s) => s.openEditor);
   const columns: Column[] = [
     {
       key: 'time',
@@ -132,6 +140,8 @@ export function OrderTable({
       header: strings.columns.actions,
       render: (order) => {
         const name = orderName(order);
+        const stop = stops?.get(order.id);
+        const editable = stop !== undefined && !TERMINAL.has(stop.status);
         return (
           <div className="flex gap-1">
             <Button
@@ -161,6 +171,24 @@ export function OrderTable({
                   {strings.actions.cancel}
                 </Button>
               </>
+            ) : null}
+            {editable ? (
+              <Button
+                size="sm"
+                variant="secondary"
+                aria-label={strings.actions.editStopLabel(name)}
+                onClick={() =>
+                  openEditor({
+                    symbol: stop.symbol,
+                    exchange: stop.exchange,
+                    token: stop.token,
+                    product: stop.product,
+                    tab: 'stop',
+                  })
+                }
+              >
+                {strings.actions.editStop}
+              </Button>
             ) : null}
           </div>
         );
