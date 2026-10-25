@@ -17,6 +17,7 @@ const EnvSchema = z.object({
     .url({ protocol: /^rediss?$/, error: 'must be a redis:// or rediss:// URL' })
     .default(DEFAULT_REDIS_URL),
   ENABLE_TEST_CONTROLS: Flag,
+  QUOTE_SHARDS: z.coerce.number().int().min(1).max(64).optional(),
 });
 
 export type RealtimeConfig = {
@@ -33,6 +34,11 @@ export type RealtimeConfig = {
    * default; refused in any other NODE_ENV.
    */
   testControls: boolean;
+  /**
+   * `QUOTE_SHARDS`: read ticks from the streams of this many apps/quotes shards (spec
+   * market-data-and-matching §4). Unset: the pub/sub tick channel apps/api publishes on.
+   */
+  quoteShards: number | null;
 };
 
 /** Reads and validates the environment; throws at startup on a bad value. */
@@ -57,5 +63,6 @@ export function loadConfig(env: Readonly<Record<string, string | undefined>>): R
     host: parsed.data.HOST,
     redisUrl: parsed.data.REDIS_URL,
     testControls: parsed.data.ENABLE_TEST_CONTROLS,
+    quoteShards: parsed.data.QUOTE_SHARDS ?? null,
   };
 }

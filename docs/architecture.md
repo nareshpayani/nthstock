@@ -74,8 +74,12 @@ is the piece a licensed vendor feed replaces (D3).
   per-shard `seq`, and its quotes go to the snapshot hash `nthstock:quotes:last:v1:{shard}` in the same MULTI. A
   consumer that sees any `seq` other than the next one re-reads the snapshot (`tickStreamStep` in
   `packages/contracts`).
-- **Status:** the writer, lease and streams are built. apps/realtime and apps/api still use the in-process tick pump
-  until NSTOCK-0353 and NSTOCK-0354 switch them to the streams.
+- **apps/realtime reads the streams** when `QUOTE_SHARDS` is set (`feeds/streamFeed.ts`): at start it loads each
+  shard's snapshot, then follows every stream with one blocking `XREAD`. A gap or a restarted writer (its `seq` starts
+  again at 1) triggers a snapshot re-read; a malformed entry is logged and skipped. Without `QUOTE_SHARDS` it keeps
+  the pub/sub feed from the API's tick pump.
+- **Status:** the writer, lease, streams and the realtime reader are built. apps/api still uses the in-process tick
+  pump until NSTOCK-0354 switches it to the snapshot.
 
 ### Market data and chart bars
 - `packages/marketData` generates each range's own bars (1D: 1-minute, 1W: 5-minute, 1M: hourly,
