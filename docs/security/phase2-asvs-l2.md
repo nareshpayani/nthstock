@@ -91,7 +91,7 @@ user data (the demo mobile is the made-up 9000000001, D9).
 | 14, 15 | Market-hours jobs and P&L snapshots | E16 (BullMQ jobs) |
 | 16 to 19 | Step-up, TOTP, sessions | scenarios in [`twoFactor.ts`](../../packages/contracts/src/testing/scenarios/twoFactor.ts) and [`sessions.ts`](../../packages/contracts/src/testing/scenarios/sessions.ts), [`securityJourney.spec.ts`](../../apps/web/e2e/securityJourney.spec.ts) |
 | 20, 21 | Consent and deletion | scenarios in [`dpdp.ts`](../../packages/contracts/src/testing/scenarios/dpdp.ts); purge after 30 days with E16 |
-| 22, 23 | OpenAPI and contract tests | E20 |
+| 22, 23 | OpenAPI and contract tests | [`docs/api/openapi.json`](../api/openapi.json) (CI fails when stale), [`contract.test.ts`](../../apps/api/src/test/contract.test.ts) |
 | 24 | `seed:demo` twice gives the same state, equal to `?demo=1` | [`seed.integration.test.ts`](../../apps/api/src/modules/demo/seed.integration.test.ts), [`seed.test.ts`](../../apps/api/src/modules/demo/seed.test.ts), [`demoSeed.test.ts`](../../apps/web/src/mocks/demoSeed.test.ts) |
 
 Performance (spec §13, NSTOCK-0243): see [`docs/runbooks/perf-smoke.md`](../runbooks/perf-smoke.md)
@@ -108,4 +108,4 @@ for the 10,000-user report.
 - [ ] Performance smoke report within budget (order ack p95 < 300 ms, PIN login p95 < 200 ms,
       slowest query p95 < 50 ms).
 - [ ] Open items accepted or scheduled: the `sql.raw` lint rule (5.3.4), market-hours jobs and purge
-      (E16), OpenAPI and contract tests (E20).
+      (E16).
