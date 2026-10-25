@@ -42,7 +42,8 @@ export type CandleStore = {
 
 type BarRow = {
   token: number;
-  bucket: Date;
+  /** Drizzle's node-postgres driver hands timestamps back as text. */
+  bucket: string | Date;
   open: string;
   high: string;
   low: string;
@@ -52,7 +53,7 @@ type BarRow = {
 
 const toBar = (row: BarRow): StoredBar => ({
   token: row.token,
-  bucket: row.bucket,
+  bucket: new Date(row.bucket),
   open: Number(row.open),
   high: Number(row.high),
   low: Number(row.low),
