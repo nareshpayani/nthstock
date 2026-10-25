@@ -28,6 +28,7 @@ afterEach(() => {
   resetSession();
   paths.length = 0;
   window.localStorage.clear();
+  window.sessionStorage.clear();
 });
 afterAll(() => {
   server.close();

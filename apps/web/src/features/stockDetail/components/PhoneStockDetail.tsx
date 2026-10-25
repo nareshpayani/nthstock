@@ -115,7 +115,7 @@ export function PhoneStockDetail({
         />,
       )}
       {/* Demo mode only (TFC-12): under the chart, so a phone demo can ratchet and trigger a stop. */}
-      <SimulatorPanel symbol={symbol} />
+      {section(strings.simulator.label, <SimulatorPanel symbol={symbol} />)}
       <Tabs value={tab} onValueChange={(next) => setTab(next as PhoneTab)} className="grid gap-0">
         <TabsList aria-label={strings.phone.tabsLabel} className="gap-0">
           {PHONE_TABS.map((key) => (

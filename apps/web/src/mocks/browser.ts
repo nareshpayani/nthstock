@@ -28,6 +28,8 @@ export type StartMockWorkerOptions = {
    * without this option the parameter is read, and dropped, here.
    */
   demo?: boolean;
+  /** Loads a URL in place of the page (Try demo's `?demo=1` reload); tests pass a spy. */
+  navigate?: (url: string) => void;
 };
 
 export async function startMockWorker(
@@ -122,7 +124,7 @@ export async function startMockWorker(
   // their saved state, as on a direct ?demo=1 load; the login page then carries on (TFC-12).
   setDemoStarter(() => {
     if (listStorage && !isDemoMode(listStorage) && markDemoPending(listStorage)) {
-      window.location.assign('/login?demo=1');
+      (options.navigate ?? ((url) => window.location.assign(url)))('/login?demo=1');
       return 'reloading';
     }
     startSimulator();

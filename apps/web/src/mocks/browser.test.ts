@@ -134,3 +134,83 @@ describe('startMockWorker (T-050)', () => {
     info.mockRestore();
   });
 });
+
+describe('Try demo starter (TFC-12)', () => {
+  const config = {
+    apiMode: 'msw',
+    apiBaseUrl: '',
+    wsUrl: null,
+    mockMarketOpen: false,
+    testControls: false,
+  } as const;
+
+  it('outside demo mode, reloads with ?demo=1 and marks Try demo pending', async () => {
+    const info = vi.spyOn(console, 'info').mockImplementation(() => undefined);
+    window.sessionStorage.clear();
+    window.history.replaceState(null, '', '/login');
+    const { startMockWorker } = await import('./browser');
+    const { DEMO_PENDING_STORAGE_KEY, setDemoStarter, startDemo } =
+      await import('@/shared/lib/demoSimulator');
+    const navigate = vi.fn();
+    const { adapter, orders } = await startMockWorker(config, undefined, { navigate });
+
+    expect(startDemo()).toBe('reloading');
+    expect(navigate).toHaveBeenCalledWith('/login?demo=1');
+    expect(window.sessionStorage.getItem(DEMO_PENDING_STORAGE_KEY)).toBe('1');
+    setDemoStarter(null);
+    orders.dispose();
+    adapter.dispose();
+    window.sessionStorage.clear();
+    info.mockRestore();
+  });
+
+  it('in demo mode, is ready and registers the Simulator once', async () => {
+    const info = vi.spyOn(console, 'info').mockImplementation(() => undefined);
+    window.sessionStorage.clear();
+    window.history.replaceState(null, '', '/login');
+    const demo = await import('@/shared/lib/demoSimulator');
+    const register = vi.spyOn(demo, 'registerSimulator');
+    const { startMockWorker } = await import('./browser');
+    const navigate = vi.fn();
+    const { adapter, orders } = await startMockWorker(config, undefined, { demo: true, navigate });
+    const registeredAtStart = register.mock.calls.length;
+
+    expect(demo.startDemo()).toBe('ready');
+    expect(demo.startDemo()).toBe('ready');
+    expect(navigate).not.toHaveBeenCalled();
+    expect(registeredAtStart).toBe(1);
+    expect(register).toHaveBeenCalledTimes(1);
+    demo.setDemoStarter(null);
+    demo.registerSimulator(null);
+    register.mockRestore();
+    orders.dispose();
+    adapter.dispose();
+    window.sessionStorage.clear();
+    info.mockRestore();
+  });
+
+  it('keeps the pending flag on the ?demo=1 load and drops a stale one on any other', async () => {
+    const info = vi.spyOn(console, 'info').mockImplementation(() => undefined);
+    window.history.replaceState(null, '', '/login');
+    const { startMockWorker } = await import('./browser');
+    const { DEMO_PENDING_STORAGE_KEY, setDemoStarter } = await import('@/shared/lib/demoSimulator');
+
+    window.sessionStorage.clear();
+    window.sessionStorage.setItem(DEMO_PENDING_STORAGE_KEY, '1');
+    const demoLoad = await startMockWorker(config, undefined, { demo: true });
+    expect(window.sessionStorage.getItem(DEMO_PENDING_STORAGE_KEY)).toBe('1');
+    demoLoad.orders.dispose();
+    demoLoad.adapter.dispose();
+
+    window.sessionStorage.clear();
+    window.sessionStorage.setItem(DEMO_PENDING_STORAGE_KEY, '1');
+    const plainLoad = await startMockWorker(config, undefined, { demo: false });
+    expect(window.sessionStorage.getItem(DEMO_PENDING_STORAGE_KEY)).toBeNull();
+    plainLoad.orders.dispose();
+    plainLoad.adapter.dispose();
+
+    setDemoStarter(null);
+    window.sessionStorage.clear();
+    info.mockRestore();
+  });
+});
