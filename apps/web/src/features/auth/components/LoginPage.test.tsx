@@ -211,6 +211,21 @@ describe('Try demo outside demo mode (TFC-12)', () => {
   });
 });
 
+describe('Try demo after a reload that did not start demo mode', () => {
+  it('shows an error instead of reloading again', async () => {
+    const start = vi.fn((): DemoStart => 'reloading');
+    setDemoStarter(start);
+    onTestFinished(() => setDemoStarter(null));
+    window.sessionStorage.setItem(DEMO_PENDING_STORAGE_KEY, '1');
+    const { apiClient } = newBrowser();
+    renderApp('/login', { apiClient });
+
+    expect(await screen.findByRole('alert')).toBeInTheDocument();
+    expect(start).toHaveBeenCalledOnce();
+    expect(screen.getByRole('button', { name: 'Try demo' })).toBeEnabled();
+  });
+});
+
 describe('PIN setup, PIN entry and lockout (T-088)', () => {
   it('first login sets a PIN; the trusted browser then goes straight to PIN entry; 5 wrong PINs lock; OTP unlocks', async () => {
     const { apiClient, mobile } = newBrowser();

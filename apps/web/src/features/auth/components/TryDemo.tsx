@@ -29,10 +29,15 @@ export function TryDemo({ devOtp }: { devOtp: string }) {
   const [pending, setPending] = useState(resume);
   const [error, setError] = useState<string | null>(null);
 
-  const run = async () => {
-    // Outside demo mode the page reloads with the demo account first, then carries on in `resume`.
-    if (startDemo() === 'reloading') return;
+  /** `resumed`: the page already reloaded once for the demo account, so never reload again. */
+  const run = async (resumed = false) => {
     try {
+      // Outside demo mode the page reloads with the demo account first, then carries on in
+      // `resume`. A second reload would loop, so after a resume it counts as a failure.
+      if (startDemo() === 'reloading') {
+        if (!resumed) return;
+        throw new Error('demo mode did not start after the reload');
+      }
       const sent = await requestOtp.mutateAsync({ mobile: DEMO_MOBILE, purpose: 'LOGIN' });
       await verifyOtp.mutateAsync({ requestId: sent.requestId, mobile: DEMO_MOBILE, otp: devOtp });
       await navigate({ to: '/stocks/$symbol', params: { symbol: DEMO_INSTRUMENT }, replace: true });
@@ -55,7 +60,7 @@ export function TryDemo({ devOtp }: { devOtp: string }) {
     } catch {
       // No storage, so no flag.
     }
-    void run();
+    void run(true);
   });
   useEffect(() => {
     if (!resume) return undefined;
