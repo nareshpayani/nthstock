@@ -5,6 +5,7 @@ import type {
   FundsSummary,
   Holding,
   LedgerPage,
+  MatcherFill,
   InstrumentToken,
   ModifyOrderRequest,
   Order,
@@ -49,6 +50,11 @@ export type OrderServiceDeps = {
   onAuditError?: (error: Error) => void;
   /** Ids for orders and ledger entries; default `pe_<uuid>`. */
   newId?: () => string;
+  /**
+   * False (`MATCHER_MODE=worker`, NSTOCK-0369): the desk subscribes to no ticks and fills come
+   * only through `applyMatcherFill`. Default true.
+   */
+  followTicks?: boolean;
 };
 
 /**
@@ -64,11 +70,24 @@ export type OrderUpdateListener = (
   last?: boolean,
 ) => void;
 
+/**
+ * A committed trailing stop change, at the account version after its commit (the matcher's
+ * `STOP_ADD` / `STOP_CANCEL`, NSTOCK-0368). Only a stop's final state in the commit is announced.
+ */
+export type TrailingStopUpdateListener = (
+  userId: string,
+  stop: TrailingStop,
+  version: number,
+) => void;
+
 /** One committed account change, for the Redis publisher (NSTOCK-0368). */
 export type AccountDelta = AccountDeltaEvent['delta'];
 export type AccountDeltaListener = (userId: string, delta: AccountDelta) => void;
 
 export type OrderService = ReturnType<typeof createOrderService>;
+
+/** How many times a matcher fill that lost its commit to another writer runs again. */
+export const MATCHER_FILL_RETRIES = 3;
 
 const orderGone = (): never => {
   throw new ApiHttpError(404, 'NOT_FOUND', 'This order was not found.');
@@ -103,8 +122,8 @@ type AccountCache = {
   updates: Order[];
   /** Trailing-stop updates for the change being made, announced with the order updates. */
   stopUpdates: TrailingStop[];
-  /** A commit lost to another writer since the last `settle`: the engine was reloaded. */
-  conflicted: boolean;
+  /** A commit lost to another writer since the last `settle` (the engine was reloaded), or null. */
+  conflict: AccountConflict | null;
   /** A commit failed for another reason: reload before the next use. */
   stale: boolean;
   /** The entry that closes the change being made (the funds reset's), from the funds after it. */
@@ -138,9 +157,11 @@ export function createOrderService({
     process.stderr.write(`audit write failed: ${error.message}\n`);
   },
   newId = () => `pe_${randomUUID().replaceAll('-', '')}`,
+  followTicks = true,
 }: OrderServiceDeps) {
   const listeners = new Set<OrderUpdateListener>();
   const deltaListeners = new Set<AccountDeltaListener>();
+  const stopListeners = new Set<TrailingStopUpdateListener>();
   /** How many of each user's ledger entries are in the audit log already. */
   const auditedLedger = new Map<string, number>();
   const cache = new Map<string, AccountCache>();
@@ -208,7 +229,7 @@ export function createOrderService({
       pending: [],
       updates: [],
       stopUpdates: [],
-      conflicted: false,
+      conflict: null,
       stale: false,
       closing: null,
     });
@@ -261,7 +282,7 @@ export function createOrderService({
         }
         await hydrate(userId);
         const reloaded = cache.get(userId);
-        if (reloaded) reloaded.conflicted = true;
+        if (reloaded) reloaded.conflict = error;
         return;
       }
       const { version } = account;
@@ -269,7 +290,17 @@ export function createOrderService({
         const last = !updates.slice(at + 1).some((later) => later.id === order.id);
         for (const listener of [...listeners]) listener(userId, order, version, last);
       }
-      await announceDelta(userId, engine, latestById(updates), latestById(stopUpdates));
+      const stops = latestById(stopUpdates);
+      for (const stop of stops)
+        for (const listener of [...stopListeners]) {
+          // A failing listener must not stop the others, nor the delta below.
+          try {
+            listener(userId, stop, version);
+          } catch (error) {
+            reportError(error);
+          }
+        }
+      await announceDelta(userId, engine, latestById(updates), stops);
     }).catch(() => undefined);
   }
 
@@ -310,17 +341,17 @@ export function createOrderService({
   }
 
   /**
-   * Waits for the user's queued writes and answers whether one of them lost to another writer
-   * (and clears that). A failed commit answers with its error.
+   * Waits for the user's queued writes and answers with the conflict if one of them lost to
+   * another writer (and clears it), else null. A failed commit answers with its error.
    */
-  async function settle(userId: string): Promise<boolean> {
+  async function settle(userId: string): Promise<AccountConflict | null> {
     while (queues.has(userId)) await queues.get(userId);
     const account = cache.get(userId);
     if (account?.stale)
       throw new ApiHttpError(500, 'INTERNAL_ERROR', 'Your account could not be saved.');
-    const conflicted = account?.conflicted ?? false;
-    if (account) account.conflicted = false;
-    return conflicted;
+    const conflict = account?.conflict ?? null;
+    if (account) account.conflict = null;
+    return conflict;
   }
 
   /** Whether the accounts with live orders are on the desk (see `hydrateLive`). */
@@ -372,6 +403,7 @@ export function createOrderService({
       });
       account.stopUpdates.push(stop);
     },
+    followTicks,
     onOrderUpdate: (userId, order) => {
       const account = cache.get(userId);
       if (!account) return;
@@ -651,6 +683,14 @@ export function createOrderService({
       };
     },
 
+    /** Every committed trailing stop change of every user (for the matcher, NSTOCK-0368). */
+    onTrailingStopUpdate(listener: TrailingStopUpdateListener): () => void {
+      stopListeners.add(listener);
+      return () => {
+        stopListeners.delete(listener);
+      };
+    },
+
     /** Syncs every account, so session events run and are pushed without a request. */
     sweep: async (): Promise<void> => {
       // A boot that could not load the live accounts (the database was down) tries again here.
@@ -658,6 +698,37 @@ export function createOrderService({
       await desk.sweep();
       // The session events it ran are announced once committed.
       while (queues.size > 0) await Promise.all(queues.values());
+    },
+
+    /**
+     * Reloads each account from the store, syncs its engine to now and commits (the session jobs,
+     * T-208): reloading first takes in what another process (the API, or an earlier run) wrote,
+     * and a rerun at the same time finds nothing left to do. One account that fails is counted
+     * and skipped, so the rest still get their session event; the job retries the run when any
+     * failed.
+     */
+    syncAccounts: async (
+      userIds: Iterable<string>,
+    ): Promise<{ synced: number; failed: number }> => {
+      let synced = 0;
+      let failed = 0;
+      for (const userId of new Set(userIds)) {
+        try {
+          await settle(userId);
+          const known = cache.get(userId);
+          if (known) known.stale = true;
+          await ensure(userId);
+          desk.fundsSummary(userId);
+          // A commit that lost to another writer reloaded the account: sync that one once more.
+          if (await settle(userId)) await read(userId, () => desk.fundsSummary(userId));
+          synced += 1;
+        } catch (error) {
+          failed += 1;
+          // No user id or message in the report: the job worker logs it (never log PII).
+          reportError(new Error('An account did not sync', { cause: error }));
+        }
+      }
+      return { synced, failed };
     },
 
     /**
@@ -674,6 +745,28 @@ export function createOrderService({
       await settle(userId);
     },
 
+    /**
+     * A fill request from the matcher worker (ADR 0013, NSTOCK-0367): runs the user's engine at
+     * the tick's price and time and commits what it fills, then announces it, like any tick. The
+     * engine re-checks every order, so a request that arrives twice fills nothing twice and one
+     * for an order modified or cancelled since fills only what still crosses. Losing to another
+     * writer reloads and runs again, up to `MATCHER_FILL_RETRIES` times (NSTOCK-0388); a failed
+     * commit rejects, so the request is retried.
+     */
+    async applyMatcherFill(fill: MatcherFill): Promise<void> {
+      await ensure(fill.userId);
+      let conflict: AccountConflict | null = null;
+      for (let attempt = 0; attempt <= MATCHER_FILL_RETRIES; attempt += 1) {
+        await desk.ingestFor([fill.userId], fill);
+        conflict = await settle(fill.userId);
+        if (!conflict) return;
+      }
+      // Losing every time rejects with the last conflict's versions: the matcher already dropped
+      // the crossed order from its book, so the request stays pending and is claimed again rather
+      // than acked unfilled.
+      throw conflict ?? new AccountConflict(fill.userId, 0, 0);
+    },
+
     /** A scripted tick for tests and scenarios (see `PaperDesk.pinPrice`). */
     pinPrice: (token: InstrumentToken, ltp: number) => {
       desk.pinPrice(token, ltp);
@@ -685,6 +778,7 @@ export function createOrderService({
     dispose: () => {
       listeners.clear();
       deltaListeners.clear();
+      stopListeners.clear();
       desk.dispose();
     },
   };

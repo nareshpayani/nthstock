@@ -11,7 +11,7 @@ feature branch ──PR──► develop ──green CI──► development (de
                           └──Promote to production (CI green + dev smoke test)──► production ──green CI──► live site
 ```
 
-Both environments are deployed by `.github/workflows/web-hosting.yml` and listed under
+Both environments are deployed by `.github/workflows/deploy-web-hosting.yml` and listed under
 **Settings → Environments**, each with its deploy history and current URL.
 
 | | development (default) | production |
@@ -32,7 +32,7 @@ When the API is hosted (scalability phase), each environment gets its own variab
 
 ## Opening the development site
 
-Settings → Environments → **development** → the deployment URL, or the latest **Web hosting** run
+Settings → Environments → **development** → the deployment URL, or the latest **Deploy: Web hosting** run
 on `develop` (its summary has the link). Add `/dashboard?demo=1`; demo login 9000000001, OTP 123456.
 
 ## One-time owner setup (GitHub settings)

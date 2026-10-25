@@ -9,12 +9,14 @@ import { PAGE_LIMIT_DEFAULT } from '@nthstock/contracts';
 import type { PaperEngineWorkingSet } from '@nthstock/paperEngine';
 import { istDateKey } from '@nthstock/utils';
 import type { AuditRepo } from '../audit/index.js';
+import type { Notifier, StoredNotification } from '../notifications/index.js';
 import {
   AccountConflict,
   clearsOrders,
   type AccountChange,
   type AccountStore,
 } from './accountStore.js';
+import { notificationsForChange } from './changeNotifications.js';
 
 type StoredAccount = {
   version: number;
@@ -40,7 +42,14 @@ const LIVE: ReadonlySet<OrderStatus> = new Set(['AMO', 'OPEN']);
  * out: every order, order history and ledger entry ever committed, so the read queries see the
  * whole account. Audit entries go to `audit` with the commit.
  */
-export function createMemoryAccountStore({ audit }: { audit: AuditRepo }): AccountStore {
+export function createMemoryAccountStore({
+  audit,
+  notifier,
+}: {
+  audit: AuditRepo;
+  /** Where the notifications a change raises go (NSTOCK-0379), as in the Postgres store. */
+  notifier?: Notifier;
+}): AccountStore {
   const accounts = new Map<string, StoredAccount>();
 
   /** The account with the change applied, leaving `current` untouched. */
@@ -85,8 +94,12 @@ export function createMemoryAccountStore({ audit }: { audit: AuditRepo }): Accou
       const next = applied(current, change);
       // Taken synchronously with the check, so two commits at one version cannot both win.
       accounts.set(userId, next);
+      let stored: StoredNotification[] = [];
       try {
         await audit.appendMany(auditEntries);
+        if (notifier) {
+          stored = await notifier.repo.appendMany(notificationsForChange(userId, change));
+        }
       } catch (error) {
         // The change and its audit entries go together or not at all.
         if (accounts.get(userId) === next) {
@@ -95,6 +108,7 @@ export function createMemoryAccountStore({ audit }: { audit: AuditRepo }): Accou
         }
         throw error;
       }
+      notifier?.committed(stored);
       return next.version;
     },
 
@@ -127,6 +141,9 @@ export function createMemoryAccountStore({ audit }: { audit: AuditRepo }): Accou
       ),
 
     accountsTouchedOn: (tradeDate) => {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(tradeDate)) {
+        return Promise.reject(new RangeError(`Not a YYYY-MM-DD date: ${tradeDate}`));
+      }
       const on = (iso: string) => istDateKey(new Date(iso)) === tradeDate;
       return Promise.resolve(
         [...accounts]
@@ -138,6 +155,13 @@ export function createMemoryAccountStore({ audit }: { audit: AuditRepo }): Accou
           .map(([userId]) => userId),
       );
     },
+
+    accountsWithHoldings: () =>
+      Promise.resolve(
+        [...accounts]
+          .filter(([, account]) => account.workingSet.holdings.length > 0)
+          .map(([userId]) => userId),
+      ),
 
     reset: () => {
       accounts.clear();

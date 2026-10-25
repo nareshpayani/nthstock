@@ -16,7 +16,8 @@ import { resolveWsUrl, type RuntimeConfig } from '../config/runtimeConfig';
  * when the order-update listener asks for it. The same socket carries the signed-in user's
  * `orderUpdate` messages (T-147).
  *
- * With `trading` (msw mode, where the engine sends account frames), a trading store rides the same
+ * With `trading` (both modes: the in-browser engine and apps/api both send account frames,
+ * NSTOCK-0368), a trading store rides the same
  * socket (ADR 0012): it is started on sign-in, and its frames' quotes reach the quote store first,
  * so both commit on the same animation frame. Order updates then come from the frames' orders.
  */
@@ -46,6 +47,13 @@ export function createLiveQuotes(
       wsClient.onMessage((message) => {
         if (message.type === 'notification') listener(message);
       }),
+    onReconnect: (listener) => {
+      let last = wsClient.status();
+      return wsClient.onStatus((status) => {
+        if (status === 'open' && last === 'reconnecting') listener();
+        last = status;
+      });
+    },
   };
   const tradingStore = trading
     ? createTradingStore({

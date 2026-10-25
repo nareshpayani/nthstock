@@ -16,7 +16,7 @@ import type { MarketDataAdapter, Unsubscribe } from '@nthstock/marketData';
 import { ws } from 'msw';
 
 /** At most 4 updates/sec/symbol (CLAUDE.md §4): one flush every 250 ms. */
-export const QUOTE_FLUSH_MS = 250;
+const QUOTE_FLUSH_MS = 250;
 
 export type IntervalTimers = {
   setInterval(callback: () => void, ms: number): unknown;

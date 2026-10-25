@@ -16,7 +16,7 @@ import {
 type UserRow = typeof users.$inferSelect;
 
 /** The AES-GCM context (additional data) of each encrypted column. */
-export const USER_PII_CONTEXT = {
+const USER_PII_CONTEXT = {
   mobile: 'users.mobile_enc',
   name: 'users.name_enc',
   email: 'users.email_enc',
@@ -202,6 +202,39 @@ export function createPgUsersRepo({
         .onConflictDoNothing()
         .returning({ id: users.id });
       return rows.length > 0;
+    },
+
+    async ensureConsent(userId, consent, grantedAt) {
+      // The live user's row is locked first, so two concurrent calls (two instances seeding at
+      // once) serialise and the second sees the first one's consent.
+      return db.transaction(async (tx) => {
+        const live = await tx
+          .select({ id: users.id })
+          .from(users)
+          .where(and(eq(users.id, userId), isNull(users.deletedAt)))
+          .for('update');
+        if (live.length === 0) return false;
+        const held = await tx
+          .select({ id: consents.id })
+          .from(consents)
+          .where(
+            and(
+              eq(consents.userId, userId),
+              eq(consents.purpose, consent.purpose),
+              eq(consents.policyVersion, consent.policyVersion),
+              isNull(consents.withdrawnAt),
+            ),
+          )
+          .limit(1);
+        if (held.length > 0) return false;
+        await tx.insert(consents).values({
+          userId,
+          purpose: consent.purpose,
+          policyVersion: consent.policyVersion,
+          grantedAt,
+        });
+        return true;
+      });
     },
 
     reset: () =>

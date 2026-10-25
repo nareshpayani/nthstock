@@ -1,0 +1,26 @@
+name: Set up Playwright browsers
+description: >-
+  Installs the Playwright browsers the workspace's @playwright/test version needs, cached across
+  runs by version, plus their OS packages. Run after setup-workspace.
+inputs:
+  browsers:
+    description: Space-separated Playwright browsers, e.g. "chromium webkit".
+    default: chromium
+runs:
+  using: composite
+  steps:
+    - id: version
+      shell: bash
+      run: echo "playwright=$(node -p "require('@playwright/test/package.json').version")" >> "$GITHUB_OUTPUT"
+    - id: cache
+      uses: actions/cache@v6
+      with:
+        path: ~/.cache/ms-playwright
+        key: playwright-${{ runner.os }}-${{ steps.version.outputs.playwright }}-${{ inputs.browsers }}
+    # A cache hit still needs the OS packages, which live outside the cache.
+    - if: steps.cache.outputs.cache-hit == 'true'
+      shell: bash
+      run: npx playwright install-deps ${{ inputs.browsers }}
+    - if: steps.cache.outputs.cache-hit != 'true'
+      shell: bash
+      run: npx playwright install --with-deps ${{ inputs.browsers }}

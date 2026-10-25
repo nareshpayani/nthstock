@@ -17,7 +17,7 @@ export type ReadinessChecks = {
 };
 
 /** A check that has not answered by then counts as down. */
-export const READY_CHECK_TIMEOUT_MS = 2_000;
+const READY_CHECK_TIMEOUT_MS = 2_000;
 
 async function probe(
   check: ReadinessCheck | null,

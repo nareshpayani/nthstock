@@ -7,7 +7,7 @@ export type InstrumentParams = { symbol: string; exchange?: Exchange | undefined
 
 const withExchange = (exchange: Exchange | undefined) => (exchange ? { exchange } : {});
 
-export const stockDetailKeys = {
+const stockDetailKeys = {
   all: ['stockDetail'] as const,
   instrument: (params: InstrumentParams) =>
     [
@@ -111,7 +111,7 @@ export function profileQuery(api: ApiClient, params: InstrumentParams) {
 }
 
 /** Search hits a symbol lookup reads, enough for the exact match on both exchanges to be in. */
-export const LISTINGS_SEARCH_LIMIT = 20;
+const LISTINGS_SEARCH_LIMIT = 20;
 
 /**
  * The exchanges that list `symbol`, from `GET /v1/market/search` (T-106). A search answers 200

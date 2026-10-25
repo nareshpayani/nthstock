@@ -1,5 +1,5 @@
 import { base32Decode, base32Encode, type Clock } from '@nthstock/utils';
-import { and, desc, eq, gt, isNull, lt, lte, sql } from 'drizzle-orm';
+import { and, desc, eq, gt, isNull, lt, lte, sql, type SQL } from 'drizzle-orm';
 import type { Database } from '../../db/client.js';
 import type { PiiCrypto } from '../../db/crypto.js';
 import {
@@ -27,7 +27,7 @@ type DeviceRow = typeof devices.$inferSelect;
 type SessionRow = typeof sessions.$inferSelect;
 
 /** A SHA-256 in hex (how the services pass token hashes) as the 32 bytes the tables store. */
-export function tokenHashBytes(hash: string): Buffer {
+function tokenHashBytes(hash: string): Buffer {
   if (!/^[0-9a-f]{64}$/.test(hash)) throw new Error('A token hash must be a hex SHA-256');
   return Buffer.from(hash, 'hex');
 }
@@ -54,15 +54,35 @@ const toDevice = (row: DeviceRow): DeviceRecord => ({
  * failure count only changes in one `UPDATE … RETURNING`, so concurrent wrong PINs each get their
  * own count and the fifth one locks.
  */
-export function createPgDeviceStore({
+/** Rows one cleanup statement deletes at most (T-210); a session's cascade adds its tokens. */
+const CLEANUP_CHUNK = 5_000;
+const CLEANUP_STATEMENT_TIMEOUT_MS = 10_000;
+
+/** Runs a `… limit <chunk>` delete until it deletes less than a chunk; the total deleted. */
+async function deleteInChunks(database: Database, chunk: number, statement: SQL): Promise<number> {
+  let total = 0;
+  for (;;) {
+    const deleted = await database.transaction(
+      async (tx) => (await tx.execute(statement)).rowCount ?? 0,
+      { statementTimeoutMs: CLEANUP_STATEMENT_TIMEOUT_MS },
+    );
+    total += deleted;
+    if (deleted < chunk) return total;
+  }
+}
+
+function createPgDeviceStore({
   database,
   clock,
   pii,
+  cleanupChunk = CLEANUP_CHUNK,
 }: {
   database: Database;
   clock: Clock;
   /** Encrypts TOTP secrets at rest (NSTOCK-0215). */
   pii: PiiCrypto;
+  /** Rows per cleanup delete (default `CLEANUP_CHUNK`). */
+  cleanupChunk?: number;
 }): DeviceStore {
   const { db } = database;
   // The user id binds each ciphertext to its row: a secret copied to another user fails to decrypt.
@@ -163,6 +183,15 @@ export function createPgDeviceStore({
         .update(pins)
         .set({ failures: 0, updatedAt: clock.now() })
         .where(eq(pins.userId, userId));
+    },
+
+    async deleteExpiredDeviceTokens(now) {
+      // On device_tokens_expires_at_idx. The device row stays; an expired token already fails.
+      return deleteInChunks(
+        database,
+        cleanupChunk,
+        sql`delete from device_tokens where token_hash in (select token_hash from device_tokens where expires_at < ${now} limit ${cleanupChunk})`,
+      );
     },
 
     async getTotpFactor(userId) {
@@ -278,7 +307,13 @@ const toSession = (row: SessionRow): SessionRecord => ({
  * `useRefreshToken` is one statement that locks the token row, sets `used_at` if it is unset, and
  * returns the value it had before, so of two concurrent uses exactly one sees it unused.
  */
-export function createPgSessionStore({ database }: { database: Database }): SessionStore {
+function createPgSessionStore({
+  database,
+  cleanupChunk = CLEANUP_CHUNK,
+}: {
+  database: Database;
+  cleanupChunk?: number;
+}): SessionStore {
   const { db } = database;
   return {
     async createSession(session) {
@@ -368,6 +403,24 @@ export function createPgSessionStore({ database }: { database: Database }): Sess
       return row ?? null;
     },
 
+    async deleteExpiredSessions(now, sessionsBefore) {
+      // Two statements on the expires_at indexes, each a pure delete, so a rerun finds nothing.
+      // Deleting a session cascades to the refresh tokens still in its family.
+      // Both run in chunks, each its own short transaction, so a backlog (the first run, or after
+      // an outage) never holds locks or a connection for long.
+      const tokens = await deleteInChunks(
+        database,
+        cleanupChunk,
+        sql`delete from refresh_tokens where token_hash in (select token_hash from refresh_tokens where expires_at < ${now} limit ${cleanupChunk})`,
+      );
+      const gone = await deleteInChunks(
+        database,
+        cleanupChunk,
+        sql`delete from sessions where id in (select id from sessions where expires_at < ${sessionsBefore} limit ${cleanupChunk})`,
+      );
+      return { refreshTokens: tokens, sessions: gone };
+    },
+
     reset: refuseReset('session store'),
   };
 }
@@ -379,16 +432,24 @@ export type PgAuthRepoOptions = {
   pii: PiiCrypto;
   /** Where OTP challenges and the resend throttle live (Redis in apps/api, T-193). */
   otp: OtpStore;
+  /** Rows per cleanup delete (default `CLEANUP_CHUNK`); tests use a small one. */
+  cleanupChunk?: number;
 };
 
 /**
  * AuthRepo for `DB_DRIVER=postgres`: devices, device tokens and PINs (T-191) and sessions and
  * refresh tokens (T-192) in Postgres; OTPs in the given store.
  */
-export function createPgAuthRepo({ database, clock, pii, otp }: PgAuthRepoOptions): AuthRepo {
+export function createPgAuthRepo({
+  database,
+  clock,
+  pii,
+  otp,
+  cleanupChunk = CLEANUP_CHUNK,
+}: PgAuthRepoOptions): AuthRepo {
   return composeAuthRepo({
     otp,
-    devices: createPgDeviceStore({ database, clock, pii }),
-    sessions: createPgSessionStore({ database }),
+    devices: createPgDeviceStore({ database, clock, pii, cleanupChunk }),
+    sessions: createPgSessionStore({ database, cleanupChunk }),
   });
 }

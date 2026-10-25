@@ -14,6 +14,13 @@ export type QuoteStreamsOptions = {
   snapshotKey?: (shard: number) => string;
   /** The matcher command stream of a shard (NSTOCK-0365); apps/api writes it, apps/matcher reads it. */
   commandsKey?: (shard: number) => string;
+  /** The matcher's fill streams (NSTOCK-0367); tests pass their own. */
+  fillsKey?: (shard: number) => string;
+  /** How long a fill read by a process that did not ack it waits before another takes it. */
+  fillClaimIdleMs?: number;
+  /** The fill dead-letter stream (NSTOCK-0388) and the deliveries before an entry goes there. */
+  fillsDeadKey?: string;
+  fillMaxDeliveries?: number;
   /** How long one `XREAD BLOCK` waits; default 5 s (tests use less, to close fast). */
   blockMs?: number;
   log: PublisherLog;

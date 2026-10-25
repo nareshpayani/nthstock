@@ -33,7 +33,7 @@ export const CANDLE_AGGREGATES = [
 ] as const;
 
 /** Bars handed to `upsertMinuteBars` at a time (it splits them into INSERTs of 5,000). */
-export const SEED_BATCH_BARS = 50_000;
+const SEED_BATCH_BARS = 50_000;
 
 export type CandleSeedOptions = {
   store: CandleStore;
@@ -98,7 +98,7 @@ export function seedRows(
  * of the minute window since an earlier seed keeps its minute bars instead of gaining a whole-day
  * row on top of its 09:15 minute (which would double its volume in `candles_1d`).
  */
-export function seedRowSets(
+function seedRowSets(
   master: SymbolMaster,
   symbol: string,
   calendar: HistoryCalendar,

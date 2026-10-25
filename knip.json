@@ -1,0 +1,31 @@
+{
+  "$schema": "https://unpkg.com/knip@5/schema.json",
+  "workspaces": {
+    ".": {
+      "entry": ["infra/k6/*.js", "tools/**/*.mjs"],
+      "ignoreDependencies": ["k6", "ws", "ioredis"],
+      "ignoreBinaries": ["psql"]
+    },
+    "apps/web": {
+      "entry": [
+        "e2e/support/apiSupervisor.mjs",
+        "e2e/walkthrough/*.walkthrough.ts",
+        "playwright.walkthrough.config.ts",
+        "lighthouserc.cjs"
+      ]
+    },
+    "packages/tokens": {
+      "entry": ["src/writeCss.ts"],
+      "ignoreDependencies": ["@fontsource/ibm-plex-mono", "@fontsource/ibm-plex-sans"]
+    },
+    "packages/ui": { "entry": ["src/index.ts", "test-runner-jest.config.js"] },
+    "apps/*": {},
+    "packages/*": {}
+  },
+  "ignoreBinaries": [
+    "playwright",
+    "vite",
+    "e2e/screens/playwright.screens.config.ts",
+    "playwright.deployed.config.ts"
+  ]
+}

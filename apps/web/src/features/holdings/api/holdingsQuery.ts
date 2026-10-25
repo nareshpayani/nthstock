@@ -11,12 +11,3 @@ export function holdingsQuery(api: ApiClient) {
     staleTime: 10_000,
   });
 }
-
-/** `GET /v1/portfolio/summary`: totals over the holdings. */
-export function portfolioSummaryQuery(api: ApiClient) {
-  return queryOptions({
-    queryKey: holdingsKeys.summary(),
-    queryFn: ({ signal }) => api.request('portfolioSummary', { signal }),
-    staleTime: 10_000,
-  });
-}

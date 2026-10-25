@@ -171,7 +171,9 @@ tests and for the `/v1/__test` scripted-tick routes, so no existing test changes
 `notifications(id bigserial, user_id, kind, ref_id, title, body, created_at, read_at)`, indexed on
 `(user_id, id DESC)`. Kinds: `ORDER_EXECUTED`, `ORDER_REJECTED`, `TRAILING_STOP_TRIGGERED`,
 `PRICE_ALERT`, `AMO_RELEASED`, `SQUARED_OFF`, `SECURITY` (new login, two-factor change, all sessions
-logged out). The body is built from contract types and never holds a mobile number or a name. The
+logged out). As built (NSTOCK-0379), `ORDER_EXECUTED` and `TRAILING_STOP_TRIGGERED` keep the
+contract's existing names, `ORDER_FILLED` and `TRAILING_STOP`, so stored rows and the web app need no
+rename. The body is built from contract types and never holds a mobile number or a name. The
 newest 100 per user are kept, as today; the E16 cleanup job trims the rest daily.
 
 ### 6.2 Delivery

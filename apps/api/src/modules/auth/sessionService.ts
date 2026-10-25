@@ -3,6 +3,7 @@ import { REFRESH_TOKEN_TTL_SEC, type AccessTokenClaims } from '@nthstock/contrac
 import { deviceLabel, type Clock } from '@nthstock/utils';
 import { ApiHttpError } from '../../http/apiError.js';
 import type { AuditActor, AuditRepo } from '../audit/index.js';
+import { raiseSecurityNotice, type SecurityNotices } from '../notifications/index.js';
 import type { UserRecord, UsersRepo } from '../users/index.js';
 import { signAccessToken, verifyAccessToken, type SignedAccessToken } from './accessToken.js';
 import type { AuthRepo, DeviceRecord, SessionRecord, SessionRevokedReason } from './repo.js';
@@ -23,10 +24,12 @@ export type SessionServiceDeps = {
   revocations?: SessionRevocations;
   /** Id generator for sessions and devices; default `<prefix>_<uuid>`. */
   newId?: (prefix: 'ses' | 'dev') => string;
+  /** A sign-in on a device the user has not used before raises a security notification (NSTOCK-0382). */
+  notices?: SecurityNotices;
 };
 
 /** `sessions.last_seen_at` is written at most once per this long per session (T-194). */
-export const LAST_SEEN_WRITE_INTERVAL_MS = 60_000;
+const LAST_SEEN_WRITE_INTERVAL_MS = 60_000;
 
 /** A freshly issued (or rotated) session with everything the route needs to answer. */
 export type IssuedSession = {
@@ -103,6 +106,7 @@ export function createSessionService({
   audit,
   revocations = createMemorySessionRevocations(),
   newId = (prefix) => `${prefix}_${randomUUID().replaceAll('-', '')}`,
+  notices,
 }: SessionServiceDeps): SessionService {
   /** Records activity, but writes only when the stored time is a minute old or more. */
   async function touch(session: SessionRecord, now: Date) {
@@ -122,11 +126,16 @@ export function createSessionService({
     return { session, user, device, access, refreshToken };
   }
 
-  async function deviceFor(input: StartSessionInput, now: Date): Promise<DeviceRecord> {
+  /** The user's known device, or a new one (`created`), which counts as a new sign-in. */
+  async function deviceFor(
+    input: StartSessionInput,
+    now: Date,
+  ): Promise<{ device: DeviceRecord; created: boolean }> {
     if (input.deviceId) {
       const known = await repo.getDevice(input.deviceId);
       if (known && known.userId === input.user.id) {
-        return (await repo.updateDevice(known.id, { lastSeenAt: now })) ?? known;
+        const device = (await repo.updateDevice(known.id, { lastSeenAt: now })) ?? known;
+        return { device, created: false };
       }
     }
     const device: DeviceRecord = {
@@ -138,13 +147,13 @@ export function createSessionService({
       lastSeenAt: now,
     };
     await repo.createDevice(device);
-    return device;
+    return { device, created: true };
   }
 
   return {
     async start(input) {
       const now = clock.now();
-      const device = await deviceFor(input, now);
+      const { device, created } = await deviceFor(input, now);
       const session: SessionRecord = {
         id: newId('ses'),
         userId: input.user.id,
@@ -167,6 +176,14 @@ export function createSessionService({
         outcome: 'OK',
         detail: { method: input.method, sessionId: session.id, deviceId: device.id },
       });
+      if (created) {
+        raiseSecurityNotice(
+          notices,
+          input.user.id,
+          { type: 'NEW_DEVICE', deviceLabel: device.label, sessionId: session.id },
+          now,
+        );
+      }
       return issued;
     },
 

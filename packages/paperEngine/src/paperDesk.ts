@@ -84,6 +84,13 @@ export type PaperDeskOptions = {
   onTrailingStopUpdate?: (userId: string, stop: TrailingStop) => void;
   /** False refuses trailing stops. Default true. */
   trailingStops?: boolean;
+  /**
+   * False: subscribe to no ticks (apps/api with `MATCHER_MODE=worker`, NSTOCK-0369). The matcher
+   * worker finds fills and sends them to `ingestFor`; the desk reads the adapter's current quote
+   * whenever an order action or a valuation needs a price, so a MARKET order still fills at the
+   * live price. Default true.
+   */
+  followTicks?: boolean;
   /** After any change to a user's engine (MSW saves a snapshot here). */
   onChange?: (userId: string, engine: PaperEngine) => void;
 };
@@ -135,6 +142,10 @@ export class PaperDesk {
   readonly #holidays: HolidayTable;
   readonly #ticks = new Map<InstrumentToken, number>();
   readonly #pins = new Map<InstrumentToken, number>();
+  /** The tick time of the newest matcher request per instrument (`ingestFor`), in ms. */
+  readonly #matcherTickAt = new Map<InstrumentToken, number>();
+  /** While an older matcher request runs, its own price, seen only by its users' engines. */
+  #heldPrice: { token: InstrumentToken; ltp: number } | null = null;
   /** Ticks seen per instrument, from the feed and from pinned prices. */
   readonly #tickSeq = new Map<InstrumentToken, number>();
   readonly #fillCaps = new Map<InstrumentToken, number>();
@@ -159,7 +170,11 @@ export class PaperDesk {
     this.#engines = options.engines ?? mapRegistry();
     this.#holidays = options.holidays ?? nseHolidays2026;
     this.#prices = {
-      getLtp: (token) => this.#pins.get(token) ?? this.#ticks.get(token) ?? null,
+      getLtp: (token) =>
+        this.#pins.get(token) ??
+        (this.#heldPrice?.token === token ? this.#heldPrice.ltp : undefined) ??
+        this.#ticks.get(token) ??
+        null,
       tickSeq: (token) => this.#tickSeq.get(token) ?? 0,
     };
     this.#instrumentSource = {
@@ -457,6 +472,47 @@ export class PaperDesk {
   }
 
   /**
+   * One tick the matcher worker saw cross something of these users' (ADR 0013, NSTOCK-0367):
+   * takes `ltp` as the instrument's price and syncs only these users' engines, at the tick's own
+   * time when it is recent, as `ingest` does. The engine re-checks every order and stop, so a
+   * request for an order that has since changed fills only what still crosses.
+   *
+   * Requests can arrive out of order (two apps/api processes, a claimed retry), so the price is
+   * kept only when the tick is newer than the last request's for the instrument (NSTOCK-0388); an
+   * older one still runs its users at its own price, which is what crossed on the matcher's book.
+   * A request this desk cannot run (disposed, a price that is not positive paise, a bad time)
+   * throws, so the reader leaves it pending instead of acking it unfilled.
+   */
+  async ingestFor(
+    userIds: Iterable<string>,
+    tick: { token: InstrumentToken; ltp: number; ts: string },
+  ): Promise<void> {
+    if (this.#disposed) throw new Error('The paper desk is disposed');
+    if (!Number.isSafeInteger(tick.ltp) || tick.ltp <= 0) {
+      throw new RangeError(`A matcher tick price must be positive paise, got ${String(tick.ltp)}`);
+    }
+    const at = Date.parse(tick.ts);
+    if (Number.isNaN(at)) throw new RangeError(`A matcher tick time must be ISO 8601: ${tick.ts}`);
+    await this.#prepare(tick.token);
+    const last = this.#matcherTickAt.get(tick.token);
+    if (last === undefined || at > last) {
+      this.#ticks.set(tick.token, tick.ltp);
+      this.#matcherTickAt.set(tick.token, at);
+    } else {
+      this.#heldPrice = { token: tick.token, ltp: tick.ltp };
+    }
+    this.#countTick(tick.token);
+    const now = this.#options.clock.now().getTime();
+    this.#tickAt = at <= now && now - at <= REPLAY_WINDOW_MS ? new Date(at) : null;
+    try {
+      for (const userId of userIds) this.#syncUser(userId);
+    } finally {
+      this.#tickAt = null;
+      this.#heldPrice = null;
+    }
+  }
+
+  /**
    * Symbols with a live order or an active trailing stop, for any user: the instruments the mock
    * market replays tick by tick after a paused tab (SPEC-TFC-1 §6.7).
    */
@@ -625,8 +681,15 @@ export class PaperDesk {
    */
   async #prepare(token: InstrumentToken): Promise<void> {
     const day = istDateKey(this.#options.clock.now());
-    if (this.#instruments.get(token)?.day === day && this.#subscriptions.has(token)) return;
+    const follow = this.#options.followTicks !== false;
+    const known = this.#instruments.get(token)?.day === day;
+    if (known && follow && this.#subscriptions.has(token)) return;
     const instrument = (await this.#master()).get(token);
+    if (known && !follow) {
+      // Not following ticks: the bands are today's, the price is read fresh every time.
+      if (instrument) await this.#readQuote(token, instrument.symbol, instrument.exchange);
+      return;
+    }
     if (instrument?.type !== 'EQUITY') {
       this.#instruments.set(token, { info: null, day });
       return;
@@ -634,7 +697,7 @@ export class PaperDesk {
     const { symbol, exchange } = instrument;
     const [stats, quote] = await Promise.all([
       this.#options.market.getStats(symbol, exchange),
-      this.#ticks.has(token) ? null : this.#options.market.getQuote(symbol, exchange),
+      follow && this.#ticks.has(token) ? null : this.#options.market.getQuote(symbol, exchange),
     ]);
     this.#instruments.set(token, {
       info: stats
@@ -648,8 +711,10 @@ export class PaperDesk {
         : null,
       day,
     });
-    if (quote && quote.ltp > 0 && !this.#ticks.has(token)) this.#ticks.set(token, quote.ltp);
-    if (!this.#subscriptions.has(token) && !this.#disposed) {
+    if (quote && quote.ltp > 0 && (!follow || !this.#ticks.has(token))) {
+      this.#ticks.set(token, quote.ltp);
+    }
+    if (follow && !this.#subscriptions.has(token) && !this.#disposed) {
       this.#subscriptions.set(
         token,
         this.#options.market.subscribe([symbol], (quotes) => this.ingest(quotes), exchange),
@@ -657,10 +722,19 @@ export class PaperDesk {
     }
   }
 
-  /** A price for `token` before valuing it: a tick, or else the adapter's quote (and a feed). */
+  /**
+   * A price for `token` before valuing it: a tick, or else the adapter's quote (and a feed). Not
+   * following ticks, the quote is read every time, so a valuation is never stale.
+   */
   async #ensurePrice(token: InstrumentToken): Promise<void> {
-    if (this.ltp(token) !== null) return;
+    if (this.#options.followTicks !== false && this.ltp(token) !== null) return;
     await this.#prepare(token);
+  }
+
+  /** The adapter's current LTP, for a desk that follows no ticks. */
+  async #readQuote(token: InstrumentToken, symbol: string, exchange: Instrument['exchange']) {
+    const quote = await this.#options.market.getQuote(symbol, exchange);
+    if (quote && quote.ltp > 0) this.#ticks.set(token, quote.ltp);
   }
 
   /** Yesterday's close from the adapter's quote, cached per IST day; null when there is none. */

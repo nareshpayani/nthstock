@@ -13,7 +13,7 @@ import { knownSignedOut, useSessionStore } from './sessionStore';
  * The CSRF header value before a session exists (OTP, PIN login, the refresh after a reload).
  * Any non-empty value is accepted then; see `AUTH_CSRF_HEADER` in packages/contracts.
  */
-export const PRE_SESSION_CSRF = 'pre-session';
+const PRE_SESSION_CSRF = 'pre-session';
 
 let refreshing: Promise<boolean> | null = null;
 
@@ -22,7 +22,7 @@ let refreshing: Promise<boolean> | null = null;
  * callers share the same request, so a burst of 401s rotates the refresh token once. Resolves
  * whether a session is now held.
  */
-export function refreshSession(apiClient: ApiClient): Promise<boolean> {
+function refreshSession(apiClient: ApiClient): Promise<boolean> {
   refreshing ??= apiClient
     .request('sessionRefresh')
     .then(

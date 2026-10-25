@@ -1,0 +1,337 @@
+name: 'Deploy: Web hosting'
+
+# Free Firebase Hosting (Spark plan) for the msw-mode web build: the whole app, mock market and
+# paper engine included, runs in the browser, so a static deploy is a working demo (WF-06).
+# Branches and environments (ADR 0010, docs/runbooks/environments.md):
+# - pull requests: a preview channel per PR (expires after 7 days), its URL commented on the PR,
+#   deleted when the PR closes. The channel quota is small, so each preview deploy first frees the
+#   channels of PRs already closed (NSTOCK-0333, tools/github/sweepPreviewChannels.sh).
+# - develop → the `development` environment: every green CI run on develop deploys to the
+#   long-lived `dev` channel. Never the live site.
+# - production → the `production` environment, https://<project>.web.app: every green CI run on
+#   the production branch deploys live. production only moves through Promote to production
+#   (release-promote-to-production.yml, docs/runbooks/release.md), which first checks develop is tested.
+# Both deploys check the site serves the new build and run the reviewer smoke test.
+# Run workflow redeploys either environment (stage development or live) from a commit on its branch
+# with green CI; rolling production back is a live dispatch with an older commit on production.
+# Needs the repo variable FIREBASE_PROJECT_ID and the secret FIREBASE_SERVICE_ACCOUNT (see
+# docs/runbooks/web-hosting.md). Until both are set, every job here is skipped, not failed.
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [develop, production]
+  # Previews only for PRs that can change the deployed app (ADR 0014). Informational, never a
+  # required check; closed PRs outside these paths never had a channel to delete.
+  pull_request:
+    types: [opened, synchronize, reopened, closed]
+    paths:
+      - 'apps/web/**'
+      - 'packages/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'firebase.json'
+      - 'tools/github/sweepPreviewChannels.sh'
+      - '.github/workflows/deploy-web-hosting.yml'
+  workflow_dispatch:
+    inputs:
+      stage:
+        description: 'development: the dev channel, from develop; live: the production site, from production'
+        type: choice
+        options: [development, live]
+        default: development
+      ref:
+        description: >-
+          Commit SHA (or branch) to deploy. development: a commit on develop; live: a commit on
+          production. Either way its CI must be green.
+        type: string
+        default: develop
+
+permissions:
+  contents: read
+
+env:
+  # firebase-tools 15.34.1 (2026-10-21) asks Service Usage whether Hosting is enabled, which the
+  # deploy service account may not do, and every deploy failed with a 403. Pinned to the last
+  # version that deployed; Dependabot does not see this, so move it up by hand after checking.
+  FIREBASE_TOOLS_VERSION: 15.34.0
+
+concurrency:
+  # One group per PR and per environment; a green CI run and a dispatch for the same environment
+  # share one. A red CI run (every job skipped) gets its own group, so it never replaces a pending
+  # deploy.
+  group: >-
+    deploy-web-hosting-${{ github.event.pull_request.number || inputs.stage ||
+    (github.event.workflow_run.conclusion == 'success' &&
+    (github.event.workflow_run.head_branch == 'production' && 'live' || 'development') || github.run_id) }}
+  # A deploy to an environment is never cancelled halfway; a newer one waits for it.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  preview:
+    name: Deploy a preview channel
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # A PR from this repo (fork PRs get no secrets).
+    if: >-
+      vars.FIREBASE_PROJECT_ID != '' && github.event_name == 'pull_request' &&
+      github.event.action != 'closed' &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    permissions:
+      contents: read
+      checks: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      # Reviewers open the demo at any hour, so the mock market ticks outside NSE hours too.
+      - run: npx turbo run build --filter=@nthstock/web
+        env:
+          VITE_API_MODE: msw
+          VITE_MOCK_MARKET_OPEN: 'true'
+      # A full channel quota fails every new preview ("channel quota reached"), so free the
+      # channels of closed PRs first. A failed sweep only warns; the deploy says if room is short.
+      - name: Free the preview channels of closed PRs
+        env:
+          SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          FIREBASE_PROJECT_ID: ${{ vars.FIREBASE_PROJECT_ID }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          export GOOGLE_APPLICATION_CREDENTIALS="$RUNNER_TEMP/firebaseServiceAccount.json"
+          printf '%s' "$SERVICE_ACCOUNT" > "$GOOGLE_APPLICATION_CREDENTIALS"
+          trap 'rm -f "$GOOGLE_APPLICATION_CREDENTIALS"' EXIT
+          bash tools/github/sweepPreviewChannels.sh || echo "::warning::Preview channel sweep failed"
+      # Third-party and handed the service-account key, so pinned to a commit.
+      - id: deploy
+        uses: FirebaseExtended/action-hosting-deploy@500ac625ca2dd40cbd15f7659af953801858032a # v0
+        with:
+          repoToken: ${{ secrets.GITHUB_TOKEN }}
+          firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          projectId: ${{ vars.FIREBASE_PROJECT_ID }}
+          firebaseToolsVersion: ${{ env.FIREBASE_TOOLS_VERSION }}
+          expires: 7d
+      - name: Install Chrome for Testing (Chromium)
+        run: npx playwright install --with-deps chromium
+      # Log in with the demo account, place a paper buy and open the guide on the deployed preview.
+      - name: Smoke-test the preview as a reviewer
+        env:
+          E2E_BASE_URL: ${{ steps.deploy.outputs.details_url }}
+        working-directory: apps/web
+        run: npx playwright test -c playwright.deployed.config.ts
+
+  preview-cleanup:
+    name: Delete the preview channel
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    # The PR closed (merged or not): its preview channel goes, and any other closed PR's with it.
+    if: >-
+      vars.FIREBASE_PROJECT_ID != '' && github.event_name == 'pull_request' &&
+      github.event.action == 'closed' &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+      - name: Delete the preview channels of closed PRs
+        env:
+          SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          FIREBASE_PROJECT_ID: ${{ vars.FIREBASE_PROJECT_ID }}
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          export GOOGLE_APPLICATION_CREDENTIALS="$RUNNER_TEMP/firebaseServiceAccount.json"
+          printf '%s' "$SERVICE_ACCOUNT" > "$GOOGLE_APPLICATION_CREDENTIALS"
+          trap 'rm -f "$GOOGLE_APPLICATION_CREDENTIALS"' EXIT
+          bash tools/github/sweepPreviewChannels.sh "$PR_NUMBER"
+
+  development:
+    name: Deploy the development environment
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # Every green CI run on develop (pushes, the scheduled health checks, runs auto-merge dispatches;
+    # never a PR's run, even from a fork branch named develop), or a dispatched "development".
+    if: >-
+      vars.FIREBASE_PROJECT_ID != '' && (
+        (github.event_name == 'workflow_dispatch' && inputs.stage == 'development') ||
+        (github.event_name == 'workflow_run' &&
+          github.event.workflow_run.head_branch == 'develop' &&
+          github.event.workflow_run.conclusion == 'success' &&
+          github.event.workflow_run.event != 'pull_request' &&
+          github.event.workflow_run.head_repository.full_name == github.repository)
+      )
+    environment:
+      name: development
+      url: ${{ steps.deploy.outputs.details_url }}
+    permissions:
+      contents: read
+      checks: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # workflow_run starts on the branch's latest commit; deploy exactly the commit CI passed.
+          ref: >-
+            ${{ github.event_name == 'workflow_dispatch' && inputs.ref ||
+            github.event.workflow_run.head_sha }}
+          fetch-depth: 0
+      # The gate scripts and smoke test come from this workflow's own commit, not the one being
+      # deployed, so an older commit still runs them.
+      - name: Take the release tools from this workflow's commit
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
+          path: .release-tools
+          sparse-checkout: |
+            tools/github
+            apps/web/e2e/deployed
+            apps/web/e2e/support
+            apps/web/playwright.deployed.config.ts
+          sparse-checkout-cone-mode: false
+      - name: Put the smoke test next to the deployed app
+        run: |
+          mkdir -p apps/web/e2e
+          cp -r .release-tools/apps/web/e2e/deployed .release-tools/apps/web/e2e/support apps/web/e2e/
+          cp .release-tools/apps/web/playwright.deployed.config.ts apps/web/
+      - name: Check the commit (on develop, CI green)
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash .release-tools/tools/github/checkReleaseCommit.sh develop
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - run: npx turbo run build --filter=@nthstock/web
+        env:
+          VITE_API_MODE: msw
+          VITE_MOCK_MARKET_OPEN: 'true'
+      # The `dev` channel keeps its URL while it exists. 30 days is Firebase's longest expiry; each
+      # deploy (at least the daily scheduled CI run on develop) pushes it out again.
+      - id: deploy
+        uses: FirebaseExtended/action-hosting-deploy@500ac625ca2dd40cbd15f7659af953801858032a # v0
+        with:
+          repoToken: ${{ secrets.GITHUB_TOKEN }}
+          firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          projectId: ${{ vars.FIREBASE_PROJECT_ID }}
+          firebaseToolsVersion: ${{ env.FIREBASE_TOOLS_VERSION }}
+          channelId: dev
+          expires: 30d
+      - name: Check the development site serves this build
+        env:
+          SITE: ${{ steps.deploy.outputs.details_url }}
+        run: bash .release-tools/tools/github/smokeTestSite.sh "$SITE" apps/web/dist/index.html
+      - name: Install Chrome for Testing (Chromium)
+        run: npx playwright install --with-deps chromium
+      - name: Smoke-test the development site as a reviewer
+        env:
+          E2E_BASE_URL: ${{ steps.deploy.outputs.details_url }}
+        working-directory: apps/web
+        run: npx playwright test -c playwright.deployed.config.ts
+      - name: Summary
+        env:
+          URL: ${{ steps.deploy.outputs.details_url }}
+          EXPIRES: ${{ steps.deploy.outputs.expire_time }}
+        run: |
+          {
+            echo "### Development"
+            echo "Commit \`$(git rev-parse HEAD)\` is on the development environment: $URL/dashboard?demo=1"
+            echo "Not the live site. Channel expires $EXPIRES unless develop deploys again first."
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "::notice title=Development::$URL/dashboard?demo=1"
+
+  live:
+    name: Deploy the live site
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # Every green CI run on production (after a promotion, never a PR's run or a fork), or a dispatched
+    # "live" (redeploy or rollback).
+    if: >-
+      vars.FIREBASE_PROJECT_ID != '' && (
+        (github.event_name == 'workflow_dispatch' && inputs.stage == 'live') ||
+        (github.event_name == 'workflow_run' &&
+          github.event.workflow_run.head_branch == 'production' &&
+          github.event.workflow_run.conclusion == 'success' &&
+          github.event.workflow_run.event != 'pull_request' &&
+          github.event.workflow_run.head_repository.full_name == github.repository)
+      )
+    environment:
+      name: production
+      url: https://${{ vars.FIREBASE_PROJECT_ID }}.web.app
+    permissions:
+      contents: read
+      checks: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # workflow_run starts on the default branch; deploy exactly the commit CI passed.
+          ref: >-
+            ${{ github.event_name == 'workflow_dispatch' && inputs.ref ||
+            github.event.workflow_run.head_sha }}
+          fetch-depth: 0
+      # The gate scripts and smoke test come from this workflow's own commit, not the one being
+      # released, so a rollback to a commit from before they existed still runs them.
+      - name: Take the release tools from this workflow's commit
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
+          path: .release-tools
+          sparse-checkout: |
+            tools/github
+            apps/web/e2e/deployed
+            apps/web/e2e/support
+            apps/web/playwright.deployed.config.ts
+          sparse-checkout-cone-mode: false
+      - name: Put the smoke test next to the released app
+        run: |
+          mkdir -p apps/web/e2e
+          cp -r .release-tools/apps/web/e2e/deployed .release-tools/apps/web/e2e/support apps/web/e2e/
+          cp .release-tools/apps/web/playwright.deployed.config.ts apps/web/
+      - name: Check the release commit (on production, CI green)
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash .release-tools/tools/github/checkReleaseCommit.sh production
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - run: npx turbo run build --filter=@nthstock/web
+        env:
+          VITE_API_MODE: msw
+          VITE_MOCK_MARKET_OPEN: 'true'
+      - uses: FirebaseExtended/action-hosting-deploy@500ac625ca2dd40cbd15f7659af953801858032a # v0
+        with:
+          repoToken: ${{ secrets.GITHUB_TOKEN }}
+          firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          projectId: ${{ vars.FIREBASE_PROJECT_ID }}
+          firebaseToolsVersion: ${{ env.FIREBASE_TOOLS_VERSION }}
+          channelId: live
+      - name: Check the live site serves this build
+        env:
+          SITE: https://${{ vars.FIREBASE_PROJECT_ID }}.web.app
+        run: bash .release-tools/tools/github/smokeTestSite.sh "$SITE" apps/web/dist/index.html
+      - name: Install Chrome for Testing (Chromium)
+        run: npx playwright install --with-deps chromium
+      - name: Smoke-test the live site as a reviewer
+        env:
+          E2E_BASE_URL: https://${{ vars.FIREBASE_PROJECT_ID }}.web.app
+        working-directory: apps/web
+        run: npx playwright test -c playwright.deployed.config.ts
+      - name: Summary
+        env:
+          SITE: https://${{ vars.FIREBASE_PROJECT_ID }}.web.app
+        run: |
+          {
+            echo "### Live"
+            echo "Commit \`$(git rev-parse HEAD)\` is live at $SITE/dashboard?demo=1 and passed the smoke test."
+          } >> "$GITHUB_STEP_SUMMARY"

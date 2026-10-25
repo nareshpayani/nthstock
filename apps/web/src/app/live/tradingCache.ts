@@ -35,7 +35,7 @@ export function writeTradingCommit(queryClient: QueryClient, commit: TradingComm
 }
 
 /** The book with `changed` applied: rows replaced in place, new orders first, newest first. */
-export function upsertOrders(book: readonly Order[], changed: readonly Order[]): Order[] {
+function upsertOrders(book: readonly Order[], changed: readonly Order[]): Order[] {
   const byId = new Map(changed.map((order) => [order.id, order]));
   const next = book.map((order) => {
     const update = byId.get(order.id);

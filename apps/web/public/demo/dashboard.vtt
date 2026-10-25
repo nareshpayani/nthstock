@@ -1,0 +1,33 @@
+WEBVTT
+
+1
+00:00:01.833 --> 00:00:05.764
+The dashboard: open to everyone, no login needed. Prices are live.
+
+2
+00:00:05.764 --> 00:00:08.591
+The header tickers and the market status update every second over the WebSocket.
+
+3
+00:00:08.591 --> 00:00:17.628
+The NIFTY 50 chart, from 1 day to 5 years.
+
+4
+00:00:17.628 --> 00:00:20.575
+Hover for the crosshair and the price at that time.
+
+5
+00:00:20.575 --> 00:00:24.313
+Market indices with ▲ ▼ and a sign: colour is never the only signal.
+
+6
+00:00:24.313 --> 00:00:29.362
+Curated stock lists beside the top gainers and losers.
+
+7
+00:00:29.362 --> 00:00:32.731
+Gainers or losers, by index: NIFTY 50, NIFTY Bank and NIFTY IT.
+
+8
+00:00:32.731 --> 00:00:35.150
+Every stock opens its own page.

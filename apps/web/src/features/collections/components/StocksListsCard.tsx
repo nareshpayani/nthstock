@@ -11,8 +11,8 @@ import { strings } from '../strings';
 export const LIST_ROWS = 5;
 
 export type StockListTab = (typeof strings.lists)[number];
-export const STOCK_LISTS: readonly StockListTab[] = strings.lists;
-export const DEFAULT_LIST_ID: string = strings.lists[0].id;
+const STOCK_LISTS: readonly StockListTab[] = strings.lists;
+const DEFAULT_LIST_ID: string = strings.lists[0].id;
 
 /** The list id to show for a URL value: known ids pass, anything else falls back to the first. */
 export const resolveListId = (id: string | undefined): string =>

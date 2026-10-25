@@ -56,7 +56,7 @@ describe('OrderBook (NSTOCK-0363)', () => {
     // It pops only the entry it crossed; the next one is only looked at.
     expect(tick.read).toBe(1);
     expect(ids(book.tick(102_00).crossed)).toEqual(['s1', 's2']);
-    expect(book.size).toEqual({ orders: 1, stops: 0 });
+    expect(book.size).toEqual({ orders: 1, stops: 0, alerts: 0 });
   });
 
   it('applies a change only when its version is newer', () => {
@@ -83,6 +83,37 @@ describe('OrderBook (NSTOCK-0363)', () => {
     expect(book.tick(100_05).crossed).toEqual([o1]);
     book.removeOrder('o1', 6);
     expect(book.restoreOrder(o1)).toBe(false);
+  });
+
+  it('keeps a newer MODIFY when the fill of the crossed version fails (NSTOCK-0388)', () => {
+    const book = new OrderBook();
+    const o1 = order('o1', 'BUY', 100_00, 5);
+    book.upsertOrder(o1);
+    expect(book.tick(100_00).crossed).toEqual([o1]);
+    // The user moved the limit down before the fill request for version 5 failed.
+    const modified = order('o1', 'BUY', 95_00, 6);
+    expect(book.upsertOrder(modified)).toBe(true);
+    expect(book.restoreOrder(o1)).toBe(false);
+    expect([...book.orders()]).toEqual([modified]);
+    // The old limit no longer crosses; the new one does.
+    expect(book.tick(99_00).crossed).toEqual([]);
+    expect(book.tick(95_00).crossed).toEqual([modified]);
+  });
+
+  it('keeps the heap entry of an order upserted at the same price, and lists the orders', () => {
+    const book = new OrderBook();
+    book.upsertOrder(order('o1', 'SELL', 100_00, 1));
+    book.upsertOrder(order('o2', 'BUY', 90_00, 1));
+    for (let version = 2; version <= 50; version += 1)
+      book.upsertOrder(order('o1', 'SELL', 100_00, version));
+    expect([...book.orders()].map((o) => [o.orderId, o.version]).sort()).toEqual([
+      ['o1', 50],
+      ['o2', 1],
+    ]);
+    // One entry read for the one order crossed: the 49 upserts left nothing stale behind it.
+    const tick = book.tick(100_00);
+    expect(tick.crossed).toEqual([order('o1', 'SELL', 100_00, 50)]);
+    expect(tick.read).toBe(1);
   });
 
   it('ratchets a trailing stop and re-keys it, so it triggers at the new stop', () => {
@@ -159,6 +190,31 @@ describe('OrderBook (NSTOCK-0363)', () => {
     expect(book.tick(120_00).triggered).toEqual([]);
     expect(book.removeStop('t1', 3)).toBe(false);
     expect(book.size.stops).toBe(0);
+  });
+
+  it('restores a triggered stop at the same version, not after a newer change, and lists stops', () => {
+    const book = new OrderBook();
+    const stop = trailing('t1', 'LONG', 100_00, 90_00, undefined, 5);
+    book.upsertStop(stop);
+    book.upsertStop(trailing('t2', 'SHORT', 100_00, 110_00, undefined, 5));
+    expect([...book.stops()].map((s) => s.stopId).sort()).toEqual(['t1', 't2']);
+
+    expect(book.tick(90_00).triggered.map((s) => s.stopId)).toEqual(['t1']);
+    expect(book.hasStop('t1')).toBe(false);
+    // An upsert at the same version does not land; only a restore puts it back.
+    expect(book.upsertStop(stop)).toBe(false);
+    expect(book.restoreStop(stop)).toBe(true);
+    expect([...book.stops()].map((s) => s.stopId).sort()).toEqual(['t1', 't2']);
+    // It rests on its stop again, so the next tick through it triggers it again.
+    expect(book.tick(89_00).triggered.map((s) => s.stopId)).toEqual(['t1']);
+
+    // A newer cancel arrived after the trigger: the restore at the old version is refused.
+    book.removeStop('t1', 6);
+    expect(book.restoreStop(stop)).toBe(false);
+    expect(book.hasStop('t1')).toBe(false);
+    // A restore of a stop never triggered is an ordinary upsert, by version.
+    expect(book.restoreStop(trailing('t3', 'LONG', 100_00, 80_00, undefined, 1))).toBe(true);
+    expect(book.restoreStop(trailing('t3', 'LONG', 100_00, 85_00, undefined, 1))).toBe(false);
   });
 
   // The property behind §5.1: a tick acts on exactly what stepping every order and stop would.
@@ -238,9 +294,48 @@ describe('OrderBook (NSTOCK-0363)', () => {
             expect(moved.state).toEqual(stops.get(moved.stopId)?.state);
         }
       }
-      expect(book.size).toEqual({ orders: orders.size, stops: stops.size });
+      expect(book.size).toEqual({ orders: orders.size, stops: stops.size, alerts: 0 });
     },
   );
+});
+
+describe('OrderBook price alerts (NSTOCK-0383)', () => {
+  const alert = (alertId: string, condition: 'ABOVE' | 'BELOW', price: number) => ({
+    alertId,
+    userId: 'usr_a',
+    condition,
+    price,
+  });
+
+  it('fires exactly the alerts a tick crosses, once each, gaps included', () => {
+    const book = new OrderBook();
+    book.addAlert(alert('a1', 'ABOVE', 1_530_00));
+    book.addAlert(alert('a2', 'ABOVE', 1_540_00));
+    book.addAlert(alert('b1', 'BELOW', 1_480_00));
+    book.addAlert(alert('b2', 'BELOW', 1_470_00));
+    expect(book.addAlert(alert('a1', 'ABOVE', 1_530_00))).toBe(false);
+
+    expect(book.tick(1_500_00).alerts).toEqual([]);
+    expect(book.tick(1_535_00).alerts.map((a) => a.alertId)).toEqual(['a1']);
+    expect(book.tick(1_535_00).alerts).toEqual([]);
+    // A gap past both BELOW levels fires both, in price order.
+    expect(book.tick(1_460_00).alerts.map((a) => a.alertId)).toEqual(['b1', 'b2']);
+    expect(book.size.alerts).toBe(1);
+    expect([...book.alerts()].map((a) => a.alertId)).toEqual(['a2']);
+  });
+
+  it('reads only what it fires: a removed alert is dropped as a stale entry', () => {
+    const book = new OrderBook();
+    book.addAlert(alert('a1', 'ABOVE', 1_530_00));
+    book.addAlert(alert('a2', 'ABOVE', 1_900_00));
+    expect(book.removeAlert('a1')).toBe(true);
+    expect(book.removeAlert('a1')).toBe(false);
+    expect(book.hasAlert('a1')).toBe(false);
+
+    const tick = book.tick(1_600_00);
+    expect(tick.alerts).toEqual([]);
+    expect(tick.read).toBe(1); // the stale a1 entry, then a2 stays put unread
+  });
 });
 
 const sameState = (a: TrailingStopState, b: TrailingStopState) =>

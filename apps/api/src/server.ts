@@ -1,6 +1,6 @@
 import { Redis } from 'ioredis';
 import { buildApp } from './app.js';
-import { loadConfig } from './config.js';
+import { loadConfig, matcherModeWarning } from './config.js';
 import { resolveJwtSecret } from './modules/auth/index.js';
 import { seedDemo } from './modules/demo/index.js';
 import { offsetClock } from './modules/testControls/index.js';
@@ -66,6 +66,8 @@ const app = buildApp({
     ...(config.quoteShards !== null && config.redisUrl
       ? { quoteStreams: { url: config.redisUrl, shards: config.quoteShards, log: tickLog } }
       : {}),
+    // MATCHER_MODE=worker: apps/matcher matches, and this process follows no ticks.
+    matcherMode: config.matcherMode,
     production: config.production,
     jwtSecret,
     // PII_ENC_KEYS and PII_HMAC_KEY for the Postgres repos (T-189); development keys when unset.
@@ -76,12 +78,17 @@ const app = buildApp({
   },
   ...(publisher ? { tickPublisher: publisher, orderPublisher: publisher } : {}),
   ...(testClock ? { testControls: { setTime: testClock.set } } : {}),
+  // JOBS_MODE=bullmq (T-207): the job worker runs the session events, so no in-process sweep.
+  jobsMode: config.jobsMode,
 });
 
 app.addHook('onClose', async () => {
   await rateLimitRedis?.quit();
   await stateRedis?.quit();
 });
+
+const matcherWarning = matcherModeWarning(config);
+if (matcherWarning) app.log.warn(matcherWarning);
 
 if (config.dbDriver === 'postgres' && config.pii.devKeys) {
   app.log.warn('PII_ENC_KEYS and PII_HMAC_KEY are not set: using the throwaway development keys.');

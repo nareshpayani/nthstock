@@ -1,7 +1,7 @@
 import type { ApiClient } from '@nthstock/apiClient';
 import { queryOptions } from '@tanstack/react-query';
 
-export const indicesKeys = {
+const indicesKeys = {
   all: ['indices'] as const,
   summaries: () => ['indices', 'summaries', {}] as const,
 };

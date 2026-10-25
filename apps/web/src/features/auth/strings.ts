@@ -2,7 +2,7 @@ const plural = (count: number, one: string, many: string) =>
   `${String(count)} ${count === 1 ? one : many}`;
 
 /** Seconds as m:ss, e.g. 0:27. */
-export const formatCountdown = (seconds: number) =>
+const formatCountdown = (seconds: number) =>
   `${String(Math.floor(seconds / 60))}:${String(seconds % 60).padStart(2, '0')}`;
 
 export const strings = {

@@ -6,7 +6,7 @@ import {
   type TestPriceRequest,
 } from '@nthstock/contracts';
 import { expect, type Page } from '@playwright/test';
-import { API_ORIGIN, E2E_MODE, REALTIME_ORIGIN } from './env';
+import { API_ORIGIN, API_SUPERVISOR_ORIGIN, E2E_MODE, REALTIME_ORIGIN } from './env';
 
 // Test-only controls (T-162) from a spec, the same calls in both modes:
 // - msw: the MSW /v1/__test handlers in the page (the Playwright build sets VITE_TEST_CONTROLS);
@@ -61,6 +61,20 @@ export async function setClock(page: Page, at: string): Promise<void> {
   } else if (page.url().startsWith('http')) {
     await inPage(page, 'POST', TEST_CONTROL_PATHS.clock, body);
   }
+}
+
+/**
+ * api mode only (T-241): stops apps/api and starts it again through its E2E supervisor
+ * (apiSupervisor.mjs), on the same port with the same env, and resolves once it is ready. Whatever
+ * apps/api held only in memory is gone after it, the test clock and scripted prices included, so
+ * call `setClock` again before the next step that depends on the time.
+ */
+export async function restartApi(page: Page): Promise<void> {
+  if (E2E_MODE !== 'api') throw new Error('restartApi runs only with E2E_MODE=api');
+  const response = await page.request.post(`${API_SUPERVISOR_ORIGIN}/restart`, {
+    timeout: 90_000,
+  });
+  expect(response.status(), `POST ${API_SUPERVISOR_ORIGIN}/restart`).toBe(200);
 }
 
 /** A scripted tick: the paper engines see `ltp` paise for `symbol` from now on. */

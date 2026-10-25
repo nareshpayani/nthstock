@@ -26,7 +26,7 @@ import {
   type LedgerCarried,
   type PaperEngineWorkingSet,
 } from '@nthstock/paperEngine';
-import { fromIst, istDateKey, toIstParts } from '@nthstock/utils';
+import { fromIst, istDateKey, shardOf, toIstParts } from '@nthstock/utils';
 import { and, desc, eq, gte, inArray, lt, or, sql, type SQL } from 'drizzle-orm';
 import { isDeepStrictEqual } from 'node:util';
 import type { Database, Tx } from '../../db/client.js';
@@ -41,6 +41,8 @@ import {
   trailingStops,
 } from '../../db/schema/paper.js';
 import type { AuditRepo } from '../audit/index.js';
+import type { Notifier, StoredNotification } from '../notifications/index.js';
+import { notificationsForChange } from './changeNotifications.js';
 import {
   AccountConflict,
   clearsOrders,
@@ -173,7 +175,20 @@ function pageOf<T extends { id: string }>(rows: readonly T[], limit: number) {
   return { items, nextCursor: rows.length > limit && last ? last.id : null };
 }
 
-export type PgAccountStoreOptions = { database: Database; audit: AuditRepo };
+export type PgAccountStoreOptions = {
+  database: Database;
+  audit: AuditRepo;
+  /**
+   * `QUOTE_SHARDS`, when the matcher runs: each order row records `shardOf(token, shards)` so the
+   * matcher reads only its own shard's live orders (NSTOCK-0366). Without it the column stays null.
+   */
+  shards?: number;
+  /**
+   * Where the notifications a change raises go (NSTOCK-0379): written in the commit's transaction,
+   * announced once it has committed. Left out, commits raise none.
+   */
+  notifier?: Notifier;
+};
 
 /**
  * The paper account store in Postgres (T-203, spec backend-core §4.3 and §5.3).
@@ -184,13 +199,25 @@ export type PgAccountStoreOptions = { database: Database; audit: AuditRepo };
  * loser writes nothing. With the row held it diffs `change` into order upserts, new order events,
  * new ledger rows (numbered after the account's highest `seq`, so a user's sequence has no gaps),
  * the replaced position and holding-sale rows, changed holdings, new or changed trailing stops,
- * and the audit entries. The account row carries the engine `seq` and the exit order ids.
+ * the audit entries and the notifications the change raises, with their outbox rows. The account row carries the engine `seq` and the exit order ids.
  *
  * `load` rebuilds the engine's working set from those rows: today's and live orders with their
  * events, all holdings, the ledger as a carried balance plus today's entries, and the active and
  * today's trailing stops.
  */
-export function createPgAccountStore({ database, audit }: PgAccountStoreOptions): AccountStore {
+/**
+ * How far past day D an order changed on D can trade: an AMO placed on D after the close trades
+ * on the next session, which a long holiday run can push a week out. Every other order changed on
+ * D trades on D (day orders end at the close).
+ */
+const AMO_TRADE_DATE_DAYS = 8;
+
+export function createPgAccountStore({
+  database,
+  audit,
+  shards,
+  notifier,
+}: PgAccountStoreOptions): AccountStore {
   /** Takes the account row at `expected` and moves it to the next version; AccountConflict if not. */
   async function claimVersion(
     tx: Tx,
@@ -338,6 +365,7 @@ export function createPgAccountStore({ database, audit }: PgAccountStoreOptions)
       status: order.status,
       statusReason: order.statusReason,
       rejectCode: rejectCodes.get(order.id) ?? null,
+      shard: shards === undefined ? null : shardOf(order.token, shards),
       placedAt: new Date(order.placedAt),
       updatedAt: new Date(order.updatedAt),
     }));
@@ -686,8 +714,9 @@ export function createPgAccountStore({ database, audit }: PgAccountStoreOptions)
       throw new Error('The account kept changing while it was loaded');
     },
 
-    commit: (userId, change, expectedVersion, auditEntries) =>
-      database.transaction(async (tx) => {
+    async commit(userId, change, expectedVersion, auditEntries) {
+      let stored: StoredNotification[] = [];
+      const committed = await database.transaction(async (tx) => {
         const version = await claimVersion(tx, userId, change.after, expectedVersion);
         if (clearsOrders(change)) await clearOrders(tx, userId);
         await writeOrders(tx, userId, change);
@@ -698,8 +727,15 @@ export function createPgAccountStore({ database, audit }: PgAccountStoreOptions)
         await writeTrailingStops(tx, userId, change);
         // The audit entries commit or roll back with the change they record.
         await audit.appendMany(auditEntries, tx);
+        // So do the notifications: one exists exactly when its event does.
+        if (notifier) {
+          stored = await notifier.repo.appendMany(notificationsForChange(userId, change), tx);
+        }
         return version;
-      }),
+      });
+      notifier?.committed(stored);
+      return committed;
+    },
 
     async ordersPage(userId, { status, cursor, limit = PAGE_LIMIT_DEFAULT }: OrdersPageQuery = {}) {
       const scope = and(eq(orders.userId, userId), status ? eq(orders.status, status) : undefined);
@@ -778,13 +814,31 @@ export function createPgAccountStore({ database, audit }: PgAccountStoreOptions)
         database.db
           .selectDistinct({ userId: orders.userId })
           .from(orders)
-          .where(and(gte(orders.updatedAt, start), lt(orders.updatedAt, end))),
+          .where(
+            and(
+              // An order changed on day D trades on D, or later when it is an AMO placed after
+              // the close; the bound lets Postgres prune every older (and far later) partition.
+              gte(orders.tradeDate, tradeDate),
+              lt(orders.tradeDate, istDateKey(fromIst(year, month, day + AMO_TRADE_DATE_DAYS, 0))),
+              gte(orders.updatedAt, start),
+              lt(orders.updatedAt, end),
+            ),
+          ),
         database.db
           .selectDistinct({ userId: ledgerEntries.userId })
           .from(ledgerEntries)
           .where(and(gte(ledgerEntries.createdAt, start), lt(ledgerEntries.createdAt, end))),
       ]);
       return [...new Set([...fromOrders, ...fromLedger].map((row) => row.userId))].sort();
+    },
+
+    async accountsWithHoldings() {
+      // A holdings row always has qty > 0 (holdings_qty_check): a sold-out holding is deleted.
+      const rows = await database.db
+        .selectDistinct({ userId: holdings.userId })
+        .from(holdings)
+        .orderBy(holdings.userId);
+      return rows.map((row) => row.userId);
     },
 
     reset: () =>

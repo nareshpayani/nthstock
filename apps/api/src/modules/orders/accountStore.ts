@@ -87,6 +87,8 @@ export interface AccountStore {
   liveAccountIds(): Promise<string[]>;
   /** Users with an order change or a ledger entry on the IST trade date `YYYY-MM-DD`. */
   accountsTouchedOn(tradeDate: string): Promise<string[]>;
+  /** Users holding stock: at least one delivery holding (the P&L snapshot job, T-209). */
+  accountsWithHoldings(): Promise<string[]>;
   /** Tests only: forget every account. */
   reset(): Promise<void>;
 }

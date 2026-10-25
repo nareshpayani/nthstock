@@ -77,7 +77,3 @@ export const withItemsReordered = (
   tokens: readonly number[],
 ) =>
   mapList(data, id, (list) => ({ ...list, items: reorderBy(list.items, (i) => i.token, tokens) }));
-
-/** The ids of the lists that hold `token` (the stock detail star, T-121). */
-export const listsContaining = (data: WatchlistsResponse | undefined, token: number): string[] =>
-  (data?.items ?? []).filter((list) => list.items.some((i) => i.token === token)).map((l) => l.id);

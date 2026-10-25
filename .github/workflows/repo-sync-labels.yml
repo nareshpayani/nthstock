@@ -1,0 +1,44 @@
+name: 'Repo: Sync labels'
+
+# Creates or updates the labels the agent team uses. Run once manually, and on changes to this file.
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [develop]
+    paths: [.github/workflows/repo-sync-labels.yml]
+
+permissions:
+  issues: write
+
+jobs:
+  labels:
+    name: Create or update the labels
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -e
+          # Renamed labels keep their PRs and issues (ADR 0014): rename the old one when it still exists.
+          rename() { gh label edit "$1" --repo "$GITHUB_REPOSITORY" --name "$2" >/dev/null 2>&1 && echo "renamed $1 to $2" || true; }
+          rename "agent:conflict" "agent:merge-conflict"
+          create() { gh label create "$1" --repo "$GITHUB_REPOSITORY" --color "$2" --description "$3" --force; }
+          create "plan:approved"     "0E8A16" "Owner approved: the spec planner breaks this into a spec + stories"
+          create "spec"              "5319E7" "PR containing a feature spec; merging it releases its stories"
+          create "epic"              "3E4B9E" "A large feature; its stories are sub-issues"
+          create "story"             "1D76DB" "A user story"
+          create "bug"               "D73A4A" "Something is broken"
+          create "agent:backlog"     "C5DEF5" "Waiting for its spec PR to be merged"
+          create "agent:ready"       "FBCA04" "The story developer will pick this up"
+          create "agent:in-progress" "F9D0C4" "The story developer is working on it"
+          create "agent:pr"          "BFD4F2" "PR opened by the story developer"
+          create "agent:fix-needed"  "E99695" "PR reviewer found blocking issues; the PR fixer will fix them"
+          create "agent:merge-conflict" "D93F0B" "PR conflicts with its base; the merge conflict resolver is merging develop into it"
+          create "ready-to-merge"    "0E8A16" "PR reviewer approved; auto-merges once CI result is green"
+          create "needs-human"       "B60205" "Agents stopped; owner decision needed"
+          create "do-not-merge"      "000000" "Hold: auto-merge skips this PR"
+          for area in web api ui infra docs; do
+            create "area:$area" "EDEDED" "Touches $area"
+          done

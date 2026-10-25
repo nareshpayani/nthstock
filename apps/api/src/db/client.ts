@@ -9,9 +9,9 @@ export type Db = NodePgDatabase;
 export type Tx = Parameters<Parameters<Db['transaction']>[0]>[0];
 
 /** Default `statement_timeout` for every transaction (spec backend-core §5.1). */
-export const DEFAULT_STATEMENT_TIMEOUT_MS = 2_000;
+const DEFAULT_STATEMENT_TIMEOUT_MS = 2_000;
 /** Default `PG_POOL_MAX`. */
-export const DEFAULT_POOL_MAX = 10;
+const DEFAULT_POOL_MAX = 10;
 
 export type DatabaseOptions = {
   /** A postgres:// URL; apps/api uses the DML-only `nthstock_app` role (`DATABASE_URL`). */

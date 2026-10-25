@@ -27,7 +27,7 @@ const RELATION: Readonly<Record<StoredInterval, string>> = {
 };
 
 /** Rows per INSERT statement: 7 parameters a row stays well under Postgres's 65,535 limit. */
-export const UPSERT_CHUNK_ROWS = 5_000;
+const UPSERT_CHUNK_ROWS = 5_000;
 
 export type CandleStore = {
   /**

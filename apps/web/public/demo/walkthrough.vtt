@@ -1,0 +1,73 @@
+WEBVTT
+
+1
+00:00:01.564 --> 00:00:06.263
+nthstock: paper trading on a simulated NSE market. Tap Try demo.
+
+2
+00:00:06.263 --> 00:00:09.122
+One tap from the login page to a live chart. The "Simulated" panel moves the price.
+
+3
+00:00:09.122 --> 00:00:12.104
+US-01 · Tap the price axis: a ghost order line appears. Nothing is sent yet.
+
+4
+00:00:12.104 --> 00:00:16.039
+Drag the line by its handle to the price you want. The chart does not pan.
+
+5
+00:00:16.039 --> 00:00:19.529
+US-02 · Tap Buy: the ticket opens at the line price. Add a 1% trailing stop.
+
+6
+00:00:19.529 --> 00:00:24.833
+Quantity 4, trail 1%. The preview line says what will happen on the fill.
+
+7
+00:00:24.833 --> 00:00:27.646
+Filled. The position chip shows live P&L; the amber line is the trailing stop.
+
+8
+00:00:27.646 --> 00:00:29.759
+US-03 · Tap the position: its trailing-stop sheet opens.
+
+9
+00:00:29.759 --> 00:00:32.864
+Change the trail to 1.5% and update. One modify, no cancel and replace.
+
+10
+00:00:32.864 --> 00:00:38.852
+US-04 · Rally the price: the stop follows new highs.
+
+11
+00:00:38.852 --> 00:00:41.271
+The stop moved up from ₹1,348.75 to ₹1,365.55.
+
+12
+00:00:41.271 --> 00:00:44.944
+Pull back: the stop never moves down.
+
+13
+00:00:44.944 --> 00:00:47.191
+Gap down 3% through the stop: it triggers once and sells the 4 shares.
+
+14
+00:00:47.191 --> 00:00:49.800
+Trailing stop triggered. Position and line are gone.
+
+15
+00:00:49.800 --> 00:00:57.358
+US-05 · Scalp mode: pick a size, arm, then one tap in and one tap out.
+
+16
+00:00:57.358 --> 00:01:04.094
+Bought 5 at the ask. The strip shows the open position.
+
+17
+00:01:04.094 --> 00:01:07.207
+Flatten: closed in one tap. Trading is only live while armed.
+
+18
+00:01:07.207 --> 00:01:10.418
+Every surface reads one engine state: chart, ticket, depth and strip never disagree.

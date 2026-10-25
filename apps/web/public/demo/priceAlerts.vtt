@@ -1,0 +1,29 @@
+WEBVTT
+
+1
+00:00:06.934 --> 00:00:12.274
+Price alerts: the bell beside the stock name.
+
+2
+00:00:12.274 --> 00:00:15.315
+Quick ±1% and ±2% levels, or any price, with a note.
+
+3
+00:00:15.315 --> 00:00:17.524
+The alert shows as a dotted line on the chart.
+
+4
+00:00:17.524 --> 00:00:20.659
+Rally the price through it with the Demo simulator:
+
+5
+00:00:20.659 --> 00:00:24.171
+A toast the moment it crosses. It fires once.
+
+6
+00:00:24.171 --> 00:00:28.332
+The notification centre: alerts, fills and trailing stops, in IST.
+
+7
+00:00:28.332 --> 00:00:30.758
+Price alerts, with this one marked Triggered.

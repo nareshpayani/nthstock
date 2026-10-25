@@ -1,0 +1,73 @@
+name: 'Agent: Story developer'
+
+# Implements a story or bug when it is labelled `agent:ready`, then opens a PR.
+
+on:
+  issues:
+    types: [labeled]
+  # Used by 'Issues: Release spec stories' (label events made with GITHUB_TOKEN cannot start workflows).
+  workflow_dispatch:
+    inputs:
+      issue:
+        description: 'Issue number to implement'
+        required: true
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+  id-token: write
+
+concurrency:
+  group: agent-story-developer-${{ github.event.issue.number || github.event.inputs.issue }}
+  cancel-in-progress: false
+
+jobs:
+  implement:
+    name: Implement the issue and open a PR
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      github.event.label.name == 'agent:ready' &&
+      (github.event.sender.login == (vars.OWNER_LOGIN || 'nareshpayani') || github.event.sender.login == (vars.AGENT_BOT_LOGIN || 'claude[bot]'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      HAS_AGENT_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN != '' }}
+      ISSUE: ${{ github.event.issue.number || github.event.inputs.issue }}
+    steps:
+      - uses: actions/checkout@v7
+        # No persisted GITHUB_TOKEN, so the agent pushes with its app token (see agent-pr-fixer.yml).
+        with:
+          persist-credentials: false
+      - name: Block pushes to production and develop
+        run: |
+          printf '#!/bin/sh\nwhile read -r _ _ ref _; do case "$ref" in refs/heads/production|refs/heads/main|refs/heads/develop) echo "Pushing to production or develop is not allowed." >&2; exit 1 ;; esac; done\nexit 0\n' > .git/hooks/pre-push
+          chmod +x .git/hooks/pre-push
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - name: Mark issue in progress
+        if: env.HAS_AGENT_TOKEN == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh issue edit "$ISSUE" --repo "$GITHUB_REPOSITORY" --add-label agent:in-progress --remove-label agent:ready
+      - if: env.HAS_AGENT_TOKEN != 'true'
+        run: echo "::notice::CLAUDE_CODE_OAUTH_TOKEN is not set; agent skipped. See docs/agent-workflow.md."
+      - if: env.HAS_AGENT_TOKEN == 'true'
+        uses: anthropics/claude-code-action@42619cb7a75ded196ded275cdd529a35178bfd2c # v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          # Commits are authored as the owner, not the app (owner decision 2026-10-21).
+          bot_name: ${{ vars.OWNER_LOGIN || 'nareshpayani' }}
+          bot_id: ${{ vars.OWNER_ID || '15100692' }}
+          allowed_bots: ${{ (vars.AGENT_BOT_LOGIN || 'claude[bot]') }}
+          prompt: |
+            REPO: ${{ github.repository }}
+            ISSUE: #${{ env.ISSUE }}
+
+            Act as the Developer. Follow .claude/agents/story-developer.md exactly.
+          claude_args: |
+            --max-turns 80
+            --allowedTools "Read,Glob,Grep,Edit,Write,Bash(npm:*),Bash(npx:*),Bash(node:*),Bash(git:*),Bash(gh issue:*),Bash(gh pr create:*),Bash(gh pr view:*),Bash(gh pr edit:*),Bash(bash tools/github/issueKey.sh:*)"

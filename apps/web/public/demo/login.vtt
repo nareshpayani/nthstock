@@ -1,0 +1,33 @@
+WEBVTT
+
+1
+00:00:02.376 --> 00:00:05.039
+Accounts: log in with a mobile number and a one-time password.
+
+2
+00:00:05.039 --> 00:00:11.315
+Log in with a mobile number. Accept the terms and get an OTP.
+
+3
+00:00:11.315 --> 00:00:14.869
+Mock mode shows the OTP: 123456. A full code submits itself.
+
+4
+00:00:14.869 --> 00:00:21.039
+First login on this browser: set a 4-digit PIN for next time.
+
+5
+00:00:21.039 --> 00:00:28.538
+Logged in. The session survives a reload (an httpOnly refresh cookie).
+
+6
+00:00:28.538 --> 00:00:34.364
+The profile menu masks the mobile number and shows the KYC status.
+
+7
+00:00:34.364 --> 00:00:38.041
+This browser is trusted, so next time it asks only for the PIN.
+
+8
+00:00:38.041 --> 00:00:41.340
+Back in with four digits. Five wrong PINs lock it; an OTP always works.

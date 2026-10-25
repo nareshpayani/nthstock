@@ -1,7 +1,7 @@
 import type { Quote } from '@nthstock/contracts';
 
 /** Monday 28 Sep 2026, 10:30 IST: the market is open. */
-export const OPEN_TS = '2026-09-28T05:00:00.000Z';
+const OPEN_TS = '2026-09-28T05:00:00.000Z';
 /** Sunday 27 Sep 2026: the market is closed. */
 export const CLOSED_TS = '2026-09-27T05:00:00.000Z';
 

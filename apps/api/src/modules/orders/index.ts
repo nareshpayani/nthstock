@@ -11,9 +11,14 @@ export { createMemoryAccountStore } from './repo.js';
 export { orderRoutes } from './routes.js';
 export { createOrderService, type OrderService } from './service.js';
 export {
-  commandFor,
   startMatcherCommands,
   type CommandStream,
   type MatcherCommands,
 } from './matcherCommands.js';
+export {
+  logFillClientEvents,
+  startMatcherFills,
+  type FillStreamClient,
+  type MatcherFills,
+} from './matcherFills.js';
 export { startOrderUpdatePublisher, type OrderUpdatePublisher } from './updatePublisher.js';

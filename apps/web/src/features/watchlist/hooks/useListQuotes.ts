@@ -7,7 +7,7 @@ import { listQuotesQuery } from '../api/watchlistsQuery';
 const EXCHANGES: readonly Exchange[] = ['NSE', 'BSE'];
 
 /** How long a list's REST prices stay fresh; live ticks take over for rows on screen. */
-export const LIST_QUOTES_STALE_MS = 10_000;
+const LIST_QUOTES_STALE_MS = 10_000;
 
 /** Module-level, so TanStack Query keeps the combined map while the results do not change. */
 function byKey(results: UseQueryResult<readonly Quote[]>[]): ReadonlyMap<string, Quote> {

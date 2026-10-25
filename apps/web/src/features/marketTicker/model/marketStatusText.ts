@@ -24,7 +24,7 @@ function time(date: Date): string {
 }
 
 /** "today 9:15 am", "tomorrow 9:15 am" or "Mon 9:15 am", all in IST. */
-export function describeNextOpen(clock: Clock): string {
+function describeNextOpen(clock: Clock): string {
   const now = clock.now();
   const next = nextSessionOpen(clock);
   const tomorrow = new Date(now.getTime() + 24 * 60 * 60 * 1000);

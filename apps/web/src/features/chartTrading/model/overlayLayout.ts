@@ -1,7 +1,7 @@
 /** Labels closer than this are offset with a leader line (SPEC-TFC-1 §8.4): one touch target. */
 export const LABEL_GAP = 44;
 /** A pinned label keeps this far from the pane's top and bottom edges, so it stays tappable. */
-export const EDGE_INSET = 22;
+const EDGE_INSET = 22;
 
 export type LayoutInput = {
   id: string;

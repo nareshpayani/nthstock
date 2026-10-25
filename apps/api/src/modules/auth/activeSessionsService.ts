@@ -1,6 +1,7 @@
 import type { ActiveSession } from '@nthstock/contracts';
 import type { Clock } from '@nthstock/utils';
 import { ApiHttpError } from '../../http/apiError.js';
+import { raiseSecurityNotice, type SecurityNotices } from '../notifications/index.js';
 import type { AuthRepo, DeviceRecord } from './repo.js';
 import type { AuthContext, SessionService } from './sessionService.js';
 import type { TwoFactorService } from './twoFactorService.js';
@@ -10,6 +11,8 @@ export type ActiveSessionsServiceDeps = {
   repo: AuthRepo;
   sessions: SessionService;
   twoFactor: Pick<TwoFactorService, 'requireStepUp'>;
+  /** Logging out the other devices raises a security notification (NSTOCK-0382). */
+  notices?: SecurityNotices;
 };
 
 export type ActiveSessionsService = {
@@ -31,6 +34,7 @@ export function createActiveSessionsService({
   repo,
   sessions,
   twoFactor,
+  notices,
 }: ActiveSessionsServiceDeps): ActiveSessionsService {
   const others = async (context: AuthContext) =>
     (await repo.listActiveSessions(context.user.id, clock.now())).filter(
@@ -71,8 +75,22 @@ export function createActiveSessionsService({
     async revokeOthers(context) {
       twoFactor.requireStepUp(context);
       const targets = await others(context);
-      for (const target of targets) {
-        await sessions.revoke(target.id, { type: 'user', userId: context.user.id });
+      let revoked = 0;
+      try {
+        for (const target of targets) {
+          await sessions.revoke(target.id, { type: 'user', userId: context.user.id });
+          revoked += 1;
+        }
+      } finally {
+        // Also when a revoke throws partway: tell the user about the sessions already ended.
+        if (revoked > 0) {
+          raiseSecurityNotice(
+            notices,
+            context.user.id,
+            { type: 'SESSIONS_ENDED', count: revoked },
+            clock.now(),
+          );
+        }
       }
       return targets.length;
     },

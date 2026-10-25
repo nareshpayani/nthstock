@@ -2,7 +2,7 @@
 
 The web app in msw mode needs no backend: MSW, the mock market and the paper engine all run in the
 browser. So the static build is a full working demo, hosted free on **Firebase Hosting** (Spark
-plan, no card). `.github/workflows/web-hosting.yml` deploys it:
+plan, no card). `.github/workflows/deploy-web-hosting.yml` deploys it:
 
 - **Development environment**, the long-lived `dev` channel: every green CI run on `develop`
   deploys there, so merged work is always on a shared link that is not the live site
@@ -35,11 +35,11 @@ Blaze plan. That waits for the scalability phase (AWS Mumbai).
 
    Then delete the downloaded JSON file.
 
-5. Run **Actions → Web hosting → Run workflow** with stage `live` and ref `production` (CI must be green
+5. Run **Actions → Deploy: Web hosting → Run workflow** with stage `live` and ref `production` (CI must be green
    on that commit). Later releases follow [release.md](release.md). The development environment
    fills itself on the next green CI run on `develop`.
 
-Until both values are set, the Web hosting jobs are skipped, not failed.
+Until both values are set, the Deploy: Web hosting jobs are skipped, not failed.
 
 ## Sharing with a reviewer
 

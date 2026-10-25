@@ -6,6 +6,7 @@ import {
   encodeQuoteFrame,
   instrumentOf,
   type AccountDeltaEvent,
+  type NotificationEvent,
   type Order,
   type Quote,
   type WsInstrument,
@@ -63,6 +64,11 @@ export type Hub = {
    */
   deliverAccountDelta(userId: string, delta: AccountDeltaEvent['delta']): void;
   /**
+   * The same private channel (NSTOCK-0381): a stored notification goes, as a `notification`
+   * message with the alert that fired it, to every open connection of its user only.
+   */
+  deliverNotification(userId: string, pushed: Omit<NotificationEvent, 'v' | 'userId'>): void;
+  /**
    * Closes every connection of a revoked session with 4401 (T-195), leaving the user's other
    * sessions open. Resolves to how many it closed.
    */
@@ -92,7 +98,7 @@ export const FLUSH_INTERVAL_MS = 1_000 / MAX_UPDATES_PER_SECOND;
 
 /** How often the heartbeat runs: idle checks each time, a ping every `PING_INTERVAL_MS`. */
 export const HEARTBEAT_INTERVAL_MS = 5_000;
-export const PING_INTERVAL_MS = 20_000;
+const PING_INTERVAL_MS = 20_000;
 /** Above this many bytes buffered for a client, its quote frames are dropped (T-075). */
 export const MAX_BUFFERED_BYTES = 1024 * 1024;
 
@@ -258,6 +264,24 @@ export function createHub(options: HubOptions = {}): Hub {
     }
   };
 
+  const deliverNotification = (
+    userId: string,
+    { notification, alert }: Omit<NotificationEvent, 'v' | 'userId'>,
+  ) => {
+    for (const session of byUser.get(userId) ?? []) {
+      try {
+        sendJson(session.socket, {
+          v: WS_PROTOCOL_VERSION,
+          type: 'notification',
+          notification,
+          ...(alert ? { alert } : {}),
+        });
+      } catch (error) {
+        logger.warn('notification send failed', { error: String(error) });
+      }
+    }
+  };
+
   const closeSession = (sessionId: string) => {
     const revoked = [...(bySession.get(sessionId) ?? [])];
     for (const session of revoked) {
@@ -374,6 +398,7 @@ export function createHub(options: HubOptions = {}): Hub {
     ingest,
     deliverOrder,
     deliverAccountDelta,
+    deliverNotification,
     closeSession,
     flush,
     heartbeat,

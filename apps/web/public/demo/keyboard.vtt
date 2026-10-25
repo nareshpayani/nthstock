@@ -1,0 +1,29 @@
+WEBVTT
+
+1
+00:00:07.141 --> 00:00:10.029
+Everything works from the keyboard (WCAG 2.2 AA). Press ? for the list.
+
+2
+00:00:10.029 --> 00:00:13.689
+The shortcuts.
+
+3
+00:00:13.689 --> 00:00:19.576
+/ to search, ↓ to pick, Shift+Enter adds to the watchlist, Enter opens.
+
+4
+00:00:19.576 --> 00:00:23.390
+On a watchlist row, B buys and S sells.
+
+5
+00:00:23.390 --> 00:00:25.971
+Type the quantity, Enter to review.
+
+6
+00:00:25.971 --> 00:00:29.665
+Esc closes and puts focus back where it was.
+
+7
+00:00:29.665 --> 00:00:32.414
+Focus is always visible, and every change is announced to screen readers.

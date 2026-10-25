@@ -2,10 +2,12 @@ import { MatcherCommand, routes, type Quote } from '@nthstock/contracts';
 import { MockMarketDataAdapter, generateSymbolMaster } from '@nthstock/marketData';
 import { shardOf } from '@nthstock/utils';
 import { Redis } from 'ioredis';
+import { Client } from 'pg';
 import { afterAll, beforeAll, expect, it } from 'vitest';
 import { buildApp } from '../../app.js';
 import { loginWithOtp } from '../../test/authFlow.js';
 import { manualClock } from '../../test/manualClock.js';
+import { describeWithPostgres, useTestPostgres } from '../../test/testPostgres.js';
 import {
   describeWithRedis,
   startTestRedis,
@@ -36,7 +38,7 @@ describeWithRedis('matcher commands from apps/api (integration, NSTOCK-0365)', (
     await redis?.stop();
   });
 
-  it('sends ADD, MODIFY and CANCEL for a LIMIT order, in version order', async () => {
+  async function startApp(phone: string) {
     const url = redis?.url ?? '';
     const prefix = uniqueChannel('commands');
     const clock = manualClock('2026-09-28T04:30:00.000Z'); // Monday 10:00 IST, market open
@@ -69,8 +71,14 @@ describeWithRedis('matcher commands from apps/api (integration, NSTOCK-0365)', (
     });
     app.addHook('onClose', () => market.dispose());
     await app.ready();
-    const user = await loginWithOtp(app, '9876500011');
+    const user = await loginWithOtp(app, phone);
     const headers = { authorization: `Bearer ${user.access}`, 'x-csrf-token': 'bearer' };
+
+    return { app, prefix, shard, headers, user, clock };
+  }
+
+  it('sends ADD, MODIFY and CANCEL for a LIMIT order, in version order', async () => {
+    const { app, prefix, shard, headers, user, clock } = await startApp('9876500011');
 
     const placed = await app.inject({
       method: 'POST',
@@ -119,4 +127,136 @@ describeWithRedis('matcher commands from apps/api (integration, NSTOCK-0365)', (
 
     await app.close();
   }, 60_000);
+
+  it('sends STOP_ADD and STOP_CANCEL for a trailing stop (NSTOCK-0368)', async () => {
+    const { app, prefix, shard, headers } = await startApp('9876500012');
+
+    const bought = await app.inject({
+      method: 'POST',
+      url: routes.orderPlace.path,
+      headers,
+      payload: { token: TOKEN, side: 'BUY', type: 'MARKET', product: 'DELIVERY', qty: 2 },
+    });
+    expect(bought.statusCode, bought.body).toBe(200);
+    const placed = await app.inject({
+      method: 'POST',
+      url: routes.trailingStopPlace.path,
+      headers,
+      payload: {
+        token: TOKEN,
+        product: 'DELIVERY',
+        trail: { unit: 'AMOUNT', amount: 10_00 },
+        activationPrice: null,
+        exitOrderType: 'MARKET',
+        exitLimitOffset: null,
+      },
+    });
+    expect(placed.statusCode, placed.body).toBe(200);
+    const stopId = (placed.json() as { id: string }).id;
+    const cancelled = await app.inject({
+      method: 'DELETE',
+      url: `/v1/trailing-stops/${stopId}`,
+      headers,
+    });
+    expect(cancelled.statusCode, cancelled.body).toBe(200);
+
+    const key = `${prefix}:commands:${String(shard)}`;
+    await expect.poll(async () => await reader.xlen(key), { timeout: 10_000 }).toBe(2);
+    const commands = (await reader.xrange(key, '-', '+')).map(([, fields]) =>
+      MatcherCommand.parse(JSON.parse(fields[1] ?? '')),
+    );
+    expect(commands.map((c) => c.type)).toEqual(['STOP_ADD', 'STOP_CANCEL']);
+    expect(commands[0]).toMatchObject({
+      stopId,
+      token: TOKEN,
+      state: { status: 'TRAILING', direction: 'LONG', trail: { unit: 'AMOUNT', amount: 10_00 } },
+    });
+    expect(commands[1]).toMatchObject({ stopId, type: 'STOP_CANCEL' });
+    expect(commands[0]?.version).toBeLessThan(commands[1]?.version ?? 0);
+
+    await app.close();
+  }, 60_000);
+});
+
+describeWithPostgres('order rows record their matcher shard (integration, NSTOCK-0366)', () => {
+  describeWithRedis('with Redis', () => {
+    let redis: TestRedis | undefined;
+    let reader: Redis;
+
+    beforeAll(async () => {
+      redis = await startTestRedis();
+      reader = new Redis(redis.url);
+    }, 180_000);
+
+    afterAll(async () => {
+      reader.disconnect();
+      await redis?.stop();
+    });
+
+    it("sets orders.shard to the instrument's shard on insert", async () => {
+      const pg = await useTestPostgres();
+      await pg.truncate();
+      const prefix = uniqueChannel('shard');
+      const clock = manualClock('2026-09-28T04:30:00.000Z');
+      const market = new MockMarketDataAdapter({ master, clock, externalTicks: true });
+      const base = (await new MockMarketDataAdapter({ master }).getQuote(
+        EQUITY?.symbol ?? '',
+      )) as Quote;
+      const shard = shardOf(TOKEN, SHARDS);
+      await reader.hset(
+        `${prefix}:last:${String(shard)}`,
+        String(TOKEN),
+        JSON.stringify({ ...base, ltp: 1_400_00 }),
+      );
+      const app = buildApp({
+        deps: {
+          clock,
+          market,
+          dbDriver: 'postgres',
+          databaseUrl: pg.appUrl,
+          quoteStreams: {
+            url: redis?.url ?? '',
+            shards: SHARDS,
+            streamKey: (s) => `${prefix}:ticks:${String(s)}`,
+            snapshotKey: (s) => `${prefix}:last:${String(s)}`,
+            commandsKey: (s) => `${prefix}:commands:${String(s)}`,
+            blockMs: 100,
+            log: silent,
+          },
+        },
+        orderSweepMs: null,
+      });
+      app.addHook('onClose', () => market.dispose());
+      await app.ready();
+      const user = await loginWithOtp(app, '9876500012');
+      const placed = await app.inject({
+        method: 'POST',
+        url: routes.orderPlace.path,
+        headers: { authorization: `Bearer ${user.access}`, 'x-csrf-token': 'bearer' },
+        payload: {
+          token: TOKEN,
+          side: 'BUY',
+          type: 'LIMIT',
+          price: 1_390_00,
+          product: 'DELIVERY',
+          qty: 1,
+        },
+      });
+      expect(placed.statusCode, placed.body).toBe(200);
+      const { id } = placed.json() as { id: string };
+
+      const owner = new Client({ connectionString: pg.ownerUrl });
+      await owner.connect();
+      try {
+        const { rows } = await owner.query<{ shard: number | null }>(
+          'SELECT shard FROM orders WHERE id = $1',
+          [id],
+        );
+        expect(rows).toEqual([{ shard }]);
+      } finally {
+        await owner.end();
+        await app.close();
+      }
+    }, 60_000);
+  });
 });

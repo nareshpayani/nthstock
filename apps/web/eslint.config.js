@@ -82,7 +82,7 @@ export default tseslint.config(
     rules: { 'no-restricted-exports': 'off' },
   },
   {
-    files: ['scripts/**/*.mjs', 'e2e/**/*.ts', 'playwright.config.ts'],
+    files: ['scripts/**/*.mjs', 'e2e/**/*.{ts,mjs}', 'playwright.config.ts'],
     languageOptions: { globals: globals.node },
     rules: { 'no-console': 'off' },
   },

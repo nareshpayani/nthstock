@@ -4,7 +4,7 @@ import { queryOptions } from '@tanstack/react-query';
 
 export type MoversParams = { index: string; direction: MoverDirection; limit: number };
 
-export const moversKeys = {
+const moversKeys = {
   all: ['movers'] as const,
   list: (params: MoversParams) => ['movers', 'list', params] as const,
 };

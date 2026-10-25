@@ -69,12 +69,36 @@ function scriptedClient(answers: (() => unknown)[]) {
         release = () => resolve(null);
       });
     },
+    xrevrange: () => Promise.resolve([]),
     disconnect: () => release(),
   };
   return { client, calls };
 }
 
 const entry = (id: string, command: unknown) => [id, ['command', JSON.stringify(command)]];
+
+describe('applyCommand: price alerts (NSTOCK-0383)', () => {
+  it('adds an alert once and cancels it', () => {
+    const book = new OrderBook();
+    const alertAdd: MatcherCommand = {
+      v,
+      type: 'ALERT_ADD',
+      token: 1,
+      version: 0,
+      alertId: 'a1',
+      userId: 'u1',
+      condition: 'BELOW',
+      price: 90_00,
+    };
+    expect(applyCommand(book, alertAdd)).toBe(true);
+    expect(applyCommand(book, alertAdd)).toBe(false);
+    expect(book.hasAlert('a1')).toBe(true);
+    const cancel: MatcherCommand = { v, type: 'ALERT_CANCEL', token: 1, version: 0, alertId: 'a1' };
+    expect(applyCommand(book, cancel)).toBe(true);
+    expect(applyCommand(book, cancel)).toBe(false);
+    expect(book.hasAlert('a1')).toBe(false);
+  });
+});
 
 describe('readMatcherCommands (NSTOCK-0365)', () => {
   it('reads from the newest entry on, drops malformed entries and moves its cursor', async () => {
@@ -105,8 +129,23 @@ describe('readMatcherCommands (NSTOCK-0365)', () => {
     await vi.waitFor(() => expect(calls).toHaveLength(2));
     expect(seen.map((c) => c.version)).toEqual([1, 3]);
     expect(warnings).toHaveLength(3);
-    expect(calls[0]).toEqual(['COUNT', 500, 'BLOCK', 5_000, 'STREAMS', 'k2', '$']);
+    expect(calls[0]).toEqual(['COUNT', 500, 'BLOCK', 5_000, 'STREAMS', 'k2', '0-0']);
     expect(calls[1]?.at(-1)).toBe('5-0');
+    await reader.close();
+  });
+
+  it('starts after the newest existing entry and never reads from $', async () => {
+    const { client, calls } = scriptedClient([() => null, () => null]);
+    client.xrevrange = () => Promise.resolve([entry('7-3', add(1, 100_00))]);
+    const reader = readMatcherCommands({
+      client,
+      shard: 0,
+      onCommand: () => undefined,
+      log: { info: () => undefined, warn: () => undefined },
+    });
+    await reader.ready();
+    await vi.waitFor(() => expect(calls).toHaveLength(3));
+    expect(calls.map((call) => call.at(-1))).toEqual(['7-3', '7-3', '7-3']);
     await reader.close();
   });
 

@@ -12,10 +12,15 @@ export type OrderUpdateSource = {
   connect(): void;
   /** New notifications of the signed-in user (NSTOCK-0344); absent where the socket sends none. */
   onNotification?(listener: (message: WsNotification) => void): () => void;
+  /**
+   * Called each time the socket opens again after a drop (NSTOCK-0384), not on the first open:
+   * messages sent during the gap are lost, so pushed state is read again over REST.
+   */
+  onReconnect?(listener: () => void): () => void;
 };
 
 /** A source that never delivers: tests and Storybook without a socket. */
-export const detachedOrderUpdates: OrderUpdateSource = {
+const detachedOrderUpdates: OrderUpdateSource = {
   onOrderUpdate: () => () => undefined,
   connect: () => undefined,
 };

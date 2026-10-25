@@ -27,6 +27,8 @@ import {
 // redis://127.0.0.1:6379, the CI service) and Postgres at E2E_DATABASE_URL (default the migrated
 // `npm run infra:up` database as nthstock_app, like the CI service; T-182), plus an api-mode web
 // build behind the preview proxy. apps/api counts as started once /v1/health/ready answers 200.
+// It runs under e2e/support/apiSupervisor.mjs, which restarts it on the same port with the same
+// env (and so the same JWT secret) when a spec asks (`restartApi`, T-241).
 // Only specs tagged @api run, one at a time, since they share one backend clock.
 //
 // perf (`E2E_PERF=1`, T-169 and T-170): the msw-mode build, only the specs tagged @perf (Web Vitals
@@ -80,9 +82,13 @@ const mswServer = {
 
 const apiServers = [
   {
-    command: 'node ../api/dist/server.js',
+    command: 'node e2e/support/apiSupervisor.mjs',
     url: `${API_ORIGIN}/v1/health/ready`,
-    env: { ...backendEnv, PORT: String(E2E_PORTS.api) },
+    env: {
+      ...backendEnv,
+      PORT: String(E2E_PORTS.api),
+      API_SUPERVISOR_PORT: String(E2E_PORTS.apiSupervisor),
+    },
     reuseExistingServer: false,
     timeout: 60_000,
   },

@@ -1,6 +1,13 @@
 import { setupWorker } from 'msw/browser';
 import { resolveWsUrl, type RuntimeConfig } from '@/app/config/runtimeConfig';
-import { enterDemoMode, isDemoMode, registerSimulator } from '@/shared/lib/demoSimulator';
+import {
+  enterDemoMode,
+  clearDemoPending,
+  isDemoMode,
+  markDemoPending,
+  registerSimulator,
+  setDemoStarter,
+} from '@/shared/lib/demoSimulator';
 import { wantsDemo, withoutDemoParam } from './demoParam';
 import { seedMockDemo } from './demoSeed';
 import { ORDER_SWEEP_MS, createMockHandlers } from './handlers';
@@ -21,6 +28,8 @@ export type StartMockWorkerOptions = {
    * without this option the parameter is read, and dropped, here.
    */
   demo?: boolean;
+  /** Loads a URL in place of the page (Try demo's `?demo=1` reload); tests pass a spy. */
+  navigate?: (url: string) => void;
 };
 
 export async function startMockWorker(
@@ -61,6 +70,10 @@ export async function startMockWorker(
         ? '[MSW] Demo seed loaded (?demo=1): log in as 9000000001 with OTP 123456.'
         : '[MSW] Demo seed skipped: sessionStorage is unavailable.',
     );
+  } else if (listStorage) {
+    // A Try demo reload carries on only on the ?demo=1 load it started; a flag left by a reload
+    // that never landed must not log a later /login in as the demo user.
+    clearDemoPending(listStorage);
   }
   // E2E builds only (VITE_TEST_CONTROLS, T-162): the mocks share the test clock, so auth,
   // watchlists and orders all move when a test sets it.
@@ -100,9 +113,23 @@ export async function startMockWorker(
     if (document.visibilityState === 'hidden') orders.flush();
   });
   // The Simulator exists only in demo mode (SPEC-TFC-1 TFC-12); a reload in the same session keeps it.
-  if (listStorage && isDemoMode(listStorage)) {
+  let simulatorOn = false;
+  const startSimulator = () => {
+    if (simulatorOn) return;
+    simulatorOn = true;
     registerSimulator(createSimulator({ adapter, orders }));
-  }
+  };
+  if (listStorage && isDemoMode(listStorage)) startSimulator();
+  // Try demo outside demo mode: reload with ?demo=1, so the seed is written before the mocks read
+  // their saved state, as on a direct ?demo=1 load; the login page then carries on (TFC-12).
+  setDemoStarter(() => {
+    if (listStorage && !isDemoMode(listStorage) && markDemoPending(listStorage)) {
+      (options.navigate ?? ((url) => window.location.assign(url)))('/login?demo=1');
+      return 'reloading';
+    }
+    startSimulator();
+    return 'ready';
+  });
   // Chrome stops idle service workers; this re-registers the tab with a restarted one.
   const keeper = startWorkerKeeper();
   return { worker, adapter, orders, ensureActive: keeper.ensureActive };

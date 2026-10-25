@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { manualClock } from '../../test/manualClock.js';
 import { createMemoryAuditRepo } from '../audit/repo.js';
 import { createMemoryUsersRepo, DEMO_USER } from '../users/repo.js';
@@ -44,6 +44,43 @@ describe('session service', () => {
 
     expect(again.device.id).toBe(first.device.id);
     expect(foreign.device.id).not.toBe(first.device.id);
+  });
+
+  it('raises a notice only for a device the user has not used before (NSTOCK-0382)', async () => {
+    const raise = vi.fn(() => Promise.resolve([]));
+    service = createSessionService({
+      clock,
+      repo,
+      users,
+      audit,
+      secret: new Uint8Array(32).fill(7),
+      notices: { notifier: { raise }, onError: vi.fn() },
+    });
+
+    const first = await service.start({ user: DEMO_USER, method: 'PIN', userAgent: undefined });
+    expect(raise).toHaveBeenCalledTimes(1);
+
+    // The same trusted device again: no second notice.
+    await service.start({
+      user: DEMO_USER,
+      method: 'PIN',
+      userAgent: undefined,
+      deviceId: first.device.id,
+    });
+    expect(raise).toHaveBeenCalledTimes(1);
+
+    // Another user presenting that device id is a new device for them: a notice.
+    const other = await users.create({ mobile: '9876543210' });
+    await service.start({
+      user: other,
+      method: 'TOTP',
+      userAgent: undefined,
+      deviceId: first.device.id,
+    });
+    expect(raise).toHaveBeenCalledTimes(2);
+    expect(raise).toHaveBeenLastCalledWith([
+      expect.objectContaining({ userId: other.id, kind: 'SECURITY' }),
+    ]);
   });
 
   it('ends the session when its user or device disappears', async () => {

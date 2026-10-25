@@ -1,0 +1,45 @@
+WEBVTT
+
+1
+00:00:07.318 --> 00:00:10.607
+Trade from Charts: click the price axis to put a ghost order line there.
+
+2
+00:00:10.607 --> 00:00:15.645
+Nothing is sent yet. Drag its handle to the price you want.
+
+3
+00:00:15.645 --> 00:00:20.291
+The compact ticket opens as a limit at the line price.
+
+4
+00:00:20.291 --> 00:00:22.212
+A blue line for the open order.
+
+5
+00:00:22.212 --> 00:00:25.248
+Drag it: the price follows, and one modify goes on release.
+
+6
+00:00:25.248 --> 00:00:27.717
+Order modified.
+
+7
+00:00:27.717 --> 00:00:30.432
+× asks once: "Cancel?" A second click cancels.
+
+8
+00:00:30.432 --> 00:00:36.334
+Cancelled, and the line is gone.
+
+9
+00:00:36.334 --> 00:00:39.791
+A position shows as a chip at the average price, with live P&L.
+
+10
+00:00:39.791 --> 00:00:42.504
+Click it to protect the position with a trailing stop.
+
+11
+00:00:42.504 --> 00:00:45.538
+Chart, ticket, depth and orders read one engine state, so they never disagree.

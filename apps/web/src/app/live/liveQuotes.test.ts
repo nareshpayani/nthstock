@@ -138,6 +138,54 @@ describe('createLiveQuotes', () => {
     vi.unstubAllGlobals();
   });
 
+  it('tells reconnect listeners when the socket opens again after a drop, not on the first open (NSTOCK-0384)', () => {
+    vi.useFakeTimers();
+    const sockets: {
+      onopen: (() => void) | null;
+      onclose: (() => void) | null;
+      readyState: number;
+    }[] = [];
+    class DroppingSocket {
+      readyState = 0;
+      binaryType = 'blob';
+      onopen: (() => void) | null = null;
+      onmessage = null;
+      onclose: (() => void) | null = null;
+      onerror = null;
+      constructor() {
+        sockets.push(this);
+      }
+      send() {}
+      close() {}
+    }
+    vi.stubGlobal('WebSocket', DroppingSocket);
+    const { wsClient, orderUpdates } = createLiveQuotes(
+      { wsUrl: null },
+      { protocol: 'http:', host: 'localhost:5173' },
+    );
+    const listener = vi.fn();
+    const stop = orderUpdates.onReconnect?.(listener);
+    const open = (index: number) => {
+      const socket = sockets[index];
+      if (!socket) throw new Error(`no socket ${index}`);
+      socket.readyState = 1;
+      socket.onopen?.();
+      return socket;
+    };
+    orderUpdates.connect();
+    const first = open(0);
+    expect(listener).not.toHaveBeenCalled();
+    first.readyState = 3;
+    first.onclose?.();
+    vi.advanceTimersByTime(60_000);
+    open(1);
+    expect(listener).toHaveBeenCalledTimes(1);
+    stop?.();
+    wsClient.close();
+    vi.unstubAllGlobals();
+    vi.useRealTimers();
+  });
+
   it('in msw mode, opens the socket only once the mock worker is ready (T-169)', async () => {
     const urls: string[] = [];
     class FakeSocket {

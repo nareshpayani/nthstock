@@ -7,6 +7,7 @@ import { installErrorHandling } from './http/errorHandler.js';
 import { installSecurityHeaders } from './http/securityHeaders.js';
 import { alertRoutes } from './modules/alerts/index.js';
 import { authRoutes } from './modules/auth/index.js';
+import { docsRoutes } from './modules/docs/index.js';
 import { fundsRoutes } from './modules/funds/index.js';
 import { healthRoutes, type ReadinessCheck } from './modules/health/index.js';
 import { marketRoutes } from './modules/market/index.js';
@@ -18,8 +19,13 @@ import {
 import { portfolioRoutes } from './modules/portfolio/index.js';
 import { testControlRoutes, type TestControls } from './modules/testControls/index.js';
 import { watchlistRoutes } from './modules/watchlists/index.js';
+import {
+  startNotificationPublisher,
+  type NotificationPublisher,
+} from './modules/notifications/index.js';
 import type { Publisher } from './ticks/publisher.js';
 import { startTickPump, type TickPump } from './ticks/tickPump.js';
+import { runsOrderSweep, type JobsMode } from './config.js';
 
 export type AppOptions = {
   logger?: FastifyServerOptions['logger'];
@@ -48,6 +54,16 @@ export type AppOptions = {
    */
   orderSweepMs?: number | null;
   /**
+   * `JOBS_MODE` (T-207): only `inline` (default) runs the order sweep; under `bullmq` the job
+   * worker runs the session events, and `off` runs neither.
+   */
+  jobsMode?: JobsMode;
+  /**
+   * How often the notification outbox relay runs, and how old a row must be before it takes it
+   * (NSTOCK-0380); default `OUTBOX_RELAY_MS`. `null` runs no timer. Only with `orderPublisher`.
+   */
+  notificationRelayMs?: number | null;
+  /**
    * Registers the `/v1/__test` clock and price routes (T-162) for E2E suites. Left out (always, in
    * production), those paths answer 404. `server.ts` passes it only for `NODE_ENV=test` with
    * `ENABLE_TEST_CONTROLS=true`; `setTime` must move `deps.clock`.
@@ -63,7 +79,7 @@ export type AppOptions = {
 export const DEFAULT_RATE_LIMIT_PER_MINUTE = 600;
 /** How long boot waits for the quote snapshots before it starts on the opening prices. */
 const QUOTE_SNAPSHOT_WAIT_MS = 5_000;
-export const DEFAULT_ORDER_SWEEP_MS = 15_000;
+const DEFAULT_ORDER_SWEEP_MS = 15_000;
 
 export type App = FastifyInstance & { deps: AppDeps };
 
@@ -102,6 +118,10 @@ export function buildApp(options: AppOptions = {}): App {
   app.addHook('onReady', async () => {
     await deps.orders.hydrateLive().catch((error: unknown) => {
       app.log.error({ err: error }, 'loading accounts with live orders failed');
+    });
+    // Active price alerts are watched again after a restart (NSTOCK-0383).
+    await deps.alerts.ready().catch((error: unknown) => {
+      app.log.error({ err: error }, 'loading active price alerts failed');
     });
   });
   // On the quote service the prices start from its snapshots (NSTOCK-0354). With Redis down the
@@ -150,19 +170,41 @@ export function buildApp(options: AppOptions = {}): App {
     app.addHook('onClose', async () => {
       updates?.stop();
     });
+    // Notifications go out on the same publisher, with the outbox relay (NSTOCK-0380).
+    let notifications: NotificationPublisher | null = null;
+    app.addHook('onReady', async () => {
+      notifications = startNotificationPublisher({
+        notifier: deps.notifier,
+        publisher: orderPublisher,
+        log: app.log,
+        ...(options.notificationRelayMs !== undefined
+          ? { relayMs: options.notificationRelayMs }
+          : {}),
+      });
+    });
+    app.addHook('onClose', async () => {
+      notifications?.stop();
+    });
   }
   // Each publisher is closed once, even when ticks and order updates share one.
   for (const owned of new Set([publisher, orderPublisher])) {
     if (owned) app.addHook('onClose', () => owned.close());
   }
+  // With the matcher worker, no API process sweeps every account (spec market-data-and-matching
+  // §5.4): fills come from the matcher, and a user's engine syncs on their next request.
   const sweepMs =
-    options.orderSweepMs === undefined ? DEFAULT_ORDER_SWEEP_MS : options.orderSweepMs;
+    deps.matcherMode === 'worker' || !runsOrderSweep(options.jobsMode ?? 'inline')
+      ? null
+      : options.orderSweepMs === undefined
+        ? DEFAULT_ORDER_SWEEP_MS
+        : options.orderSweepMs;
   if (sweepMs !== null) {
     let sweeper: ReturnType<typeof setInterval> | null = null;
     app.addHook('onReady', async () => {
       sweeper = setInterval(() => {
         deps.orders.sweep().catch((error: unknown) => {
-          app.log.error({ error }, 'order sweep failed');
+          // pino serialises an error (its message and stack) only under `err`.
+          app.log.error({ err: error }, 'order sweep failed');
         });
       }, sweepMs);
       sweeper.unref();
@@ -181,6 +223,7 @@ export function buildApp(options: AppOptions = {}): App {
       },
     }),
   );
+  app.register(docsRoutes());
   app.register(marketRoutes(deps));
   app.register(authRoutes(deps));
   app.register(watchlistRoutes(deps));

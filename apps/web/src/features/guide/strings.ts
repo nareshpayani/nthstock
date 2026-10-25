@@ -19,6 +19,10 @@ export const strings = {
   inWords: 'The diagram in words',
   opensInNewTab: '(opens in a new tab)',
   pagerLabel: 'Previous and next topic',
+  videoLabel: (title: string, device: string) =>
+    `${title}, ${device.toLowerCase()} walkthrough video`,
+  videoFallback: (title: string) => `Download the ${title} video`,
+  captionsLabel: 'English',
 
   tabs: defineTabs([
     {
@@ -95,7 +99,7 @@ export const strings = {
         {
           kind: 'steps',
           items: [
-            'Open the login page and tap Try demo. It loads a ready-made account with watchlists and holdings.',
+            'Open the login page and tap Try demo. It loads a ready-made account with watchlists and holdings and opens RELIANCE with the Demo simulator on, on a phone too.',
             'Or log in by hand: enter 9000000001, tick the consent box, choose Get OTP, and enter 123456. It is a demo code and works only on the demo site.',
             'On the PIN step, choose Skip for now. You land on the dashboard as Demo Investor.',
           ],
@@ -123,6 +127,24 @@ export const strings = {
             'Switch on Scalp for the one-tap pad. Arm it first; it disarms itself after 2 minutes idle.',
             'Use the labelled Demo simulator on the instrument page to move the price, so a trailing stop ratchets and triggers in seconds.',
           ],
+        },
+        {
+          kind: 'links',
+          label: 'Watch it first',
+          items: [
+            {
+              label: 'Walkthrough video: the five journeys on a 390 px phone, 72 seconds',
+              href: repoLink('apps/web/public/demo/walkthrough.mp4'),
+            },
+            {
+              label: 'Shot list and how the video is recorded',
+              href: repoLink('docs/runbooks/demo-walkthrough.md'),
+            },
+          ],
+        },
+        {
+          kind: 'note',
+          text: 'Every other feature has its own short clip on the Walkthrough videos tab.',
         },
         {
           kind: 'note',
@@ -216,6 +238,193 @@ export const strings = {
             {
               name: 'Documentation',
               body: 'This page: public, deep-linkable tabs, also linked from the login page.',
+            },
+          ],
+        },
+      ],
+    },
+    {
+      id: 'walkthroughs',
+      label: 'Walkthrough videos',
+      title: 'Walkthrough videos of every feature',
+      summary: 'One short captioned clip per feature, recorded from the production build.',
+      blocks: [
+        {
+          kind: 'text',
+          text: 'Each clip shows one feature end to end, with a caption for every step and a dot where the click or tap lands, so it reads without sound. Each player loads only its poster until you press play, and has an English captions track you can turn on.',
+        },
+        {
+          kind: 'videos',
+          label: 'Walkthrough videos',
+          items: [
+            {
+              id: 'walkthrough',
+              title: 'Trade from Charts on a phone',
+              device: 'Phone',
+              length: '1:12',
+              body: 'The five assignment journeys in one take: Try demo, a ghost line on the price axis, a limit buy with a trailing stop, the stop ratcheting and triggering with the Demo simulator, and the scalper.',
+            },
+            {
+              id: 'login',
+              title: 'Log in with OTP and PIN',
+              device: 'Desktop',
+              length: '0:43',
+              body: 'Mobile number with DPDP consent, the mock OTP, setting a 4-digit PIN, the session surviving a reload, the profile menu, and logging back in with only the PIN on a trusted browser.',
+            },
+            {
+              id: 'twoFactor',
+              title: 'Two-factor authentication',
+              device: 'Desktop',
+              length: '0:51',
+              body: 'Turning on 2FA behind a PIN step-up: the QR code and setup key, confirming with an authenticator code, ten recovery codes, then a login that asks for the second factor.',
+            },
+            {
+              id: 'activeSessions',
+              title: 'Where you are logged in',
+              device: 'Desktop',
+              length: '0:27',
+              body: 'Every session with This device and Trusted badges; logging one device out behind a confirm and a step-up, then all the others at once.',
+            },
+            {
+              id: 'accountDeletion',
+              title: 'DPDP consent and account deletion',
+              device: 'Desktop',
+              length: '0:41',
+              body: 'Consent recorded at sign-up, deleting the account behind DELETE typed and a step-up, logged out everywhere, and the same mobile refused while its data is erased.',
+            },
+            {
+              id: 'dashboard',
+              title: 'Dashboard and live prices',
+              device: 'Desktop',
+              length: '0:36',
+              body: 'Header tickers and market status, the NIFTY 50 chart from 1 day to 5 years with its crosshair, market indices, stock lists and the top gainers and losers.',
+            },
+            {
+              id: 'search',
+              title: 'Search',
+              device: 'Desktop',
+              length: '0:28',
+              body: 'The / shortcut, matching by symbol or company name, keyboard selection, recent and popular searches.',
+            },
+            {
+              id: 'watchlists',
+              title: 'Watchlists',
+              device: 'Desktop',
+              length: '1:00',
+              body: 'Creating a list, adding stocks from search, live rows, reordering by drag and with Alt+arrows, sorting, removing, and everything surviving a reload.',
+            },
+            {
+              id: 'stockDetail',
+              title: 'Stock page and charts',
+              device: 'Desktop',
+              length: '0:48',
+              body: 'Every range (1D, 1W, 1M, 1Y, 5Y) and every bar size (1, 5, 15, 30 and 60 minutes), area and candles, the crosshair, key stats, live market depth and the company overview.',
+            },
+            {
+              id: 'orderTicket',
+              title: 'Order ticket',
+              device: 'Desktop',
+              length: '0:47',
+              body: 'Buy from a stock while logged out, back with the ticket open; a market order with review and confirm; an intraday limit picked from the depth; the circuit band refusing a price.',
+            },
+            {
+              id: 'afterMarketOrder',
+              title: 'After-market order (AMO)',
+              device: 'Desktop',
+              length: '0:43',
+              body: 'At 8 PM the market is closed, so the order goes in as an AMO, waits under Open, and is released and executed at 9:15 the next morning.',
+            },
+            {
+              id: 'trailingStop',
+              title: 'Trailing stop-loss (TSLO)',
+              device: 'Desktop',
+              length: '0:47',
+              body: 'A trailing stop from the ticket in percent, the amber stop line, the stop ratcheting up on a rally, holding on a pullback, and triggering once on a gap.',
+            },
+            {
+              id: 'tradeFromCharts',
+              title: 'Trade from Charts with a mouse',
+              device: 'Desktop',
+              length: '0:47',
+              body: 'Click the price axis for a ghost line, drag it, place a limit from the compact ticket, drag the order line to modify it, cancel with two clicks, and protect a position from its chip.',
+            },
+            {
+              id: 'scalper',
+              title: 'Scalper',
+              device: 'Phone',
+              length: '0:36',
+              body: 'The one-tap pad: size chips, Arm, Buy at ask, Flatten and the hold-to-Reverse, each with a plain acknowledgement.',
+            },
+            {
+              id: 'orders',
+              title: 'Order book',
+              device: 'Desktop',
+              length: '0:52',
+              body: 'Open, Executed and Cancelled tabs, modifying an open limit order, cancelling it, and the status timeline in IST.',
+            },
+            {
+              id: 'positionsPortfolio',
+              title: 'Positions and portfolio',
+              device: 'Desktop',
+              length: '0:33',
+              body: 'Demo holdings valued live, a new position with live P&L in Positions, and Exit at the market price.',
+            },
+            {
+              id: 'funds',
+              title: 'Funds',
+              device: 'Desktop',
+              length: '0:27',
+              body: '₹10,00,000 of virtual cash, invested and free amounts, the ledger of every block, debit and credit, and a reset behind RESET typed.',
+            },
+            {
+              id: 'priceAlerts',
+              title: 'Price alerts and notifications',
+              device: 'Desktop',
+              length: '0:32',
+              body: 'An alert from the bell on a stock with a quick level and a note, its dotted line on the chart, the toast when the price crosses, and the notification centre.',
+            },
+            {
+              id: 'keyboard',
+              title: 'Keyboard shortcuts',
+              device: 'Desktop',
+              length: '0:34',
+              body: 'The ? list, / to search, Shift+Enter to add to a watchlist, B to buy from a watchlist row, Enter to review and Esc to close, with focus always visible.',
+            },
+            {
+              id: 'phoneLayout',
+              title: 'Phone layout',
+              device: 'Phone',
+              length: '0:40',
+              body: 'The dashboard in one column, the menu drawer with search, the stock page tabs and sticky trade bar, the bottom-sheet ticket and the position strip.',
+            },
+            {
+              id: 'guide',
+              title: 'This documentation',
+              device: 'Desktop',
+              length: '0:27',
+              body: 'The documentation page from the login link: its tabs, diagrams and code links.',
+            },
+          ],
+        },
+        {
+          kind: 'note',
+          text: 'The clips are recorded by Playwright from the production build on mock data, so prices and names are simulated. The desktop clips are 1440 × 900 and the phone clips 390 × 844.',
+        },
+        {
+          kind: 'links',
+          label: 'How they are made',
+          items: [
+            {
+              label: 'Shot list and how to re-record a clip',
+              href: repoLink('docs/runbooks/demo-walkthrough.md'),
+            },
+            {
+              label: 'The recorder (tools/demo/recordWalkthrough.sh)',
+              href: repoLink('tools/demo/recordWalkthrough.sh'),
+            },
+            {
+              label: 'The clip scripts (apps/web/e2e/walkthrough)',
+              href: repoLink('apps/web/e2e/walkthrough'),
             },
           ],
         },
@@ -327,8 +536,13 @@ export const strings = {
       id: 'architecture',
       label: 'Architecture',
       title: 'Architecture: how the app works',
-      summary: 'The parts, what each one owns, and how a price and an order travel between them.',
+      summary:
+        'The processes, what each one owns, and how a price, an order, a fill and an alert travel between them.',
       blocks: [
+        {
+          kind: 'text',
+          text: 'nthstock is a modular monolith with specialised workers. One Fastify API holds every business module; a WebSocket gateway, a quote service and a matcher run beside it and talk through Redis Streams, with PostgreSQL as the record. The full high-level design, with sequence diagrams for every flow, is docs/architecture.md (linked below).',
+        },
         { kind: 'diagram', id: 'system' },
         { kind: 'heading', text: 'The parts' },
         {
@@ -338,40 +552,59 @@ export const strings = {
           rows: [
             [
               'apps/web',
-              'Every screen; the live quote store and the trading store',
-              'React 19, Vite, TanStack Router and Query',
+              'Every screen; the live quote store and the trading store; the whole mock backend in demo mode',
+              'React 19, Vite, TanStack Router and Query, MSW',
             ],
             [
               'apps/api',
-              'REST under /v1: auth, users, watchlists, orders, portfolio, funds, market, audit',
-              'Fastify 5 modular monolith',
+              'REST under /v1: auth, users, watchlists, orders, trailing stops, portfolio, funds, market, alerts, notifications, audit; commits the matcher’s fills',
+              'Fastify 5 modular monolith, stateless',
             ],
             [
               'apps/realtime',
-              'WebSocket fan-out of quotes and per-user order updates',
+              'Authenticated WebSocket fan-out: binary quote frames, per-user order updates, account deltas and notifications',
               'Node ws server, scales on its own',
             ],
             [
+              'apps/quotes',
+              'The one source of ticks: one writer per shard of instruments, picked by a Redis lease',
+              'Redis Streams with a sequence number and a snapshot',
+            ],
+            [
+              'apps/matcher',
+              'Price-indexed order books per instrument: fills, trailing stop triggers, price alerts; repairs itself from Postgres every minute',
+              'One active process per shard, standbys follow',
+            ],
+            [
+              'Job worker and candle writer',
+              'Market-session jobs at 9:15, 3:20, 3:30 and 3:45 IST; 1-minute bars into TimescaleDB',
+              'Same codebase as apps/api, other entries; BullMQ',
+            ],
+            [
               'packages/marketData',
-              'The mock market: symbol master, ticks, candles, depth',
+              'The mock market: symbol master, ticks, candles, depth, leases, stream follower',
               'Pure TypeScript, runs in Node and the browser',
             ],
             [
               'packages/paperEngine',
-              'Orders, fills, funds ledger, positions, P&L, trailing stops',
-              'Pure TypeScript, one engine for both modes',
+              'Orders, fills, funds ledger, positions, P&L, trailing stops, order books',
+              'Pure TypeScript, one engine for the browser, the API and the matcher',
             ],
             [
               'packages/contracts',
-              'Every REST and WS message, as Zod schemas',
+              'Every REST, WebSocket and Redis message, as Zod schemas; the OpenAPI document',
               'Zod 4; types and runtime checks',
             ],
             [
-              'PostgreSQL 16',
-              'Users, sessions, orders, ledger, holdings, audit log',
+              'PostgreSQL 16 + TimescaleDB',
+              'Users, sessions, orders (partitioned by day), ledger, holdings, stops, alerts, notifications, audit log, candles',
               'Drizzle migrations, three roles',
             ],
-            ['Redis 7', 'Tick and order pub/sub, OTPs, session revocation, rate limits', 'ioredis'],
+            [
+              'Redis 7',
+              'Tick, command and fill streams; per-user pub/sub; leases; OTPs; session revocation; rate limits; job queues',
+              'ioredis, BullMQ',
+            ],
           ],
         },
         { kind: 'heading', text: 'Two ways to run' },
@@ -379,15 +612,16 @@ export const strings = {
           kind: 'list',
           items: [
             'Hosted demo (what you are using): the whole backend runs in your browser. Mock Service Worker answers the same REST and WebSocket contracts, with the same market and paper engine packages. So the demo needs no server and costs nothing to host.',
-            'Full stack (npm run dev:api): the SPA talks to apps/api and apps/realtime on PostgreSQL and Redis. This is the mode the load test measures.',
+            'Full stack (npm run dev:api): the SPA talks to apps/api and apps/realtime on PostgreSQL and Redis, with apps/quotes as the price source and the job worker running the session events. Add the matcher and MATCHER_MODE=worker for the topology that scales out. This is the mode the load test measures.',
           ],
         },
         { kind: 'heading', text: 'A price, from tick to screen' },
         {
           kind: 'steps',
           items: [
-            'The mock market steps each instrument’s price (every second, or every 250 ms for the one on screen).',
-            'apps/api’s tick pump publishes each batch to Redis.',
+            'apps/quotes steps each instrument’s price (every second, or every 250 ms for the one on screen) while it holds its shard’s lease.',
+            'Each batch is appended to the shard’s Redis stream with a sequence number, and the newest quotes are written to a snapshot in the same transaction.',
+            'apps/api, apps/realtime, the matcher and the candle writer all follow the stream. A gap in the sequence, or a restarted writer, makes a reader re-read the snapshot, so nobody drifts.',
             'apps/realtime keeps only what each socket subscribed to, conflates it to at most 4 updates a second per symbol, and sends compact binary frames.',
             'The browser’s quote store updates only the cells for that symbol, batched into one paint per animation frame.',
           ],
@@ -396,21 +630,56 @@ export const strings = {
         {
           kind: 'steps',
           items: [
-            'The ticket validates the order with the same Zod schema the server uses, then sends POST /v1/orders with an idempotency key.',
-            'The orders module checks the funds, and the paper engine fills a market order at the current price, or keeps a limit order open until the price reaches it.',
-            'The fill commits the order, its events, the funds ledger, the position and the audit entries in one Postgres transaction.',
+            'The ticket validates the order with the same Zod schema the server uses, marks it as a pending intent, then sends POST /v1/orders with a client order id, so a retry never places it twice.',
+            'The orders module runs the user’s paper engine: it checks the funds, fills a market order at the current price, or keeps a limit order open until the price reaches it.',
+            'The change commits the order, its events, the funds ledger, the position, the audit entries and any notification in one Postgres transaction.',
             'The engine in memory is only a cache of the account in Postgres. Each change commits against the version it was read at, so a second writer is caught, reloads and retries once. At boot apps/api loads every account with a resting order, so a limit order placed before a restart still fills on the tick that crosses it.',
-            'The order update goes out over Redis and the WebSocket, and every screen updates from it.',
+            'Only after the commit, the order update and an account delta go out over Redis and the WebSocket, and a command goes to the matcher. Every screen updates from the same frame.',
           ],
         },
-        { kind: 'heading', text: 'Matching off the API process (being built)' },
+        { kind: 'heading', text: 'Matching on its own worker' },
         {
           kind: 'steps',
           items: [
             'apps/matcher runs one process per shard of instruments. A Redis lease picks the one that acts; the others follow the same streams, so a standby is current the moment it takes over.',
-            'After each order commit, apps/api appends an ADD, MODIFY or CANCEL command to the shard’s command stream, stamped with the account version. A late or replayed command never undoes a newer one.',
-            'Each instrument has an order book: limit orders and trailing stops sit in price heaps, so a tick reads only what it fills, triggers or moves, not every resting order. A property test checks it against a full walk.',
-            'Still to come: the reconcile loop from Postgres, fills committed through the account store, server-side trailing stops, a switch to turn it on, and a benchmark.',
+            'After each order commit, apps/api appends an ADD, MODIFY or CANCEL command to the shard’s command stream, stamped with the account version, and a STOP_ADD or STOP_CANCEL after each trailing stop change. A late or replayed command never undoes a newer one.',
+            'Each instrument has an order book: limit orders, trailing stops and price alerts sit in price heaps, so a tick reads only what it fills, triggers or moves, not every resting order. A property test checks it against a full walk.',
+            'Every minute, and on start, the matcher reads its shard’s live orders and active trailing stops from Postgres, the record, in one consistent snapshot, and repairs its books, so a lost command is fixed within a minute.',
+            'When a tick crosses an order, the matcher sends a fill request per user to a Redis stream. Every API process reads it in one consumer group, runs the user’s paper engine at that price, commits with the account version and only then acknowledges it. A request sent twice fills nothing twice, one a crashed process held is picked up by another after 30 seconds, and one that keeps failing goes to a dead-letter stream (ADR 0013).',
+            'MATCHER_MODE=worker moves all matching to the worker: the API process then follows no ticks at all and reads the live quote only when an order action needs a price. The default, inline, keeps matching in the API process for tests and scripted demos.',
+            'All of it is built and measured: the matcher’s benchmark is in the Performance tab.',
+          ],
+        },
+        { kind: 'heading', text: 'Other flows, end to end' },
+        {
+          kind: 'table',
+          caption: 'How the other key flows work',
+          head: ['Flow', 'What happens'],
+          rows: [
+            [
+              'Log in',
+              'OTP request (hashed, 5 minutes, one per mobile, 30 s resend) → verify (CAPTCHA after 3 misses, burnt after 5) → TOTP challenge if on → a session row, a 15-minute access cookie and a rotating 30-day refresh cookie, both httpOnly and SameSite=Strict → the socket opens with the same cookie.',
+            ],
+            [
+              'Trailing stop triggers',
+              'The stop’s heap entry pops when the price reaches it → the fill request carries it → the engine marks it TRIGGERED, places one reduce-only exit, commits with a notification → the chart’s stop line becomes a filled exit on the next frame.',
+            ],
+            [
+              'Price alert fires',
+              'The alert sits on the matcher’s book → the crossing tick wins one conditional UPDATE … WHERE status = ACTIVE, written with its notification and outbox row → published to the user’s channel → bell and toast. It fires exactly once.',
+            ],
+            [
+              '1-minute bar stored',
+              'The candle writer folds ticks into the forming bar → at the minute boundary it upserts every closed bar in one statement → acknowledges the stream only then, so a restart loses no minute.',
+            ],
+            [
+              'AMO released at 9:15',
+              'BullMQ hands the job to one worker → each account with an AMO is loaded, synced to the open and committed at its version → order updates and notifications go out. A retry changes nothing twice.',
+            ],
+            [
+              'Session revoked',
+              'Marked in Postgres and audited → a Redis key and event reach every API instance and realtime node at once → the device’s next request answers 401 and its sockets close with 4401.',
+            ],
           ],
         },
         {
@@ -418,12 +687,14 @@ export const strings = {
           label: 'Read the code',
           items: [
             {
-              label: 'Architecture (docs/architecture.md)',
+              label: 'High-level design (docs/architecture.md)',
               href: repoLink('docs/architecture.md'),
             },
             { label: 'Decision records (docs/adr)', href: repoLink('docs/adr') },
             { label: 'API app (apps/api/src/app.ts)', href: repoLink('apps/api/src/app.ts') },
             { label: 'Realtime hub', href: repoLink('apps/realtime/src/connections/hub.ts') },
+            { label: 'Quote writer', href: repoLink('apps/quotes/src/quoteWriter.ts') },
+            { label: 'Matcher', href: repoLink('apps/matcher/src/matcher.ts') },
           ],
         },
       ],
@@ -514,10 +785,13 @@ export const strings = {
         {
           kind: 'list',
           items: [
-            'AlertDesk in packages/paperEngine runs in both backends, beside the paper desk on the same market: it subscribes to an instrument only while some user has an active alert on it.',
-            'Every tick is checked: an ABOVE alert fires on the first LTP at or above its level, a BELOW alert at or below, once. A gap past the level fires with the LTP that crossed it. A level the price has already passed is refused, so nothing fires on the tick it was set.',
-            'A fired alert, an executed order and a triggered trailing stop each add a notification (the newest 100 are kept, with a read flag) and go to the owner at once as a notification message on the socket.',
-            'The web app toasts a fired alert on any page, refreshes the bell and the alerts list, and draws active alerts as dotted price lines on the chart. Routes: GET and POST /v1/alerts, DELETE /v1/alerts/:id, GET /v1/notifications, POST /v1/notifications/read.',
+            'Every notification is written in the same Postgres transaction as its cause: a fill, a rejection, an after-market order sent at the open, a square-off, a triggered trailing stop, a fired price alert, or a security event. So a notification exists exactly when its event does. The newest 100 per user are kept.',
+            'A transactional outbox carries it to the screen. The same transaction writes an outbox row; after commit apps/api publishes the notification on the user’s Redis channel and clears the row, and a relay re-publishes anything older than 5 seconds. A crash or a Redis blip only delays delivery, and the web app drops an id it already holds, so nothing shows twice.',
+            'apps/realtime subscribes each connected user’s channel and pushes to that user’s sockets only. The bell and the toast update with no polling; after a reconnect the list is re-read, so nothing sent while offline is lost.',
+            'Price alerts are stored in Postgres and sit on the matcher’s order book in two price heaps, so a tick reads only the alerts it fires. apps/api watches them too. Whichever process sees the crossing tick first wins one conditional UPDATE, so an alert fires exactly once.',
+            'An ABOVE alert fires on the first price at or above its level, a BELOW alert at or below. A gap fires with the price that crossed it. A level the price has already passed is refused.',
+            'Security notices: a sign-in from a new device, two-factor turned on or off, and logging out the other devices each tell the user at once, naming the device type and the IST time, with “Not you? Change your PIN.”',
+            'Routes: GET and POST /v1/alerts, DELETE /v1/alerts/:id, GET /v1/notifications, POST /v1/notifications/read.',
           ],
         },
         { kind: 'heading', text: 'Two-factor authentication and step-up' },
@@ -549,6 +823,64 @@ export const strings = {
             'The web app navigates to /login?deleted=… before it clears the session, forgets the trusted browser and empties the query cache, so nothing from the account stays on the device.',
           ],
         },
+        { kind: 'heading', text: 'Background jobs on BullMQ' },
+        {
+          kind: 'text',
+          text: 'Market-session events happen on time for every account, including users who are not online: a job worker (the same apps/api codebase, another entry) runs them on BullMQ queues in Redis, with cron in Asia/Kolkata.',
+        },
+        {
+          kind: 'table',
+          caption: 'Scheduled jobs (IST)',
+          head: ['Job', 'When', 'What it does'],
+          rows: [
+            [
+              'session.amoRelease',
+              '09:15, trading days',
+              'Syncs every account with an AMO to the open, so AMOs are released and market AMOs fill',
+            ],
+            [
+              'session.squareOff',
+              '15:20, trading days',
+              'Squares off intraday positions and cancels live intraday orders',
+            ],
+            [
+              'session.dayClose',
+              '15:30, trading days',
+              'Cancels open day orders and settles today’s delivery buys into holdings',
+            ],
+            [
+              'pnl.snapshot',
+              '15:45, trading days',
+              'Writes one P&L row per account touched today or holding stock',
+            ],
+            ['db.orderPartitions', '00:30, daily', 'Keeps 14 days of order partitions ahead'],
+            [
+              'auth.tokenCleanup',
+              '03:00, daily',
+              'Deletes expired refresh and device tokens and sessions expired over 30 days',
+            ],
+          ],
+        },
+        {
+          kind: 'list',
+          items: [
+            'Each job is a plain run(at) function of its scheduled time, unit-tested with a fixed clock; BullMQ only schedules and retries it (3 attempts, exponential backoff from 30 s).',
+            'Session jobs check the NSE holiday calendar and exit on a holiday or weekend. Each run reloads the accounts from Postgres, syncs them to now and commits against their version, so a second run, or the API writing at the same moment, changes nothing twice.',
+            'Several workers can run: BullMQ hands each scheduled run to one of them, and the job id (scheduler and due time) keeps it to one run per time. SIGTERM lets the running job finish before the worker exits.',
+            'Failures are logged as the job, attempt and error class only: a database error’s row values never reach a log line.',
+            'JOBS_MODE=inline keeps the in-process sweep for tests that move a manual clock; with JOBS_MODE=bullmq the API leaves session events to the worker.',
+          ],
+        },
+        { kind: 'heading', text: 'OpenAPI 3.1, generated from the contracts' },
+        {
+          kind: 'list',
+          items: [
+            'packages/contracts builds an OpenAPI 3.1 document from the same route map that types the client, validates the server and drives the mocks, using Zod 4’s own z.toJSONSchema. Nothing is written by hand and no extra library is needed.',
+            'Every route appears once with its method, path, path and query parameters, request body, response schema, its auth (cookie or Bearer JWT) and the ApiError envelope for every error. Response types are shared component schemas, so Order is described once.',
+            'apps/api serves it at GET /v1/docs/openapi.json, public and cacheable, revalidated by ETag so a deploy shows at once. npm run openapi writes the same text to docs/api/openapi.json, ready for Postman, Swagger Editor or a client generator.',
+            'CI regenerates the file on every pull request, uploads it as a build artifact and fails when the committed copy is stale, so the published API description can never drift from the code. A new route joins automatically.',
+          ],
+        },
         { kind: 'heading', text: 'Rules every layer follows' },
         {
           kind: 'list',
@@ -574,6 +906,8 @@ export const strings = {
             },
             { label: 'Trading store', href: repoLink('packages/apiClient/src/tradingStore.ts') },
             { label: 'Binary quote frame', href: repoLink('packages/contracts/src/quoteFrame.ts') },
+            { label: 'OpenAPI document', href: repoLink('docs/api/openapi.json') },
+            { label: 'OpenAPI generator', href: repoLink('packages/contracts/src/openapi.ts') },
           ],
         },
       ],
@@ -783,6 +1117,36 @@ export const strings = {
             ],
           ],
         },
+        { kind: 'heading', text: 'The matcher, measured' },
+        {
+          kind: 'table',
+          caption:
+            'tools/loadTest/matcher.mjs: 1,00,000 resting orders and 10,000 trailing stops over 500 instruments, every instrument ticking every 250 ms, one process on 4 vCPU',
+          head: ['Measure', 'Target', 'Result'],
+          rows: [
+            [
+              'Book time per tick',
+              'well under the 250 ms tick',
+              'p95 0.06 ms, p99 0.1 ms at 2,000 ticks a second',
+            ],
+            [
+              'Orders read per tick',
+              'only what the tick acts on',
+              '6.8 on average, against 220 for a walk of every order; each one a fill, trigger or ratchet',
+            ],
+            [
+              'Tick to fill commit, steady',
+              'p95 under 100 ms',
+              'about 10 ms (Redis 3.1 ms, Postgres commit 6.5 ms)',
+            ],
+            ['Tick to screen for a fill', 'p95 under 500 ms', 'about 110 ms'],
+            [
+              'One tick that fills 200 users',
+              'reported',
+              'last commit at about 0.3 s: one API process commits 550 to 650 fills a second, so more API processes add capacity',
+            ],
+          ],
+        },
         { kind: 'heading', text: 'What keeps it fast' },
         {
           kind: 'list',
@@ -804,6 +1168,8 @@ export const strings = {
               href: repoLink('apps/web/e2e/chartTradingPerf.spec.ts'),
             },
             { label: 'Render performance E2E', href: repoLink('apps/web/e2e/renderPerf.spec.ts') },
+            { label: 'Matcher benchmark', href: repoLink('tools/loadTest/matcher.mjs') },
+            { label: 'Load test runbook', href: repoLink('docs/runbooks/load-test.md') },
           ],
         },
       ],
@@ -867,7 +1233,7 @@ export const strings = {
           kind: 'list',
           items: [
             'The API keeps no state in the process: sessions, OTPs and rate limits are in Redis, data in Postgres. More API tasks behind the load balancer add capacity, about 1,300 requests a second each on this hardware.',
-            'One honest caveat: until Phase 4, order matching and the mock tick pump run inside the API process, so only one API process may run them. Phase 4 moves them into their own worker; then API tasks scale freely.',
+            'Matching no longer pins the API to one process: with the quote service and MATCHER_MODE=worker, apps/quotes and apps/matcher run one active process per shard behind Redis leases, the API follows no ticks, and every API process joins the fill consumer group, so API tasks scale freely.',
             'Realtime nodes scale on their own: each takes its share of sockets and reads the same Redis channel. At scale the channel moves from Redis pub/sub to NATS JetStream.',
             'Postgres: PgBouncer in transaction mode (already in Docker Compose), read replicas for portfolio and order history, and day partitions for orders (the tables are already partitioned).',
             'On AWS Mumbai (Phase 6): ECS Fargate tasks with a scheduled pre-scale at 8:45 AM IST, autoscaling through the day and scale-down after 3:45 PM, a CDN for static files and public market snapshots, and a warm standby in Hyderabad.',
@@ -939,10 +1305,25 @@ export const strings = {
             'Exchange data: real-time NSE or BSE prices need a licence, so v1 uses a simulated feed.',
           ],
         },
+        { kind: 'heading', text: 'How Phase 2 is signed off' },
+        {
+          kind: 'list',
+          items: [
+            'An OWASP ASVS 4.0.3 Level 2 checklist maps every item the backend touches to the tests that prove it, and names the gaps that are left.',
+            'A restart test in the browser: log in, watch a stock, buy it, then restart apps/api. The session, the watchlist, the order and the holding are all still there, read back from Postgres.',
+            'A security journey runs in both modes, against the in-browser mock and against apps/api on Postgres and Redis: turn on two-factor, log out, log back in with the authenticator code, log out another device and delete the account, with an accessibility check on every step.',
+            'The demo account is written to Postgres with its consent, and seeding twice gives the same state.',
+            'A performance smoke on a database of 10,000 users runs in CI: market-order acknowledgement p95 29.6 ms (budget 300 ms), PIN login p95 42.1 ms (budget 200 ms) and the slowest query p95 0.6 ms from pg_stat_statements (budget 50 ms), measured on 25 Oct 2026.',
+          ],
+        },
         {
           kind: 'links',
           label: 'Read the code',
           items: [
+            {
+              label: 'Phase 2 ASVS L2 checklist',
+              href: repoLink('docs/security/phase2-asvs-l2.md'),
+            },
             { label: 'Security baseline', href: repoLink('docs/architecture.md') },
             { label: 'Auth module', href: repoLink('apps/api/src/modules/auth') },
             { label: 'Database roles', href: repoLink('infra/postgres/init.sql') },
@@ -959,7 +1340,7 @@ export const strings = {
         {
           kind: 'code',
           label: 'nthstock/',
-          text: 'CLAUDE.md               project rules every agent reads first\nWRITEUP.md              design rationale for the assignment\napps/\n  web/                  React SPA\n    e2e/                Playwright specs: journeys, phone, perf, a11y\n    scripts/            build budgets, no raw colours, import rules\n    src/\n      main.tsx          boot: config, mocks, providers, router\n      app/              app-wide wiring: layouts, live quotes, router\n      routes/           file routes; thin, they load a feature page\n      features/<name>/  dashboard, stockDetail, orderTicket, chartTrading,\n                        scalper, orders, positions, holdings, funds,\n                        watchlist, search, guide, …\n      shared/           cross-feature components and hooks\n      mocks/            MSW handlers and the in-browser market\n  api/                  Fastify modular monolith\n    drizzle/            SQL migrations\n    src/\n      app.ts server.ts config.ts deps.ts\n      db/               Postgres client, migrator, column crypto\n      http/             errors, cookies, CSRF, security headers\n      modules/<name>/   auth, users, watchlists, orders, portfolio,\n                        funds, market, audit, health, demo\n      ticks/            tick pump and Redis publisher\n  realtime/             WebSocket server\n    src/connections/    auth, hub, subscription registry\n    src/feeds/          Redis quote, order and revocation feeds\n  quotes/               tick writer, one per shard behind a Redis lease\npackages/\n  ui/                   design system components and Storybook\n  tokens/               design tokens → CSS variables and Tailwind\n  contracts/            Zod schemas for every REST and WS message\n  marketData/           the mock market\n  paperEngine/          orders, fills, ledger, P&L, trailing stops\n  apiClient/            REST and WS clients, quote and trading stores\n  config/               shared ESLint, TypeScript, Vitest presets\n  utils/                INR formatting, market hours, IST dates, shards\ninfra/                  Docker Compose, PgBouncer, k6\ntools/                  issue keys, release checks, load test\ndocs/                   product, architecture, ADRs, specs, runbooks\n.claude/                agents, rules, skills, hooks\n.github/                workflows, PR template, CODEOWNERS',
+          text: 'CLAUDE.md               project rules every agent reads first\nWRITEUP.md              design rationale for the assignment\napps/\n  web/                  React SPA\n    e2e/                Playwright specs: journeys, phone, perf, a11y\n    scripts/            build budgets, no raw colours, import rules\n    src/\n      main.tsx          boot: config, mocks, providers, router\n      app/              app-wide wiring: layouts, live quotes, router\n      routes/           file routes; thin, they load a feature page\n      features/<name>/  dashboard, stockDetail, orderTicket, chartTrading,\n                        scalper, orders, positions, holdings, funds,\n                        watchlist, search, guide, …\n      shared/           cross-feature components and hooks\n      mocks/            MSW handlers and the in-browser market\n  api/                  Fastify modular monolith\n    drizzle/            SQL migrations\n    src/\n      app.ts server.ts worker.ts candleWriter.ts\n      config.ts deps.ts\n      db/               Postgres client, migrator, column crypto\n      http/             errors, cookies, CSRF, security headers\n      modules/<name>/   auth, users, watchlists, orders, portfolio,\n                        funds, market, alerts, notifications, candles,\n                        jobs, audit, health, docs, demo\n      ticks/            tick pump, publisher, quote-stream follower\n  realtime/             WebSocket server\n    src/connections/    auth, hub, subscription registry\n    src/feeds/          Redis quote, order and revocation feeds\n  quotes/               tick writer, one per shard behind a Redis lease\n  matcher/              order books per shard: commands, reconcile, fills\npackages/\n  ui/                   design system components and Storybook\n  tokens/               design tokens → CSS variables and Tailwind\n  contracts/            Zod schemas for every REST and WS message\n  marketData/           the mock market\n  paperEngine/          orders, fills, ledger, P&L, trailing stops\n  apiClient/            REST and WS clients, quote and trading stores\n  config/               shared ESLint, TypeScript, Vitest presets\n  utils/                INR formatting, market hours, IST dates, shards\ninfra/                  Docker Compose, PgBouncer, k6\ntools/                  issue keys, release checks, load test\ndocs/                   product, architecture, ADRs, specs, runbooks,\n                        api/openapi.json (generated)\n.claude/                agents, rules, skills, hooks\n.github/                workflows, PR template, CODEOWNERS',
         },
         {
           kind: 'list',
@@ -1009,13 +1390,13 @@ export const strings = {
             ],
             [
               'Contract',
-              'Shared Zod schemas and adapter suites',
-              'Every market adapter must pass the shared contract suite; mocks are typed from the same schemas',
+              'Shared Zod schemas, route contract tests, adapter suites',
+              'Every route in the map is registered in Fastify with its method, path and auth, and has an MSW handler; every scenario response on both backends is checked against its route schema, every error against ApiError; every market adapter passes the shared suite',
             ],
             [
               'End to end',
               'Playwright',
-              '33 specs: desktop Chrome, Chromium phone and WebKit iPhone',
+              '41 specs: desktop Chrome, Chromium phone and WebKit iPhone',
             ],
             [
               'User journeys',
@@ -1102,10 +1483,13 @@ export const strings = {
           kind: 'links',
           label: 'Read the code',
           items: [
-            { label: 'Web hosting workflow', href: repoLink('.github/workflows/web-hosting.yml') },
+            {
+              label: 'Web hosting workflow',
+              href: repoLink('.github/workflows/deploy-web-hosting.yml'),
+            },
             {
               label: 'Promote to production',
-              href: repoLink('.github/workflows/promote-to-production.yml'),
+              href: repoLink('.github/workflows/release-promote-to-production.yml'),
             },
             { label: 'Release runbook', href: repoLink('docs/runbooks/release.md') },
             {
@@ -1132,20 +1516,24 @@ export const strings = {
           caption: 'The agents',
           head: ['Agent', 'When it runs', 'What it does'],
           rows: [
-            ['Planner', 'An issue labelled plan:approved', 'Writes a spec PR and the story issues'],
             [
-              'Developer',
+              'Spec planner',
+              'An issue labelled plan:approved',
+              'Writes a spec PR and the story issues',
+            ],
+            [
+              'Story developer',
               'A story labelled agent:ready',
               'Builds the story end to end and opens a PR with “Closes #N”',
             ],
             [
-              'Reviewer',
+              'PR reviewer',
               'Every PR opened or updated',
               'Reviews against CLAUDE.md; labels ready-to-merge or agent:fix-needed',
             ],
             [
               'Frontend reviewer',
-              'Called by the Reviewer',
+              'Called by the PR reviewer',
               'React hooks, render and state bugs, accessibility, render performance',
             ],
             [
@@ -1159,22 +1547,27 @@ export const strings = {
               'Indexes, locking, constraints, transactions, roles',
             ],
             [
-              'Silent-failure hunter',
+              'Error-handling reviewer',
               'Every code PR',
               'Swallowed errors and fallbacks that hide failures',
             ],
             [
-              'Test-gap analyzer',
+              'Test-coverage reviewer',
               'Every code PR',
               'Whether the tests would fail without the change',
             ],
             [
-              'Fixer',
-              'Blocking findings, red CI, conflicts, red develop',
+              'PR fixer',
+              'Blocking findings, red CI, red develop',
               'Root-causes and pushes a fix; opens a fix PR when develop is red',
             ],
             [
-              'E2E author',
+              'Merge conflict resolver',
+              'A push to develop leaves a PR conflicting',
+              'Merges develop into the PR branch, keeping both sides',
+            ],
+            [
+              'E2E test author',
               'On request',
               'Writes and repairs Playwright specs, root-causes flaky ones',
             ],
@@ -1187,7 +1580,6 @@ export const strings = {
             'Auto-merge squash-merges a PR once the Reviewer labels it ready-to-merge and every check is green. Spec PRs and changes to CI or agent config wait for the owner.',
             'Issue closer: a merged PR closes its stories with “Done in #PR”, and an epic closes when all its stories are done.',
             'Scheduled health runs of the full suite (09:20 and 12:30 IST on weekdays, 20:00 IST daily); a red run sends the Fixer.',
-            'Conflict resolver: when develop moves, it merges develop into open PR branches.',
             'Issue keys: every issue is titled NSTOCK-0001 : title, and stories are filed under their epic.',
           ],
         },
@@ -1246,7 +1638,7 @@ export const strings = {
             ],
             [
               '3 to 5',
-              'Order matching worker, TimescaleDB candles, notifications, hardening',
+              'Order matching worker, TimescaleDB candles, notifications service, hardening',
               'Planned',
             ],
             [
@@ -1284,7 +1676,7 @@ export const strings = {
     system: {
       title: 'System architecture',
       description:
-        'The browser app talks to apps/api over REST and receives live data from apps/realtime over a WebSocket. apps/api stores data in PostgreSQL and publishes ticks and order events to Redis, which apps/realtime fans out. In the hosted demo, Mock Service Worker answers the same contracts inside the browser.',
+        'The browser app calls apps/api over REST and receives live data from apps/realtime over a WebSocket. apps/quotes writes every tick to Redis Streams; apps/api, apps/realtime, the matcher and the candle writer follow them. apps/api sends order commands to the matcher and commits its fills in PostgreSQL. In the hosted demo, Mock Service Worker answers the same contracts inside the browser.',
       groups: { browser: 'Your browser', servers: 'Full stack (npm run dev:api)' },
       nodes: {
         spa: ['React SPA', 'routes · features · ui'],
@@ -1292,32 +1684,40 @@ export const strings = {
         msw: ['Hosted demo', 'Mock Service Worker,', 'market and engine in browser'],
         realtime: ['apps/realtime', 'WebSocket fan-out'],
         api: ['apps/api', 'Fastify modular monolith'],
-        engine: ['Mock market + paper engine', 'marketData + paperEngine'],
-        redis: ['Redis 7', 'pub/sub, OTPs, limits'],
-        postgres: ['PostgreSQL 16', 'system of record'],
+        postgres: ['PostgreSQL 16', '+ TimescaleDB, the record'],
+        workers: ['Workers', 'jobs · candle writer'],
+        quotes: ['apps/quotes', 'ticks, 1 writer per shard'],
+        redis: ['Redis 7', 'streams, pub/sub, leases'],
+        matcher: ['apps/matcher', 'order books per shard'],
       },
       edges: {
         rest: 'REST /v1',
         ws: 'WSS live',
         stores: 'updates',
         demo: 'same contracts',
-        pubsub: 'pub/sub',
-        publish: 'ticks, orders',
+        ticks: 'tick streams',
+        fanout: 'ticks, events',
+        streams: 'orders, fills',
+        matcher: 'ticks, fills',
+        reconcile: 'reconcile',
         sql: 'SQL',
-        engine: 'ticks, fills',
+        workerSql: 'SQL',
+        jobs: 'jobs, ticks',
       },
       inWords: [
         'The React app in your browser calls apps/api over HTTPS REST under /v1.',
-        'Live quotes and order updates arrive from apps/realtime over a secure WebSocket and land in the quote and trading stores.',
-        'apps/api runs the mock market and the paper engine, stores data in PostgreSQL, and publishes ticks and order events to Redis.',
-        'apps/realtime subscribes to Redis and sends each socket only what it subscribed to.',
+        'Live quotes, order updates, account deltas and notifications arrive from apps/realtime over a secure WebSocket and land in the quote and trading stores.',
+        'apps/quotes is the one source of prices: one writer per shard appends each tick batch to a Redis stream with a sequence number and a snapshot.',
+        'apps/api, apps/realtime, the matcher and the candle writer follow those streams. apps/realtime sends each socket only what it subscribed to.',
+        'apps/api commits every change in PostgreSQL, then sends order commands to the matcher; the matcher finds what a tick fills and apps/api commits those fills. Every minute the matcher repairs its books from PostgreSQL.',
+        'The job worker runs the market-session events on BullMQ, and the candle writer stores 1-minute bars in TimescaleDB.',
         'In the hosted demo, Mock Service Worker answers the same REST and WebSocket contracts inside the browser, with the same market and engine packages.',
       ],
     },
     ticks: {
       title: 'Tick pipeline',
       description:
-        'A seeded symbol master feeds a GBM price step per instrument inside the mock market adapter. In the hosted demo the in-browser paper engine turns ticks into accountDelta frames for the trading store. On the full stack the API tick pump publishes to Redis and apps/realtime sends conflated binary frames to the quote store.',
+        'A seeded symbol master feeds a GBM price step per instrument inside the mock market adapter. In the hosted demo the in-browser paper engine turns ticks into accountDelta frames for the trading store. On the full stack apps/quotes writes each batch to a Redis stream per shard, apps/realtime sends conflated binary frames to the quote store, and apps/api sends accountDelta frames through apps/realtime after each commit.',
       groups: { demo: 'Hosted demo, in the browser', stack: 'Full stack' },
       nodes: {
         master: ['Symbol master', '5,000 equities, seeded'],
@@ -1326,7 +1726,7 @@ export const strings = {
         engine: ['Paper engine', 'match orders, step stops'],
         delta: ['accountDelta frame', 'every 250 ms, with seq'],
         store: ['Trading store', 'chart, ticket, pad, orders'],
-        pump: ['apps/api tick pump', 'Redis TICKS_CHANNEL'],
+        pump: ['apps/quotes writer', 'Redis Streams per shard'],
         hub: ['apps/realtime hub', '4 updates/s, binary frames'],
         quotes: ['Quote store', 'per-symbol cells, one paint'],
       },
@@ -1335,8 +1735,8 @@ export const strings = {
         'The symbol master creates 5,000 equities and the indices from a fixed seed.',
         'Each instrument steps its price with geometric Brownian motion: the one on screen every 250 ms, the rest every second.',
         'The mock market adapter turns the steps into quotes, 1-minute bars, candles and depth, and can replay missed ticks after a pause.',
-        'In the hosted demo, the paper engine matches orders and steps trailing stops on each tick, and sends one accountDelta frame every 250 ms to the trading store.',
-        'On the full stack, the apps/api tick pump publishes each batch to Redis, and apps/realtime sends each socket its subscribed symbols, at most 4 updates a second, as binary frames to the quote store.',
+        'In the hosted demo, the paper engine matches orders and steps trailing stops on each tick, and sends one accountDelta frame every 250 ms to the trading store. On the full stack the same engine runs in apps/api, which sends an accountDelta frame after each commit.',
+        'On the full stack, apps/quotes appends each batch to its shard’s Redis stream with a sequence number, and apps/realtime sends each socket its subscribed symbols, at most 4 updates a second, as binary frames to the quote store.',
       ],
     },
     tslo: {
@@ -1424,7 +1824,7 @@ export const strings = {
         'The owner labels an issue plan:approved.',
         'The Planner writes a spec PR and story issues. When the owner merges the spec, the stories become agent:ready.',
         'The Developer builds a story and opens a PR.',
-        'The Reviewer, helped by the frontend, security, database, silent-failure and test-gap specialists, labels the PR ready-to-merge or agent:fix-needed.',
+        'The Reviewer, helped by the frontend, security, database, error-handling and test-coverage specialists, labels the PR ready-to-merge or agent:fix-needed.',
         'The Fixer pushes fixes for blocking findings and red CI to the same PR, and the Reviewer looks again.',
         'Auto-merge squash-merges green, approved PRs and closes their issues.',
       ],

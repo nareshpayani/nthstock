@@ -75,6 +75,18 @@ async function findOrCreateUser(
 export const authRoutes =
   (deps: AppDeps): FastifyPluginAsync =>
   async (app) => {
+    // Security notifications (NSTOCK-0382): a failure is logged and never fails the sign-in.
+    const notices = {
+      notifier: deps.notifier,
+      // The error's name and code only: a driver message can carry the SQL parameters.
+      onError: (error: unknown, context: { userId: string; event: string }) => {
+        const { name, code } = (error ?? {}) as { name?: unknown; code?: unknown };
+        app.log.error(
+          { ...context, error: { name, code } },
+          'a security notification was not stored',
+        );
+      },
+    };
     const otp = createOtpService({
       clock: deps.clock,
       repo: deps.repos.auth,
@@ -91,6 +103,7 @@ export const authRoutes =
       secret: deps.jwtSecret,
       audit: deps.repos.audit,
       revocations: deps.sessionRevocations,
+      notices,
     });
     const authenticate = createAuthenticate(sessions);
     const pins = createPinService({
@@ -110,12 +123,14 @@ export const authRoutes =
       pins,
       sessions,
       hasher: deps.pinHasher,
+      notices,
     });
     const activeSessions = createActiveSessionsService({
       clock: deps.clock,
       repo: deps.repos.auth,
       sessions,
       twoFactor,
+      notices,
     });
     const accountDeletion = createAccountDeletionService({
       clock: deps.clock,

@@ -1,11 +1,23 @@
+import { randomUUID } from 'node:crypto';
+import {
+  MATCHER_COMMANDS_MAXLEN,
+  matcherCommandsKey,
+  type MatcherCommand,
+} from '@nthstock/contracts';
 import { MockMarketDataAdapter, type MarketDataAdapter } from '@nthstock/marketData';
 import { Redis } from 'ioredis';
-import { systemClock, type Clock } from '@nthstock/utils';
-import type { DbDriver } from './config.js';
+import { shardOf, systemClock, type Clock } from '@nthstock/utils';
+import type { DbDriver, MatcherMode } from './config.js';
 import { createDatabase, type Database } from './db/client.js';
 import { createPiiCrypto, resolvePiiKeys, type PiiKeys } from './db/crypto.js';
 import { createMemoryAuditRepo, createPgAuditRepo, type AuditRepo } from './modules/audit/index.js';
-import { createAlertService, type AlertService } from './modules/alerts/index.js';
+import {
+  createAlertService,
+  createMemoryAlertsRepo,
+  createPgAlertsRepo,
+  type AlertService,
+  type AlertsRepo,
+} from './modules/alerts/index.js';
 import { createPgCandleStore, type CandleStore } from './modules/candles/index.js';
 import {
   createArgon2PinHasher,
@@ -29,11 +41,26 @@ import {
   createMemoryAccountStore,
   createPgAccountStore,
   createOrderService,
+  logFillClientEvents,
   startMatcherCommands,
+  startMatcherFills,
   type AccountStore,
   type MatcherCommands,
+  type MatcherFills,
   type OrderService,
 } from './modules/orders/index.js';
+import {
+  createMemoryNotificationsRepo,
+  createNotifier,
+  createPgNotificationsRepo,
+  type Notifier,
+  type NotificationsRepo,
+} from './modules/notifications/index.js';
+import {
+  createMemoryPnlSnapshotRepo,
+  createPgPnlSnapshotRepo,
+  type PnlSnapshotRepo,
+} from './modules/portfolio/index.js';
 import { createMemoryUsersRepo, createPgUsersRepo, type UsersRepo } from './modules/users/index.js';
 import {
   createMemoryWatchlistsRepo,
@@ -60,6 +87,12 @@ export type Repos = {
   accounts: AccountStore;
   /** The append-only audit log. */
   audit: AuditRepo;
+  /** The notification centre and its outbox (NSTOCK-0379). */
+  notifications: NotificationsRepo;
+  /** Price alerts (NSTOCK-0383). */
+  alerts: AlertsRepo;
+  /** End-of-day P&L per account, written by the `pnl.snapshot` job (T-209). */
+  pnlSnapshots: PnlSnapshotRepo;
 };
 
 /** What modules get injected instead of reaching for globals: time, storage and market data. */
@@ -80,6 +113,11 @@ export type AppDeps = {
   orders: OrderService;
   /** Price alerts and notifications (NSTOCK-0344), on the same market and orders. */
   alerts: AlertService;
+  /**
+   * Stores and announces notifications (NSTOCK-0379): the account store writes the ones a change
+   * raises inside its commit; the app's notification publisher sends them to apps/realtime.
+   */
+  notifier: Notifier;
   /** `DB_DRIVER` (T-182): `memory` for unit tests, `postgres` for `npm run dev:api` and E2E. */
   dbDriver: DbDriver;
   /** The process's Postgres pool under `DB_DRIVER=postgres`; null on the memory driver. */
@@ -95,6 +133,8 @@ export type AppDeps = {
    * adapter ticks on its own, as before.
    */
   quoteStreams: QuoteStreams | null;
+  /** `MATCHER_MODE`: in `worker`, apps/matcher matches and this process runs no order sweep. */
+  matcherMode: MatcherMode;
   /**
    * Stored candles on TimescaleDB (NSTOCK-0375) under `DB_DRIVER=postgres`: the candles route reads
    * them and falls back to the adapter's generated bars where the store has none. Null on the
@@ -122,6 +162,11 @@ export type DepsOverrides = {
   quoteStreams?: QuoteStreamsOptions;
   /** Use this candle store (tests); null turns stored candles off under `postgres`. */
   candleStore?: CandleStore | null;
+  /**
+   * `MATCHER_MODE` (NSTOCK-0369); default `inline`. `worker` needs `quoteStreams`: the orders
+   * desk then follows no ticks, and fills come only from apps/matcher's fill stream.
+   */
+  matcherMode?: MatcherMode;
   production?: boolean;
   sms?: SmsProvider;
   /** Where the default mock SMS provider writes its dev log line; default: nowhere. */
@@ -157,6 +202,16 @@ export type DepsOverrides = {
   piiKeys?: PiiKeys;
   /** Where a failed background audit write (fills, fund movements) is reported; default stderr. */
   onAuditError?: (error: Error) => void;
+  /**
+   * Where a notification that could not be stored or announced is reported, with whose it was
+   * (NSTOCK-0379); default stderr.
+   */
+  onNotifyError?: (error: unknown, context: Record<string, string | null>) => void;
+};
+
+const notifyErrorToStderr = (error: unknown, context: Record<string, string | null>) => {
+  const message = error instanceof Error ? error.message : String(error);
+  process.stderr.write(`notification failed: ${message} ${JSON.stringify(context)}\n`);
 };
 
 function openDatabase(overrides: DepsOverrides, driver: DbDriver): Database | null {
@@ -174,6 +229,10 @@ function openDatabase(overrides: DepsOverrides, driver: DbDriver): Database | nu
 
 /** Builds a fresh set of dependencies; each app (and each test app) gets its own in-memory state. */
 export function createDeps(overrides: DepsOverrides = {}): AppDeps {
+  const matcherMode = overrides.matcherMode ?? 'inline';
+  if (matcherMode === 'worker' && !overrides.quoteStreams) {
+    throw new Error('MATCHER_MODE=worker needs quoteStreams, which carry the matcher streams');
+  }
   const clock = overrides.clock ?? systemClock;
   const market =
     overrides.market ??
@@ -200,6 +259,18 @@ export function createDeps(overrides: DepsOverrides = {}): AppDeps {
   const audit =
     overrides.repos?.audit ??
     (database ? createPgAuditRepo({ database, clock }) : createMemoryAuditRepo({ clock }));
+  const notificationsRepo =
+    overrides.repos?.notifications ??
+    (database
+      ? createPgNotificationsRepo({ database, clock })
+      : createMemoryNotificationsRepo({ clock }));
+  const onNotifyError = overrides.onNotifyError ?? notifyErrorToStderr;
+  const notifier = createNotifier({
+    repo: notificationsRepo,
+    onListenerError: (error, stored) => {
+      onNotifyError(error, { userId: stored.userId, notificationId: stored.notification.id });
+    },
+  });
   const repos: Repos = {
     users:
       overrides.repos?.users ??
@@ -222,19 +293,45 @@ export function createDeps(overrides: DepsOverrides = {}): AppDeps {
       overrides.repos?.watchlists ??
       (database ? createPgWatchlistsRepo({ database }) : createMemoryWatchlistsRepo()),
     audit,
+    notifications: notificationsRepo,
+    alerts:
+      overrides.repos?.alerts ??
+      (database
+        ? createPgAlertsRepo({ database, notifications: notificationsRepo })
+        : createMemoryAlertsRepo({ notifications: notificationsRepo })),
     accounts:
       overrides.repos?.accounts ??
-      (database ? createPgAccountStore({ database, audit }) : createMemoryAccountStore({ audit })),
+      (database
+        ? createPgAccountStore({
+            database,
+            audit,
+            notifier,
+            ...(overrides.quoteStreams ? { shards: overrides.quoteStreams.shards } : {}),
+          })
+        : createMemoryAccountStore({ audit, notifier })),
+    pnlSnapshots:
+      overrides.repos?.pnlSnapshots ??
+      (database ? createPgPnlSnapshotRepo({ database }) : createMemoryPnlSnapshotRepo()),
   };
   const orders = createOrderService({
     clock,
     market,
     audit: repos.audit,
     accounts: repos.accounts,
+    followTicks: matcherMode === 'inline',
     ...(overrides.onAuditError ? { onAuditError: overrides.onAuditError } : {}),
     ...(overrides.newOrderId ? { newId: overrides.newOrderId } : {}),
   });
-  const alerts = createAlertService({ clock, market, orders });
+  // Set below once the matcher's command stream is open; alerts made before that need none.
+  let sendAlertCommand: ((command: MatcherCommand) => void) | null = null;
+  const alerts = createAlertService({
+    clock,
+    market,
+    repo: repos.alerts,
+    notifier,
+    onNotifyError,
+    sendCommand: (command) => sendAlertCommand?.(command),
+  });
   // Last, so nothing above can throw after the Redis connections are open.
   const quoteStreams =
     overrides.quoteStreams && market instanceof MockMarketDataAdapter
@@ -255,6 +352,59 @@ export function createDeps(overrides: DepsOverrides = {}): AppDeps {
       log,
     });
     matcherCommands = { commands, redis };
+    // Alerts rest on the matcher's books too (NSTOCK-0383); a lost one is reloaded by its reconcile.
+    const key = commandsKey ?? matcherCommandsKey;
+    sendAlertCommand = (command) => {
+      redis
+        .xadd(
+          key(shardOf(command.token, shards)),
+          'MAXLEN',
+          '~',
+          MATCHER_COMMANDS_MAXLEN,
+          '*',
+          'command',
+          JSON.stringify(command),
+        )
+        .catch((error: unknown) => {
+          log.warn(
+            `Alert command failed: ${error instanceof Error ? error.message : String(error)}`,
+          );
+        });
+    };
+  }
+  // And this process commits its share of the matcher's fills (ADR 0013, NSTOCK-0367), on a
+  // connection of its own: XREADGROUP BLOCK holds it.
+  let matcherFills: MatcherFills | null = null;
+  if (quoteStreams && overrides.quoteStreams) {
+    const {
+      url,
+      shards,
+      fillsKey,
+      fillsDeadKey,
+      fillClaimIdleMs,
+      fillMaxDeliveries,
+      blockMs,
+      log,
+    } = overrides.quoteStreams;
+    const client = new Redis(url, { maxRetriesPerRequest: null });
+    // Failed reads are logged by the reader itself, once per outage; the connection's own errors
+    // and reconnects here, at most once a minute (NSTOCK-0388).
+    logFillClientEvents(client, log);
+    matcherFills = startMatcherFills({
+      orders,
+      client,
+      shards,
+      consumer: `api-${randomUUID()}`,
+      log,
+      // The command connection is free when the reader's is held by XREADGROUP BLOCK, so it
+      // removes this process's consumer from the groups on close.
+      ...(matcherCommands ? { cleanup: matcherCommands.redis } : {}),
+      ...(fillsKey ? { fillsKey } : {}),
+      ...(fillsDeadKey ? { deadLetterKey: fillsDeadKey } : {}),
+      ...(fillClaimIdleMs === undefined ? {} : { claimIdleMs: fillClaimIdleMs }),
+      ...(fillMaxDeliveries === undefined ? {} : { maxDeliveries: fillMaxDeliveries }),
+      ...(blockMs === undefined ? {} : { blockMs }),
+    });
   }
   return {
     clock,
@@ -269,6 +419,7 @@ export function createDeps(overrides: DepsOverrides = {}): AppDeps {
     pinHasher: overrides.pinHasher ?? createArgon2PinHasher(),
     orders,
     alerts,
+    notifier,
     dbDriver,
     database,
     quoteStreams,
@@ -278,6 +429,7 @@ export function createDeps(overrides: DepsOverrides = {}): AppDeps {
         : database
           ? createPgCandleStore({ database })
           : null,
+    matcherMode,
     sessionRevocations: redisState
       ? createRedisSessionRevocations({
           redis: redisState,
@@ -285,6 +437,9 @@ export function createDeps(overrides: DepsOverrides = {}): AppDeps {
         })
       : createMemorySessionRevocations(),
     dispose: async () => {
+      // The fill reader stops first, with its in-flight fills, so none commits after the flush
+      // or is acked after the desk is disposed.
+      await matcherFills?.close();
       // Audit entries still queued are written before the pool closes.
       await orders.flushAudit();
       alerts.dispose();

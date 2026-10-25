@@ -25,6 +25,11 @@ describeWithPostgres('candle tables (integration)', () => {
 
   beforeEach(async () => {
     await pg.truncate();
+    // Truncating candles_1m leaves what a policy job already materialised from the previous test;
+    // refreshing the now-empty range drops it so every test starts from empty aggregates.
+    for (const name of AGGREGATES) {
+      await owner.query(`CALL refresh_continuous_aggregate('${name}', NULL, NULL)`);
+    }
   });
 
   /** One bar a minute for token 1 from `from` to `to` (inclusive), each with volume 10. */

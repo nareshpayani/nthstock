@@ -3,8 +3,8 @@ import type { SimulatorActions } from '@/shared/lib/demoSimulator';
 import type { OrdersMock } from './handlers';
 
 /** Rally and Pull back move the price by these ratios; Gap by `GAP_RATIO` (SPEC-TFC-1 T09). */
-export const RALLY_RATIO = 0.01;
-export const PULL_BACK_RATIO = -0.01;
+const RALLY_RATIO = 0.01;
+const PULL_BACK_RATIO = -0.01;
 export const GAP_RATIO = -0.03;
 /** With split fills on, a LIMIT order fills at most this many shares per tick. */
 export const SPLIT_FILL_QTY = 10;

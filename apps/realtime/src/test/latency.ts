@@ -5,7 +5,7 @@ import type { TestClient } from './wsTestClient.js';
 // Shared by the wall-clock latency tests (`*.latency.test.ts`, `npm run test:latency`).
 
 /** One frame at 60 Hz: the quote store paints on the next animation frame. */
-export const FRAME_MS = 1000 / 60;
+const FRAME_MS = 1000 / 60;
 
 export const freePort = () =>
   new Promise<number>((resolve, reject) => {

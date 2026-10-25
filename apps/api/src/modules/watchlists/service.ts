@@ -30,7 +30,7 @@ const conflict = (message: string) => new ApiHttpError(409, 'CONFLICT', message)
 const limitReached = (message: string) => new ApiHttpError(409, 'LIMIT_REACHED', message);
 
 /** The public view of a stored list: UTC ISO timestamps, items in display order. */
-export function toWatchlist(record: WatchlistRecord): Watchlist {
+function toWatchlist(record: WatchlistRecord): Watchlist {
   return {
     id: record.id,
     name: record.name,

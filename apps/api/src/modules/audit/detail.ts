@@ -2,7 +2,7 @@
  * Detail keys the audit log refuses in every environment (spec backend-core §8, ASVS 7.1.1 and
  * 7.1.2): no mobile, OTP, PIN, TOTP code, token, secret, name or email ever reaches `detail`.
  */
-export const AUDIT_DETAIL_DENY_LIST = [
+const AUDIT_DETAIL_DENY_LIST = [
   'mobile',
   'otp',
   'pin',

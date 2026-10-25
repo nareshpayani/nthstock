@@ -9,14 +9,19 @@
     "build": "tsc -p tsconfig.build.json",
     "start": "node dist/server.js",
     "candles": "node dist/candleWriter.js",
+    "worker": "node dist/worker.js",
+    "dev:worker": "JOBS_MODE=bullmq DB_DRIVER=${DB_DRIVER:-postgres} DATABASE_URL=${DATABASE_URL:-postgres://nthstock_app:nthstock_app_dev@127.0.0.1:5432/nthstock} REDIS_URL=${REDIS_URL:-redis://127.0.0.1:6379} QUOTE_SHARDS=${QUOTE_SHARDS:-1} tsx watch src/worker.ts",
     "dev:candles": "DATABASE_URL=${DATABASE_URL:-postgres://nthstock_app:nthstock_app_dev@127.0.0.1:5432/nthstock} REDIS_URL=${REDIS_URL:-redis://127.0.0.1:6379} tsx watch src/candleWriter.ts",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "test": "vitest run --coverage",
+    "test:latency": "vitest run --config vitest.latency.config.ts",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "tsx src/db/migrateCli.ts",
     "db:check": "tsx src/db/checkCli.ts",
-    "db:seed:candles": "tsx src/modules/candles/seedCli.ts"
+    "db:seed:candles": "tsx src/modules/candles/seedCli.ts",
+    "perf:smoke": "tsx src/perf/smokeCli.ts",
+    "openapi": "tsx src/openapiCli.ts"
   },
   "dependencies": {
     "@fastify/rate-limit": "11.2.1",
@@ -25,6 +30,7 @@
     "@nthstock/marketData": "0.0.0",
     "@nthstock/paperEngine": "0.0.0",
     "@nthstock/utils": "0.0.0",
+    "bullmq": "6.4.2",
     "drizzle-orm": "0.45.4",
     "fastify": "5.12.7",
     "ioredis": "6.0.0",

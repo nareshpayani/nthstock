@@ -24,7 +24,7 @@ import { createCipheriv, createDecipheriv, createHash, createHmac, randomBytes }
  */
 
 /** AES-256 and HMAC-SHA256 key size. */
-export const PII_KEY_BYTES = 32;
+const PII_KEY_BYTES = 32;
 const IV_BYTES = 12;
 const TAG_BYTES = 16;
 const HEADER_BYTES = 1 + IV_BYTES + TAG_BYTES;

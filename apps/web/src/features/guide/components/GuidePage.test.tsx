@@ -8,6 +8,7 @@ import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { useState } from 'react';
 import { beforeAll, describe, expect, it, vi } from 'vitest';
+import { videoFile } from '../model/guideContent';
 import { strings } from '../strings';
 import { GuidePage } from './GuidePage';
 
@@ -133,6 +134,35 @@ describe('GuidePage', () => {
       );
       expect(link).toHaveAttribute('rel', 'noopener noreferrer');
       expect(link).toHaveAccessibleName(/opens in a new tab/);
+    }
+  });
+
+  it('lists a labelled player with poster, mp4 and captions for every walkthrough clip', async () => {
+    renderGuide('walkthroughs');
+    const panel = await screen.findByRole('tabpanel');
+    const block = tabOf('walkthroughs').blocks.find((item) => item.kind === 'videos');
+    if (block?.kind !== 'videos') throw new Error('walkthroughs tab has no videos block');
+    expect(block.items.length).toBeGreaterThan(0);
+
+    const players = panel.querySelectorAll('video');
+    expect(players).toHaveLength(block.items.length);
+    for (const video of block.items) {
+      const player = within(panel).getByLabelText(strings.videoLabel(video.title, video.device));
+      expect(player.tagName).toBe('VIDEO');
+      expect(player).toHaveAttribute('poster', videoFile(video.id, 'jpg'));
+      expect(player).toHaveAttribute('preload', 'none');
+      expect(player.querySelector('source')).toHaveAttribute('src', videoFile(video.id, 'mp4'));
+      expect(player.querySelector('source')).toHaveAttribute('type', 'video/mp4');
+      const track = player.querySelector('track');
+      expect(track).toHaveAttribute('kind', 'captions');
+      expect(track).toHaveAttribute('src', videoFile(video.id, 'vtt'));
+      expect(track).toHaveAttribute('srclang', 'en');
+      expect(track).toHaveAttribute('label', strings.captionsLabel);
+      // Off by default: the clip already shows its captions in the picture.
+      expect(track).not.toHaveAttribute('default');
+      const fallback = within(player).getByText(strings.videoFallback(video.title));
+      expect(fallback).toHaveAttribute('href', videoFile(video.id, 'mp4'));
+      expect(player).toHaveClass(video.device === 'Phone' ? 'aspect-[390/844]' : 'aspect-video');
     }
   });
 

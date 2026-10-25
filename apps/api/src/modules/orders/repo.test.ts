@@ -68,7 +68,7 @@ const limitBuy = (price: number) =>
     price,
   }) as const;
 
-const USERS = ['usr_a', 'usr_b'] as const;
+const USERS = ['usr_a', 'usr_b', 'usr_c', 'usr_d'] as const;
 const clock = manualClock('2026-09-25T04:30:00.000Z');
 
 const note = (userId: string, orderId: string | null = null): NewAuditRecord => ({
@@ -316,6 +316,51 @@ describeRepoConformance<Fixture>(
       expect(await store.accountsTouchedOn('2026-09-25')).toEqual(['usr_a']);
       expect(await store.accountsTouchedOn('2026-09-28')).toEqual(['usr_b']);
       expect(await store.accountsTouchedOn('2026-09-26')).toEqual([]);
+    });
+
+    it('counts an evening AMO on the day it was placed, by IST day edges (T-208)', async () => {
+      const { store } = repo();
+      // Friday 25 Sep, 20:00 and 23:59 IST: AMOs trading on Monday 28 Sep.
+      const evening = newEngine(at(25, 20), 'eve');
+      evening.engine.place(limitBuy(1_400_00));
+      await store.commit('usr_a', { before: null, after: evening.engine.workingSet() }, 0, []);
+      const late = newEngine(at(25, 23, 59), 'late');
+      late.engine.place(limitBuy(1_400_00));
+      await store.commit('usr_b', { before: null, after: late.engine.workingSet() }, 0, []);
+      // Saturday 00:00 IST is the next day.
+      const midnight = newEngine(at(26, 0), 'mid');
+      midnight.engine.place(limitBuy(1_400_00));
+      await store.commit('usr_c', { before: null, after: midnight.engine.workingSet() }, 0, []);
+      // An account with only its opening credit (a ledger entry) on Sunday.
+      const ledgerOnly = newEngine(at(27, 12), 'ledger');
+      await store.commit('usr_d', { before: null, after: ledgerOnly.engine.workingSet() }, 0, []);
+
+      expect(await store.accountsTouchedOn('2026-09-25')).toEqual(['usr_a', 'usr_b']);
+      expect(await store.accountsTouchedOn('2026-09-26')).toEqual(['usr_c']);
+      expect(await store.accountsTouchedOn('2026-09-27')).toEqual(['usr_d']);
+      expect(await store.accountsTouchedOn('2026-09-28')).toEqual([]);
+      await expect(store.accountsTouchedOn('25/09/2026')).rejects.toThrow(RangeError);
+    });
+
+    it('lists the accounts holding stock, and drops one that sold out (T-209)', async () => {
+      const { store } = repo();
+      await commitOrders('usr_a', 1);
+      const { engine } = newEngine(at(25, 10), 'held', {
+        holdings: [[INFY.token, { qty: 5, investedValue: 7_000_00 }]],
+      });
+      const holding = engine.workingSet();
+      await store.commit('usr_b', { before: null, after: holding }, 0, []);
+      expect(await store.accountsWithHoldings()).toEqual(['usr_b']);
+
+      engine.place({
+        token: INFY.token,
+        side: 'SELL',
+        type: 'MARKET',
+        product: 'DELIVERY',
+        qty: 5,
+      });
+      await store.commit('usr_b', { before: holding, after: engine.workingSet() }, 1, []);
+      expect(await store.accountsWithHoldings()).toEqual([]);
     });
 
     it('round-trips trailing stops, their exits, keys and seq as they ratchet (NSTOCK-0368)', async () => {

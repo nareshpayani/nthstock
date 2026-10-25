@@ -11,7 +11,7 @@ import { strings } from '../strings';
 import type { OverlayLine } from './overlayLine';
 
 /** Line ids, so a tap knows what it hit. */
-export const positionLineId = (product: string) => `position:${product}`;
+const positionLineId = (product: string) => `position:${product}`;
 export const stopLineId = (id: string) => `stop:${id}`;
 
 /** A trail in words: "1.5%" or "₹12.50". */
@@ -86,7 +86,7 @@ export function stopLine(stop: TrailingStop, pending?: PendingStop): OverlayLine
 }
 
 /** Line id for a stop's activation price. */
-export const activationLineId = (id: string) => `activation:${id}`;
+const activationLineId = (id: string) => `activation:${id}`;
 
 /**
  * A stop waiting to start trailing draws its activation price as a thin dotted line (§8.1),

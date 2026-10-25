@@ -79,14 +79,15 @@ Each phase ends with a demo and owner sign-off before the next starts.
 ## 8. Agentic workflow → [docs/agent-workflow.md](docs/agent-workflow.md)
 1. **Spec first:** `docs/specs/<feature>.md`, opened as a PR labelled `spec`; merging it is approval.
 2. **Architecture changes** go through an ADR in `docs/adr/`.
-3. **Agents** (Planner, Developer, Reviewer, Fixer; roles in `.claude/agents/`) run on GitHub
+3. **Agents** (spec planner, story developer, PR reviewer, PR fixer, merge conflict resolver; roles in
+   `.claude/agents/`, names and pipeline in `docs/ci-cd.md`, ADR 0014) run on GitHub
    Actions. Green non-spec PRs labelled `ready-to-merge` auto-merge (ADR 0006). The owner merges spec
    PRs and PRs touching `.github/`, `.claude/` or `CLAUDE.md`.
 4. **Done means closed:** a PR lists `Closes #N` for every issue it completes.
 5. **Agents never** push to `develop` or `production`, touch real money, commit secrets, or add a paid service or a
    dependency outside the approved stack without asking. Production changes only when the owner asks
-   for a deploy and an agent runs Promote to production, which refuses unless develop passed CI and
-   the development smoke test (ADR 0011, `docs/runbooks/release.md`).
+   for a deploy and an agent runs Promote to production, which refuses unless develop passed CI, CodeQL
+   and the development smoke test (ADR 0011, 0014, `docs/runbooks/release.md`).
 6. **One phase at a time:** no phase starts without owner sign-off in the project chat.
 
 ## 9. Compliance notes → [docs/product.md §9](docs/product.md)
@@ -107,7 +108,7 @@ Node 22 is required (`.nvmrc`). On the owner's Mac: `export PATH="$(brew --prefi
 ## Claude Code setup (`.claude/`)
 | Path | What it holds |
 |---|---|
-| `agents/` | Planner, Developer, Reviewer, Fixer roles (used by GitHub Actions), and the report-only specialists the Reviewer calls: `frontend-reviewer`, `security-reviewer`, `database-reviewer`, `silent-failure-hunter`, `test-gap-analyzer`; plus `e2e-author` for Playwright specs |
+| `agents/` | `spec-planner`, `story-developer`, `pr-reviewer`, `pr-fixer` and `merge-conflict-resolver` roles (used by GitHub Actions), and the report-only specialists the PR reviewer calls: `frontend-reviewer`, `security-reviewer`, `database-reviewer`, `error-handling-reviewer`, `test-coverage-reviewer`; plus `e2e-test-author` for Playwright specs |
 | `rules/` | Detailed standards, loaded when you work in matching paths: `frontend`, `backend`, `packages`, `testing`, `git-and-prs` |
 | `skills/` | Repeatable procedures: `run-checks`, `local-dev`, `new-web-feature`, `new-api-module`, `browser-qa`, `production-audit`, `database-migrations`, `latency`, `release` |
 | `hooks/` | Automatic checks (see `hooks/README.md`): format + lint after each edit, typecheck of changed workspaces at the end of a turn, guards against pushing to `production` or `develop` and editing secrets or generated files |

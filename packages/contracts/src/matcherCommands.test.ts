@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { MatcherCommand, matcherCommandsKey } from './matcherCommands.js';
+import {
+  MatcherCommand,
+  MATCHER_FILL_MAX_IDS,
+  MatcherFill,
+  matcherCommandsKey,
+  matcherFillsKey,
+} from './matcherCommands.js';
 
 const order = {
   v: 1,
@@ -48,5 +54,40 @@ describe('MatcherCommand (NSTOCK-0365)', () => {
 
   it('keys a stream per shard', () => {
     expect(matcherCommandsKey(3)).toBe('nthstock:matcher:commands:v1:3');
+  });
+});
+
+describe('MatcherFill (NSTOCK-0367)', () => {
+  const fill = {
+    v: 1,
+    userId: 'u_1',
+    token: 1594,
+    ltp: 1_500_00,
+    ts: '2026-09-28T04:30:00.250Z',
+    orderIds: ['pe_1'],
+    stopIds: [],
+  };
+
+  it('reads a fill and keys a stream per shard', () => {
+    expect(MatcherFill.parse(fill)).toEqual(fill);
+    expect(matcherFillsKey(0)).toBe('nthstock:matcher:fills:v1:0');
+  });
+
+  it('refuses a local time and a price that is not positive', () => {
+    expect(MatcherFill.safeParse({ ...fill, ts: '2026-09-28T10:00:00+05:30' }).success).toBe(false);
+    expect(MatcherFill.safeParse({ ...fill, ltp: 0 }).success).toBe(false);
+  });
+
+  it('refuses more ids than one request may name (NSTOCK-0388)', () => {
+    const ids = (n: number) => Array.from({ length: n }, (_, i) => `pe_${String(i)}`);
+    expect(MatcherFill.safeParse({ ...fill, orderIds: ids(MATCHER_FILL_MAX_IDS) }).success).toBe(
+      true,
+    );
+    expect(
+      MatcherFill.safeParse({ ...fill, orderIds: ids(MATCHER_FILL_MAX_IDS + 1) }).success,
+    ).toBe(false);
+    expect(MatcherFill.safeParse({ ...fill, stopIds: ids(MATCHER_FILL_MAX_IDS + 1) }).success).toBe(
+      false,
+    );
   });
 });

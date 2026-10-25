@@ -1,0 +1,37 @@
+WEBVTT
+
+1
+00:00:07.059 --> 00:00:14.236
+Trailing stop-loss (TSLO): a stop that follows the price up and never back.
+
+2
+00:00:14.236 --> 00:00:18.809
+Bought 5 INFY. With a position, the ticket offers Trailing SL.
+
+3
+00:00:18.809 --> 00:00:23.603
+Trail in rupees or percent, an optional activation price, a market or limit exit.
+
+4
+00:00:23.603 --> 00:00:28.648
+The preview shows the first stop and the exit value.
+
+5
+00:00:28.648 --> 00:00:30.759
+The amber line on the chart is the stop.
+
+6
+00:00:30.759 --> 00:00:34.159
+The Demo simulator moves the price. Rally +1%:
+
+7
+00:00:34.159 --> 00:00:39.008
+The stop ratcheted up from ₹1,509.55 to ₹1,524.90.
+
+8
+00:00:39.008 --> 00:00:42.454
+A pullback: the stop holds. It never moves down.
+
+9
+00:00:42.454 --> 00:00:45.562
+A gap through the stop triggers it once and sells the 5 shares.

@@ -24,11 +24,10 @@ export const ordersKeys = {
   history: (id: string) => ['orders', 'history', { id }] as const,
 };
 
-/** Holdings and the portfolio summary. Every `orderUpdate` invalidates `holdingsKeys.all`. */
+/** Holdings. Every `orderUpdate` invalidates `holdingsKeys.all`. */
 export const holdingsKeys = {
   all: ['holdings'] as const,
   list: () => ['holdings', 'list'] as const,
-  summary: () => ['holdings', 'summary'] as const,
 };
 
 /** Positions. Every `orderUpdate` invalidates `positionsKeys.all`. */
@@ -39,7 +38,8 @@ export const positionsKeys = {
 
 /**
  * Price alerts and the notification centre (NSTOCK-0344). A `notification` message on the socket
- * invalidates both: a fired alert changes the alerts list too.
+ * is added to the centre's cache (NSTOCK-0384), and a fired alert invalidates the alerts list; a
+ * socket reconnect invalidates both.
  */
 export const alertsKeys = {
   all: ['alerts'] as const,

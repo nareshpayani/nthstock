@@ -17,7 +17,8 @@
     "e2e:perf": "E2E_PERF=1 playwright test",
     "e2e:deployed": "playwright test -c playwright.deployed.config.ts",
     "lhci": "npx --yes @lhci/cli@0.15.1 autorun --config=lighthouserc.cjs",
-    "build:api-check": "VITE_API_MODE=api vite build --outDir dist-api --emptyOutDir --logLevel warn && node scripts/checkBuild.mjs dist-api"
+    "build:api-check": "VITE_API_MODE=api vite build --outDir dist-api --emptyOutDir --logLevel warn && node scripts/checkBuild.mjs dist-api",
+    "e2e:walkthrough": "bash ../../tools/demo/recordWalkthrough.sh"
   },
   "devDependencies": {
     "@nthstock/config": "0.0.0",
@@ -27,6 +28,7 @@
     "@tanstack/router-plugin": "1.168.47",
     "@testing-library/jest-dom": "7.0.1",
     "@testing-library/react": "16.3.3",
+    "@testing-library/user-event": "14.6.8",
     "@types/node": "22.20.5",
     "@types/qrcode": "1.5.6",
     "@types/react": "19.3.0",
@@ -42,7 +44,7 @@
     "tailwindcss": "4.3.3",
     "typescript": "6.0.3",
     "typescript-eslint": "8.72.0",
-    "vite": "8.3.4",
+    "vite": "8.3.5",
     "vitest": "5.0.5"
   },
   "dependencies": {
@@ -64,7 +66,7 @@
     "react-dom": "19.3.1",
     "react-hook-form": "7.90.0",
     "zod": "4.6.7",
-    "zustand": "5.0.15"
+    "zustand": "5.0.16"
   },
   "msw": {
     "workerDirectory": [

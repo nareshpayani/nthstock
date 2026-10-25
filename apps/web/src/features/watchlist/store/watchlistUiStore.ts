@@ -2,9 +2,9 @@ import { create } from 'zustand';
 import { safeStorage } from '@/shared/lib/safeStorage';
 import { isWatchlistSort, type WatchlistSort } from '../model/sortItems';
 
-export const ACTIVE_LIST_KEY = 'nth.watchlist.active';
-export const ACTIVE_NAME_KEY = 'nth.watchlist.activeName';
-export const SORT_KEY = 'nth.watchlist.sort';
+const ACTIVE_LIST_KEY = 'nth.watchlist.active';
+const ACTIVE_NAME_KEY = 'nth.watchlist.activeName';
+const SORT_KEY = 'nth.watchlist.sort';
 
 /**
  * Watchlist UI state shared by distant parts of the left rail (ADR 0005): the list tab that is
