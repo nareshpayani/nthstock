@@ -66,6 +66,8 @@ const app = buildApp({
     ...(config.quoteShards !== null && config.redisUrl
       ? { quoteStreams: { url: config.redisUrl, shards: config.quoteShards, log: tickLog } }
       : {}),
+    // MATCHER_MODE=worker: apps/matcher matches, and this process follows no ticks.
+    matcherMode: config.matcherMode,
     production: config.production,
     jwtSecret,
     // PII_ENC_KEYS and PII_HMAC_KEY for the Postgres repos (T-189); development keys when unset.

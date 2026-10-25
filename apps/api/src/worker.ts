@@ -48,6 +48,8 @@ const deps = createDeps({
   ...(config.quoteShards !== null
     ? { quoteStreams: { url: config.redisUrl, shards: config.quoteShards, log } }
     : {}),
+  // Under MATCHER_MODE=worker the matcher owns resting orders, so these engines must not match.
+  matcherMode: config.matcherMode,
   production: config.production,
   piiKeys: config.pii.keys,
   // Errors are reported as their classes and SQLSTATE only (no PII in logs).
