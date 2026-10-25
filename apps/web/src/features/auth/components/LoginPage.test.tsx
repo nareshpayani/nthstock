@@ -1,10 +1,15 @@
 import type { ApiClient } from '@nthstock/apiClient';
 import { CONSENT_POLICY_VERSION, DEV_OTP, OTP_RESEND_AFTER_SEC } from '@nthstock/contracts';
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
-import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, describe, expect, it, onTestFinished, vi } from 'vitest';
 import { createMockServer } from '@/mocks/node';
 import { renderApp } from '@/test/renderApp';
 import { resetSession, signIn } from '@/test/session';
+import {
+  DEMO_PENDING_STORAGE_KEY,
+  setDemoStarter,
+  type DemoStart,
+} from '@/shared/lib/demoSimulator';
 import { createSessionApiClient } from '@/shared/lib/sessionClient';
 import { readTrustedDevice } from '../store/trustedDevice';
 
@@ -23,6 +28,7 @@ afterEach(() => {
   resetSession();
   paths.length = 0;
   window.localStorage.clear();
+  window.sessionStorage.clear();
 });
 afterAll(() => {
   server.close();
@@ -157,7 +163,10 @@ describe('OTP screen (T-087)', () => {
 });
 
 describe('Try demo (REQ-DEL-02)', () => {
-  it('one tap logs in as the demo user and opens the instrument page', async () => {
+  it('one tap logs in as the demo user and opens the instrument page in demo mode', async () => {
+    const start = vi.fn((): DemoStart => 'ready');
+    setDemoStarter(start);
+    onTestFinished(() => setDemoStarter(null));
     const { apiClient } = newBrowser();
     const { router } = renderApp('/login', { apiClient });
     await heading('Log in to nthstock');
@@ -166,7 +175,54 @@ describe('Try demo (REQ-DEL-02)', () => {
 
     await waitFor(() => expect(router.state.location.pathname).toBe('/stocks/RELIANCE'));
     expect(paths).toContain('/v1/auth/otp/verify');
+    // The Demo simulator comes with Try demo, not only with ?demo=1.
+    expect(start).toHaveBeenCalledOnce();
     await heading(/Reliance/);
+  });
+});
+
+describe('Try demo outside demo mode (TFC-12)', () => {
+  it('reloads with the demo account first, sending nothing yet', async () => {
+    setDemoStarter(() => 'reloading');
+    onTestFinished(() => setDemoStarter(null));
+    const { apiClient } = newBrowser();
+    renderApp('/login', { apiClient });
+    await heading('Log in to nthstock');
+    paths.length = 0;
+
+    fireEvent.click(screen.getByRole('button', { name: 'Try demo' }));
+
+    await waitFor(() => expect(screen.getByRole('button', { name: /Starting/ })).toBeDisabled());
+    expect(paths).not.toContain('/v1/auth/otp/request');
+  });
+
+  it('carries on after the reload without a second tap', async () => {
+    setDemoStarter(() => 'ready');
+    onTestFinished(() => setDemoStarter(null));
+    // Past the OTP resend throttle for the demo mobile, which the test above used.
+    now += (OTP_RESEND_AFTER_SEC + 1) * 1000;
+    window.sessionStorage.setItem(DEMO_PENDING_STORAGE_KEY, '1');
+    const { apiClient } = newBrowser();
+    const { router } = renderApp('/login', { apiClient });
+
+    await waitFor(() => expect(router.state.location.pathname).toBe('/stocks/RELIANCE'));
+    expect(window.sessionStorage.getItem(DEMO_PENDING_STORAGE_KEY)).toBeNull();
+    await heading(/Reliance/);
+  });
+});
+
+describe('Try demo after a reload that did not start demo mode', () => {
+  it('shows an error instead of reloading again', async () => {
+    const start = vi.fn((): DemoStart => 'reloading');
+    setDemoStarter(start);
+    onTestFinished(() => setDemoStarter(null));
+    window.sessionStorage.setItem(DEMO_PENDING_STORAGE_KEY, '1');
+    const { apiClient } = newBrowser();
+    renderApp('/login', { apiClient });
+
+    expect(await screen.findByRole('alert')).toBeInTheDocument();
+    expect(start).toHaveBeenCalledOnce();
+    expect(screen.getByRole('button', { name: 'Try demo' })).toBeEnabled();
   });
 });
 

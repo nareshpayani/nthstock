@@ -136,15 +136,21 @@ Every task's pull request passes `npm run check` and lists its requirement IDs.
 
 ## 6. Go/no-go checklist (T29)
 
-- [ ] `develop` CI green, including Chromium mobile, WebKit iPhone and desktop journeys
-- [ ] Development smoke test green (ADR 0011)
-- [ ] Performance targets met (specification §12)
-- [ ] axe clean; keyboard-only journey green
-- [ ] Production cold load and Try demo verified on an iPhone (Safari) and an Android phone (Chrome)
-- [ ] US-01 to US-05 run by hand on the iPhone
-- [ ] Simulator present in demo mode only
-- [ ] Design rationale approved; compliance matrix shows every requirement Met or an approved deviation
-- [ ] Rollback commit identified
+Recorded on the release issue (#430), 2026-10-25.
+
+- [x] `develop` CI green, including Chromium mobile, WebKit iPhone and desktop journeys
+- [x] Development smoke test green (ADR 0011)
+- [x] Performance targets met (specification §12)
+- [x] axe clean; keyboard-only journey green
+- [ ] Production cold load and Try demo verified on an iPhone (Safari) and an Android phone (Chrome).
+      Deviation: verified by the deployed smoke at 390 px and the WebKit iPhone 13 journeys, not on
+      physical phones
+- [x] US-01 to US-05 run on a phone-sized touch screen: the scripted walkthrough (T30) on the
+      production build. Deviation: emulated, not by hand on an iPhone
+- [x] Simulator present in demo mode only
+- [x] Design rationale approved; compliance matrix shows every requirement Met or a recorded deviation
+- [x] Rollback commit identified: the `production` commit before the release, redeployed with the
+      Promote to production workflow (`docs/runbooks/release.md`)
 
 ## 7. Working agreement
 

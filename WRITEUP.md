@@ -5,7 +5,12 @@ Naresh Payani · TFC-1 · October 2026
 **Try it on a phone:** <https://nthstock-a13a5.web.app/login>, then tap **Try demo**. It is paper
 trading on a simulated NSE market that is always open in the demo. A labelled "Demo simulator" on
 the instrument page moves the price, so a trailing stop can be shown ratcheting and triggering in
-seconds. **Walkthrough video:** linked here at release (T30). **Script:**
+seconds. **Walkthrough video (80 s):** <https://nthstock-a13a5.web.app/demo/walkthrough.mp4>, also
+[in the repository](apps/web/public/demo/walkthrough.mp4). It shows US-01 to US-05 on a 390 × 844
+touch phone, from a cold load of the production build, with a caption for each step and a dot
+where the finger lands. It is recorded by a script, not by hand, so anyone can re-record it and
+get the same take ([demoWalkthrough.walkthrough.ts](apps/web/e2e/walkthrough/demoWalkthrough.walkthrough.ts),
+`npm run e2e:walkthrough -w @nthstock/web`). **Shot list:**
 [docs/runbooks/demo-walkthrough.md](docs/runbooks/demo-walkthrough.md).
 
 The full specification is [SPEC-TFC-1](docs/specs/trade-from-charts.md), the architecture decision

@@ -308,6 +308,22 @@ Spec `backend-core.md` §3 and §9, ADR 0007 §11. Code: `apps/api/src/modules/j
   the same thing in `npm run check`. A new route in the map joins with no extra wiring: regenerate
   and commit the file.
 
+### Demo mode and Try demo (TFC-12, REQ-DEL-02)
+The hosted site is the msw-mode build: the mock backend runs in the browser's service worker
+(`apps/web/src/mocks/browser.ts`) and each tab keeps its own paper account in sessionStorage.
+- **Demo mode** is a sessionStorage flag (`nthstock.demoMode`). It loads the demo account
+  (watchlists, holdings, ledger from `@nthstock/paperEngine`) and registers the Demo simulator,
+  whose Rally, Pull back and Gap buttons move one instrument's feed, so every screen sees the same
+  move. The instrument page shows it on desktop and on the phone layout, labelled "Simulated".
+- **`?demo=1`** turns it on at load: the seed is written before the mocks read their saved state.
+- **Try demo** on /login gives the same thing from a cold load. Outside demo mode it reloads to
+  `/login?demo=1` with a pending flag, then logs in as the demo user and opens RELIANCE without a
+  second tap (`startDemo` in `shared/lib/demoSimulator.ts`, `TryDemo.tsx`). In api mode nothing
+  registers a starter, so Try demo only logs in.
+- **Walkthrough video:** a Playwright script plays the five journeys on a 390 px touch phone
+  against the production build and encodes `public/demo/walkthrough.mp4`
+  (`docs/runbooks/demo-walkthrough.md`).
+
 ### Phase 2 sign-off (E21)
 - Demo seed: with `DB_DRIVER=postgres`, `DEMO_SEED=true` writes the demo user (upserted by the
   mobile's blind index), their terms and privacy consent (`UsersRepo.ensureConsent`, idempotent),
