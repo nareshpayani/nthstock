@@ -21,6 +21,7 @@
     "db:psql": "psql ${DATABASE_URL:-postgres://nthstock_app:nthstock_app_dev@127.0.0.1:5432/nthstock}",
     "db:reset": "docker compose -f infra/docker-compose.yml down -v && npm run infra:up && npm run db:migrate",
     "db:seed:candles": "DATABASE_URL=${DATABASE_URL:-postgres://nthstock_app:nthstock_app_dev@127.0.0.1:5432/nthstock} DATABASE_MIGRATION_URL=${DATABASE_MIGRATION_URL:-postgres://nthstock_owner:nthstock_owner_dev@127.0.0.1:5432/nthstock} npm run db:seed:candles -w @nthstock/api --",
+    "perf:smoke": "DATABASE_URL=${DATABASE_URL:-postgres://nthstock_app:nthstock_app_dev@127.0.0.1:5432/nthstock} DATABASE_MIGRATION_URL=${DATABASE_MIGRATION_URL:-postgres://nthstock_owner:nthstock_owner_dev@127.0.0.1:5432/nthstock} PERF_STATS_URL=${PERF_STATS_URL:-postgres://postgres:postgres_dev@127.0.0.1:5432/nthstock} npm run perf:smoke -w @nthstock/api",
     "storybook": "npm run storybook -w @nthstock/ui",
     "build-storybook": "turbo run build-storybook",
     "build": "turbo run build",

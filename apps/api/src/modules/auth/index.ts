@@ -14,5 +14,10 @@ export {
   createRedisSessionRevocations,
   type SessionRevocations,
 } from './sessionRevocations.js';
-export { createSessionService, type AuthContext, type SessionService } from './sessionService.js';
+export {
+  createSessionService,
+  hashToken,
+  type AuthContext,
+  type SessionService,
+} from './sessionService.js';
 export { createMockSmsProvider, type SmsLog, type SmsProvider } from './smsProvider.js';
