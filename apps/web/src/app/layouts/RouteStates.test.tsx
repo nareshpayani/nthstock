@@ -46,6 +46,7 @@ describe('RouteError', () => {
     }
 
     afterEach(() => {
+      vi.restoreAllMocks();
       vi.unstubAllGlobals();
       window.sessionStorage.clear();
     });
