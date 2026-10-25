@@ -78,8 +78,13 @@ export const authRoutes =
     // Security notifications (NSTOCK-0382): a failure is logged and never fails the sign-in.
     const notices = {
       notifier: deps.notifier,
-      onError: (error: unknown) => {
-        app.log.warn({ err: error }, 'a security notification could not be stored');
+      // The error's name and code only: a driver message can carry the SQL parameters.
+      onError: (error: unknown, context: { userId: string; event: string }) => {
+        const { name, code } = (error ?? {}) as { name?: unknown; code?: unknown };
+        app.log.error(
+          { ...context, error: { name, code } },
+          'a security notification was not stored',
+        );
       },
     };
     const otp = createOtpService({

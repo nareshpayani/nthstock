@@ -118,6 +118,10 @@ streams, so apps/api stops matching in process.
   live order and takes off any order Postgres no longer has live, each at the account version, so a lost command
   is repaired within a minute while a command newer than the read stands. An upsert at the same price keeps the
   order's heap entry, so the rounds leave nothing stale. Rows from before the column are matched by token.
+  The same round reconciles trailing stops: it reads the ARMED and TRAILING rows of `trailing_stops` (what
+  `STOP_ADD` puts on a book) in that snapshot, keeps those whose token maps to the shard (the table has no shard
+  column), upserts or removes them at the account version, and puts back a stop a tick triggered whose fill never
+  committed.
 - **Fills** (NSTOCK-0367, [ADR 0013](adr/0013-matcher-fills-commit-in-api.md)): the matcher finds fills, apps/api
   commits them. For each tick that crosses an order or triggers a stop the lease holder writes one `MatcherFill` per
   user to `nthstock:matcher:fills:v1:{shard}`; every apps/api process reads those streams in the `api` consumer

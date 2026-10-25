@@ -177,6 +177,31 @@ describe('OrderBook (NSTOCK-0363)', () => {
     expect(book.size.stops).toBe(0);
   });
 
+  it('restores a triggered stop at the same version, not after a newer change, and lists stops', () => {
+    const book = new OrderBook();
+    const stop = trailing('t1', 'LONG', 100_00, 90_00, undefined, 5);
+    book.upsertStop(stop);
+    book.upsertStop(trailing('t2', 'SHORT', 100_00, 110_00, undefined, 5));
+    expect([...book.stops()].map((s) => s.stopId).sort()).toEqual(['t1', 't2']);
+
+    expect(book.tick(90_00).triggered.map((s) => s.stopId)).toEqual(['t1']);
+    expect(book.hasStop('t1')).toBe(false);
+    // An upsert at the same version does not land; only a restore puts it back.
+    expect(book.upsertStop(stop)).toBe(false);
+    expect(book.restoreStop(stop)).toBe(true);
+    expect([...book.stops()].map((s) => s.stopId).sort()).toEqual(['t1', 't2']);
+    // It rests on its stop again, so the next tick through it triggers it again.
+    expect(book.tick(89_00).triggered.map((s) => s.stopId)).toEqual(['t1']);
+
+    // A newer cancel arrived after the trigger: the restore at the old version is refused.
+    book.removeStop('t1', 6);
+    expect(book.restoreStop(stop)).toBe(false);
+    expect(book.hasStop('t1')).toBe(false);
+    // A restore of a stop never triggered is an ordinary upsert, by version.
+    expect(book.restoreStop(trailing('t3', 'LONG', 100_00, 80_00, undefined, 1))).toBe(true);
+    expect(book.restoreStop(trailing('t3', 'LONG', 100_00, 85_00, undefined, 1))).toBe(false);
+  });
+
   // The property behind §5.1: a tick acts on exactly what stepping every order and stop would.
   it.each([1, 7, 42, 2026, 90210])(
     'matches a full walk of every order and stop (seed %i)',

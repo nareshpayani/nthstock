@@ -48,7 +48,7 @@ export function securityNotification(
 export type SecurityNotices = {
   notifier: Pick<Notifier, 'raise'>;
   /** A failed notification never fails the action that raised it; it is logged here. */
-  onError: (error: unknown) => void;
+  onError: (error: unknown, context: { event: SecurityEvent['type']; userId: string }) => void;
 };
 
 /** Raises the event's notification without waiting for it or letting it fail the caller. */
@@ -59,5 +59,15 @@ export function raiseSecurityNotice(
   at: Date,
 ): void {
   if (!notices) return;
-  notices.notifier.raise([securityNotification(userId, event, at)]).catch(notices.onError);
+  const report = (error: unknown) => {
+    try {
+      notices.onError(error, { event: event.type, userId });
+    } catch {
+      // Reporting a lost notice must not itself surface as an unhandled rejection.
+    }
+  };
+  // Built inside an async function so a synchronous throw becomes a rejection, not a caller error.
+  void (async () => notices.notifier.raise([securityNotification(userId, event, at)]))().catch(
+    report,
+  );
 }

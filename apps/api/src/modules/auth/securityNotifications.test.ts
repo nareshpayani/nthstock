@@ -12,6 +12,7 @@ import { securityNotification } from '../notifications/index.js';
 // name or IP address in it.
 
 const MOBILE = '9876543210';
+const OTHER_MOBILE = '9876543211';
 const PIN = '482105';
 const CHROME_MAC =
   'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36';
@@ -33,10 +34,10 @@ const client = (scope: number) => {
   return createScenarioClient(backend.scope?.(scope) ?? backend);
 };
 
-async function login(c: ScenarioClient) {
-  const { requestId } = await c.call('otpRequest', { body: { mobile: MOBILE } });
+async function login(c: ScenarioClient, mobile = MOBILE) {
+  const { requestId } = await c.call('otpRequest', { body: { mobile } });
   return c.call('otpVerify', {
-    body: { requestId, mobile: MOBILE, otp: DEV_OTP, consentVersion: CONSENT_POLICY_VERSION },
+    body: { requestId, mobile, otp: DEV_OTP, consentVersion: CONSENT_POLICY_VERSION },
   });
 }
 
@@ -132,8 +133,58 @@ describe('security notifications (NSTOCK-0382)', () => {
     await c.call('pinSet', { body: { pin: PIN, confirmPin: PIN } });
     await c.call('stepUp', { body: { pin: PIN } });
     await settled(c, 1);
-    await c.call('sessionsRevokeOthers');
-    await new Promise((resolve) => setTimeout(resolve, 20));
+    const raise = vi.spyOn(app.deps.notifier, 'raise');
+    expect(await c.call('sessionsRevokeOthers')).toMatchObject({ revoked: 0 });
+    expect(raise).not.toHaveBeenCalled();
+  });
+
+  it('raises nothing for a sign-in from a device the user already trusts', async () => {
+    const c = client(5);
+    await login(c);
+    // Setting a PIN trusts this browser for this user.
+    await c.call('pinSet', { body: { pin: PIN, confirmPin: PIN } });
+    await settled(c, 1);
+    const raise = vi.spyOn(app.deps.notifier, 'raise');
+    clock.advance(60_000);
+    await login(c);
+    expect(raise).not.toHaveBeenCalled();
     expect(await security(c)).toHaveLength(1);
+  });
+
+  it('notifies a sign-in on a device another user trusts, as new for this user', async () => {
+    const c = client(6);
+    await login(c);
+    await c.call('pinSet', { body: { pin: PIN, confirmPin: PIN } });
+    await settled(c, 1);
+    clock.advance(60_000);
+    // The same browser, so the same device cookie, now signing in as someone else.
+    await login(c, OTHER_MOBILE);
+    await settled(c, 1);
+    expect((await security(c))[0]?.title).toBe('New sign-in to your account');
+  });
+
+  it('still signs in, turns on two-factor and logs out the others when notices fail', async () => {
+    const raise = vi
+      .spyOn(app.deps.notifier, 'raise')
+      .mockRejectedValue(new Error('notifications store down'));
+    const c = client(7);
+    await expect(login(c)).resolves.toMatchObject({ user: expect.anything() as unknown });
+    await c.call('pinSet', { body: { pin: PIN, confirmPin: PIN } });
+    clock.advance(31_000); // past the OTP resend wait
+    await login(client(8));
+    await c.call('stepUp', { body: { pin: PIN } });
+    const { setupKey } = await c.call('totpEnrol');
+    const secret = base32Decode(setupKey);
+    await c.call('totpEnrolConfirm', {
+      body: { code: await totpCode(secret, clock.now().getTime()) },
+    });
+    expect(await c.call('sessionsRevokeOthers')).toMatchObject({ revoked: 1 });
+    // New device (twice), two-factor on, others logged out: each attempted, none stored.
+    expect(raise.mock.calls.map(([entries]) => entries[0]?.title)).toEqual([
+      'New sign-in to your account',
+      'New sign-in to your account',
+      'Two-factor authentication turned on',
+      'Other devices logged out',
+    ]);
   });
 });
