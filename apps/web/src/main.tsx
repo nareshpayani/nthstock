@@ -12,6 +12,7 @@ import { parseRuntimeConfig } from './app/config/runtimeConfig';
 import { writeTradingCommit } from './app/live/tradingCache';
 import { bindTradingSession } from './app/live/tradingSession';
 import { restSnapshot, startVisibilitySync } from './app/live/visibilitySync';
+import { installStaleBuildReload } from './app/staleBuild';
 import { wantsDemo, withoutDemoParam } from './mocks/demoParam';
 import { createSessionApiClient } from './shared/lib/sessionClient';
 import { useSessionStore } from './shared/lib/sessionStore';
@@ -67,6 +68,8 @@ function boot() {
   if (!rootElement) {
     throw new Error('Root element #root not found');
   }
+  // A tab older than the last deploy reloads to the current build instead of a broken page.
+  installStaleBuildReload();
 
   // VITE_API_MODE is a build-time constant (vite.config.ts), so in an api-mode build this branch
   // and the MSW chunk it imports are removed entirely (T-050), and nothing is gated.
