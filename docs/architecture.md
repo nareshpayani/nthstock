@@ -131,11 +131,18 @@ the chart shows after a reload.
   in one multi-row `INSERT … ON CONFLICT (token, bucket) DO UPDATE`, records the minute as written, and only then
   acknowledges the stream entries, so a restart re-reads what was not stored: no minute is lost and a replayed one
   overwrites itself with the same values.
-- **History:** a one-off seed writes 2 years of daily bars and 30 days of 1-minute bars from the deterministic
-  generator, so charts have depth on day one and every machine stores the same rows.
+- **History:** `npm run db:seed:candles` (also run by `seed:demo`) writes 2 years of daily bars and 30 days (at least
+  22 sessions) of 1-minute bars from the deterministic generator, so charts have depth on day one and every machine
+  stores the same rows. Because `candles_1d` aggregates `candles_1m`, a day older than the minute window is stored
+  as one 09:15 IST row carrying that day's OHLCV. Minute bars go to the indices and their large-cap members
+  (66 instruments, about 577k rows, 23 s locally); `--all` adds daily history for every symbol. The seed refreshes
+  the aggregates as the owner role, because the app role may not.
+- **Running the writer:** `npm run dev:candles -w @nthstock/api` beside `npm run dev:api` (one process per
+  deployment: it uses a fixed consumer name).
 - **Reads:** `GET /v1/market/instruments/:symbol/candles` reads 1-minute bars from the hypertable, 5 minutes to an
-  hour and daily bars from the aggregates, and finishes the forming bar with the live price from the quote
-  snapshot.
+  hour and daily bars from the aggregates, weekly bars by grouping the daily ones, and finishes the forming bar with
+  the live price from the quote snapshot. A symbol with no stored bars in the window (not seeded, or only daily
+  history on an intraday range) keeps the generated bars, so nothing regresses.
 - **Schema check:** `db:check` with `DB_CHECK_URL` compares a migrated database with the schema files and the
   hand-written relations, skipping TimescaleDB's catalog, chunks and internal schemas; CI runs it.
 - **AWS (Phase 6):** RDS does not offer TimescaleDB; the spec's open question 1 decides between self-managed
