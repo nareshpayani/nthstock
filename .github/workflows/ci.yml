@@ -383,9 +383,11 @@ jobs:
 
   # New or changed dependencies with a known high or critical advisory, or a licence that cannot ship
   # in a public repo, fail the PR before they reach develop. npm audit (above) covers the whole tree.
+  # Needs the repository's Dependency graph (Settings → Code security), so it runs once the owner
+  # turns that on and sets the variable DEPENDENCY_REVIEW to true (docs/ci-cd.md); skipped until then.
   dependency-review:
     name: Dependency review
-    if: github.event_name == 'pull_request'
+    if: github.event_name == 'pull_request' && vars.DEPENDENCY_REVIEW == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:

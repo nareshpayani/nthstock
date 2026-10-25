@@ -50,7 +50,7 @@ scheduled runs skip the detection and run everything.
 | Playwright golden path (api mode), tick latency, perf smoke | skipped | runs | runs | runs |
 | Dependency audit (`npm audit --audit-level=high`) | runs | runs | runs | runs |
 | Secret scan (gitleaks, full history) | runs | runs | runs | runs |
-| Dependency review (new deps: high advisories, GPL/AGPL) | runs | runs | runs | — |
+| Dependency review (new deps: high advisories, GPL/AGPL; once enabled, see Branch rules) | runs | runs | runs | — |
 | Workflow lint (actionlint + shellcheck) | runs | runs | runs | runs |
 | **CI result** | runs | runs | runs | runs |
 
@@ -100,6 +100,9 @@ ruleset:
   (Promote to production is the only writer).
 - Settings → General → Pull requests: allow squash merging only; tick "Automatically delete head
   branches".
+- Settings → Code security: turn on **Dependency graph**, then Settings → Secrets and variables →
+  Actions → Variables: `DEPENDENCY_REVIEW` = `true`. Until then the Dependency review job is skipped
+  (it errors on a repository without the dependency graph).
 
 ## Release flow
 
