@@ -244,8 +244,8 @@ the chart shows after a reload.
 
 ### Background jobs (Phase 2, E16)
 Spec `backend-core.md` §3 and §9, ADR 0007 §11. Code: `apps/api/src/modules/jobs/`, entry `apps/api/src/worker.ts`.
-- **Worker:** the same codebase as the API with another entry (`npm run worker`, locally `npm run dev:worker -w
-  @nthstock/api` beside `npm run dev:api`), so jobs share the repos, the paper engine and the quote-service prices.
+- **Worker:** the same codebase as the API with another entry (`npm run worker -w @nthstock/api`; `npm run dev:api`
+  starts it as `dev:worker` with `JOBS_MODE=bullmq`), so jobs share the repos, the paper engine and the quote-service prices.
   It publishes the order updates its jobs make, and sends them to the matcher as the API does.
 - **`JOBS_MODE`:** `inline` (default) keeps the API's in-process order sweep, which unit tests and the `/v1/__test`
   clock routes drive; `bullmq` (needs `DB_DRIVER=postgres`) turns the sweep off and leaves session events to the
