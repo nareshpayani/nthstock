@@ -1,5 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
-import { isChunkLoadError, reloadForNewBuild, type StaleBuildEnv } from './staleBuild';
+import {
+  installStaleBuildReload,
+  isChunkLoadError,
+  reloadForNewBuild,
+  type StaleBuildEnv,
+} from './staleBuild';
 
 function memoryStorage(): Pick<Storage, 'getItem' | 'setItem'> {
   const items = new Map<string, string>();
@@ -30,8 +35,15 @@ describe('isChunkLoadError', () => {
     'error loading dynamically imported module: https://example.test/assets/a.js',
     'Importing a module script failed.',
     'Unable to preload CSS for /assets/index.css',
+    'Loading chunk 42 failed.',
   ])('recognises "%s"', (message) => {
     expect(isChunkLoadError(new TypeError(message))).toBe(true);
+  });
+
+  it('recognises a ChunkLoadError by name', () => {
+    const error = new Error('boom');
+    error.name = 'ChunkLoadError';
+    expect(isChunkLoadError(error)).toBe(true);
   });
 
   it('ignores other errors and non-errors', () => {
@@ -41,7 +53,35 @@ describe('isChunkLoadError', () => {
   });
 });
 
+describe('installStaleBuildReload', () => {
+  it('prevents and reloads on the first preload error, not on a second within a minute', () => {
+    const target = new EventTarget();
+    const now = { value: 1_000_000 };
+    const e = env(now);
+    installStaleBuildReload(target as unknown as Window, e);
+
+    const first = new Event('vite:preloadError', { cancelable: true });
+    target.dispatchEvent(first);
+    expect(first.defaultPrevented).toBe(true);
+    expect(e.reload).toHaveBeenCalledOnce();
+
+    now.value += 10_000;
+    const second = new Event('vite:preloadError', { cancelable: true });
+    target.dispatchEvent(second);
+    expect(second.defaultPrevented).toBe(false);
+    expect(e.reload).toHaveBeenCalledOnce();
+  });
+});
+
 describe('reloadForNewBuild', () => {
+  it('treats a corrupt stored value as no previous reload', () => {
+    const now = { value: 1_000_000 };
+    const storage = memoryStorage();
+    storage.setItem('nthstock:staleBuildReloadAt', 'garbage');
+    const e = env(now, storage);
+    expect(reloadForNewBuild(e)).toBe(true);
+  });
+
   it('reloads once, then not again within a minute, then again after it', () => {
     const now = { value: 1_000_000 };
     const e = env(now);

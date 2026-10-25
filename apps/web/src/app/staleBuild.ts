@@ -83,8 +83,11 @@ export function reloadForNewBuild(env: StaleBuildEnv = defaultEnv()): boolean {
  * Vite fires `vite:preloadError` when a chunk's preload fails. Reload to the current build instead
  * of letting the import throw into a route's error boundary.
  */
-export function installStaleBuildReload(target: Pick<Window, 'addEventListener'> = window): void {
+export function installStaleBuildReload(
+  target: Pick<Window, 'addEventListener'> = window,
+  env?: StaleBuildEnv,
+): void {
   target.addEventListener('vite:preloadError', (event) => {
-    if (reloadForNewBuild()) event.preventDefault();
+    if (reloadForNewBuild(env)) event.preventDefault();
   });
 }
