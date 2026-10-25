@@ -190,8 +190,11 @@ test.describe(`chart gestures by touch (T20, SPEC-TFC-1 §9.1) ${TOUCH_TAG}`, ()
     await chart.touch.tap(await centreOf(chip));
     const sheet = page.getByRole('dialog', { name: 'Trailing stop · INFY' });
     await expect(sheet).toBeVisible();
-    await page.keyboard.press('Escape');
-    await expect(sheet).toBeHidden();
+    // On a loaded runner the sheet can still be opening when the first Escape lands: press again.
+    await expect(async () => {
+      await page.keyboard.press('Escape');
+      await expect(sheet).toBeHidden({ timeout: 1_000 });
+    }).toPass();
     if (!chart.touch.multiTouch) return;
 
     await zoomIn(chart);

@@ -5,7 +5,11 @@ import { Pool } from 'pg';
 import { loadConfig } from './config.js';
 import { jsonLogger } from './logger.js';
 import { startMatcher } from './matcher.js';
-import { createPgLiveOrderSource } from './pgLiveOrders.js';
+import {
+  CONNECTION_TIMEOUT_MS,
+  QUERY_TIMEOUT_MS,
+  createPgLiveOrderSource,
+} from './pgLiveOrders.js';
 
 // apps/matcher (spec market-data-and-matching §5): one process per shard fills resting orders and
 // triggers trailing stops off the tick stream, while it holds the shard's lease.
@@ -28,7 +32,13 @@ commands.on('error', (error: Error) => {
 
 // One connection is enough: the reconcile loop reads once a minute.
 const pool = config.databaseUrl
-  ? new Pool({ connectionString: config.databaseUrl, max: 1, application_name: 'apps/matcher' })
+  ? new Pool({
+      connectionString: config.databaseUrl,
+      max: 1,
+      application_name: 'apps/matcher',
+      connectionTimeoutMillis: CONNECTION_TIMEOUT_MS,
+      query_timeout: QUERY_TIMEOUT_MS,
+    })
   : null;
 pool?.on('error', (error: Error) => {
   jsonLogger.warn('postgres idle connection error', { error: error.message });

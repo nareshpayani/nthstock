@@ -86,6 +86,17 @@ export type ReconcileLoop = {
 /** How often the matcher reconciles with Postgres (spec §5.3): a lost command lasts at most this. */
 export const RECONCILE_EVERY_MS = 60_000;
 
+/** A read still pending after this is abandoned, so one stalled connection cannot end the loop. */
+export const RECONCILE_READ_TIMEOUT_MS = 15_000;
+
+function readWithin<T>(read: Promise<T>, ms: number): Promise<T> {
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  const expired = new Promise<never>((_, reject) => {
+    timeout = setTimeout(() => reject(new Error(`read did not settle in ${String(ms)} ms`)), ms);
+  });
+  return Promise.race([read, expired]).finally(() => clearTimeout(timeout));
+}
+
 /**
  * Reconciles on start and then every `everyMs`. A failed read is logged and retried on the next
  * round; the books keep what the commands built meanwhile.
@@ -98,6 +109,7 @@ export function startReconcileLoop(options: {
   book: (token: number) => OrderBook;
   log: MatcherLog;
   everyMs?: number;
+  readTimeoutMs?: number;
   /** The first round waits for this (the command reader's first read). */
   after?: Promise<unknown>;
   /** Tests pass `null` to run rounds by hand. */
@@ -111,7 +123,10 @@ export function startReconcileLoop(options: {
   async function round(): Promise<ReconcileResult | null> {
     try {
       const users = heldUsers(books);
-      const snapshot = await source.read(shard, users);
+      const snapshot = await readWithin(
+        source.read(shard, users),
+        options.readTimeoutMs ?? RECONCILE_READ_TIMEOUT_MS,
+      );
       if (stopped) return null;
       const result = reconcileBooks({
         snapshot,

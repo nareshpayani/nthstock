@@ -1,6 +1,6 @@
 import { OrderBook } from '@nthstock/paperEngine';
 import { shardOf } from '@nthstock/utils';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   heldUsers,
   reconcileBooks,
@@ -171,13 +171,77 @@ describe('startReconcileLoop (NSTOCK-0366)', () => {
     expect(RECONCILE_EVERY_MS).toBe(60_000);
     expect(reads).toBe(1);
     tick();
-    await loop.run();
-    expect(reads).toBe(2);
+    await vi.waitFor(() => expect(reads).toBe(2));
+    // Let that round finish: a tick during a round is skipped by design.
+    await new Promise<void>((resolve) => setImmediate(resolve));
     tick();
-    await loop.run();
-    expect(reads).toBe(3);
+    await vi.waitFor(() => expect(reads).toBe(3));
     await loop.stop();
     expect(cleared).toEqual([handle]);
+  });
+
+  it('fires on the real timer by default, and stop ends it', async () => {
+    vi.useFakeTimers();
+    try {
+      const { books, book } = harness();
+      let reads = 0;
+      const loop = startReconcileLoop({
+        source: {
+          read: async () => {
+            reads += 1;
+            return { orders: [], versions: new Map() };
+          },
+        },
+        shard: 1,
+        shards: SHARDS,
+        books,
+        book,
+        log: { info: () => undefined, warn: () => undefined },
+      });
+      await vi.advanceTimersByTimeAsync(0);
+      expect(reads).toBe(1);
+      await vi.advanceTimersByTimeAsync(RECONCILE_EVERY_MS);
+      expect(reads).toBe(2);
+      await loop.stop();
+      await vi.advanceTimersByTimeAsync(RECONCILE_EVERY_MS * 3);
+      expect(reads).toBe(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('abandons a hung read so the next round and stop still run', async () => {
+    vi.useFakeTimers();
+    try {
+      const { books, book } = harness();
+      let reads = 0;
+      const warnings: string[] = [];
+      const loop = startReconcileLoop({
+        source: {
+          read: () => {
+            reads += 1;
+            return reads === 1
+              ? new Promise<never>(() => undefined)
+              : Promise.resolve({ orders: [], versions: new Map() });
+          },
+        },
+        shard: 1,
+        shards: SHARDS,
+        books,
+        book,
+        readTimeoutMs: 1_000,
+        log: { info: () => undefined, warn: (m) => warnings.push(m) },
+        timer: null,
+      });
+      await vi.advanceTimersByTimeAsync(1_000);
+      await loop.ready();
+      expect(warnings).toEqual(['Reconcile failed']);
+      await loop.run();
+      expect(reads).toBe(2);
+      await expect(loop.stop()).resolves.toBeUndefined();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('runs on start, one round at a time, and logs a failing read once', async () => {
