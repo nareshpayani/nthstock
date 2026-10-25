@@ -25,6 +25,7 @@
     "@nthstock/marketData": "0.0.0",
     "@nthstock/paperEngine": "0.0.0",
     "@nthstock/utils": "0.0.0",
+    "bullmq": "6.4.2",
     "drizzle-orm": "0.45.4",
     "fastify": "5.12.7",
     "ioredis": "6.0.0",

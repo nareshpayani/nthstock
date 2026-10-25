@@ -76,6 +76,8 @@ const app = buildApp({
   },
   ...(publisher ? { tickPublisher: publisher, orderPublisher: publisher } : {}),
   ...(testClock ? { testControls: { setTime: testClock.set } } : {}),
+  // JOBS_MODE=bullmq (T-207): the job worker runs the session events, so no in-process sweep.
+  ...(config.jobsMode === 'inline' ? {} : { orderSweepMs: null }),
 });
 
 app.addHook('onClose', async () => {
