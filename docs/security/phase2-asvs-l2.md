@@ -95,7 +95,9 @@ user data (the demo mobile is the made-up 9000000001, D9).
 | 24 | `seed:demo` twice gives the same state, equal to `?demo=1` | [`seed.integration.test.ts`](../../apps/api/src/modules/demo/seed.integration.test.ts), [`seed.test.ts`](../../apps/api/src/modules/demo/seed.test.ts), [`demoSeed.test.ts`](../../apps/web/src/mocks/demoSeed.test.ts) |
 
 Performance (spec §13, NSTOCK-0243): see [`docs/runbooks/perf-smoke.md`](../runbooks/perf-smoke.md)
-for the 10,000-user report.
+for the 10,000-user report. First CI run (25 Oct 2026, PR #565): MARKET order ack p95 29.6 ms
+(budget 300 ms), PIN login p95 42.1 ms (budget 200 ms), slowest query p95 0.6 ms (budget 50 ms), no
+errors in 500 of each.
 
 ## Owner sign-off checklist
 
@@ -105,7 +107,7 @@ for the 10,000-user report.
       another device, delete a test account.
 - [ ] CI on `develop`: unit, Postgres integration, dual-backend scenarios, msw and api-mode E2E,
       restart and security journey specs green.
-- [ ] Performance smoke report within budget (order ack p95 < 300 ms, PIN login p95 < 200 ms,
-      slowest query p95 < 50 ms).
+- [x] Performance smoke report within budget (order ack p95 < 300 ms, PIN login p95 < 200 ms,
+      slowest query p95 < 50 ms): 29.6 ms, 42.1 ms and 0.6 ms on 25 Oct 2026.
 - [ ] Open items accepted or scheduled: the `sql.raw` lint rule (5.3.4), market-hours jobs and purge
       (E16).
