@@ -185,6 +185,9 @@ describeWithPostgres('account purge on Postgres (integration, T-230)', () => {
       mobile_last4: null,
       name_enc: null,
       email_enc: null,
+      pin_set: false,
+      totp_enabled: false,
+      kyc_status: 'NOT_STARTED',
       purged_at: at,
     });
 
@@ -196,5 +199,60 @@ describeWithPostgres('account purge on Postgres (integration, T-230)', () => {
     // The mobile now signs up as somebody new.
     const again = await loginWithOtp(server, MOBILE);
     expect(again.session.user.id).not.toBe(userId);
+  });
+
+  it('one failing account rolls back alone: the run purges the rest, then throws', async () => {
+    const server = start();
+    const failing = (await loginWithOtp(server, '9876500011')).session.user.id;
+    const due = (await loginWithOtp(server, '9876500012')).session.user.id;
+    const notDue = (await loginWithOtp(server, '9876500013')).session.user.id;
+    const users = createPgUsersRepo({
+      database: database as Database,
+      clock,
+      pii: createPiiCrypto(devPiiKeys()),
+    });
+    const at = new Date(clock.now().getTime() + 31 * DAY_MS);
+    // The failing account is first in purge order; the last one is not due until tomorrow.
+    await users.markDeleted(failing, clock.now(), new Date(at.getTime() - 2 * DAY_MS));
+    await users.markDeleted(due, clock.now(), new Date(at.getTime() - DAY_MS));
+    await users.markDeleted(notDue, clock.now(), new Date(at.getTime() + DAY_MS));
+    await owner.query(
+      `create function purge_test_refuse() returns trigger language plpgsql as $$
+         begin
+           if old.user_id = '${failing}' then raise exception 'refused for the test'; end if;
+           return old;
+         end $$`,
+    );
+    await owner.query(
+      'create trigger purge_test_refuse before delete on consents for each row execute function purge_test_refuse()',
+    );
+    purgeDatabase = createDatabase({ url: pg.purgeUrl, poolMax: 1 });
+    try {
+      // A batch of one walks the keyset past the failed account.
+      await expect(runAccountPurge(at, { purgeDatabase }, 1)).rejects.toThrow(
+        /failed for 1 account\(s\); 1 purged/,
+      );
+    } finally {
+      await owner.query('drop trigger purge_test_refuse on consents');
+      await owner.query('drop function purge_test_refuse()');
+    }
+
+    const state = async (id: string) =>
+      (
+        await owner.query<{ purged: boolean; mobile: boolean; consents: string }>(
+          `select purged_at is not null as purged, mobile_hash is not null as mobile,
+                  (select count(*) from consents where user_id = $1) as consents
+             from users where id = $1`,
+          [id],
+        )
+      ).rows[0];
+    expect(await state(failing)).toEqual({ purged: false, mobile: true, consents: '1' });
+    expect(await state(due)).toEqual({ purged: true, mobile: false, consents: '0' });
+    expect(await state(notDue)).toEqual({ purged: false, mobile: true, consents: '1' });
+
+    // The retry purges the account that failed, and still not the one that is not due.
+    expect(await runAccountPurge(at, { purgeDatabase }, 1)).toEqual({ accounts: 1 });
+    expect(await state(failing)).toMatchObject({ purged: true, mobile: false });
+    expect(await state(notDue)).toMatchObject({ purged: false });
   });
 });
