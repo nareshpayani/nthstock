@@ -1,5 +1,6 @@
 // Public API of the candles module. Other modules and the app wiring import it only through this
 // file; tests may import internals.
+export { createCandleReader, type CandleReader, type LiveQuotes } from './reader.js';
 export {
   CANDLE_AGGREGATES,
   refreshWithOwner,

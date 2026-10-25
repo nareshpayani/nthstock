@@ -6,6 +6,7 @@ import { createDatabase, type Database } from './db/client.js';
 import { createPiiCrypto, resolvePiiKeys, type PiiKeys } from './db/crypto.js';
 import { createMemoryAuditRepo, createPgAuditRepo, type AuditRepo } from './modules/audit/index.js';
 import { createAlertService, type AlertService } from './modules/alerts/index.js';
+import { createPgCandleStore, type CandleStore } from './modules/candles/index.js';
 import {
   createArgon2PinHasher,
   createMemoryAuthRepo,
@@ -93,6 +94,12 @@ export type AppDeps = {
    */
   quoteStreams: QuoteStreams | null;
   /**
+   * Stored candles on TimescaleDB (NSTOCK-0375) under `DB_DRIVER=postgres`: the candles route reads
+   * them and falls back to the adapter's generated bars where the store has none. Null on the
+   * memory driver, where the route serves the adapter's bars as before.
+   */
+  candleStore: CandleStore | null;
+  /**
    * Releases what `createDeps` created itself (the orders desk's subscriptions, the adapter's
    * timers, the Postgres pool). Injected parts are left alone.
    */
@@ -111,6 +118,8 @@ export type DepsOverrides = {
    * `market` passed with it must be a `MockMarketDataAdapter` built with `externalTicks`.
    */
   quoteStreams?: QuoteStreamsOptions;
+  /** Use this candle store (tests); null turns stored candles off under `postgres`. */
+  candleStore?: CandleStore | null;
   production?: boolean;
   sms?: SmsProvider;
   /** Where the default mock SMS provider writes its dev log line; default: nowhere. */
@@ -245,6 +254,12 @@ export function createDeps(overrides: DepsOverrides = {}): AppDeps {
     dbDriver,
     database,
     quoteStreams,
+    candleStore:
+      overrides.candleStore !== undefined
+        ? overrides.candleStore
+        : database
+          ? createPgCandleStore({ database })
+          : null,
     sessionRevocations: redisState
       ? createRedisSessionRevocations({
           redis: redisState,
