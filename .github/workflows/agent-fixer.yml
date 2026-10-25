@@ -151,7 +151,7 @@ jobs:
       - uses: actions/checkout@v7
         # No persisted GITHUB_TOKEN: the agent action points origin at its app token, so its pushes
         # start CI and the Reviewer. checkout@v7 keeps the token in an includeIf file the action
-        # cannot clear, and GITHUB_TOKEN pushes start no workflows (NSTOCK-0363).
+        # cannot clear, and GITHUB_TOKEN pushes start no workflows (NSTOCK-0377).
         with:
           persist-credentials: false
           ref: ${{ needs.resolve-target.outputs.mode == 'develop' && 'develop' || needs.resolve-target.outputs.branch }}
