@@ -750,6 +750,25 @@ export const strings = {
             ['Price text updates', 'every tick', 'about 25 a second'],
           ],
         },
+        { kind: 'heading', text: 'Tick to screen, measured' },
+        {
+          kind: 'table',
+          caption:
+            'npm run test:latency, 8 symbols for 10 s over a real Redis, plus one 60 Hz frame to paint (3 runs)',
+          head: ['Path', 'Target', 'p95'],
+          rows: [
+            [
+              'apps/quotes → Redis Streams → apps/realtime → browser socket',
+              'under 500 ms',
+              '240 to 260 ms; most of it is the 250 ms batch window',
+            ],
+            [
+              'API tick pump → Redis pub/sub → apps/realtime → browser socket',
+              'under 500 ms',
+              '86 to 106 ms',
+            ],
+          ],
+        },
         { kind: 'heading', text: 'What keeps it fast' },
         {
           kind: 'list',

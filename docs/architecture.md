@@ -84,8 +84,24 @@ is the piece a licensed vendor feed replaces (D3).
   quote service, and the tick pump does not start. `GET /v1/market/quotes` reads the snapshot hashes directly, so
   two instances answer the same LTP at the same moment. Both apps read the streams through `followTickStreams` in
   `packages/marketData`. Without `QUOTE_SHARDS` nothing changes: the adapter ticks in process.
-- **Status:** the writer, lease, streams and both readers are built. NSTOCK-0355 starts apps/quotes in Compose and
-  `dev:api` and measures tick-to-screen latency across the three processes.
+- **Locally:** `npm run dev:api` starts apps/quotes beside apps/api, apps/realtime and the web app, with
+  `QUOTE_SHARDS=1`, so the full stack runs on the quote service by default (Compose runs Postgres and Redis; the apps
+  run under Turborepo).
+- **Latency (NSTOCK-0355):** `npm run test:latency -w @nthstock/realtime` measures tick-to-screen across apps/quotes,
+  Redis Streams, apps/realtime and a WebSocket client (plus one frame to paint), beside the API tick-pump path.
+  Locally: p95 240 to 260 ms on the quote service against 86 to 106 ms on the pump, both under the 500 ms target. The
+  difference is the 250 ms batch window of the writer; CI asserts the p95 on every PR.
+
+### Matcher (Wave 3, E23)
+Spec `market-data-and-matching.md` §5. A matcher worker will fill resting orders and trigger trailing stops off the tick
+streams, so apps/api stops matching in process.
+- **Order book** (`OrderBook` in `packages/paperEngine`, NSTOCK-0363): per instrument, BUY and SELL LIMIT orders sit
+  in price heaps and trailing stops in heaps on their stop, watermark and activation prices. A tick pops only what it
+  fills, triggers, ratchets or activates, and moves every stop with `stepTrailingStop`, the rule the engine and the
+  browser mock run, so it leaves each stop where stepping every stop would (property-tested against that full walk).
+  A change applies only when its version is newer than the one held.
+- **Status:** the book is built. The worker, commands, reconcile loop, fills, server-side trailing stops,
+  `MATCHER_MODE` and the benchmark are NSTOCK-0364 to 0370.
 
 ### Market data and chart bars
 - `packages/marketData` generates each range's own bars (1D: 1-minute, 1W: 5-minute, 1M: hourly,
