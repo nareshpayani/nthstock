@@ -1,6 +1,7 @@
 import { createTradingStore, type ApiClient } from '@nthstock/apiClient';
 import { fixedClock, fromIst } from '@nthstock/utils';
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
+import { http } from 'msw';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { createMockServer } from '@/mocks/node';
 import type { MarketSession } from '@/shared/lib/marketSessionContext';
@@ -73,6 +74,7 @@ beforeEach(() => {
   installResizeObserver();
 });
 afterEach(() => {
+  mock.server.resetHandlers();
   resetSession();
   useTrailingSheetStore.setState(initialTrailingSheetState);
 });
@@ -136,9 +138,36 @@ describe('trailing-stop sheet (T18, SPEC-TFC-1 §8.4)', () => {
       const ltp = (await mock.adapter.getQuote('INFY'))?.ltp ?? 0;
       fireEvent.click(await within(sheet).findByRole('radio', { name: '₹' }));
       const expected = Math.max(5, Math.round(ltp / 100 / 5) * 5);
-      expect(await within(sheet).findByRole('textbox', { name: 'Trail (₹)' })).toHaveValue(
-        (expected / 100).toFixed(2),
+      const field = await within(sheet).findByRole('textbox', { name: 'Trail (₹)' });
+      await waitFor(() => expect(field).toHaveValue((expected / 100).toFixed(2)));
+    },
+    HEAVY,
+  );
+
+  it(
+    'switching to rupees before the first price fills the field once the price lands',
+    async () => {
+      // Hold the REST snapshot back (the test quote store never ticks) until the switch is made.
+      let release = () => {};
+      const held = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      mock.server.use(
+        http.get('*/v1/market/quotes', async () => {
+          await held;
+          return undefined;
+        }),
       );
+      const { token } = await renderSheet(5);
+      const sheet = await openSheet(token);
+      const ltp = (await mock.adapter.getQuote('INFY'))?.ltp ?? 0;
+      fireEvent.click(await within(sheet).findByRole('radio', { name: '₹' }));
+      const field = await within(sheet).findByRole('textbox', { name: 'Trail (₹)' });
+      expect(field).toHaveValue('');
+
+      release();
+      const expected = Math.max(5, Math.round(ltp / 100 / 5) * 5);
+      await waitFor(() => expect(field).toHaveValue((expected / 100).toFixed(2)));
     },
     HEAVY,
   );
