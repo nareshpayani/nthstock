@@ -1,3 +1,12 @@
+// Public API of the candles module. Other modules and the app wiring import it only through this
+// file; tests may import internals.
+export {
+  CANDLE_AGGREGATES,
+  refreshWithOwner,
+  seedCandles,
+  type CandleSeedOptions,
+  type CandleSeedSummary,
+} from './seed.js';
 export {
   CANDLES_CONSUMER,
   CANDLES_GROUP,
