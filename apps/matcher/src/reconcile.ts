@@ -26,7 +26,8 @@ export type ReconcileResult = { added: number; removed: number };
 /**
  * Brings the books in step with Postgres, the truth (NSTOCK-0366). Each live order is upserted at
  * its account's version, so it lands only when that is newer than what the book holds: a command
- * that arrived after the read is kept. An order on a book that Postgres no longer has live is
+ * that arrived after the read is kept. An order a tick crossed is put back when Postgres still
+ * has it open at the same version: its fill request was lost (NSTOCK-0367). An order on a book that Postgres no longer has live is
  * taken off at its user's version, again only when that is newer. Rows with a null shard are
  * kept when their token maps to this shard.
  */
@@ -49,7 +50,8 @@ export function reconcileBooks(options: {
     const { orderId, userId, version, side, price } = order;
     const held = book(order.token);
     const had = held.hasOrder(orderId);
-    if (held.upsertOrder({ orderId, userId, version, side, price }) && !had) added += 1;
+    // `restoreOrder` also puts back an order a tick crossed whose fill never committed.
+    if (held.restoreOrder({ orderId, userId, version, side, price }) && !had) added += 1;
   }
   for (const held of books.values()) {
     for (const order of [...held.orders()]) {

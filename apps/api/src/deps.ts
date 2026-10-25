@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { MockMarketDataAdapter, type MarketDataAdapter } from '@nthstock/marketData';
 import { Redis } from 'ioredis';
 import { systemClock, type Clock } from '@nthstock/utils';
@@ -30,8 +31,10 @@ import {
   createPgAccountStore,
   createOrderService,
   startMatcherCommands,
+  startMatcherFills,
   type AccountStore,
   type MatcherCommands,
+  type MatcherFills,
   type OrderService,
 } from './modules/orders/index.js';
 import { createMemoryUsersRepo, createPgUsersRepo, type UsersRepo } from './modules/users/index.js';
@@ -262,6 +265,25 @@ export function createDeps(overrides: DepsOverrides = {}): AppDeps {
     });
     matcherCommands = { commands, redis };
   }
+  // And this process commits its share of the matcher's fills (ADR 0013, NSTOCK-0367), on a
+  // connection of its own: XREADGROUP BLOCK holds it.
+  let matcherFills: MatcherFills | null = null;
+  if (quoteStreams && overrides.quoteStreams) {
+    const { url, shards, fillsKey, fillClaimIdleMs, blockMs, log } = overrides.quoteStreams;
+    const client = new Redis(url, { maxRetriesPerRequest: null });
+    // A failed read is logged by the reader itself, once per outage.
+    client.on('error', () => undefined);
+    matcherFills = startMatcherFills({
+      orders,
+      client,
+      shards,
+      consumer: `api-${randomUUID()}`,
+      log,
+      ...(fillsKey ? { fillsKey } : {}),
+      ...(fillClaimIdleMs === undefined ? {} : { claimIdleMs: fillClaimIdleMs }),
+      ...(blockMs === undefined ? {} : { blockMs }),
+    });
+  }
   return {
     clock,
     repos,
@@ -297,6 +319,7 @@ export function createDeps(overrides: DepsOverrides = {}): AppDeps {
       orders.dispose();
       matcherCommands?.commands.stop();
       matcherCommands?.redis.disconnect();
+      await matcherFills?.close();
       await quoteStreams?.close();
       owned?.dispose();
       await ownedDatabase?.close();

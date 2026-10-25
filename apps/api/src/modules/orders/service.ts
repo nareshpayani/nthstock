@@ -5,6 +5,7 @@ import type {
   FundsSummary,
   Holding,
   LedgerPage,
+  MatcherFill,
   InstrumentToken,
   ModifyOrderRequest,
   Order,
@@ -672,6 +673,24 @@ export function createOrderService({
       auditedLedger.set(userId, engine.ledger.size);
       persist(userId, engine, { replace: true });
       await settle(userId);
+    },
+
+    /**
+     * A fill request from the matcher worker (ADR 0013, NSTOCK-0367): runs the user's engine at
+     * the tick's price and time and commits what it fills, then announces it, like any tick. The
+     * engine re-checks every order, so a request that arrives twice fills nothing twice and one
+     * for an order modified or cancelled since fills only what still crosses. Losing to another
+     * writer reloads and runs once more; a failed commit rejects, so the request is retried.
+     */
+    async applyMatcherFill(fill: MatcherFill): Promise<void> {
+      await ensure(fill.userId);
+      const run = () => desk.ingestFor([fill.userId], fill);
+      await run();
+      if (await settle(fill.userId)) {
+        await run();
+        // Losing twice: the newer writer's engine saw the same price, or the next tick will.
+        await settle(fill.userId);
+      }
     },
 
     /** A scripted tick for tests and scenarios (see `PaperDesk.pinPrice`). */

@@ -117,9 +117,16 @@ streams, so apps/api stops matching in process.
   live order and takes off any order Postgres no longer has live, each at the account version, so a lost command
   is repaired within a minute while a command newer than the read stands. An upsert at the same price keeps the
   order's heap entry, so the rounds leave nothing stale. Rows from before the column are matched by token.
-- **Status:** the book, the worker, the order commands and the reconcile loop are built. Fills, server-side
-  trailing stops, `MATCHER_MODE` and the benchmark are NSTOCK-0367 to 0370; until then the worker only logs what a
-  tick crossed.
+- **Fills** (NSTOCK-0367, [ADR 0013](adr/0013-matcher-fills-commit-in-api.md)): the matcher finds fills, apps/api
+  commits them. For each tick that crosses an order or triggers a stop the lease holder writes one `MatcherFill` per
+  user to `nthstock:matcher:fills:v1:{shard}`; every apps/api process reads those streams in the `api` consumer
+  group, runs the user's engine at the tick's price and time (`PaperDesk.ingestFor`), commits through the account
+  store with the expected version, publishes the order update and only then acks. The engine re-checks every
+  order, so a replayed request fills nothing twice and a request for an order modified since fills only what still
+  crosses. A request a crashed process held is claimed after 30 s; an unsent one puts its orders back on the book.
+- **Status:** the book, the worker, the order commands, the reconcile loop and fills are built. Server-side
+  trailing stops, `MATCHER_MODE` and the benchmark are NSTOCK-0368 to 0370; until `MATCHER_MODE=worker` apps/api
+  also fills on its own ticks, and a request that arrives after such a fill finds nothing to do.
 
 ### Server-side trailing stops (NSTOCK-0368)
 In api mode trailing stops run on the server with the same engine rules as the browser mock (SPEC-TFC-1 §6, §10.6).
