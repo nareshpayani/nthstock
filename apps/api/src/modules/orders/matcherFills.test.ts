@@ -26,7 +26,7 @@ type Script = {
   groupError?: string;
   /** `XAUTOCLAIM` replies, in order; then an empty page. */
   claims?: unknown[];
-  /** The `XPENDING` reply. */
+  /** The `XPENDING` reply; an Error is thrown as a failed call. */
   pending?: (args: (string | number)[]) => unknown;
   /** An `XACK` of this id fails. */
   ackFails?: (id: string | number | undefined) => boolean;
@@ -59,7 +59,10 @@ function scripted(reads: unknown[], options: Script = {}) {
       if (command === 'XAUTOCLAIM') {
         return Promise.resolve(options.claims?.shift() ?? ['0-0', [], []]);
       }
-      if (command === 'XPENDING') return Promise.resolve(options.pending?.(args) ?? []);
+      if (command === 'XPENDING') {
+        const reply = options.pending?.(args) ?? [];
+        return reply instanceof Error ? Promise.reject(reply) : Promise.resolve(reply);
+      }
       if (command === 'XACK' && options.ackFails?.(args.at(-1))) {
         return Promise.reject(new Error('READONLY replica'));
       }
@@ -127,7 +130,9 @@ describe('startMatcherFills (NSTOCK-0367)', () => {
     await vi.waitFor(() => expect(acks()).toEqual(['2-0']));
     // u1's second request waits behind its failed first one.
     expect(seen.sort()).toEqual(['u1@100', 'u2@100']);
-    expect(warnings).toEqual(['Matcher fill for u1 failed: database down']);
+    expect(warnings).toEqual([
+      'Matcher fill 1-0 on k0 for u1 failed (delivery 1 of 5): database down',
+    ]);
     await reader.close();
   });
 
@@ -331,6 +336,36 @@ describe('startMatcherFills claims (NSTOCK-0388)', () => {
 });
 
 describe('startMatcherFills entries (NSTOCK-0388)', () => {
+  it('runs claimed fills as first deliveries when XPENDING fails', async () => {
+    const { client, acks, of } = scripted([], {
+      claims: [['0-0', [entry('1-0', fill('u1', 100))], []]],
+      pending: () => new Error('LOADING Redis is loading the dataset in memory'),
+    });
+    const seen: string[] = [];
+    const { logged, log } = lines();
+    const reader = startMatcherFills({
+      orders: {
+        applyMatcherFill: async (request) => {
+          seen.push(request.userId);
+        },
+      },
+      client,
+      shards: 1,
+      consumer: 'c1',
+      log,
+      maxDeliveries: 1,
+      fillsKey: (shard) => `k${String(shard)}`,
+      deadLetterKey: 'dead',
+    });
+    await vi.waitFor(() => expect(acks()).toEqual(['1-0']));
+    expect(seen).toEqual(['u1']);
+    expect(of('XADD')).toEqual([]);
+    expect(logged).toEqual([
+      'Could not read delivery counts on k0, running the claimed fills: LOADING Redis is loading the dataset in memory',
+    ]);
+    await reader.close();
+  });
+
   it('dead-letters a malformed entry with its id, user and the Zod issues', async () => {
     const { client, of, acks } = scripted([
       [

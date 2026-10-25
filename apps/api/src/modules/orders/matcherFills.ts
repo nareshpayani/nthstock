@@ -210,7 +210,9 @@ export function startMatcherFills(options: {
           } catch (error) {
             // Left pending: it is claimed and run again after `claimIdleMs`. The user's later
             // requests wait for that too, so their fills stay in order.
-            log.warn(`Matcher fill for ${fill.userId} failed: ${messageOf(error)}`);
+            log.warn(
+              `Matcher fill ${id} on ${key} for ${fill.userId} failed (delivery ${String(deliveries.get(id) ?? 1)} of ${String(maxDeliveries)}): ${messageOf(error)}`,
+            );
             return;
           }
           await ack(key, id);
@@ -244,6 +246,24 @@ export function startMatcherFills(options: {
     return counts;
   }
 
+  /**
+   * The delivery counts, or none when `XPENDING` fails: the entries then run as first deliveries,
+   * so a Redis error never pushes a healthy fill toward the dead-letter cap.
+   */
+  async function deliveriesOrNone(
+    key: string,
+    entries: readonly StreamRecord[],
+  ): Promise<Map<string, number>> {
+    try {
+      return await deliveriesOf(key, entries);
+    } catch (error) {
+      log.warn(
+        `Could not read delivery counts on ${key}, running the claimed fills: ${messageOf(error)}`,
+      );
+      return new Map();
+    }
+  }
+
   let lastClaim: number | null = null;
   /**
    * Takes over requests another process (or this one, for a fill that failed) read and did not
@@ -270,7 +290,7 @@ export function startMatcherFills(options: {
         const entries = (claimed?.[1] ?? []).filter(
           (entry): entry is StreamRecord => Array.isArray(entry) && Array.isArray(entry[1]),
         );
-        if (entries.length > 0) await handle(key, entries, await deliveriesOf(key, entries));
+        if (entries.length > 0) await handle(key, entries, await deliveriesOrNone(key, entries));
         cursor = String(claimed?.[0] ?? '0-0');
         if (cursor === '0-0') break;
       }
