@@ -42,24 +42,53 @@ the tab is left alone. A new browser tab starts without the demo until you add `
 `VITE_MOCK_MARKET_OPEN=true` keeps prices ticking outside NSE hours; leave it out to follow the real
 market clock (orders placed while the market is closed become AMOs).
 
-## api mode (apps/api, apps/realtime, Redis)
+## api mode (apps/api, apps/realtime, Postgres, Redis)
 
-Needs Docker for Redis and Postgres (`npm run infra:up` and `npm run db:migrate`, run for you).
+Needs Docker for Postgres and Redis. Nothing else to install: the commands below start the
+containers, migrate the database and seed it for you.
 
 ```bash
 MOCK_MARKET_ALWAYS_OPEN=true npm run seed:demo
 ```
 
-`npm run seed:demo` is `npm run dev:api` with `DEMO_SEED=true`: apps/api loads the demo watchlists
-and paper account for the demo user as it starts, then serves requests. apps/api keeps its state
-in memory until Phase 3 (Postgres), so the seed is applied at start-up rather than written to a
-database, and a restart of apps/api (including a `tsx watch` reload after a code change) seeds
-again from the same starting state.
+`npm run seed:demo` runs `npm run infra:up` (Postgres 16 with TimescaleDB and Redis 7, loopback
+only), `npm run db:migrate` (as `nthstock_owner`), `npm run db:seed:candles`, then
+`npm run dev:api` with `DEMO_SEED=true`. As apps/api starts it writes the demo user, their terms
+and privacy consent, the demo watchlists and the paper account to Postgres (NSTOCK-0239). The
+user is upserted by the mobile's blind index and the rest is replaced, so seeding again gives the
+same state, and a restart of apps/api (including a `tsx watch` reload) keeps whatever you changed
+until the next seed. Use `npm run dev:api` (no seed) to keep your changes across restarts.
 
 1. Open <http://localhost:5173/dashboard>.
 2. Log in with **9000000001** and OTP **123456** (apps/api also prints the OTP), then "Skip for now".
 
 apps/api refuses `DEMO_SEED=true` with `NODE_ENV=production`.
+
+### From a fresh clone
+
+```bash
+nvm use                 # Node 22 (.nvmrc)
+npm install
+npm run infra:up        # Postgres + Redis containers, waits for their health checks
+npm run db:migrate      # schema as nthstock_owner
+MOCK_MARKET_ALWAYS_OPEN=true npm run seed:demo
+```
+
+### Database chores
+
+| Task | Command |
+| --- | --- |
+| Start or stop the containers | `npm run infra:up` / `npm run infra:down` (data stays in the `postgres-data` volume) |
+| Apply new migrations | `npm run db:migrate` |
+| Check the schema matches the migrations | `npm run db:check -w @nthstock/api` |
+| Open psql as the app role | `npm run db:psql` |
+| Start again from an empty database | `npm run db:reset` (deletes the local volume, then migrates) |
+| Re-seed the demo user only | `MOCK_MARKET_ALWAYS_OPEN=true npm run seed:demo` |
+
+Dev keys: `npm run dev:api` makes a fresh `JWT_SECRET` per run (shared by apps/api and
+apps/realtime) unless you set one, and apps/api uses fixed, non-secret development keys for PII
+encryption (`PII_ENC_KEYS`, `PII_HMAC_KEY`) outside production; production refuses to start
+without real ones. The role passwords are listed in [`infra/README.md`](../../infra/README.md).
 
 ## Checking both modes agree
 
@@ -80,5 +109,7 @@ watchlists on screen.
 | --- | --- |
 | msw mode shows an empty "My Watchlist" | The URL lacked `?demo=1`, or sessionStorage is blocked (the console says "Demo seed skipped"). |
 | api mode shows no holdings | apps/api was started without `DEMO_SEED=true`; use `npm run seed:demo`. |
+| `db:migrate` fails with "could not access file timescaledb" | The volume was made by the old `postgres:16-alpine` image; run `npm run db:reset` once. |
+| apps/api answers 503 on `/v1/health/ready` | Postgres or Redis is down; `npm run infra:up`. |
 | Prices do not move | Outside NSE hours: set `VITE_MOCK_MARKET_OPEN=true` (msw) or `MOCK_MARKET_ALWAYS_OPEN=true` (api). |
 | Live prices stop in api mode, WebSocket closes with 4401 | The access token expired or apps/api and apps/realtime have different `JWT_SECRET`s; log in again, or let `npm run seed:demo` generate one key for both. |
