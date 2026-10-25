@@ -369,8 +369,13 @@ describe('position editor (NSTOCK-0395)', () => {
     async () => {
       const token = await renderWithLoad(() => new Promise<never>(() => {}));
       const editor = await openEditor(token);
+      // Let the lazy editor chunk settle, so the skeleton below is the editor's own wait, not the
+      // host's Suspense fallback.
+      await act(async () => {
+        await import('./PositionEditor');
+      });
       expect(
-        await within(editor).findByRole('status', { name: 'Loading the order ticket' }),
+        within(editor).getByRole('status', { name: 'Loading the order ticket' }),
       ).toBeInTheDocument();
       expect(within(editor).queryByText(/This position is closed/)).toBeNull();
     },
@@ -460,6 +465,7 @@ describe('position editor (NSTOCK-0395)', () => {
       fireEvent.change(field, { target: { value: rupees(after - 500) } });
       mock.adapter.gap('INFY', 0.02);
       await act(() => tradingStore.resync());
+      expect((await stopsOf(api))[0]?.stopPrice ?? 0).toBeGreaterThan(after);
       expect(field).toHaveValue(rupees(after - 500));
     },
     HEAVY,

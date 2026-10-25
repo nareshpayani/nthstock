@@ -1,5 +1,5 @@
 import { Sheet } from '@nthstock/ui';
-import { Suspense, lazy, useLayoutEffect, useRef } from 'react';
+import { Suspense, lazy, useEffect, useLayoutEffect, useRef } from 'react';
 import { usePhoneLayout } from '@/shared/hooks/usePhoneLayout';
 import { useSession } from '@/shared/hooks/useSession';
 import { usePositionEditorStore } from '@/shared/lib/positionEditorStore';
@@ -20,6 +20,10 @@ export function PositionEditorHost() {
   const target = usePositionEditorStore((s) => s.target);
   const closeEditor = usePositionEditorStore((s) => s.closeEditor);
   const { status } = useSession();
+  // A session that ends forgets the target, so a later login never reopens stale state.
+  useEffect(() => {
+    if (status === 'anonymous') closeEditor();
+  }, [status, closeEditor]);
   const phone = usePhoneLayout();
   const open = target !== null && status === 'authenticated';
   const returnFocus = useRef<HTMLElement | null>(null);

@@ -10,7 +10,7 @@ import {
   useToast,
 } from '@nthstock/ui';
 import { formatInr } from '@nthstock/utils';
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useCancelOrder } from '@/features/orders';
 import { livePosition } from '@/features/positions';
 import { PnlAmount } from '@/shared/components/PnlAmount';
@@ -76,6 +76,13 @@ export function PositionEditor({ target, onClose }: PositionEditorProps) {
   const position = useTradingSelector(selectPosition, samePosition);
   const status = useTradingSelector(tradingStatus);
   const store = useTradingStore();
+  // A position that closes while the editor is open (a full exit whose fill lands before its
+  // REST answer, or the stop firing) closes the editor; the fill has its own toast (T-147).
+  const wasHeld = useRef(false);
+  useEffect(() => {
+    if (position) wasHeld.current = true;
+    else if (wasHeld.current) onClose();
+  }, [position, onClose]);
   const [tab, setTab] = useState<PositionEditorTab>(target.tab ?? 'stop');
   // Until the account state has loaded, "closed" would be a guess: wait, or say it failed.
   if (!position && (status === 'idle' || status === 'loading')) return <TicketSkeleton />;
