@@ -1,5 +1,5 @@
 import { MockMarketDataAdapter, type MarketDataAdapter } from '@nthstock/marketData';
-import type { Redis } from 'ioredis';
+import { Redis } from 'ioredis';
 import { systemClock, type Clock } from '@nthstock/utils';
 import type { DbDriver } from './config.js';
 import { createDatabase, type Database } from './db/client.js';
@@ -28,7 +28,9 @@ import {
   createMemoryAccountStore,
   createPgAccountStore,
   createOrderService,
+  startMatcherCommands,
   type AccountStore,
+  type MatcherCommands,
   type OrderService,
 } from './modules/orders/index.js';
 import { createMemoryUsersRepo, createPgUsersRepo, type UsersRepo } from './modules/users/index.js';
@@ -229,6 +231,22 @@ export function createDeps(overrides: DepsOverrides = {}): AppDeps {
     overrides.quoteStreams && market instanceof MockMarketDataAdapter
       ? startQuoteStreams(market, overrides.quoteStreams)
       : null;
+  // On the quote service, every committed order change goes to the matcher too (NSTOCK-0365).
+  let matcherCommands: { commands: MatcherCommands; redis: Redis } | null = null;
+  if (quoteStreams && overrides.quoteStreams) {
+    const { url, shards, commandsKey, log } = overrides.quoteStreams;
+    const redis = new Redis(url, { maxRetriesPerRequest: 1, commandTimeout: 1_000 });
+    // A failed send is logged by the commands themselves, once per outage.
+    redis.on('error', () => undefined);
+    const commands = startMatcherCommands({
+      orders,
+      stream: redis,
+      shards,
+      ...(commandsKey ? { commandsKey } : {}),
+      log,
+    });
+    matcherCommands = { commands, redis };
+  }
   return {
     clock,
     repos,
@@ -256,6 +274,8 @@ export function createDeps(overrides: DepsOverrides = {}): AppDeps {
       await orders.flushAudit();
       alerts.dispose();
       orders.dispose();
+      matcherCommands?.commands.stop();
+      matcherCommands?.redis.disconnect();
       await quoteStreams?.close();
       owned?.dispose();
       await ownedDatabase?.close();

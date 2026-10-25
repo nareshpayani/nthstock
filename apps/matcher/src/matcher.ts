@@ -7,6 +7,7 @@ import {
 } from '@nthstock/marketData';
 import { OrderBook, type BookTick } from '@nthstock/paperEngine';
 import { getMarketStatus } from '@nthstock/utils';
+import { applyCommand, readMatcherCommands, type CommandStreamClient } from './commands.js';
 
 export type MatcherLog = {
   info(message: string, fields?: Record<string, unknown>): void;
@@ -34,6 +35,11 @@ export type MatcherOptions = {
   snapshotKey?: (shard: number) => string;
   /** The follower; tests replace it to drive ticks by hand. */
   follow?: (options: TickStreamFollowerOptions) => TickStreamFollower;
+  /**
+   * The shard's order commands from apps/api (NSTOCK-0365), read on a connection of their own.
+   * Every process for the shard applies them, so a standby's books are current too.
+   */
+  commands?: { client: CommandStreamClient; commandsKey?: (shard: number) => string };
 };
 
 export type Matcher = {
@@ -41,8 +47,11 @@ export type Matcher = {
   book(token: number): OrderBook;
   /** The books created so far, by token. */
   readonly books: ReadonlyMap<number, OrderBook>;
-  /** Ticks seen, and ticks acted on (lease held, market open, a book for the instrument). */
-  stats(): { ticks: number; acted: number };
+  /**
+   * Ticks seen, ticks acted on (lease held, market open, a book for the instrument), and order
+   * commands that changed a book.
+   */
+  stats(): { ticks: number; acted: number; commands: number };
   ready(): Promise<void>;
   close(): Promise<void>;
 };
@@ -54,7 +63,7 @@ export type Matcher = {
  * stream, so a standby is current when it takes the lease; only the lease holder acts. Ticks
  * outside market hours are ignored, as the engine ignores them.
  *
- * The book is filled by order commands (NSTOCK-0365) and the reconcile loop (NSTOCK-0366); fills
+ * The books are filled by order commands (NSTOCK-0365) and the reconcile loop (NSTOCK-0366); fills
  * commit through the account store (NSTOCK-0367). Until then `onTick` reports what crossed.
  */
 export function startMatcher(options: MatcherOptions): Matcher {
@@ -62,6 +71,7 @@ export function startMatcher(options: MatcherOptions): Matcher {
   const books = new Map<number, OrderBook>();
   let ticks = 0;
   let acted = 0;
+  let commands = 0;
 
   const open = (ts: string) =>
     alwaysOpen || getMarketStatus({ now: () => new Date(ts) }).state === 'open';
@@ -92,18 +102,40 @@ export function startMatcher(options: MatcherOptions): Matcher {
     onQuotes: apply,
   });
 
+  function book(token: number): OrderBook {
+    let found = books.get(token);
+    if (!found) {
+      found = new OrderBook();
+      books.set(token, found);
+    }
+    return found;
+  }
+
+  const reader =
+    options.commands &&
+    readMatcherCommands({
+      client: options.commands.client,
+      shard,
+      ...(options.commands.commandsKey ? { commandsKey: options.commands.commandsKey } : {}),
+      ...(options.blockMs === undefined ? {} : { blockMs: options.blockMs }),
+      log,
+      onCommand: (command) => {
+        // A cancel for an instrument with no book has nothing to take off.
+        const removes = command.type === 'CANCEL' || command.type === 'STOP_CANCEL';
+        const target = removes ? books.get(command.token) : book(command.token);
+        if (target && applyCommand(target, command)) commands += 1;
+      },
+    });
+
   return {
-    book(token) {
-      let book = books.get(token);
-      if (!book) {
-        book = new OrderBook();
-        books.set(token, book);
-      }
-      return book;
-    },
+    book,
     books,
-    stats: () => ({ ticks, acted }),
-    ready: () => follower.ready(),
-    close: () => follower.close(),
+    stats: () => ({ ticks, acted, commands }),
+    ready: async () => {
+      await Promise.all([follower.ready(), reader?.ready()]);
+    },
+    close: async () => {
+      await Promise.all([follower.close(), reader?.close()]);
+    },
   };
 }

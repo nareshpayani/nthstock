@@ -43,7 +43,11 @@ export type OrderServiceDeps = {
   newId?: () => string;
 };
 
-export type OrderUpdateListener = (userId: string, order: Order) => void;
+/**
+ * A committed order change. `version` is the user's account version after the commit that made
+ * it: it only grows, so the matcher can drop a command older than the one it holds (NSTOCK-0365).
+ */
+export type OrderUpdateListener = (userId: string, order: Order, version: number) => void;
 
 export type OrderService = ReturnType<typeof createOrderService>;
 
@@ -231,7 +235,10 @@ export function createOrderService({
         if (reloaded) reloaded.conflicted = true;
         return;
       }
-      for (const order of updates) for (const listener of [...listeners]) listener(userId, order);
+      const { version } = account;
+      for (const order of updates) {
+        for (const listener of [...listeners]) listener(userId, order, version);
+      }
     }).catch(() => undefined);
   }
 

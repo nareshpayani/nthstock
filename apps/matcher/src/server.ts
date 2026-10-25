@@ -19,6 +19,11 @@ streams.on('error', (error: Error) => {
   jsonLogger.warn('tick stream redis error', { error: error.message });
 });
 
+const commands = new Redis(config.redisUrl, { maxRetriesPerRequest: null });
+commands.on('error', (error: Error) => {
+  jsonLogger.warn('matcher command redis error', { error: error.message });
+});
+
 const lease = startLease({
   redis,
   key: `lease:matcher:${String(config.shard)}`,
@@ -32,6 +37,7 @@ const matcher = startMatcher({
   shard: config.shard,
   holdsLease: lease.isHeld,
   alwaysOpen: config.alwaysOpen,
+  commands: { client: commands },
   log: jsonLogger,
   onTick: (tick) => {
     jsonLogger.info('tick acted', {

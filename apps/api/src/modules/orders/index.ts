@@ -10,4 +10,10 @@ export { createPgAccountStore } from './pgRepo.js';
 export { createMemoryAccountStore } from './repo.js';
 export { orderRoutes } from './routes.js';
 export { createOrderService, type OrderService } from './service.js';
+export {
+  commandFor,
+  startMatcherCommands,
+  type CommandStream,
+  type MatcherCommands,
+} from './matcherCommands.js';
 export { startOrderUpdatePublisher, type OrderUpdatePublisher } from './updatePublisher.js';
