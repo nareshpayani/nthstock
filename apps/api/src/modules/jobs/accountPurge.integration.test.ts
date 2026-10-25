@@ -1,4 +1,4 @@
-import { routes } from '@nthstock/contracts';
+import { OTP_RESEND_AFTER_SEC, routes } from '@nthstock/contracts';
 import { MockMarketDataAdapter, generateSymbolMaster } from '@nthstock/marketData';
 import { Client } from 'pg';
 import { afterAll, afterEach, beforeAll, beforeEach, expect, it } from 'vitest';
@@ -196,7 +196,8 @@ describeWithPostgres('account purge on Postgres (integration, T-230)', () => {
       expect(await rowsNaming(table, otherId), table).toBeGreaterThan(0);
     }
 
-    // The mobile now signs up as somebody new.
+    // The mobile now signs up as somebody new, once the first sign-up's OTP resend wait is over.
+    clock.advance(OTP_RESEND_AFTER_SEC * 1000);
     const again = await loginWithOtp(server, MOBILE);
     expect(again.session.user.id).not.toBe(userId);
   });
