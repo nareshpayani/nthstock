@@ -122,6 +122,7 @@ export const strings = {
           kind: 'steps',
           items: [
             'Open a stock you hold, for example RELIANCE from the demo holdings, and choose Sell. Or choose Exit on a row in Positions.',
+            'Choose Edit on a row in Positions to change an open position in one place: it shows the executed quantity, live P&L and any open orders in that stock with how much has filled, then lets you set, update, move or cancel the trailing stop with every term, exit all or part at market or a limit, or add more. Edit stop on an order with a trailing stop opens the same editor.',
             'On a phone, open a stock and tap the empty strip beside the price axis: a ghost line appears with Buy and Sell chips. Tap one to place an order at that price.',
             'Drag an order line’s handle to modify it. Tap your position chip to add a trailing stop.',
             'Switch on Scalp for the one-tap pad. Arm it first; it disarms itself after 2 minutes idle.',
@@ -194,6 +195,10 @@ export const strings = {
             {
               name: 'Trade from Charts',
               body: 'Place, drag and cancel orders on the chart; a position line with live P&L; a trailing stop from the position chip.',
+            },
+            {
+              name: 'Position editor',
+              body: 'Edit beside Exit on every open position: the executed quantity, average price, live P&L, open orders with their filled quantity, and the trailing stop. Change every stop term (trail, activation price, market or limit exit), move the stop to a price, exit all or part through the full order ticket (never more than you hold), or add to the position.',
             },
             {
               name: 'Price alerts and notifications',
@@ -456,6 +461,7 @@ export const strings = {
             ],
             ['Drag', 'A line’s 44 px handle', 'Moves that order or stop; the chart does not pan'],
             ['Tap', 'Position chip', 'Opens the trailing-stop sheet'],
+            ['Tap', 'Edit on a Positions row', 'Opens the position editor with every stop term'],
             ['Two taps within 3 s', '× on a handle', 'Cancels the order'],
           ],
         },

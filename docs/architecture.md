@@ -376,7 +376,7 @@ component and not-found component into one lazy chunk.
 | `stockDetail` | Instrument page: live price, stats, profile, depth, chart, actions | `StockDetailPage`, `MarketDepthCard` |
 | `charts` | Area and candle charts, ranges 1D to 5Y, bar sizes 1m to 1w, live last bar | `PriceChart`, `candlesQuery` |
 | `chartTrading` | Trade from Charts: order, position and stop lines; place from the price gutter; drag to modify; cancel | `ChartTrading`, `ChartOverlay` |
-| `orderTicket` | Buy/sell ticket with review, estimate, depth, attached trailing stop; trailing stop sheet | `OrderTicketHost`, `TrailingStopSheetHost` |
+| `orderTicket` | Buy/sell ticket with review, estimate, depth, attached trailing stop; trailing stop sheet; position editor (stop terms, exit, add, open orders, NSTOCK-0395) | `OrderTicketHost`, `TrailingStopSheetHost`, `PositionEditorHost` |
 | `scalper` | One-tap pad, armed by a switch, hold-to-confirm buttons | `ScalperPad`, `HoldButton` |
 | `orders`, `positions`, `holdings`, `funds` | Order book and history, live P&L positions, holdings, funds and ledger, reset | pages plus `OrderUpdatesBridge`, `useLivePositions`, `useLiveHoldings` |
 | `notifications` | Bell, toasts, price alerts with lines on the chart | `NotificationBell`, `NotificationsBridge`, `PriceAlertButton`, `AlertLines` |

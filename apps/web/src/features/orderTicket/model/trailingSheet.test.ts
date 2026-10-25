@@ -5,7 +5,9 @@ import {
   defaultTrailValue,
   isActiveStop,
   isChangeableStop,
+  canMoveStop,
   sheetValues,
+  toTermsModify,
   toTrailModify,
 } from './trailingSheet';
 
@@ -80,5 +82,33 @@ describe('trailing-stop sheet values (T18, SPEC-TFC-1 §8.4)', () => {
     expect(toTrailModify({ unit: 'PERCENT', value: 125 }, stop())).toEqual({
       trail: { unit: 'PERCENT', basisPoints: 125 },
     });
+  });
+});
+
+describe('position editor terms (NSTOCK-0395)', () => {
+  const values = sheetValues(stop(), 'DELIVERY');
+
+  it('sends only the terms that changed, and nothing when none did', () => {
+    expect(toTermsModify(values, stop())).toBeNull();
+    expect(toTermsModify({ ...values, value: 1_500 }, stop())).toEqual({
+      trail: { unit: 'AMOUNT', amount: 1_500 },
+    });
+    expect(
+      toTermsModify({ ...values, exitOrderType: 'LIMIT', exitLimitOffset: 50 }, stop()),
+    ).toEqual({ exitOrderType: 'LIMIT', exitLimitOffset: 50 });
+    expect(toTermsModify({ ...values, activationPrice: 155_000 }, stop())).toEqual({
+      activationPrice: 155_000,
+    });
+    expect(toTermsModify({ ...values, value: null }, stop())).toBeNull();
+  });
+
+  it('moves a stop by price only once it has a price to measure from', () => {
+    expect(canMoveStop(stop())).toBe(true);
+    expect(canMoveStop(stop({ status: 'ARMED', watermarkPrice: null }))).toBe(false);
+    expect(
+      canMoveStop(stop({ status: 'ARMED', watermarkPrice: null, activationPrice: 155_000 })),
+    ).toBe(true);
+    expect(canMoveStop(stop({ status: 'TRIGGERED' }))).toBe(false);
+    expect(canMoveStop(null)).toBe(false);
   });
 });

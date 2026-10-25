@@ -171,6 +171,21 @@ function TicketFlow({
     quoteStore.get(intent.symbol, intent.exchange)?.quote.ltp ?? snapshot.data?.ltp ?? null;
 
   const onSubmit = form.handleSubmit((values) => {
+    // An exit from the position editor closes at most what is held (NSTOCK-0395), whatever the
+    // product shows: a product switch, or the closed market's switch to delivery, never lifts it.
+    if (
+      intent.maxQty !== undefined &&
+      values.side === intent.side &&
+      values.qty !== null &&
+      values.qty > intent.maxQty
+    ) {
+      form.setError(
+        'qty',
+        { type: 'server', message: strings.editor.exitCap(intent.maxQty) },
+        { shouldFocus: false },
+      );
+      return;
+    }
     const ltp = latestLtp();
     const check = preCheckOrder(values, {
       now: clock.now(),

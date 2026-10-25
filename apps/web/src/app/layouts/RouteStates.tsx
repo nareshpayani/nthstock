@@ -1,13 +1,23 @@
 import { ErrorState, Skeleton, buttonVariants } from '@nthstock/ui';
 import { Link, useRouter, type ErrorComponentProps } from '@tanstack/react-router';
+import { useEffect } from 'react';
+import { isChunkLoadError, reloadForNewBuild, reloadWhenOnline } from '../staleBuild';
 import { strings } from '../strings';
 
 /** Centres a route-level state card in the content area, both ways, on every screen size. */
 const CENTERED = 'grid min-h-[calc(100dvh-10rem)] w-full place-items-center';
 
-/** Error boundary UI for every route (router defaultErrorComponent): never a blank page. */
-export function RouteError({ reset }: ErrorComponentProps) {
+/**
+ * Error boundary UI for every route (router defaultErrorComponent): never a blank page. A route
+ * whose code chunk could not load (a deploy replaced it, or the network dropped) reloads to the
+ * current build at once, and its Try again reloads too, because a failed import never retries.
+ */
+export function RouteError({ error, reset }: ErrorComponentProps) {
   const router = useRouter();
+  const staleBuild = isChunkLoadError(error);
+  useEffect(() => {
+    if (staleBuild) reloadForNewBuild();
+  }, [staleBuild]);
   return (
     <div className={CENTERED}>
       <div className="w-full max-w-lg rounded-lg border border-line bg-surface">
@@ -16,6 +26,10 @@ export function RouteError({ reset }: ErrorComponentProps) {
           description={strings.errors.routeBody}
           retryLabel={strings.errors.retry}
           onRetry={() => {
+            if (staleBuild) {
+              reloadWhenOnline();
+              return;
+            }
             reset();
             void router.invalidate();
           }}
