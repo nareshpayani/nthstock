@@ -79,6 +79,9 @@ describe('login code step (NSTOCK-0220)', () => {
 
     typeCode('Authentication code', await totpCode(secret, now));
     await waitFor(() => expect(router.state.location.pathname).toBe('/orders'));
+    // End on the page itself: a request still in flight would 401 after afterEach resets the
+    // session, refresh, and leave its session (and CSRF token) for the next test.
+    await screen.findByRole('heading', { level: 1, name: 'Orders' });
   });
 
   it('takes a recovery code instead, typed with spaces and in lower case', async () => {
@@ -93,6 +96,7 @@ describe('login code step (NSTOCK-0220)', () => {
     });
     fireEvent.click(screen.getByRole('button', { name: 'Verify' }));
     await waitFor(() => expect(router.state.location.pathname).toBe('/dashboard'));
+    await screen.findByRole('heading', { level: 1, name: /^Good/ });
   });
 
   it('after five wrong codes the sign-in ends and offers to start again', async () => {
