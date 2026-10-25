@@ -18,6 +18,7 @@ import {
 import { base32Encode, newTotpSecret, otpauthUri, verifyTotp, type Clock } from '@nthstock/utils';
 import { ApiHttpError } from '../../http/apiError.js';
 import type { AuditRepo } from '../audit/index.js';
+import { raiseSecurityNotice, type SecurityNotices } from '../notifications/index.js';
 import { maskMobile, type UserRecord, type UsersRepo } from '../users/index.js';
 import type { OtpService } from './otpService.js';
 import type { PinHasher } from './pinHasher.js';
@@ -37,6 +38,8 @@ export type TwoFactorServiceDeps = {
   hasher: PinHasher;
   /** Challenge id generator; default `tc_<uuid>`. */
   newChallengeId?: () => string;
+  /** Turning two-factor on or off raises a security notification (NSTOCK-0382). */
+  notices?: SecurityNotices;
 };
 
 export type TwoFactorService = {
@@ -105,6 +108,7 @@ export function createTwoFactorService({
   sessions,
   hasher,
   newChallengeId = () => `tc_${randomUUID().replaceAll('-', '')}`,
+  notices,
 }: TwoFactorServiceDeps): TwoFactorService {
   const record = (
     user: UserRecord,
@@ -314,6 +318,7 @@ export function createTwoFactorService({
       }
       await users.update(context.user.id, { totpEnabled: true });
       await record(context.user, 'TOTP_ENABLED', 'OK', { sessionId: context.session.id });
+      raiseSecurityNotice(notices, context.user.id, { type: 'TOTP_ENABLED' }, now);
       return display;
     },
 
@@ -329,6 +334,7 @@ export function createTwoFactorService({
       await record(context.user, 'TOTP_DISABLED', 'OK', {
         with: proof.code === undefined ? 'RECOVERY_CODE' : 'CODE',
       });
+      raiseSecurityNotice(notices, context.user.id, { type: 'TOTP_DISABLED' }, clock.now());
     },
 
     async regenerateRecoveryCodes(context, code) {
