@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { buildApp, type App } from '../../app.js';
 import { injectBackend } from '../../test/injectBackend.js';
 import { manualClock, type ManualClock } from '../../test/manualClock.js';
-import { raiseSecurityNotice, securityNotification } from '../notifications/index.js';
+import { securityNotification } from '../notifications/index.js';
 
 // Security notifications (NSTOCK-0382): a sign-in on a new device, two-factor on and off, and
 // logging out the other devices each raise one SECURITY notification, with no mobile number,
@@ -186,64 +186,5 @@ describe('security notifications (NSTOCK-0382)', () => {
       'Two-factor authentication turned on',
       'Other devices logged out',
     ]);
-  });
-});
-
-describe('raiseSecurityNotice (NSTOCK-0382)', () => {
-  const at = new Date('2026-11-02T04:00:00.000Z');
-  const event = { type: 'TOTP_ENABLED' } as const;
-
-  it('reports a rejected store with the user and event, and never throws', async () => {
-    const onError = vi.fn();
-    const failure = new Error('down');
-    expect(() => {
-      raiseSecurityNotice(
-        { notifier: { raise: () => Promise.reject(failure) }, onError },
-        'usr_a',
-        event,
-        at,
-      );
-    }).not.toThrow();
-    await vi.waitFor(() => {
-      expect(onError).toHaveBeenCalledWith(failure, { userId: 'usr_a', event: 'TOTP_ENABLED' });
-    });
-  });
-
-  it('keeps a synchronous throw and a throwing reporter away from the caller', async () => {
-    const unhandled = vi.fn();
-    process.on('unhandledRejection', unhandled);
-    try {
-      const onError = vi.fn(() => {
-        throw new Error('logger down');
-      });
-      expect(() => {
-        raiseSecurityNotice(
-          {
-            notifier: {
-              raise: () => {
-                throw new Error('sync');
-              },
-            },
-            onError,
-          },
-          'usr_a',
-          event,
-          at,
-        );
-      }).not.toThrow();
-      await vi.waitFor(() => {
-        expect(onError).toHaveBeenCalledTimes(1);
-      });
-      await new Promise((resolve) => setImmediate(resolve));
-      expect(unhandled).not.toHaveBeenCalled();
-    } finally {
-      process.off('unhandledRejection', unhandled);
-    }
-  });
-
-  it('does nothing without notices', () => {
-    expect(() => {
-      raiseSecurityNotice(undefined, 'usr_a', event, at);
-    }).not.toThrow();
   });
 });

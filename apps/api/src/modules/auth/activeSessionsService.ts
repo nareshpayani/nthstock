@@ -75,16 +75,22 @@ export function createActiveSessionsService({
     async revokeOthers(context) {
       twoFactor.requireStepUp(context);
       const targets = await others(context);
-      for (const target of targets) {
-        await sessions.revoke(target.id, { type: 'user', userId: context.user.id });
-      }
-      if (targets.length > 0) {
-        raiseSecurityNotice(
-          notices,
-          context.user.id,
-          { type: 'SESSIONS_ENDED', count: targets.length },
-          clock.now(),
-        );
+      let revoked = 0;
+      try {
+        for (const target of targets) {
+          await sessions.revoke(target.id, { type: 'user', userId: context.user.id });
+          revoked += 1;
+        }
+      } finally {
+        // Also when a revoke throws partway: tell the user about the sessions already ended.
+        if (revoked > 0) {
+          raiseSecurityNotice(
+            notices,
+            context.user.id,
+            { type: 'SESSIONS_ENDED', count: revoked },
+            clock.now(),
+          );
+        }
       }
       return targets.length;
     },

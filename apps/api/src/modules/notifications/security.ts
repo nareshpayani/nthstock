@@ -47,14 +47,11 @@ export function securityNotification(
 /** What an auth service needs to raise one: the notifier and where a failure is reported. */
 export type SecurityNotices = {
   notifier: Pick<Notifier, 'raise'>;
-  /** A failed notification never fails the action that raised it; it is reported here. */
-  onError: (error: unknown, context: { userId: string; event: SecurityEvent['type'] }) => void;
+  /** A failed notification never fails the action that raised it; it is logged here. */
+  onError: (error: unknown, context: { event: SecurityEvent['type']; userId: string }) => void;
 };
 
-/**
- * Raises the event's notification without waiting for it or letting it fail the caller: a
- * synchronous throw, a rejected store and a throwing reporter all stay inside.
- */
+/** Raises the event's notification without waiting for it or letting it fail the caller. */
 export function raiseSecurityNotice(
   notices: SecurityNotices | undefined,
   userId: string,
@@ -62,13 +59,15 @@ export function raiseSecurityNotice(
   at: Date,
 ): void {
   if (!notices) return;
-  void Promise.resolve()
-    .then(() => notices.notifier.raise([securityNotification(userId, event, at)]))
-    .catch((error: unknown) => {
-      try {
-        notices.onError(error, { userId, event: event.type });
-      } catch {
-        // Reporting is best effort too: nothing may reach the action that raised the notice.
-      }
-    });
+  const report = (error: unknown) => {
+    try {
+      notices.onError(error, { event: event.type, userId });
+    } catch {
+      // Reporting a lost notice must not itself surface as an unhandled rejection.
+    }
+  };
+  // Built inside an async function so a synchronous throw becomes a rejection, not a caller error.
+  void (async () => notices.notifier.raise([securityNotification(userId, event, at)]))().catch(
+    report,
+  );
 }
