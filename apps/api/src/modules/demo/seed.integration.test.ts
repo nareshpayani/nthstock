@@ -46,8 +46,8 @@ describeWithPostgres('the demo seed on Postgres (integration, NSTOCK-0239)', () 
     pg = await useTestPostgres();
   }, 180_000);
 
-  const boot = () => {
-    const clock = manualClock(MONDAY_10_00_IST);
+  const boot = (at = MONDAY_10_00_IST) => {
+    const clock = manualClock(at);
     const market = new MockMarketDataAdapter({ clock, scheduler: noTimers });
     const app = buildApp({
       deps: { clock, market, dbDriver: 'postgres', databaseUrl: pg.appUrl },
@@ -57,9 +57,8 @@ describeWithPostgres('the demo seed on Postgres (integration, NSTOCK-0239)', () 
     return { app, market };
   };
 
-  /** Everything the demo user sees, read over REST from a fresh login. */
-  async function demoState(app: App) {
-    const { access } = await loginWithOtp(app, DEMO_SEED_USER.mobile);
+  /** Everything the demo user sees, read over REST with `access`. */
+  async function demoState(app: App, access: string) {
     const get = async (url: string) => {
       const response = await app.inject({
         method: 'GET',
@@ -87,7 +86,8 @@ describeWithPostgres('the demo seed on Postgres (integration, NSTOCK-0239)', () 
     await pg.truncate();
     const first = boot();
     await seedDemo(first.app.deps);
-    const seeded = await demoState(first.app);
+    const { access } = await loginWithOtp(first.app, DEMO_SEED_USER.mobile);
+    const seeded = await demoState(first.app, access);
 
     const instruments = demoInstrumentsOf(first.market);
     const account = buildDemoAccount(instruments);
@@ -97,13 +97,15 @@ describeWithPostgres('the demo seed on Postgres (integration, NSTOCK-0239)', () 
     expect(seeded.holdings).toHaveLength(account.holdings.length);
 
     await seedDemo(first.app.deps);
-    expect(await demoState(first.app)).toEqual(seeded);
+    expect(await demoState(first.app, access)).toEqual(seeded);
 
-    // A fresh process seeds again over the stored state, and still answers the same.
-    const second = boot();
+    // A fresh process (a minute later, past the OTP resend throttle) seeds again over the stored
+    // state, and still answers the same.
+    const second = boot('2026-09-28T04:31:00.000Z');
     await second.app.ready();
     await seedDemo(second.app.deps);
-    expect(await demoState(second.app)).toEqual(seeded);
+    const again = await loginWithOtp(second.app, DEMO_SEED_USER.mobile);
+    expect(await demoState(second.app, again.access)).toEqual(seeded);
 
     const owner = new Client({ connectionString: pg.ownerUrl });
     await owner.connect();
