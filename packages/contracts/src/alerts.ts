@@ -61,8 +61,20 @@ export type PriceAlertIdParams = z.infer<typeof PriceAlertIdParams>;
 export const PriceAlertsResponse = z.object({ items: z.array(PriceAlert) });
 export type PriceAlertsResponse = z.infer<typeof PriceAlertsResponse>;
 
-/** What raised a notification. */
-export const NotificationKind = z.enum(['PRICE_ALERT', 'ORDER_FILLED', 'TRAILING_STOP']);
+/**
+ * What raised a notification. `ORDER_FILLED` and `TRAILING_STOP` are the spec's `ORDER_EXECUTED`
+ * and `TRAILING_STOP_TRIGGERED` (market-data-and-matching §6.1), kept under their NSTOCK-0344
+ * names; the rest arrived with the notifications service (NSTOCK-0379, NSTOCK-0382).
+ */
+export const NotificationKind = z.enum([
+  'PRICE_ALERT',
+  'ORDER_FILLED',
+  'TRAILING_STOP',
+  'ORDER_REJECTED',
+  'AMO_RELEASED',
+  'SQUARED_OFF',
+  'SECURITY',
+]);
 export type NotificationKind = z.infer<typeof NotificationKind>;
 
 /** The centre keeps the newest this many per user. */

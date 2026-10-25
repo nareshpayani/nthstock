@@ -1,10 +1,29 @@
-import type { Notification } from '@nthstock/contracts';
-import { EmptyState, IconBell, IconChart, IconCheck, cn } from '@nthstock/ui';
+import type { Notification, NotificationKind } from '@nthstock/contracts';
+import {
+  EmptyState,
+  IconAlert,
+  IconBell,
+  IconChart,
+  IconCheck,
+  IconClock,
+  IconClose,
+  IconUser,
+  cn,
+  type IconComponent,
+} from '@nthstock/ui';
 import { formatIstTime } from '@nthstock/utils';
 import { Link } from '@tanstack/react-router';
 import { strings } from '../strings';
 
-const ICONS = { PRICE_ALERT: IconBell, ORDER_FILLED: IconCheck, TRAILING_STOP: IconChart };
+const ICONS: Record<NotificationKind, IconComponent> = {
+  PRICE_ALERT: IconBell,
+  ORDER_FILLED: IconCheck,
+  TRAILING_STOP: IconChart,
+  ORDER_REJECTED: IconClose,
+  AMO_RELEASED: IconClock,
+  SQUARED_OFF: IconAlert,
+  SECURITY: IconUser,
+};
 
 export type NotificationListProps = {
   items: readonly Notification[];

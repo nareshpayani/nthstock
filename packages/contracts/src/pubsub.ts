@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { Quote } from './market.js';
+import { Notification, PriceAlert } from './alerts.js';
 import { Order } from './orders.js';
 import { Id } from './primitives.js';
 import { WsAccountDelta } from './ws.js';
@@ -108,6 +109,30 @@ export const AccountDeltaEvent = z.object({
   }),
 });
 export type AccountDeltaEvent = z.infer<typeof AccountDeltaEvent>;
+
+/**
+ * Per-user notifications (spec market-data-and-matching §6.2, NSTOCK-0380): after the commit that
+ * stored a notification, apps/api publishes it on its user's own channel, and the outbox relay
+ * publishes any it missed. Delivery is at least once, so a subscriber may see an id twice; the web
+ * app drops an id it already holds. Like the order channel it carries ids, never a mobile number
+ * or a name.
+ */
+export const NOTIFY_CHANNEL_PREFIX = 'nthstock:notify:v1:';
+
+/** The Redis channel carrying one user's notifications. */
+export const notifyChannel = (userId: string): string =>
+  `${NOTIFY_CHANNEL_PREFIX}${Id.parse(userId)}`;
+
+export const NOTIFICATION_EVENT_VERSION = 1;
+
+/** One stored notification, published as JSON on `notifyChannel(userId)`, with its alert if any. */
+export const NotificationEvent = z.object({
+  v: z.literal(NOTIFICATION_EVENT_VERSION),
+  userId: Id,
+  notification: Notification,
+  alert: PriceAlert.optional(),
+});
+export type NotificationEvent = z.infer<typeof NotificationEvent>;
 
 /** Anything on `orderUpdatesChannel(userId)`: an order update or an account delta. */
 export const UserChannelEvent = z.union([AccountDeltaEvent, OrderUpdateEvent]);

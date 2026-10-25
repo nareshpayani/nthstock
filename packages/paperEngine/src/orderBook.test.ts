@@ -85,6 +85,22 @@ describe('OrderBook (NSTOCK-0363)', () => {
     expect(book.restoreOrder(o1)).toBe(false);
   });
 
+  it('keeps the heap entry of an order upserted at the same price, and lists the orders', () => {
+    const book = new OrderBook();
+    book.upsertOrder(order('o1', 'SELL', 100_00, 1));
+    book.upsertOrder(order('o2', 'BUY', 90_00, 1));
+    for (let version = 2; version <= 50; version += 1)
+      book.upsertOrder(order('o1', 'SELL', 100_00, version));
+    expect([...book.orders()].map((o) => [o.orderId, o.version]).sort()).toEqual([
+      ['o1', 50],
+      ['o2', 1],
+    ]);
+    // One entry read for the one order crossed: the 49 upserts left nothing stale behind it.
+    const tick = book.tick(100_00);
+    expect(tick.crossed).toEqual([order('o1', 'SELL', 100_00, 50)]);
+    expect(tick.read).toBe(1);
+  });
+
   it('ratchets a trailing stop and re-keys it, so it triggers at the new stop', () => {
     const book = new OrderBook();
     book.upsertStop(trailing('t1', 'LONG', 100_00, 90_00));

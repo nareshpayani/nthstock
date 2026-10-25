@@ -8,6 +8,7 @@ import {
 import { OrderBook, type BookTick } from '@nthstock/paperEngine';
 import { getMarketStatus } from '@nthstock/utils';
 import { applyCommand, readMatcherCommands, type CommandStreamClient } from './commands.js';
+import { startReconcileLoop, type LiveOrderSource, type ReconcileLoop } from './reconcile.js';
 
 export type MatcherLog = {
   info(message: string, fields?: Record<string, unknown>): void;
@@ -40,6 +41,16 @@ export type MatcherOptions = {
    * Every process for the shard applies them, so a standby's books are current too.
    */
   commands?: { client: CommandStreamClient; commandsKey?: (shard: number) => string };
+  /**
+   * Reconciles the books with Postgres on start and every 60 s (NSTOCK-0366), which repairs a
+   * lost command. `shards` is the shard count, for rows recorded before the shard column.
+   */
+  reconcile?: {
+    source: LiveOrderSource;
+    shards: number;
+    everyMs?: number;
+    timer?: Parameters<typeof startReconcileLoop>[0]['timer'];
+  };
 };
 
 export type Matcher = {
@@ -47,6 +58,8 @@ export type Matcher = {
   book(token: number): OrderBook;
   /** The books created so far, by token. */
   readonly books: ReadonlyMap<number, OrderBook>;
+  /** The reconcile loop, when Postgres is configured. */
+  readonly reconcile: ReconcileLoop | null;
   /**
    * Ticks seen, ticks acted on (lease held, market open, a book for the instrument), and order
    * commands that changed a book.
@@ -127,14 +140,33 @@ export function startMatcher(options: MatcherOptions): Matcher {
       },
     });
 
+  // The first round waits for the command reader's first read, so a command written during it is
+  // not missed: it lands either in that round or on the stream the reader already waits on.
+  const reconcile = options.reconcile
+    ? startReconcileLoop({
+        source: options.reconcile.source,
+        shard,
+        shards: options.reconcile.shards,
+        books,
+        book,
+        log,
+        ...(reader ? { after: reader.ready() } : {}),
+        ...(options.reconcile.everyMs === undefined ? {} : { everyMs: options.reconcile.everyMs }),
+        ...(options.reconcile.timer === undefined ? {} : { timer: options.reconcile.timer }),
+      })
+    : null;
+
   return {
     book,
     books,
+    reconcile,
     stats: () => ({ ticks, acted, commands }),
     ready: async () => {
       await Promise.all([follower.ready(), reader?.ready()]);
+      await reconcile?.ready();
     },
     close: async () => {
+      await reconcile?.stop();
       await Promise.all([follower.close(), reader?.close()]);
     },
   };

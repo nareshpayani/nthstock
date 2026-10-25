@@ -1,6 +1,9 @@
 import {
+  NOTIFY_CHANNEL_PREFIX,
+  NotificationEvent,
   ORDER_UPDATES_CHANNEL_PREFIX,
   UserChannelEvent,
+  notifyChannel,
   orderUpdatesChannel,
   type AccountDeltaEvent,
   type Order,
@@ -14,8 +17,13 @@ export type OrderUpdateListener = (userId: string, order: Order) => void;
 export type AccountDelta = AccountDeltaEvent['delta'];
 export type AccountDeltaListener = (userId: string, delta: AccountDelta) => void;
 
+/** A stored notification (NSTOCK-0381), without its envelope's version and user. */
+export type PushedNotification = Omit<NotificationEvent, 'v' | 'userId'>;
+export type NotificationListener = (userId: string, pushed: PushedNotification) => void;
+
 /**
- * Where per-user order updates and account deltas come from (T-133, NSTOCK-0368): Redis in a
+ * Where per-user order updates, account deltas and notifications come from (T-133, NSTOCK-0368,
+ * NSTOCK-0381): Redis in a
  * running server, in memory in tests. A feed only delivers events for users being watched, that
  * is, users with a connection on this node, so a node never even receives another node's users'
  * orders.
@@ -25,6 +33,7 @@ export type OrderFeed = {
   watch(userId: string): () => void;
   onOrderUpdate(listener: OrderUpdateListener): () => void;
   onAccountDelta(listener: AccountDeltaListener): () => void;
+  onNotification(listener: NotificationListener): () => void;
   close(): Promise<void>;
 };
 
@@ -93,7 +102,24 @@ export function parseUserChannelMessage(channel: string, message: string): UserC
 }
 
 /**
- * Subscribes to the order channel of each user with a connection here (`orderUpdatesChannel`),
+ * Reads one message from a user's notify channel (NSTOCK-0381): the event when it parses as a
+ * `NotificationEvent` whose `userId` matches the channel's, otherwise null.
+ */
+export function parseNotifyMessage(channel: string, message: string): NotificationEvent | null {
+  if (!channel.startsWith(NOTIFY_CHANNEL_PREFIX)) return null;
+  const userId = channel.slice(NOTIFY_CHANNEL_PREFIX.length);
+  let json: unknown;
+  try {
+    json = JSON.parse(message);
+  } catch {
+    return null;
+  }
+  const parsed = NotificationEvent.safeParse(json);
+  return parsed.success && parsed.data.userId === userId ? parsed.data : null;
+}
+
+/**
+ * Subscribes to the order and notify channels of each user with a connection here (`orderUpdatesChannel`),
  * and unsubscribes when their last connection closes. A message is delivered only when it parses
  * as a `UserChannelEvent` whose `userId` matches its channel; anything else is dropped and logged.
  */
@@ -101,6 +127,7 @@ export function createRedisOrderFeed(options: { url: string; logger?: Logger }):
   const logger = options.logger ?? silentLogger;
   const listeners = listenerSet<Order>();
   const deltaListeners = listenerSet<AccountDelta>();
+  const notificationListeners = listenerSet<PushedNotification>();
   const client = new Redis(options.url);
   let pending: Promise<unknown> = Promise.resolve();
   const queue = (command: () => Promise<unknown>) => {
@@ -110,8 +137,8 @@ export function createRedisOrderFeed(options: { url: string; logger?: Logger }):
     });
   };
   const watchers = watchCounter(
-    (userId) => queue(() => client.subscribe(orderUpdatesChannel(userId))),
-    (userId) => queue(() => client.unsubscribe(orderUpdatesChannel(userId))),
+    (userId) => queue(() => client.subscribe(orderUpdatesChannel(userId), notifyChannel(userId))),
+    (userId) => queue(() => client.unsubscribe(orderUpdatesChannel(userId), notifyChannel(userId))),
   );
   let down = false;
   client.on('error', (error: Error) => {
@@ -124,6 +151,17 @@ export function createRedisOrderFeed(options: { url: string; logger?: Logger }):
     down = false;
   });
   client.on('message', (channel: string, message: string) => {
+    if (channel.startsWith(NOTIFY_CHANNEL_PREFIX)) {
+      const event = parseNotifyMessage(channel, message);
+      if (!event) {
+        logger.warn('Dropped a malformed notify channel event', { channel });
+        return;
+      }
+      if (!watchers.has(event.userId)) return;
+      const { notification, alert } = event;
+      notificationListeners.emit(event.userId, { notification, ...(alert ? { alert } : {}) });
+      return;
+    }
     if (!channel.startsWith(ORDER_UPDATES_CHANNEL_PREFIX)) return;
     const event = parseUserChannelMessage(channel, message);
     if (!event) {
@@ -138,10 +176,12 @@ export function createRedisOrderFeed(options: { url: string; logger?: Logger }):
     watch: watchers.watch,
     onOrderUpdate: listeners.add,
     onAccountDelta: deltaListeners.add,
+    onNotification: notificationListeners.add,
     settled: () => pending.then(() => undefined),
     async close() {
       listeners.clear();
       deltaListeners.clear();
+      notificationListeners.clear();
       watchers.clear();
       try {
         await client.quit();
@@ -157,12 +197,15 @@ export type MemoryOrderFeed = OrderFeed & {
   emit(userId: string, order: Order): void;
   /** Publishes an account delta (NSTOCK-0368); delivered only while `userId` is watched. */
   emitDelta(userId: string, delta: AccountDelta): void;
+  /** Publishes a notification (NSTOCK-0381); delivered only while `userId` is watched. */
+  emitNotification(userId: string, pushed: PushedNotification): void;
   watching(userId: string): boolean;
 };
 
 export function createMemoryOrderFeed(): MemoryOrderFeed {
   const listeners = listenerSet<Order>();
   const deltaListeners = listenerSet<AccountDelta>();
+  const notificationListeners = listenerSet<PushedNotification>();
   const watchers = watchCounter(
     () => undefined,
     () => undefined,
@@ -177,10 +220,15 @@ export function createMemoryOrderFeed(): MemoryOrderFeed {
     emitDelta(userId, delta) {
       if (watchers.has(userId)) deltaListeners.emit(userId, delta);
     },
+    onNotification: notificationListeners.add,
+    emitNotification(userId, pushed) {
+      if (watchers.has(userId)) notificationListeners.emit(userId, pushed);
+    },
     watching: watchers.has,
     close() {
       listeners.clear();
       deltaListeners.clear();
+      notificationListeners.clear();
       watchers.clear();
       return Promise.resolve();
     },
