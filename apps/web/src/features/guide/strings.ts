@@ -427,7 +427,7 @@ export const strings = {
             'Every minute, and on start, the matcher reads its shard’s live orders and active trailing stops from Postgres, the record, and repairs its books, so a lost command is fixed within a minute.',
             'When a tick crosses an order, the matcher sends a fill request per user to a Redis stream. Every API process reads it in one consumer group, runs the user’s paper engine at that price, commits with the account version and only then acknowledges it. A request sent twice fills nothing twice, and one a crashed process held is picked up by another (ADR 0013).',
             'MATCHER_MODE=worker moves all matching to the worker: the API process then follows no ticks at all and reads the live quote only when an order action needs a price. The default, inline, keeps matching in the API process for tests and scripted demos.',
-            'Still to come: a benchmark.',
+            'All of it is built and measured: the matcher’s benchmark is in the Performance tab.',
           ],
         },
         {
@@ -863,6 +863,36 @@ export const strings = {
             ],
           ],
         },
+        { kind: 'heading', text: 'The matcher, measured' },
+        {
+          kind: 'table',
+          caption:
+            'tools/loadTest/matcher.mjs: 1,00,000 resting orders and 10,000 trailing stops over 500 instruments, every instrument ticking every 250 ms, one process on 4 vCPU',
+          head: ['Measure', 'Target', 'Result'],
+          rows: [
+            [
+              'Book time per tick',
+              'well under the 250 ms tick',
+              'p95 0.06 ms, p99 0.1 ms at 2,000 ticks a second',
+            ],
+            [
+              'Orders read per tick',
+              'only what the tick acts on',
+              '6.8 on average, against 220 for a walk of every order; each one a fill, trigger or ratchet',
+            ],
+            [
+              'Tick to fill commit, steady',
+              'p95 under 100 ms',
+              'about 10 ms (Redis 3.1 ms, Postgres commit 6.5 ms)',
+            ],
+            ['Tick to screen for a fill', 'p95 under 500 ms', 'about 110 ms'],
+            [
+              'One tick that fills 200 users',
+              'reported',
+              'last commit at about 0.3 s: one API process commits 550 to 650 fills a second, so more API processes add capacity',
+            ],
+          ],
+        },
         { kind: 'heading', text: 'What keeps it fast' },
         {
           kind: 'list',
@@ -884,6 +914,8 @@ export const strings = {
               href: repoLink('apps/web/e2e/chartTradingPerf.spec.ts'),
             },
             { label: 'Render performance E2E', href: repoLink('apps/web/e2e/renderPerf.spec.ts') },
+            { label: 'Matcher benchmark', href: repoLink('tools/loadTest/matcher.mjs') },
+            { label: 'Load test runbook', href: repoLink('docs/runbooks/load-test.md') },
           ],
         },
       ],
