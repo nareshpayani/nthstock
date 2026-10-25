@@ -284,6 +284,37 @@ describeRepoConformance<Fixture>(
       expect(await store.liveAccountIds()).toEqual(['usr_a']);
     });
 
+    it('lists an account whose only live thing is an active trailing stop (NSTOCK-0368)', async () => {
+      const { store } = repo();
+      const { engine } = newEngine();
+      engine.place({
+        token: INFY.token,
+        side: 'BUY',
+        type: 'MARKET',
+        product: 'DELIVERY',
+        qty: 10,
+      });
+      const placed = engine.placeTrailingStop({
+        token: INFY.token,
+        product: 'DELIVERY',
+        trail: { unit: 'PERCENT', basisPoints: 100 },
+        activationPrice: null,
+        exitOrderType: 'LIMIT',
+        exitLimitOffset: 0,
+        clientRequestId: 'ts_live_1',
+      });
+      if (!placed.ok) throw new Error(placed.reason);
+      const armed = engine.workingSet();
+      expect(armed.orders.some((o) => o.status === 'AMO' || o.status === 'OPEN')).toBe(false);
+      await store.commit('usr_a', { before: null, after: armed }, 0, []);
+      expect(await store.liveAccountIds()).toEqual(['usr_a']);
+
+      const cancelled = engine.cancelTrailingStop(placed.trailingStop.id);
+      if (!cancelled.ok) throw new Error(cancelled.reason);
+      await store.commit('usr_a', { before: armed, after: engine.workingSet() }, 1, []);
+      expect(await store.liveAccountIds()).toEqual([]);
+    });
+
     it('lists the accounts touched on an IST trade date', async () => {
       const { store } = repo();
       await commitOrders('usr_a', 1);

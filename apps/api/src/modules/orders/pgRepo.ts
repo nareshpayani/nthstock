@@ -746,11 +746,18 @@ export function createPgAccountStore({ database, audit }: PgAccountStoreOptions)
     },
 
     async liveAccountIds() {
-      const rows = await database.db
-        .selectDistinct({ userId: orders.userId })
-        .from(orders)
-        .where(inArray(orders.status, LIVE_STATUSES));
-      return rows.map((row) => row.userId).sort();
+      const [withOrders, withStops] = await Promise.all([
+        database.db
+          .selectDistinct({ userId: orders.userId })
+          .from(orders)
+          .where(inArray(orders.status, LIVE_STATUSES)),
+        database.db
+          .selectDistinct({ userId: trailingStops.userId })
+          .from(trailingStops)
+          .where(inArray(trailingStops.status, ACTIVE_STOP_STATUSES)),
+      ]);
+      const ids = new Set([...withOrders, ...withStops].map((row) => row.userId));
+      return [...ids].sort();
     },
 
     async accountsTouchedOn(tradeDate) {

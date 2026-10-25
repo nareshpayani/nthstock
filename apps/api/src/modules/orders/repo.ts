@@ -1,4 +1,10 @@
-import type { LedgerEntry, Order, OrderHistoryEntry, OrderStatus } from '@nthstock/contracts';
+import type {
+  LedgerEntry,
+  Order,
+  OrderHistoryEntry,
+  OrderStatus,
+  TrailingStopStatus,
+} from '@nthstock/contracts';
 import { PAGE_LIMIT_DEFAULT } from '@nthstock/contracts';
 import type { PaperEngineWorkingSet } from '@nthstock/paperEngine';
 import { istDateKey } from '@nthstock/utils';
@@ -21,6 +27,13 @@ type StoredAccount = {
 };
 
 const LIVE: ReadonlySet<OrderStatus> = new Set(['AMO', 'OPEN']);
+/** Stops that still act on ticks, so their account must be on the desk after a restart. */
+const ACTIVE_STOP: ReadonlySet<TrailingStopStatus> = new Set([
+  'PENDING_ENTRY',
+  'ARMED',
+  'TRAILING',
+  'TRIGGERED',
+]);
 
 /**
  * The in-memory account store. Like the Postgres one it keeps more than the working set it hands
@@ -105,7 +118,11 @@ export function createMemoryAccountStore({ audit }: { audit: AuditRepo }): Accou
     liveAccountIds: () =>
       Promise.resolve(
         [...accounts]
-          .filter(([, account]) => [...account.orders.values()].some((o) => LIVE.has(o.status)))
+          .filter(
+            ([, account]) =>
+              [...account.orders.values()].some((o) => LIVE.has(o.status)) ||
+              account.workingSet.trailingStops.some((s) => ACTIVE_STOP.has(s.status)),
+          )
           .map(([userId]) => userId),
       ),
 
