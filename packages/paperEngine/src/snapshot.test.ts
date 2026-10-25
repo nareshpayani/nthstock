@@ -134,7 +134,7 @@ describe('engine snapshot and restore', () => {
       change(snapshot);
       return () => restoreFrom(harness, snapshot);
     };
-    expect(bad((s) => ((s as { v: number }).v = 4))).toThrow(/version/);
+    expect(bad((s) => ((s as { v: number }).v = 9))).toThrow(/version/);
     expect(bad((s) => (s.syncedTo = 'nope'))).toThrow(RangeError);
     expect(bad((s) => ((s.orders[0] as { qty: number }).qty = 0.5))).toThrow();
     expect(bad((s) => s.ledger.splice(1, 1, { ...at(s.ledger, 1), balanceAfter: 1 }))).toThrow(

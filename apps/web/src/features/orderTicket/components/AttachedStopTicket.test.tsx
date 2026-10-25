@@ -142,7 +142,9 @@ describe('"Add trailing stop" on an entry (T14, SPEC-TFC-1 §6.4, §7)', () => {
       const { dialog } = await openBuyTicket(false);
       const section = within(dialog).getByTestId('attach-trailing');
       expect(within(section).getByRole('switch', { name: 'Add trailing stop' })).toBeDisabled();
-      expect(section).toHaveTextContent('Trailing stops run on the in-browser demo engine only.');
+      expect(section).toHaveTextContent(
+        'Trailing stops are not available until your account has loaded.',
+      );
     },
     HEAVY,
   );

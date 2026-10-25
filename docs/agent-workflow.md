@@ -24,7 +24,8 @@ PR opened or updated
                 ├─ blocking findings ─► `agent:fix-needed` ─► Fixer pushes to the same PR ─► Reviewer again
                 └─ bug outside the PR's scope ─► new `bug` issue (`agent:ready`) ─► Developer
 CI red on an owner, agent or Dependabot PR
-  └─► Fixer finds the root cause and pushes a fix to the same PR (3 attempts, then `needs-human`)
+  └─► Fixer finds the root cause and pushes a fix to the same PR, again on every red run until CI is green
+      └─ no progress (same failure on 5 commits in a row, or a run that pushes nothing) ─► `needs-human`
       └─ Dependabot bump the stack can't take ─► `@dependabot ignore this major version`
 CI red on develop (after a merge, or in a scheduled health run: 09:20 and 12:30 IST on weekdays, 20:00 IST daily)
   └─► Fixer opens an `agent/fix-develop-*` PR (never pushes to develop) ─► Reviewer ─► checks green ─► auto-merge
@@ -87,8 +88,12 @@ Dependabot rebases its own PRs, but their CI failures go to the Fixer.
   `Co-Authored-By` trailer and PR footer. Agent branches are `agent/issue-*` and `agent/fix-develop-*`.
   GitHub still shows the account that *posts* (the app as `claude[bot]`, the Actions token as
   `github-actions[bot]`) on comments, labels and the PR author; only a personal token would change that.
-- **Loop limits:** after 3 CI-fix attempts on a PR it gets `needs-human`; only one fix-develop PR is open at a time.
-- **Loop limit:** after 3 agent reviews (`AGENT_MAX_REVIEW_ROUNDS`) a PR gets `needs-human` and agents stop.
+- **No attempt or round limits (owner decision 2026-10-25):** the Fixer keeps fixing and the Reviewer
+  re-reviews every push until the PR is green and approved. Only one fix-develop PR is open at a time.
+- **No-progress safeguard:** so an identical loop cannot drain the plan quota, a PR gets `needs-human`
+  when CI fails in exactly the same jobs and steps on the last `AGENT_NO_PROGRESS_RUNS` (default 5)
+  commits, when a CI-fix run ends without pushing anything, or when the Reviewer sees the same
+  blocking finding unresolved in 3 reviews in a row. Removing `needs-human` lets the agents carry on.
 - **Auto-merge (owner decision 2026-09-26, ADR 0006):** `agent-automerge.yml` squash-merges an open PR
   into `develop` when the Reviewer has labelled it `ready-to-merge`, it is from the owner or an agent, not
   a draft or fork, mergeable, and every check on its head commit is green. It runs after CI and CodeQL
@@ -110,7 +115,8 @@ Dependabot rebases its own PRs, but their CI failures go to the Fixer.
 - **Agents never merge by hand, never push to `develop` or `production`, never touch secrets, and
   deploy only through the release flow.** Every agent job that can push installs a pre-push hook that
   refuses `develop` and `production`, and the Fixer's `gh` access excludes `gh pr merge`.
-- **Cost caps:** `--max-turns` per agent, job timeouts, one run per issue/PR at a time.
+- **Cost caps:** the no-progress safeguard, job timeouts (the Reviewer, Fixer and conflict resolver have
+  no `--max-turns`, so a long fix is never cut off), one run per issue/PR at a time.
 
 ## One-time setup (owner)
 1. Run `claude setup-token` locally and save the token as the repo secret `CLAUDE_CODE_OAUTH_TOKEN`
@@ -129,8 +135,8 @@ Dependabot rebases its own PRs, but their CI failures go to the Fixer.
    "Playwright golden path (api mode)", "Dependency audit", "Secret scan" and
    "Analyze JavaScript/TypeScript". Requiring an approving review would block auto-merge (ADR 0006).
 
-Optional repository variables: `OWNER_LOGIN`, `OWNER_ID` (default `15100692`, the owner's GitHub user id), `AGENT_BOT_LOGIN`, `AGENT_MAX_REVIEW_ROUNDS`,
-`AGENT_MAX_CI_FIX_ATTEMPTS` (default 3), `AGENT_AUTOMERGE` (default `true`).
+Optional repository variables: `OWNER_LOGIN`, `OWNER_ID` (default `15100692`, the owner's GitHub user id), `AGENT_BOT_LOGIN`,
+`AGENT_NO_PROGRESS_RUNS` (default 5), `AGENT_AUTOMERGE` (default `true`).
 
 ## Everyday use
 - **Plan something:** open an issue describing the phase step or feature, add `plan:approved`.

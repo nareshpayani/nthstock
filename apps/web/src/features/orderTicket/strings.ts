@@ -118,9 +118,9 @@ export const strings = {
     /** Names the trail's − and + buttons: "Decrease trail", in rupees or percent. */
     stepLabel: 'trail',
     type: 'Trailing SL',
-    notAvailable: 'Not available in this mode',
+    notAvailable: 'Not available right now',
     notAvailableHint:
-      'Trailing stops run on the in-browser demo engine. They are not available in this mode yet.',
+      'Trailing stops are not available until your account has loaded. Try again in a moment.',
     position: 'Position to protect',
     positionOption: (product: string, qty: number) => `${product} · ${String(qty)}`,
     protects: (side: string, qty: number, direction: string) =>
@@ -174,7 +174,7 @@ export const strings = {
     failed: 'The trailing stop could not be placed. Try again.',
     attach: 'Add trailing stop',
     attachHint: 'Protect the position this order opens. The stop starts from your fill price.',
-    attachUnavailable: 'Trailing stops run on the in-browser demo engine only.',
+    attachUnavailable: 'Trailing stops are not available until your account has loaded.',
     attachNotForSale: 'A delivery sale closes holdings, so there is nothing to protect.',
     ifFillsAt: (price: string) => `If the entry fills at ${price}:`,
     attachedTerm: 'Trailing stop',

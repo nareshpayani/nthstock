@@ -110,8 +110,15 @@
     {
       "idx": 15,
       "version": "7",
-      "when": 1792904294864,
-      "tag": "0015_orders_shard",
+      "when": 1792904635454,
+      "tag": "0015_trailing_stops",
+      "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1792905449661,
+      "tag": "0016_orders_shard",
       "breakpoints": true
     }
   ]

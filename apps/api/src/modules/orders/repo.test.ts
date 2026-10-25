@@ -284,6 +284,28 @@ describeRepoConformance<Fixture>(
       expect(await store.liveAccountIds()).toEqual(['usr_a']);
     });
 
+    it('lists an account whose only live thing is a trailing stop (NSTOCK-0368)', async () => {
+      const { store } = repo();
+      const { engine } = newEngine(at(25, 10), 'c');
+      engine.place({ token: INFY.token, side: 'BUY', type: 'MARKET', product: 'DELIVERY', qty: 5 });
+      const placed = engine.placeTrailingStop({
+        token: INFY.token,
+        product: 'DELIVERY',
+        trail: { unit: 'AMOUNT', amount: 10_00 },
+        activationPrice: null,
+        exitOrderType: 'MARKET',
+        exitLimitOffset: null,
+      });
+      if (!placed.ok) throw new Error(placed.reason);
+      const trailing = engine.workingSet();
+      await store.commit('usr_a', { before: null, after: trailing }, 0, []);
+      expect(await store.liveAccountIds()).toEqual(['usr_a']);
+
+      engine.cancelTrailingStop(placed.trailingStop.id);
+      await store.commit('usr_a', { before: trailing, after: engine.workingSet() }, 1, []);
+      expect(await store.liveAccountIds()).toEqual([]);
+    });
+
     it('lists the accounts touched on an IST trade date', async () => {
       const { store } = repo();
       await commitOrders('usr_a', 1);
@@ -294,6 +316,50 @@ describeRepoConformance<Fixture>(
       expect(await store.accountsTouchedOn('2026-09-25')).toEqual(['usr_a']);
       expect(await store.accountsTouchedOn('2026-09-28')).toEqual(['usr_b']);
       expect(await store.accountsTouchedOn('2026-09-26')).toEqual([]);
+    });
+
+    it('round-trips trailing stops, their exits, keys and seq as they ratchet (NSTOCK-0368)', async () => {
+      const { store } = repo();
+      const { engine } = newEngine();
+      engine.place({
+        token: INFY.token,
+        side: 'BUY',
+        type: 'MARKET',
+        product: 'DELIVERY',
+        qty: 10,
+      });
+      const placed = engine.placeTrailingStop({
+        token: INFY.token,
+        product: 'DELIVERY',
+        trail: { unit: 'PERCENT', basisPoints: 100 },
+        activationPrice: null,
+        exitOrderType: 'LIMIT',
+        exitLimitOffset: 0,
+        clientRequestId: 'ts_key_1',
+      });
+      if (!placed.ok) throw new Error(placed.reason);
+      const first = engine.workingSet();
+      expect(first.trailingStops).toHaveLength(1);
+      expect(await store.commit('usr_a', { before: null, after: first }, 0, [])).toBe(1);
+      expect(await store.load('usr_a')).toEqual({ workingSet: first, version: 1 });
+
+      // A modify widens the trail (a changed row, not a new one).
+      const modified = engine.modifyTrailingStop(placed.trailingStop.id, {
+        trail: { unit: 'AMOUNT', amount: 5_00 },
+      });
+      if (!modified.ok) throw new Error(modified.reason);
+      const second = engine.workingSet();
+      expect(await store.commit('usr_a', { before: first, after: second }, 1, [])).toBe(2);
+      const loaded = await store.load('usr_a');
+      expect(loaded).toEqual({ workingSet: second, version: 2 });
+      expect(loaded?.workingSet.seq).toBe(engine.seq);
+      expect(loaded?.workingSet.trailingStopRequestIds).toEqual([
+        ['ts_key_1', placed.trailingStop.id],
+      ]);
+
+      // Restored, the engine carries on exactly where it was.
+      const again = newEngine(at(25, 10), 'r', { snapshot: loaded?.workingSet ?? second }).engine;
+      expect(again.workingSet()).toEqual(second);
     });
 
     it('round-trips positions, holdings, holding sales and the funds ledger', async () => {

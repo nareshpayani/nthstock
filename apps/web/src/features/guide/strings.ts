@@ -259,6 +259,10 @@ export const strings = {
           kind: 'text',
           text: 'The trailing logic lives in one pure function, stepTrailingStop(state, tick), in the shared paper engine. It runs on every tick of the instrument, in the same step as order matching. For a long position the high-water mark is max(mark, LTP) and the stop is max(stop, mark − trail) rounded down to the 5-paise tick, so it never moves back. At LTP ≤ stop it places one reduce-only exit.',
         },
+        {
+          kind: 'text',
+          text: 'The same engine runs on the server (NSTOCK-0368). In api mode apps/api keeps every stop in a Postgres trailing_stops table, beside the account’s engine seq and its exit orders, so a stop keeps ratcheting after a restart and a retried place with the same key answers with the same stop. Each committed change goes out on the user’s Redis channel, and apps/realtime sends it to that user’s tabs as an accountDelta frame, the same frame the in-browser demo sends. The ticket, chart line and sheet work the same in both modes.',
+        },
         { kind: 'diagram', id: 'tslo' },
         {
           kind: 'table',
@@ -1194,7 +1198,7 @@ export const strings = {
           items: [
             'Agents never push to develop or production; a pre-push hook and branch rules block it.',
             'Only the owner or the agent app can start an agent, so strangers on the public repo cannot spend usage or inject prompts.',
-            'Loop limits: 3 review rounds or 3 CI-fix attempts, then needs-human.',
+            'No attempt or round limits: the Fixer fixes and the Reviewer re-reviews every push until the PR is green; only a no-progress check (the same failure on 5 commits in a row) hands a PR to the owner.',
             'Claude Code hooks in .claude/hooks run format, lint and typecheck on every edit, and block edits to secrets and generated files.',
             'Rules in .claude/rules and skills in .claude/skills give every session the same standards and procedures.',
           ],
@@ -1258,7 +1262,7 @@ export const strings = {
         {
           kind: 'list',
           items: [
-            'Trailing stops on the server: move the engine into apps/api on Postgres, sending the same accountDelta frames. In India a trailing stop is not an exchange order type, so a broker must run it.',
+            'Trailing stops in the matcher worker: they already run on the server in apps/api on Postgres; next they move into the sharded matcher. In India a trailing stop is not an exchange order type, so a broker must run it.',
             'Real-device testing in CI, with two-finger iPhone gestures on a device farm.',
             'Several stops per position, plus SL, SL-M and OCO orders on the same chart lines.',
             'A licensed market data feed behind the same adapter.',

@@ -113,13 +113,31 @@ streams, so apps/api stops matching in process.
   `STOP_CANCEL` are in the contract and applied by the worker; apps/api sends them with server-side trailing stops.
 - **Reconcile** (NSTOCK-0366): on start and every 60 s the matcher reads its shard's OPEN LIMIT orders and the
   account versions from Postgres in one REPEATABLE READ snapshot, through the `orders_shard_live_idx` partial
-  index on `orders.shard` (migration 0015, set on insert as `shardOf(token, QUOTE_SHARDS)`). It upserts every
+  index on `orders.shard` (migration 0016, set on insert as `shardOf(token, QUOTE_SHARDS)`). It upserts every
   live order and takes off any order Postgres no longer has live, each at the account version, so a lost command
   is repaired within a minute while a command newer than the read stands. An upsert at the same price keeps the
   order's heap entry, so the rounds leave nothing stale. Rows from before the column are matched by token.
 - **Status:** the book, the worker, the order commands and the reconcile loop are built. Fills, server-side
   trailing stops, `MATCHER_MODE` and the benchmark are NSTOCK-0367 to 0370; until then the worker only logs what a
   tick crossed.
+
+### Server-side trailing stops (NSTOCK-0368)
+In api mode trailing stops run on the server with the same engine rules as the browser mock (SPEC-TFC-1 §6, §10.6).
+- **Store:** the engine's working set is version 4: it carries the trailing stops (active ones and today's), the
+  engine `seq`, the exit order ids and the stops' idempotency keys. Migration 0015 adds `trailing_stops` (one row per
+  `TrailingStop`, trail as unit plus amount or basis points, CHECKed against the contract lists) and
+  `paper_accounts.seq` and `exit_order_ids`. A commit upserts the stops that changed; a reset clears them with the
+  orders. So a stop survives a restart, keeps its stop price, and `seq` never goes back.
+- **Routes:** apps/api serves `GET/POST /v1/trailing-stops`, `PATCH/DELETE /v1/trailing-stops/:id`,
+  `POST /v1/positions/close` and `GET /v1/account/state`, with refusals mapped by `trailingStopApiError` like the
+  mock. Every action is audited (`TRAILING_STOP_PLACE`, `_MODIFY`, `_CANCEL`, `POSITION_CLOSE`) and every state change
+  as `TRAILING_STOP_UPDATE`.
+- **Frames:** after each commit the orders module publishes an `AccountDeltaEvent` (the changed orders and stops at
+  their newest `seq`, positions and funds) on the user's order channel, after the order updates. apps/realtime sends it
+  to that user's connections as an `accountDelta` frame with no quotes, so the web app's trading store runs in api mode
+  exactly as on MSW: it loads the account state, applies frames, and reloads on a gap.
+- **Matcher:** ticks still step stops in apps/api's process. Once the matcher worker (NSTOCK-0364, 0365) is on
+  `develop`, apps/api sends `STOP_ADD` and `STOP_CANCEL` to it instead.
 
 ### Market data and chart bars
 - `packages/marketData` generates each range's own bars (1D: 1-minute, 1W: 5-minute, 1M: hourly,

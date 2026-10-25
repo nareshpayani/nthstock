@@ -23,6 +23,10 @@ export type AuditActor = { type: 'user'; userId: string } | { type: 'system' };
  * - Step-up and two-factor (NSTOCK-0214, NSTOCK-0215): `STEP_UP` (detail: method PIN or OTP),
  *   `TOTP_ENABLED`, `TOTP_DISABLED` (detail: with a code or a recovery code), `RECOVERY_CODE_USED`
  *   and `RECOVERY_CODES_REGENERATED`. `LOGIN_SUCCESS` records method `TOTP` after the code step.
+ * - Trailing stops (NSTOCK-0368): `TRAILING_STOP_PLACE`, `TRAILING_STOP_MODIFY` and
+ *   `TRAILING_STOP_CANCEL` are the user's actions, `TRAILING_STOP_UPDATE` any change to a stop's
+ *   state (armed, trailing, ratcheted, triggered, ended), and `POSITION_CLOSE` the one-step exit.
+ *   The stop id is in the detail as `trailingStopId`; `order_id` names an order only.
  */
 export const AUDIT_ACTIONS = [
   'ORDER_PLACE',
@@ -45,6 +49,11 @@ export const AUDIT_ACTIONS = [
   'RECOVERY_CODES_REGENERATED',
   'CONSENT_GRANTED',
   'ACCOUNT_DELETION_REQUESTED',
+  'TRAILING_STOP_PLACE',
+  'TRAILING_STOP_MODIFY',
+  'TRAILING_STOP_CANCEL',
+  'TRAILING_STOP_UPDATE',
+  'POSITION_CLOSE',
 ] as const;
 
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];

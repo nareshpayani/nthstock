@@ -1,5 +1,5 @@
 {
-  "id": "0a68482b-70fc-49ff-93fc-529aa9d60e82",
+  "id": "4d5f23d6-2d1f-4158-9172-109def33d76b",
   "prevId": "e3bffb6a-b0d3-48eb-8ad3-98e38027b8aa",
   "version": "7",
   "dialect": "postgresql",
@@ -89,9 +89,9 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         },
         "audit_log_action_at_idx": {
           "name": "audit_log_action_at_idx",
@@ -110,9 +110,9 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         }
       },
       "foreignKeys": {},
@@ -122,7 +122,7 @@
       "checkConstraints": {
         "audit_log_action_check": {
           "name": "audit_log_action_check",
-          "value": "\"audit_log\".\"action\" IN ('ORDER_PLACE', 'ORDER_MODIFY', 'ORDER_CANCEL', 'ORDER_UPDATE', 'FUNDS_MOVEMENT', 'FUNDS_RESET', 'LOGIN_SUCCESS', 'LOGIN_FAILED', 'PIN_SET', 'PIN_LOCKED', 'LOGOUT', 'REFRESH_REUSE_DETECTED', 'SESSION_REVOKED', 'STEP_UP', 'TOTP_ENABLED', 'TOTP_DISABLED', 'RECOVERY_CODE_USED', 'RECOVERY_CODES_REGENERATED', 'CONSENT_GRANTED', 'ACCOUNT_DELETION_REQUESTED')"
+          "value": "\"audit_log\".\"action\" IN ('ORDER_PLACE', 'ORDER_MODIFY', 'ORDER_CANCEL', 'ORDER_UPDATE', 'FUNDS_MOVEMENT', 'FUNDS_RESET', 'LOGIN_SUCCESS', 'LOGIN_FAILED', 'PIN_SET', 'PIN_LOCKED', 'LOGOUT', 'REFRESH_REUSE_DETECTED', 'SESSION_REVOKED', 'STEP_UP', 'TOTP_ENABLED', 'TOTP_DISABLED', 'RECOVERY_CODE_USED', 'RECOVERY_CODES_REGENERATED', 'CONSENT_GRANTED', 'ACCOUNT_DELETION_REQUESTED', 'TRAILING_STOP_PLACE', 'TRAILING_STOP_MODIFY', 'TRAILING_STOP_CANCEL', 'TRAILING_STOP_UPDATE', 'POSITION_CLOSE')"
         },
         "audit_log_outcome_check": {
           "name": "audit_log_outcome_check",
@@ -174,34 +174,34 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         }
       },
       "foreignKeys": {
         "device_tokens_device_id_devices_id_fk": {
           "name": "device_tokens_device_id_devices_id_fk",
           "tableFrom": "device_tokens",
+          "tableTo": "devices",
           "columnsFrom": [
             "device_id"
           ],
-          "tableTo": "devices",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "cascade"
+          "onDelete": "cascade",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
         "device_tokens_device_id_unique": {
           "name": "device_tokens_device_id_unique",
+          "nullsNotDistinct": false,
           "columns": [
             "device_id"
-          ],
-          "nullsNotDistinct": false
+          ]
         }
       },
       "policies": {},
@@ -267,24 +267,24 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         }
       },
       "foreignKeys": {
         "devices_user_id_users_id_fk": {
           "name": "devices_user_id_users_id_fk",
           "tableFrom": "devices",
+          "tableTo": "users",
           "columnsFrom": [
             "user_id"
           ],
-          "tableTo": "users",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "cascade"
+          "onDelete": "cascade",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -328,15 +328,15 @@
         "pins_user_id_users_id_fk": {
           "name": "pins_user_id_users_id_fk",
           "tableFrom": "pins",
+          "tableTo": "users",
           "columnsFrom": [
             "user_id"
           ],
-          "tableTo": "users",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "cascade"
+          "onDelete": "cascade",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -391,9 +391,9 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         },
         "refresh_tokens_expires_at_idx": {
           "name": "refresh_tokens_expires_at_idx",
@@ -406,24 +406,24 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         }
       },
       "foreignKeys": {
         "refresh_tokens_session_id_sessions_id_fk": {
           "name": "refresh_tokens_session_id_sessions_id_fk",
           "tableFrom": "refresh_tokens",
+          "tableTo": "sessions",
           "columnsFrom": [
             "session_id"
           ],
-          "tableTo": "sessions",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "cascade"
+          "onDelete": "cascade",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -514,10 +514,10 @@
             }
           ],
           "isUnique": false,
-          "with": {},
-          "method": "btree",
           "where": "\"sessions\".\"revoked_at\" IS NULL",
-          "concurrently": false
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
         },
         "sessions_expires_at_idx": {
           "name": "sessions_expires_at_idx",
@@ -530,37 +530,37 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         }
       },
       "foreignKeys": {
         "sessions_user_id_users_id_fk": {
           "name": "sessions_user_id_users_id_fk",
           "tableFrom": "sessions",
+          "tableTo": "users",
           "columnsFrom": [
             "user_id"
           ],
-          "tableTo": "users",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "cascade"
+          "onDelete": "cascade",
+          "onUpdate": "no action"
         },
         "sessions_device_id_devices_id_fk": {
           "name": "sessions_device_id_devices_id_fk",
           "tableFrom": "sessions",
+          "tableTo": "devices",
           "columnsFrom": [
             "device_id"
           ],
-          "tableTo": "devices",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "cascade"
+          "onDelete": "cascade",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -625,15 +625,15 @@
         "totp_factors_user_id_users_id_fk": {
           "name": "totp_factors_user_id_users_id_fk",
           "tableFrom": "totp_factors",
+          "tableTo": "users",
           "columnsFrom": [
             "user_id"
           ],
-          "tableTo": "users",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "cascade"
+          "onDelete": "cascade",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -692,24 +692,24 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         }
       },
       "foreignKeys": {
         "totp_recovery_codes_user_id_users_id_fk": {
           "name": "totp_recovery_codes_user_id_users_id_fk",
           "tableFrom": "totp_recovery_codes",
+          "tableTo": "users",
           "columnsFrom": [
             "user_id"
           ],
-          "tableTo": "users",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "cascade"
+          "onDelete": "cascade",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -764,15 +764,15 @@
         "holding_sales_user_id_users_id_fk": {
           "name": "holding_sales_user_id_users_id_fk",
           "tableFrom": "holding_sales",
+          "tableTo": "users",
           "columnsFrom": [
             "user_id"
           ],
-          "tableTo": "users",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "cascade"
+          "onDelete": "cascade",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {
@@ -835,15 +835,15 @@
         "holdings_user_id_users_id_fk": {
           "name": "holdings_user_id_users_id_fk",
           "tableFrom": "holdings",
+          "tableTo": "users",
           "columnsFrom": [
             "user_id"
           ],
-          "tableTo": "users",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "cascade"
+          "onDelete": "cascade",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {
@@ -946,9 +946,9 @@
             }
           ],
           "isUnique": true,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         },
         "ledger_entries_user_id_seq_desc_idx": {
           "name": "ledger_entries_user_id_seq_desc_idx",
@@ -961,30 +961,30 @@
             },
             {
               "expression": "\"seq\" DESC",
-              "isExpression": true,
               "asc": true,
+              "isExpression": true,
               "nulls": "last"
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         }
       },
       "foreignKeys": {
         "ledger_entries_user_id_users_id_fk": {
           "name": "ledger_entries_user_id_users_id_fk",
           "tableFrom": "ledger_entries",
+          "tableTo": "users",
           "columnsFrom": [
             "user_id"
           ],
-          "tableTo": "users",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -1025,6 +1025,20 @@
           "notNull": true,
           "default": 0
         },
+        "seq": {
+          "name": "seq",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "exit_order_ids": {
+          "name": "exit_order_ids",
+          "type": "text[]",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'{}'::text[]"
+        },
         "synced_to": {
           "name": "synced_to",
           "type": "timestamp (3) with time zone",
@@ -1049,15 +1063,15 @@
         "paper_accounts_user_id_users_id_fk": {
           "name": "paper_accounts_user_id_users_id_fk",
           "tableFrom": "paper_accounts",
+          "tableTo": "users",
           "columnsFrom": [
             "user_id"
           ],
-          "tableTo": "users",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "cascade"
+          "onDelete": "cascade",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -1071,6 +1085,10 @@
         "paper_accounts_version_check": {
           "name": "paper_accounts_version_check",
           "value": "\"paper_accounts\".\"version\" >= 0"
+        },
+        "paper_accounts_seq_check": {
+          "name": "paper_accounts_seq_check",
+          "value": "\"paper_accounts\".\"seq\" >= 0"
         }
       },
       "isRLSEnabled": false
@@ -1133,15 +1151,15 @@
         "pnl_snapshots_user_id_users_id_fk": {
           "name": "pnl_snapshots_user_id_users_id_fk",
           "tableFrom": "pnl_snapshots",
+          "tableTo": "users",
           "columnsFrom": [
             "user_id"
           ],
-          "tableTo": "users",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "cascade"
+          "onDelete": "cascade",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {
@@ -1246,15 +1264,15 @@
         "positions_user_id_users_id_fk": {
           "name": "positions_user_id_users_id_fk",
           "tableFrom": "positions",
+          "tableTo": "users",
           "columnsFrom": [
             "user_id"
           ],
-          "tableTo": "users",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "cascade"
+          "onDelete": "cascade",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {
@@ -1282,6 +1300,273 @@
         "positions_qty_check": {
           "name": "positions_qty_check",
           "value": "\"positions\".\"buy_qty\" >= 0 AND \"positions\".\"sell_qty\" >= 0"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.trailing_stops": {
+      "name": "trailing_stops",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "token": {
+          "name": "token",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "symbol": {
+          "name": "symbol",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "exchange": {
+          "name": "exchange",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "product": {
+          "name": "product",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "direction": {
+          "name": "direction",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "trail_unit": {
+          "name": "trail_unit",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "trail_amount": {
+          "name": "trail_amount",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "trail_basis_points": {
+          "name": "trail_basis_points",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "activation_price": {
+          "name": "activation_price",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "exit_order_type": {
+          "name": "exit_order_type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "exit_limit_offset": {
+          "name": "exit_limit_offset",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "status_reason": {
+          "name": "status_reason",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "watermark_price": {
+          "name": "watermark_price",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "stop_price": {
+          "name": "stop_price",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "protected_qty": {
+          "name": "protected_qty",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "entry_order_id": {
+          "name": "entry_order_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "exit_order_id": {
+          "name": "exit_order_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "client_request_id": {
+          "name": "client_request_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "seq": {
+          "name": "seq",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp (3) with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp (3) with time zone",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {
+        "trailing_stops_user_id_updated_at_idx": {
+          "name": "trailing_stops_user_id_updated_at_idx",
+          "columns": [
+            {
+              "expression": "user_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "updated_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "trailing_stops_active_user_id_idx": {
+          "name": "trailing_stops_active_user_id_idx",
+          "columns": [
+            {
+              "expression": "user_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "where": "\"trailing_stops\".\"status\" IN ('PENDING_ENTRY', 'ARMED', 'TRAILING', 'TRIGGERED')",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "trailing_stops_user_id_client_request_id_key": {
+          "name": "trailing_stops_user_id_client_request_id_key",
+          "columns": [
+            {
+              "expression": "user_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "client_request_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "trailing_stops_user_id_users_id_fk": {
+          "name": "trailing_stops_user_id_users_id_fk",
+          "tableFrom": "trailing_stops",
+          "tableTo": "users",
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "trailing_stops_status_check": {
+          "name": "trailing_stops_status_check",
+          "value": "\"trailing_stops\".\"status\" IN ('PENDING_ENTRY', 'ARMED', 'TRAILING', 'TRIGGERED', 'EXECUTED', 'CANCELLED', 'REJECTED')"
+        },
+        "trailing_stops_product_check": {
+          "name": "trailing_stops_product_check",
+          "value": "\"trailing_stops\".\"product\" IN ('INTRADAY', 'DELIVERY')"
+        },
+        "trailing_stops_exchange_check": {
+          "name": "trailing_stops_exchange_check",
+          "value": "\"trailing_stops\".\"exchange\" IN ('NSE', 'BSE')"
+        },
+        "trailing_stops_direction_check": {
+          "name": "trailing_stops_direction_check",
+          "value": "\"trailing_stops\".\"direction\" IN ('LONG', 'SHORT')"
+        },
+        "trailing_stops_trail_check": {
+          "name": "trailing_stops_trail_check",
+          "value": "(\"trailing_stops\".\"trail_unit\" = 'AMOUNT' AND \"trailing_stops\".\"trail_amount\" > 0 AND \"trailing_stops\".\"trail_basis_points\" IS NULL) OR (\"trailing_stops\".\"trail_unit\" = 'PERCENT' AND \"trailing_stops\".\"trail_basis_points\" > 0 AND \"trailing_stops\".\"trail_amount\" IS NULL)"
+        },
+        "trailing_stops_exit_check": {
+          "name": "trailing_stops_exit_check",
+          "value": "\"trailing_stops\".\"exit_order_type\" IN ('MARKET', 'LIMIT')"
+        },
+        "trailing_stops_qty_check": {
+          "name": "trailing_stops_qty_check",
+          "value": "\"trailing_stops\".\"protected_qty\" >= 0"
+        },
+        "trailing_stops_prices_check": {
+          "name": "trailing_stops_prices_check",
+          "value": "(\"trailing_stops\".\"activation_price\" IS NULL OR \"trailing_stops\".\"activation_price\" > 0) AND (\"trailing_stops\".\"stop_price\" IS NULL OR \"trailing_stops\".\"stop_price\" > 0) AND (\"trailing_stops\".\"watermark_price\" IS NULL OR \"trailing_stops\".\"watermark_price\" >= 0) AND (\"trailing_stops\".\"exit_limit_offset\" IS NULL OR \"trailing_stops\".\"exit_limit_offset\" >= 0)"
+        },
+        "trailing_stops_seq_check": {
+          "name": "trailing_stops_seq_check",
+          "value": "\"trailing_stops\".\"seq\" >= 0"
         }
       },
       "isRLSEnabled": false
@@ -1345,24 +1630,24 @@
             }
           ],
           "isUnique": false,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         }
       },
       "foreignKeys": {
         "consents_user_id_users_id_fk": {
           "name": "consents_user_id_users_id_fk",
           "tableFrom": "consents",
+          "tableTo": "users",
           "columnsFrom": [
             "user_id"
           ],
-          "tableTo": "users",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "cascade"
+          "onDelete": "cascade",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -1480,10 +1765,10 @@
             }
           ],
           "isUnique": true,
-          "with": {},
-          "method": "btree",
           "where": "\"users\".\"deleted_at\" IS NULL",
-          "concurrently": false
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
         },
         "users_purge_after_idx": {
           "name": "users_purge_after_idx",
@@ -1496,10 +1781,10 @@
             }
           ],
           "isUnique": false,
-          "with": {},
-          "method": "btree",
           "where": "\"users\".\"purged_at\" IS NULL",
-          "concurrently": false
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
         }
       },
       "foreignKeys": {},
@@ -1578,15 +1863,15 @@
         "watchlist_items_watchlist_id_watchlists_id_fk": {
           "name": "watchlist_items_watchlist_id_watchlists_id_fk",
           "tableFrom": "watchlist_items",
+          "tableTo": "watchlists",
           "columnsFrom": [
             "watchlist_id"
           ],
-          "tableTo": "watchlists",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "cascade"
+          "onDelete": "cascade",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {
@@ -1665,30 +1950,30 @@
             },
             {
               "expression": "lower(\"name\")",
-              "isExpression": true,
               "asc": true,
+              "isExpression": true,
               "nulls": "last"
             }
           ],
           "isUnique": true,
-          "with": {},
+          "concurrently": false,
           "method": "btree",
-          "concurrently": false
+          "with": {}
         }
       },
       "foreignKeys": {
         "watchlists_user_id_users_id_fk": {
           "name": "watchlists_user_id_users_id_fk",
           "tableFrom": "watchlists",
+          "tableTo": "users",
           "columnsFrom": [
             "user_id"
           ],
-          "tableTo": "users",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "cascade"
+          "onDelete": "cascade",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -1705,10 +1990,10 @@
   },
   "enums": {},
   "schemas": {},
-  "views": {},
   "sequences": {},
   "roles": {},
   "policies": {},
+  "views": {},
   "_meta": {
     "columns": {},
     "schemas": {},

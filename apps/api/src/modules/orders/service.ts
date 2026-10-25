@@ -1,5 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type {
+  AccountDeltaEvent,
+  AccountState,
   FundsSummary,
   Holding,
   LedgerPage,
@@ -9,15 +11,21 @@ import type {
   OrderHistoryResponse,
   OrdersPage,
   OrdersQuery,
+  ModifyTrailingStopRequest,
   PlaceOrderRequest,
+  PlaceTrailingStopRequest,
   PortfolioSummary,
   Position,
+  PositionKey,
+  TrailingStop,
 } from '@nthstock/contracts';
 import {
   PaperDesk,
   orderApiError,
+  trailingStopApiError,
   type DeskMarket,
   type OrderActionResult,
+  type TrailingStopActionResult,
   type PaperEngine,
   type PaperEngineSnapshot,
   type PaperEngineWorkingSet,
@@ -56,6 +64,10 @@ export type OrderUpdateListener = (
   last?: boolean,
 ) => void;
 
+/** One committed account change, for the Redis publisher (NSTOCK-0368). */
+export type AccountDelta = AccountDeltaEvent['delta'];
+export type AccountDeltaListener = (userId: string, delta: AccountDelta) => void;
+
 export type OrderService = ReturnType<typeof createOrderService>;
 
 const orderGone = (): never => {
@@ -89,6 +101,8 @@ type AccountCache = {
   pending: NewAuditRecord[];
   /** Order updates for the change being made, announced once it is committed. */
   updates: Order[];
+  /** Trailing-stop updates for the change being made, announced with the order updates. */
+  stopUpdates: TrailingStop[];
   /** A commit lost to another writer since the last `settle`: the engine was reloaded. */
   conflicted: boolean;
   /** A commit failed for another reason: reload before the next use. */
@@ -101,8 +115,13 @@ type AccountCache = {
  * The place request as the audit log keeps it: the instrument token as `instrument`, because a
  * detail key containing "token" is refused (spec backend-core §8 deny list).
  */
-function auditedPlaceRequest({ token, ...rest }: PlaceOrderRequest) {
+function auditedPlaceRequest({ token, ...rest }: PlaceOrderRequest | PlaceTrailingStopRequest) {
   return { ...rest, instrument: token };
+}
+
+/** The latest copy of each entity, in the order each first changed. */
+function latestById<T extends { id: string }>(items: readonly T[]): T[] {
+  return [...new Map(items.map((item) => [item.id, item])).values()];
 }
 
 /**
@@ -121,6 +140,7 @@ export function createOrderService({
   newId = () => `pe_${randomUUID().replaceAll('-', '')}`,
 }: OrderServiceDeps) {
   const listeners = new Set<OrderUpdateListener>();
+  const deltaListeners = new Set<AccountDeltaListener>();
   /** How many of each user's ledger entries are in the audit log already. */
   const auditedLedger = new Map<string, number>();
   const cache = new Map<string, AccountCache>();
@@ -187,6 +207,7 @@ export function createOrderService({
       committedKey: loaded ? stateKey(loaded.workingSet) : null,
       pending: [],
       updates: [],
+      stopUpdates: [],
       conflicted: false,
       stale: false,
       closing: null,
@@ -221,6 +242,7 @@ export function createOrderService({
     if (account.closing) entries.push(account.closing(engine.fundsSummary()));
     account.closing = null;
     const updates = account.updates.splice(0);
+    const stopUpdates = account.stopUpdates.splice(0);
     void enqueue(userId, async () => {
       // A reload since this change replaced the engine: the change is gone with it.
       if (account.stale || desk.engineOf(userId) !== engine) return;
@@ -247,7 +269,44 @@ export function createOrderService({
         const last = !updates.slice(at + 1).some((later) => later.id === order.id);
         for (const listener of [...listeners]) listener(userId, order, version, last);
       }
+      await announceDelta(userId, engine, latestById(updates), latestById(stopUpdates));
     }).catch(() => undefined);
+  }
+
+  /**
+   * Tells the delta listeners about a committed change (NSTOCK-0368): its orders and trailing
+   * stops at the newest `seq` they carry, with the positions and funds after it. A change with
+   * neither (a ledger-only sync) or whose engine was replaced meanwhile announces nothing.
+   */
+  async function announceDelta(
+    userId: string,
+    engine: PaperEngine,
+    orders: Order[],
+    trailingStops: TrailingStop[],
+  ): Promise<void> {
+    if (deltaListeners.size === 0 || (orders.length === 0 && trailingStops.length === 0)) return;
+    if (desk.engineOf(userId) !== engine) return;
+    const seq = Math.max(
+      ...orders.map((order) => order.seq ?? 0),
+      ...trailingStops.map((s) => s.seq),
+    );
+    const positions = await desk.positions(userId);
+    const delta: AccountDelta = {
+      seq,
+      at: clock.now().toISOString(),
+      orders,
+      positions,
+      trailingStops,
+      funds: desk.fundsSummary(userId),
+    };
+    for (const listener of [...deltaListeners]) {
+      // One failing listener must not stop the others, nor fail the commit already made.
+      try {
+        listener(userId, delta);
+      } catch (error) {
+        reportError(error);
+      }
+    }
   }
 
   /**
@@ -268,21 +327,51 @@ export function createOrderService({
   let liveLoaded = false;
 
   /**
-   * Loads every account with a live (AMO or OPEN) order, so a resting order placed before a
-   * restart fills on the tick that crosses it (spec backend-core §5.3).
+   * Loads every account with a live (AMO or OPEN) order or an active trailing stop, so a resting
+   * order placed before a restart fills on the tick that crosses it (spec backend-core §5.3) and
+   * a stop keeps stepping on ticks alone (NSTOCK-0368). One account that fails to load is reported
+   * and skipped; the next sweep tries it again.
    */
   async function hydrateLive(): Promise<void> {
-    for (const userId of await accounts.liveAccountIds()) await ensure(userId);
-    liveLoaded = true;
+    let failed = false;
+    for (const userId of await accounts.liveAccountIds()) {
+      try {
+        await ensure(userId);
+      } catch (error) {
+        failed = true;
+        reportError(
+          new Error(
+            `Account ${userId} did not load: ${error instanceof Error ? error.message : String(error)}`,
+          ),
+        );
+      }
+    }
+    liveLoaded = !failed;
   }
 
   const desk = new PaperDesk({
     clock,
     market,
     newId,
-    // The account store keeps no trailing stops yet; the routes answer 501 until it does
-    // (SPEC-TFC-1 §10.6).
-    trailingStops: false,
+    onTrailingStopUpdate: (userId, stop) => {
+      const account = cache.get(userId);
+      if (!account) return;
+      account.pending.push({
+        actor: { type: 'system' },
+        userId,
+        action: 'TRAILING_STOP_UPDATE',
+        orderId: stop.exitOrderId,
+        outcome: 'OK',
+        detail: {
+          trailingStopId: stop.id,
+          status: stop.status,
+          stopPrice: stop.stopPrice,
+          protectedQty: stop.protectedQty,
+          reason: stop.statusReason,
+        },
+      });
+      account.stopUpdates.push(stop);
+    },
     onOrderUpdate: (userId, order) => {
       const account = cache.get(userId);
       if (!account) return;
@@ -339,6 +428,43 @@ export function createOrderService({
     throw new ApiHttpError(error.status, error.code, error.message, error.details);
   }
 
+  /**
+   * `act` for a trailing-stop action (NSTOCK-0368): the same commit, retry and audit rules, with
+   * the stop id in the entry's detail.
+   */
+  async function actOnStop(
+    userId: string,
+    action: AuditAction,
+    target: { trailingStopId: string | null; request: unknown },
+    run: () => Promise<TrailingStopActionResult>,
+  ): Promise<TrailingStop> {
+    await ensure(userId);
+    let result = await run();
+    if (await settle(userId)) {
+      result = await run();
+      if (await settle(userId)) accountMoved();
+    }
+    const stop: TrailingStop | null = result.trailingStop;
+    await record(userId, [
+      {
+        actor: { type: 'user', userId },
+        userId,
+        action,
+        orderId: null,
+        outcome: result.ok ? 'OK' : 'REFUSED',
+        detail: {
+          trailingStopId: stop?.id ?? target.trailingStopId,
+          request: target.request,
+          ...(stop ? { status: stop.status } : {}),
+          ...(result.ok ? {} : { reason: result.code }),
+        },
+      },
+    ]);
+    if (result.ok) return result.trailingStop;
+    const error = trailingStopApiError(result);
+    throw new ApiHttpError(error.status, error.code, error.message, error.details);
+  }
+
   /** Brings the user's engine up to date and waits until that is committed, for a read. */
   async function current(userId: string): Promise<void> {
     await ensure(userId);
@@ -366,6 +492,44 @@ export function createOrderService({
 
     cancel: (userId: string, id: string) =>
       act(userId, 'ORDER_CANCEL', { orderId: id, request: null }, () => desk.cancel(userId, id)),
+
+    /** Today's trailing stops, newest first (NSTOCK-0368, SPEC-TFC-1 §10.6). */
+    trailingStops: (userId: string): Promise<TrailingStop[]> =>
+      read(userId, () => desk.trailingStops(userId)),
+
+    placeTrailingStop: (userId: string, request: PlaceTrailingStopRequest) =>
+      actOnStop(
+        userId,
+        'TRAILING_STOP_PLACE',
+        { trailingStopId: null, request: auditedPlaceRequest(request) },
+        () => desk.placeTrailingStop(userId, request),
+      ),
+
+    modifyTrailingStop: (userId: string, id: string, request: ModifyTrailingStopRequest) =>
+      actOnStop(userId, 'TRAILING_STOP_MODIFY', { trailingStopId: id, request }, () =>
+        desk.modifyTrailingStop(userId, id, request),
+      ),
+
+    cancelTrailingStop: (userId: string, id: string) =>
+      actOnStop(userId, 'TRAILING_STOP_CANCEL', { trailingStopId: id, request: null }, () =>
+        desk.cancelTrailingStop(userId, id),
+      ),
+
+    /**
+     * Closes a position in one step (SPEC-TFC-1 §6.4): cancels its trailing stop and working
+     * orders and answers with the reduce-only market exit.
+     */
+    closePosition: (userId: string, { token, product }: PositionKey) =>
+      act(
+        userId,
+        'POSITION_CLOSE',
+        { orderId: null, request: { instrument: token, product } },
+        () => desk.closePosition(userId, token, product),
+      ),
+
+    /** The trading state at one `seq` (ADR 0012), which the web app's trading store loads. */
+    accountState: (userId: string): Promise<AccountState> =>
+      read(userId, () => desk.accountState(userId)),
 
     /** The order; older orders than the engine keeps (before today) come from the store. */
     async get(userId: string, id: string): Promise<Order> {
@@ -479,6 +643,14 @@ export function createOrderService({
       };
     },
 
+    /** Every committed account change of every user (for the Redis publisher, NSTOCK-0368). */
+    onAccountDelta(listener: AccountDeltaListener): () => void {
+      deltaListeners.add(listener);
+      return () => {
+        deltaListeners.delete(listener);
+      };
+    },
+
     /** Syncs every account, so session events run and are pushed without a request. */
     sweep: async (): Promise<void> => {
       // A boot that could not load the live accounts (the database was down) tries again here.
@@ -512,6 +684,7 @@ export function createOrderService({
 
     dispose: () => {
       listeners.clear();
+      deltaListeners.clear();
       desk.dispose();
     },
   };

@@ -27,8 +27,9 @@ You are the **Fixer** for nthstock. Read `CLAUDE.md` first.
    `@dependabot ignore this major version` with the reason (Dependabot closes the PR itself), and
    stop. Never merge a Dependabot PR.
 5. Commit (`fix(ci): <what was wrong>`), push to the same branch, and post a PR comment that starts with
-   `<!-- nthstock-agent-ci-fix -->` saying the root cause and the fix. The workflow counts these
-   comments and hands the PR to a human after 3 attempts.
+   `<!-- nthstock-agent-ci-fix -->` saying the root cause and the fix. There is no attempt limit:
+   each new red run brings you back until CI is green. If you find no correct fix, add `needs-human`
+   and comment what you found instead of pushing a guess (a run that pushes nothing is flagged anyway).
 
 ## Red CI on develop (`MODE: develop`)
 `develop` is never pushed to. You start on `develop`; create the branch named in BRANCH from it.

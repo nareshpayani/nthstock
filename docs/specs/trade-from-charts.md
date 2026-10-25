@@ -560,9 +560,10 @@ The CLAUDE.md §3 target of tick to screen under 500 ms holds with a 250 ms flus
 | `DELETE /v1/trailing-stops/:id` | `trailingStopCancel` |
 | `GET /v1/account/state` | `accountState` |
 
-Command responses carry `seq`. In API mode these routes return 501 until the Phase 2 follow-up, and
-a runtime capability flag hides the trailing-stop controls behind "Not available in this mode"
-rather than showing an empty state.
+Command responses carry `seq`. Both modes serve these routes: MSW from the in-browser engine, and
+apps/api (since NSTOCK-0368) from its Postgres account store, with `accountDelta` frames relayed by
+apps/realtime. Until the account state has loaded the trailing-stop controls show "Not available
+right now" rather than an empty state.
 
 ## 11. Scalper mode
 

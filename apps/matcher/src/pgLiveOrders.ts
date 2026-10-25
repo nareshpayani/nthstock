@@ -17,7 +17,7 @@ type LiveOrderRow = {
 /**
  * Reads a shard's live orders from Postgres (NSTOCK-0366) in one REPEATABLE READ, read-only
  * transaction, so the orders and the account versions are one snapshot. The orders query is
- * served by the partial index `orders_shard_live_idx` (migration 0015). Prices and versions are
+ * served by the partial index `orders_shard_live_idx` (migration 0016). Prices and versions are
  * bigint columns, which `pg` returns as strings.
  */
 export function createPgLiveOrderSource(pool: Pick<Pool, 'connect'>): LiveOrderSource {

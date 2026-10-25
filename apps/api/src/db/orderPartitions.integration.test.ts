@@ -161,7 +161,7 @@ describeWithPostgres('order partitions (integration)', () => {
         where tablename in ('orders_20261201', 'orders_default')
           and indexdef like '%status%'`,
     );
-    // By user (0011) and by matcher shard (0015, NSTOCK-0366), on each partition.
+    // By user (0011) and by matcher shard (0016, NSTOCK-0366), on each partition.
     const keyed = rows.map(
       (row) => `${row.tablename} ${/\((\w+)\)/.exec(row.indexdef)?.[1] ?? ''}`,
     );
