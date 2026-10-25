@@ -282,7 +282,14 @@ export function createOrderService({
       }
       const stops = latestById(stopUpdates);
       for (const stop of stops)
-        for (const listener of [...stopListeners]) listener(userId, stop, version);
+        for (const listener of [...stopListeners]) {
+          // A failing listener must not stop the others, nor the delta below.
+          try {
+            listener(userId, stop, version);
+          } catch (error) {
+            reportError(error);
+          }
+        }
       await announceDelta(userId, engine, latestById(updates), stops);
     }).catch(() => undefined);
   }
@@ -707,6 +714,7 @@ export function createOrderService({
     dispose: () => {
       listeners.clear();
       deltaListeners.clear();
+      stopListeners.clear();
       desk.dispose();
     },
   };

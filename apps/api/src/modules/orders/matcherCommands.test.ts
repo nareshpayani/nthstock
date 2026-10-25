@@ -155,6 +155,21 @@ describe('stopCommandFor (NSTOCK-0368)', () => {
     });
   });
 
+  it('builds commands the matcher accepts, and a ratchet is a newer STOP_ADD', () => {
+    const first = stopCommandFor('usr_a', trailing, 5);
+    const raised = stopCommandFor(
+      'usr_a',
+      { ...trailing, watermarkPrice: 1_520_00, stopPrice: 1_490_00, seq: 3 },
+      6,
+    );
+    expect(MatcherCommand.parse(first)).toEqual(first);
+    expect(MatcherCommand.parse(raised)).toMatchObject({
+      type: 'STOP_ADD',
+      version: 6,
+      state: { stopPrice: 1_490_00 },
+    });
+  });
+
   it('cancels a stop in any other status', () => {
     for (const status of [
       'PENDING_ENTRY',
