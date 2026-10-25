@@ -80,7 +80,12 @@ describeWithRedis('tick streams on real Redis (integration)', () => {
 
   it('trims the stream to about TICK_STREAM_MAXLEN entries', async () => {
     const { stream, sink } = keys();
-    for (let seq = 1; seq <= 2_600; seq += 1) await sink.append(entry(seq, [quote(1, seq)]));
+    // One connection sends commands in call order, so firing them together pipelines the round trips.
+    await Promise.all(
+      Array.from({ length: 2_600 }, (_, index) =>
+        sink.append(entry(index + 1, [quote(1, index + 1)])),
+      ),
+    );
     const length = await redis.xlen(stream);
     expect(length).toBeGreaterThanOrEqual(2_400);
     expect(length).toBeLessThan(2_600);
