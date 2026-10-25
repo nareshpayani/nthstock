@@ -3,6 +3,9 @@ import type { LiveOrder, LiveOrderSource } from './reconcile.js';
 
 /** Long enough for a shard's live orders, short enough that a stuck read cannot pile up rounds. */
 const STATEMENT_TIMEOUT_MS = 5_000;
+/** Client-side bounds: the server's statement_timeout does not help on a half-open network. */
+export const CONNECTION_TIMEOUT_MS = 5_000;
+export const QUERY_TIMEOUT_MS = STATEMENT_TIMEOUT_MS + 2_000;
 
 type LiveOrderRow = {
   id: string;
@@ -24,6 +27,7 @@ export function createPgLiveOrderSource(pool: Pick<Pool, 'connect'>): LiveOrderS
   return {
     async read(shard, userIds) {
       const client = await pool.connect();
+      let failure: Error | undefined;
       try {
         await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
         await client.query(`SET LOCAL statement_timeout = ${String(STATEMENT_TIMEOUT_MS)}`);
@@ -54,10 +58,12 @@ export function createPgLiveOrderSource(pool: Pick<Pool, 'connect'>): LiveOrderS
           versions: new Map(versions.rows.map((row) => [row.user_id, Number(row.version)])),
         };
       } catch (error) {
+        failure = error instanceof Error ? error : new Error(String(error));
         await client.query('ROLLBACK').catch(() => undefined);
         throw error;
       } finally {
-        client.release();
+        // Releasing with the error discards the connection, so a dead one is not reused.
+        client.release(failure);
       }
     },
   };
