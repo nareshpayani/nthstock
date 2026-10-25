@@ -33,22 +33,18 @@ clip('dashboard', 'the dashboard with live prices', async (page) => {
     await act.click(chart.getByRole('radio', { name: range, exact: true }), 900);
   }
   const box = await chart.locator('canvas').first().boundingBox();
-  if (box) {
-    await page.mouse.move(box.x + box.width * 0.3, box.y + box.height * 0.5, { steps: 10 });
-    await page.mouse.move(box.x + box.width * 0.75, box.y + box.height * 0.5, { steps: 30 });
-    await say(page, 'Hover for the crosshair and the price at that time.', 2000);
-  }
+  if (!box) throw new Error('the NIFTY 50 chart has no box');
+  await page.mouse.move(box.x + box.width * 0.3, box.y + box.height * 0.5, { steps: 10 });
+  await page.mouse.move(box.x + box.width * 0.75, box.y + box.height * 0.5, { steps: 30 });
+  await say(page, 'Hover for the crosshair and the price at that time.', 2000);
   await scrollTo(page, 'Market indices');
   await say(page, 'Market indices with ▲ ▼ and a sign: colour is never the only signal.', 2800);
   await scrollTo(page, 'Stocks lists');
   await say(page, 'Curated stock lists beside the top gainers and losers.', 2000);
   const movers = page.getByRole('main').getByRole('region', { name: 'Market movers' });
-  const tabs = movers.getByRole('tab');
-  if ((await tabs.count()) > 1) await act.click(tabs.nth(1), 1200);
-  const indexPicker = movers.getByRole('combobox').first();
-  if (await indexPicker.isVisible().catch(() => false)) {
-    await say(page, 'Movers by index: NIFTY 50, NIFTY Bank and more.', 1800);
-  }
+  await act.click(movers.getByRole('tab', { name: 'Top losers' }), 1200);
+  await act.click(movers.getByRole('radio', { name: 'Bank' }), 1200);
+  await say(page, 'Gainers or losers, by index: NIFTY 50, NIFTY Bank and NIFTY IT.', 1800);
   await act.click(page.getByRole('main').locator('a[href^="/stocks/"]').first(), 1200);
   await say(page, 'Every stock opens its own page.', 2400);
 });
@@ -104,13 +100,12 @@ clip('watchlists', 'watchlists: create, add, reorder, sort and remove', async (p
   await act.hover(last);
   const handle = rail.locator('[data-drag-handle="WIPRO"]');
   const box = await handle.boundingBox();
-  if (box) {
-    await say(page, 'Drag a row by its handle to reorder.', 1200);
-    await act.drag(
-      { x: box.x + box.width / 2, y: box.y + box.height / 2 },
-      { x: box.x + box.width / 2, y: box.y - 120 },
-    );
-  }
+  if (!box) throw new Error('the drag handle has no box');
+  await say(page, 'Drag a row by its handle to reorder.', 1200);
+  await act.drag(
+    { x: box.x + box.width / 2, y: box.y + box.height / 2 },
+    { x: box.x + box.width / 2, y: box.y - 120 },
+  );
   await say(page, 'Or with the keyboard: Alt+↑ and Alt+↓ on a focused row.', 1400);
   await rows.getByRole('link', { name: /^TCS NSE/ }).focus();
   await act.press('Alt+ArrowDown', 900);
@@ -152,7 +147,7 @@ clip(
     for (const range of ['1W', '1M', '1Y', '5Y']) {
       await act.click(ranges.getByRole('radio', { name: range, exact: true }), 1000);
       await say(page, `${range}${range === '1W' ? ': 5, 15, 30 and 60-minute bars' : ''}`, 900);
-      if (range === '1W' && (await bars.isVisible().catch(() => false))) {
+      if (range === '1W') {
         await act.click(bars.getByRole('radio', { name: '1-hour bars', exact: true }), 1000);
       }
     }
@@ -163,11 +158,10 @@ clip(
     );
     const figure = page.getByRole('figure', { name: /INFY candlestick chart/ });
     const box = await figure.boundingBox();
-    if (box) {
-      await page.mouse.move(box.x + box.width * 0.4, box.y + box.height * 0.45, { steps: 10 });
-      await page.mouse.move(box.x + box.width * 0.7, box.y + box.height * 0.45, { steps: 30 });
-      await say(page, 'The crosshair shows open, high, low and close in rupees.', 2200);
-    }
+    if (!box) throw new Error('the candlestick chart has no box');
+    await page.mouse.move(box.x + box.width * 0.4, box.y + box.height * 0.45, { steps: 10 });
+    await page.mouse.move(box.x + box.width * 0.7, box.y + box.height * 0.45, { steps: 30 });
+    await say(page, 'The crosshair shows open, high, low and close in rupees.', 2200);
     await act.click(ranges.getByRole('radio', { name: '1D', exact: true }), 600);
     await act.click(page.getByRole('radio', { name: 'Area' }), 600);
     const stats = page.getByRole('region', { name: 'Key stats' });
@@ -177,13 +171,11 @@ clip(
     await page.waitForTimeout(900);
     await say(page, 'Key stats: day and 52-week ranges, market cap, P/E and more.', 2600);
     const depth = page.getByRole('region', { name: 'Market depth' });
-    if (await depth.count()) {
-      await depth.evaluate((element) =>
-        element.scrollIntoView({ behavior: 'smooth', block: 'center' }),
-      );
-      await page.waitForTimeout(900);
-      await say(page, 'Live market depth: five levels of bids and asks.', 2600);
-    }
+    await depth.evaluate((element) =>
+      element.scrollIntoView({ behavior: 'smooth', block: 'center' }),
+    );
+    await page.waitForTimeout(900);
+    await say(page, 'Live market depth: five levels of bids and asks.', 2600);
     await page.evaluate(() =>
       window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' }),
     );
@@ -252,7 +244,6 @@ clip('guide', 'the documentation page', async (page) => {
     'Walkthrough videos',
   ]) {
     const tab = tabs.getByRole('tab', { name, exact: true });
-    if (!(await tab.count())) continue;
     await act.click(tab, 1400);
     await page.mouse.wheel(0, 500);
     await page.waitForTimeout(1200);

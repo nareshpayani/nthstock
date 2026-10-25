@@ -69,14 +69,17 @@ clip('twoFactor', 'turn on two-factor authentication and log in with a code', as
     setup.getByRole('img', { name: 'QR code for your authenticator app' }),
   ).toBeVisible();
   await say(page, 'Scan the QR code, or type the setup key into the app.', 2800);
-  const secret = base32Decode((await setup.getByTestId('totp-setup-key').textContent()) ?? '');
+  const key = (await setup.getByTestId('totp-setup-key').textContent())?.trim() ?? '';
+  expect(key, 'the TOTP setup key').not.toBe('');
+  const secret = base32Decode(key);
   await act.click(setup.getByRole('button', { name: 'Next' }));
   await say(page, 'Enter the 6-digit code the app shows (RFC 6238, 30-second steps).', 1600);
   await typeInto(page, 'Code from your authenticator app', await totpCode(secret, Date.now()));
   const codes = setup.getByRole('list', { name: 'Recovery codes' }).getByRole('listitem');
   await expect(codes).toHaveCount(10);
   await say(page, 'Ten one-time recovery codes, shown once. Copy or download them.', 2800);
-  const recovery = (await codes.first().textContent()) ?? '';
+  const recovery = (await codes.first().textContent())?.trim() ?? '';
+  expect(recovery, 'a recovery code').not.toBe('');
   await act.click(setup.getByRole('checkbox', { name: 'I have saved these codes' }));
   await act.click(setup.getByRole('button', { name: 'Done' }));
   await expect(page.getByLabel('Two-factor authentication is on')).toBeVisible();

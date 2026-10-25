@@ -135,23 +135,30 @@ function Block({ block }: { block: GuideBlock }) {
               key={video.id}
               className="grid content-start gap-2 rounded-md border border-line p-3"
             >
-              {/* preload="none": nothing downloads until the reader presses play. */}
+              {/* preload="none": only the poster loads until the reader presses play. The
+                  captions track is off by default, since the clip already shows its captions. */}
               <video
                 controls
                 playsInline
                 preload="none"
                 poster={videoFile(video.id, 'jpg')}
-                aria-label={`${video.title}, ${video.device.toLowerCase()} walkthrough video`}
-                className="aspect-video w-full rounded-sm bg-canvas object-contain"
+                aria-label={strings.videoLabel(video.title, video.device)}
+                className={cn(
+                  'rounded-sm bg-canvas object-contain',
+                  // A phone clip is portrait: as tall as a desktop card's player, centred.
+                  video.device === 'Phone'
+                    ? 'mx-auto aspect-[390/844] h-96 w-auto'
+                    : 'aspect-video w-full',
+                )}
               >
                 <source src={videoFile(video.id, 'mp4')} type="video/mp4" />
                 <track
                   kind="captions"
                   src={videoFile(video.id, 'vtt')}
                   srcLang="en"
-                  label="English"
-                  default
+                  label={strings.captionsLabel}
                 />
+                <a href={videoFile(video.id, 'mp4')}>{strings.videoFallback(video.title)}</a>
               </video>
               <h3 className="text-body font-semibold text-ink">{video.title}</h3>
               <p className="text-label text-ink-muted">

@@ -32,15 +32,16 @@ const stamp = (ms: number) => {
  */
 export function captionsOf(page: Page): string {
   const log = cues.get(page);
+  if (!log) throw new Error('startCaptions was not called for this page');
   const end = Date.now();
-  const lines = log?.lines ?? [];
+  const lines = log.lines;
   const body = lines
     .map((line, index) => ({ ...line, until: lines[index + 1]?.at ?? end }))
     .filter((line) => line.text)
     .map((line, index) =>
       [
         String(index + 1),
-        `${stamp(line.at - (log?.start ?? end))} --> ${stamp(line.until - (log?.start ?? end))}`,
+        `${stamp(line.at - log.start)} --> ${stamp(line.until - log.start)}`,
         line.text,
       ].join('\n'),
     );

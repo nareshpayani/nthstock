@@ -19,6 +19,10 @@ export const strings = {
   inWords: 'The diagram in words',
   opensInNewTab: '(opens in a new tab)',
   pagerLabel: 'Previous and next topic',
+  videoLabel: (title: string, device: string) =>
+    `${title}, ${device.toLowerCase()} walkthrough video`,
+  videoFallback: (title: string) => `Download the ${title} video`,
+  captionsLabel: 'English',
 
   tabs: defineTabs([
     {
@@ -247,7 +251,7 @@ export const strings = {
       blocks: [
         {
           kind: 'text',
-          text: 'Each clip shows one feature end to end, with a caption for every step and a dot where the click or tap lands, so it reads without sound. Players load nothing until you press play, and each has an English captions track.',
+          text: 'Each clip shows one feature end to end, with a caption for every step and a dot where the click or tap lands, so it reads without sound. Each player loads only its poster until you press play, and has an English captions track you can turn on.',
         },
         {
           kind: 'videos',
@@ -292,7 +296,7 @@ export const strings = {
               id: 'dashboard',
               title: 'Dashboard and live prices',
               device: 'Desktop',
-              length: '0:41',
+              length: '0:36',
               body: 'Header tickers and market status, the NIFTY 50 chart from 1 day to 5 years with its crosshair, market indices, stock lists and the top gainers and losers.',
             },
             {
@@ -313,14 +317,14 @@ export const strings = {
               id: 'stockDetail',
               title: 'Stock page and charts',
               device: 'Desktop',
-              length: '0:58',
+              length: '0:48',
               body: 'Every range (1D, 1W, 1M, 1Y, 5Y) and every bar size (1, 5, 15, 30 and 60 minutes), area and candles, the crosshair, key stats, live market depth and the company overview.',
             },
             {
               id: 'orderTicket',
               title: 'Order ticket',
               device: 'Desktop',
-              length: '1:05',
+              length: '0:47',
               body: 'Buy from a stock while logged out, back with the ticket open; a market order with review and confirm; an intraday limit picked from the depth; the circuit band refusing a price.',
             },
             {
@@ -334,7 +338,7 @@ export const strings = {
               id: 'trailingStop',
               title: 'Trailing stop-loss (TSLO)',
               device: 'Desktop',
-              length: '1:05',
+              length: '0:47',
               body: 'A trailing stop from the ticket in percent, the amber stop line, the stop ratcheting up on a rally, holding on a pullback, and triggering once on a gap.',
             },
             {
@@ -362,7 +366,7 @@ export const strings = {
               id: 'positionsPortfolio',
               title: 'Positions and portfolio',
               device: 'Desktop',
-              length: '0:30',
+              length: '0:33',
               body: 'Demo holdings valued live, a new position with live P&L in Positions, and Exit at the market price.',
             },
             {

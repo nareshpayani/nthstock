@@ -75,11 +75,26 @@ test('each topic is a tab with its own link, kept on reload', async ({ page }) =
     await expect(page.getByRole('tabpanel').getByRole('img').first()).toBeVisible();
     await expectNoSeriousA11yViolations(page, `/guide?tab=${tab}`);
   }
+
+  // The walkthrough videos: players with a poster and a captions track (NSTOCK-0390).
+  await page.goto('/guide?tab=walkthroughs');
+  const players = page.getByRole('tabpanel').locator('video');
+  await expect(players.first()).toBeVisible();
+  // Every player carries its captions track (WCAG 1.2.2).
+  await expect(players.filter({ hasNot: page.locator('track[kind="captions"]') })).toHaveCount(0);
+  await expectNoSeriousA11yViolations(page, '/guide?tab=walkthroughs');
 });
 
 test('the guide fits a phone screen without sideways scrolling', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
-  for (const tab of ['overview', 'architecture', 'scalability', 'folders', 'ci-cd']) {
+  for (const tab of [
+    'overview',
+    'walkthroughs',
+    'architecture',
+    'scalability',
+    'folders',
+    'ci-cd',
+  ]) {
     await page.goto(`/guide?tab=${tab}`);
     await expect(
       page.getByRole('heading', { level: 1, name: 'nthstock documentation' }),
