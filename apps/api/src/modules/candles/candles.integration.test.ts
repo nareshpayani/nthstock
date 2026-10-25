@@ -7,7 +7,7 @@ import {
 } from '@nthstock/marketData';
 import { fixedClock, fromIst, type Clock } from '@nthstock/utils';
 import { Client } from 'pg';
-import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { buildApp, type App } from '../../app.js';
 import { createDatabase, type Database } from '../../db/client.js';
 import {
@@ -20,6 +20,10 @@ import { createPgCandleStore, type CandleStore } from './store.js';
 
 // The candle history seed (NSTOCK-0374) and the candles route on stored bars (NSTOCK-0375), on
 // TimescaleDB as migration 0014 builds it.
+
+// Several tests run the whole seed (two years for two symbols, then five aggregate refreshes),
+// which takes a few seconds on a CI runner: well past Vitest's 5 s default.
+vi.setConfig({ testTimeout: 60_000 });
 
 const master = generateSymbolMaster({ equityCount: 200 });
 const SEEDED = ['INFY', 'NIFTY50'];
