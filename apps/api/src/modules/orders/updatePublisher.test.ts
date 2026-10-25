@@ -1,7 +1,12 @@
-import { OrderUpdateEvent, orderUpdatesChannel, type Order } from '@nthstock/contracts';
+import {
+  AccountDeltaEvent,
+  OrderUpdateEvent,
+  orderUpdatesChannel,
+  type Order,
+} from '@nthstock/contracts';
 import { describe, expect, it } from 'vitest';
 import { createMemoryPublisher } from '../../ticks/publisher.js';
-import type { OrderUpdateListener } from './service.js';
+import type { AccountDelta, AccountDeltaListener, OrderUpdateListener } from './service.js';
 import { startOrderUpdatePublisher } from './updatePublisher.js';
 
 const order: Order = {
@@ -26,6 +31,7 @@ const order: Order = {
 
 function fakeOrders() {
   const listeners = new Set<OrderUpdateListener>();
+  const deltaListeners = new Set<AccountDeltaListener>();
   return {
     onOrderUpdate(listener: OrderUpdateListener) {
       listeners.add(listener);
@@ -33,10 +39,20 @@ function fakeOrders() {
         listeners.delete(listener);
       };
     },
+    onAccountDelta(listener: AccountDeltaListener) {
+      deltaListeners.add(listener);
+      return () => {
+        deltaListeners.delete(listener);
+      };
+    },
     emit: (userId: string, next: Order) => {
       for (const listener of listeners) listener(userId, next);
     },
+    emitDelta: (userId: string, delta: AccountDelta) => {
+      for (const listener of deltaListeners) listener(userId, delta);
+    },
     listeners,
+    deltaListeners,
   };
 }
 
@@ -61,6 +77,27 @@ describe('order update publisher (T-133)', () => {
 
     running.stop();
     expect(orders.listeners.size).toBe(0);
+    expect(orders.deltaListeners.size).toBe(0);
+  });
+
+  it('publishes each account delta on the same channel as an AccountDeltaEvent (NSTOCK-0368)', async () => {
+    const orders = fakeOrders();
+    const publisher = createMemoryPublisher();
+    const log = { info: () => undefined, warn: () => undefined };
+    startOrderUpdatePublisher({ orders, publisher, log });
+
+    const delta: AccountDelta = {
+      seq: 3,
+      at: '2026-09-28T04:30:00.000Z',
+      orders: [{ ...order, seq: 3 }],
+      positions: [],
+      trailingStops: [],
+    };
+    orders.emitDelta('usr_a', delta);
+    await flush();
+    expect(publisher.messages.map((m) => m.channel)).toEqual([orderUpdatesChannel('usr_a')]);
+    const event = AccountDeltaEvent.parse(JSON.parse(publisher.messages[0]?.message ?? ''));
+    expect(event).toEqual({ v: 1, type: 'accountDelta', userId: 'usr_a', delta });
   });
 
   it('logs a failing Redis once per outage and once on recovery', async () => {

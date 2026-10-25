@@ -8,7 +8,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createRealtimeServer, WS_PATH, type RealtimeServer } from './app.js';
 import { createMemoryQuoteFeed } from './feeds/feed.js';
 import { createMemoryOrderFeed } from './feeds/orderFeed.js';
-import { testOrder } from './test/orders.js';
+import { testAccountDelta, testOrder } from './test/orders.js';
 import { quoteFramesOf } from './test/frames.js';
 import { manualTimers } from './test/manualTimers.js';
 import { testQuote } from './test/quotes.js';
@@ -219,6 +219,36 @@ describe('private order channel (T-133)', () => {
       expect(orderFeed.watching('usr_alice')).toBe(false);
     });
     expect(orderFeed.watching('usr_bob')).toBe(true);
+    bob.close();
+    await own.close();
+  });
+});
+
+describe('private account deltas (NSTOCK-0368)', () => {
+  it("user A receives their account delta as an accountDelta frame and never user B's", async () => {
+    const orderFeed = createMemoryOrderFeed();
+    const own = createRealtimeServer({ authenticate: testAuthenticator(), orderFeed });
+    const port = await own.listen(0, '127.0.0.1');
+    const url = `ws://127.0.0.1:${port}${WS_PATH}`;
+    const alice = await connectAuthed(url, 'usr_alice');
+    const aliceTab2 = await connectAuthed(url, 'usr_alice');
+    const bob = await connectAuthed(url, 'usr_bob');
+    await alice.drain();
+    await aliceTab2.drain();
+    await bob.drain();
+
+    orderFeed.emitDelta('usr_alice', testAccountDelta(3));
+
+    const frame = {
+      kind: 'json',
+      message: { v: WS_PROTOCOL_VERSION, type: 'accountDelta', quotes: [], ...testAccountDelta(3) },
+    };
+    expect(await alice.drain()).toEqual([frame]);
+    expect(await aliceTab2.drain()).toEqual([frame]);
+    expect(await bob.drain()).toEqual([]);
+
+    alice.close();
+    aliceTab2.close();
     bob.close();
     await own.close();
   });

@@ -50,6 +50,7 @@ export {
 export {
   PAPER_ENGINE_LEGACY_SNAPSHOT_VERSION,
   PAPER_ENGINE_SNAPSHOT_VERSION,
+  PAPER_ENGINE_LEGACY_WORKING_SET_VERSION,
   PAPER_ENGINE_WORKING_SET_VERSION,
   PaperEngine,
   type EngineHolding,
@@ -62,6 +63,7 @@ export {
   type PaperEngineSnapshotV1,
   type PaperEngineSnapshotV3,
   type PaperEngineWorkingSet,
+  type PaperEngineWorkingSetV2,
   type TrailingStopActionErrorCode,
   type TrailingStopActionResult,
   type TrailingStopCheckCode,

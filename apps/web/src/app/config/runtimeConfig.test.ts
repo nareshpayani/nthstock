@@ -103,8 +103,8 @@ describe('.env.example', () => {
 });
 
 describe('tradingCapabilities', () => {
-  it('offers trailing stops on the in-browser engine only (SPEC-TFC-1 §10.6)', () => {
+  it('offers trailing stops in both modes (SPEC-TFC-1 §10.6, NSTOCK-0368)', () => {
     expect(tradingCapabilities({ apiMode: 'msw' })).toEqual({ trailingStops: true });
-    expect(tradingCapabilities({ apiMode: 'api' })).toEqual({ trailingStops: false });
+    expect(tradingCapabilities({ apiMode: 'api' })).toEqual({ trailingStops: true });
   });
 });

@@ -1,6 +1,8 @@
 import {
+  ACCOUNT_DELTA_EVENT_VERSION,
   ORDER_UPDATE_EVENT_VERSION,
   orderUpdatesChannel,
+  type AccountDeltaEvent,
   type OrderUpdateEvent,
 } from '@nthstock/contracts';
 import type { Publisher, PublisherLog } from '../../ticks/publisher.js';
@@ -12,12 +14,14 @@ export type OrderUpdatePublisher = {
 };
 
 /**
- * Publishes every order change to its user's own Redis channel (T-133), as an `OrderUpdateEvent`;
- * apps/realtime delivers it on that user's connections only. A failed publish is logged once
- * until publishing recovers; the order book over REST stays the source of truth.
+ * Publishes every order change to its user's own Redis channel (T-133), as an `OrderUpdateEvent`,
+ * and after them each committed account change as an `AccountDeltaEvent` (NSTOCK-0368), which
+ * apps/realtime turns into the `accountDelta` frames the trading store applies. Both reach that
+ * user's connections only. A failed publish is logged once until publishing recovers; the REST
+ * routes (`GET /v1/account/state`) stay the source of truth.
  */
 export function startOrderUpdatePublisher(options: {
-  orders: Pick<OrderService, 'onOrderUpdate'>;
+  orders: Pick<OrderService, 'onOrderUpdate' | 'onAccountDelta'>;
   publisher: Publisher;
   log: PublisherLog;
 }): OrderUpdatePublisher {
@@ -34,11 +38,21 @@ export function startOrderUpdatePublisher(options: {
       `Order update publishing failed: ${error instanceof Error ? error.message : String(error)}`,
     );
   };
-  const stop = orders.onOrderUpdate((userId, order) => {
-    const event: OrderUpdateEvent = { v: ORDER_UPDATE_EVENT_VERSION, userId, order };
+  const publish = (userId: string, event: OrderUpdateEvent | AccountDeltaEvent) => {
     publisher
       .publish(orderUpdatesChannel(userId), JSON.stringify(event))
       .then(onPublished, onFailed);
+  };
+  const stopOrders = orders.onOrderUpdate((userId, order) => {
+    publish(userId, { v: ORDER_UPDATE_EVENT_VERSION, userId, order });
   });
-  return { stop };
+  const stopDeltas = orders.onAccountDelta((userId, delta) => {
+    publish(userId, { v: ACCOUNT_DELTA_EVENT_VERSION, type: 'accountDelta', userId, delta });
+  });
+  return {
+    stop() {
+      stopOrders();
+      stopDeltas();
+    },
+  };
 }

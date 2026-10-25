@@ -103,6 +103,24 @@ streams, so apps/api stops matching in process.
 - **Status:** the book is built. The worker, commands, reconcile loop, fills, server-side trailing stops,
   `MATCHER_MODE` and the benchmark are NSTOCK-0364 to 0370.
 
+### Server-side trailing stops (NSTOCK-0368)
+In api mode trailing stops run on the server with the same engine rules as the browser mock (SPEC-TFC-1 §6, §10.6).
+- **Store:** the engine's working set is version 4: it carries the trailing stops (active ones and today's), the
+  engine `seq`, the exit order ids and the stops' idempotency keys. Migration 0014 adds `trailing_stops` (one row per
+  `TrailingStop`, trail as unit plus amount or basis points, CHECKed against the contract lists) and
+  `paper_accounts.seq` and `exit_order_ids`. A commit upserts the stops that changed; a reset clears them with the
+  orders. So a stop survives a restart, keeps its stop price, and `seq` never goes back.
+- **Routes:** apps/api serves `GET/POST /v1/trailing-stops`, `PATCH/DELETE /v1/trailing-stops/:id`,
+  `POST /v1/positions/close` and `GET /v1/account/state`, with refusals mapped by `trailingStopApiError` like the
+  mock. Every action is audited (`TRAILING_STOP_PLACE`, `_MODIFY`, `_CANCEL`, `POSITION_CLOSE`) and every state change
+  as `TRAILING_STOP_UPDATE`.
+- **Frames:** after each commit the orders module publishes an `AccountDeltaEvent` (the changed orders and stops at
+  their newest `seq`, positions and funds) on the user's order channel, after the order updates. apps/realtime sends it
+  to that user's connections as an `accountDelta` frame with no quotes, so the web app's trading store runs in api mode
+  exactly as on MSW: it loads the account state, applies frames, and reloads on a gap.
+- **Matcher:** ticks still step stops in apps/api's process. Once the matcher worker (NSTOCK-0364, 0365) is on
+  `develop`, apps/api sends `STOP_ADD` and `STOP_CANCEL` to it instead.
+
 ### Market data and chart bars
 - `packages/marketData` generates each range's own bars (1D: 1-minute, 1W: 5-minute, 1M: hourly,
   1Y: daily, 5Y: weekly) and `resampleCandles` groups them into a coarser bar size on request

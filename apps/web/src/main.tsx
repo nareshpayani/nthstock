@@ -88,7 +88,7 @@ function boot() {
     ...(beforeRequest ? { ready: beforeRequest } : {}),
   });
   const router = createAppRouter({ queryClient, apiClient });
-  // The trading store (ADR 0012) runs where the engine sends account frames: msw mode for now.
+  // The trading store (ADR 0012) runs where the engine sends account frames: both modes now.
   const { wsClient, quoteStore, orderUpdates, tradingStore } = createLiveQuotes(
     config,
     window.location,

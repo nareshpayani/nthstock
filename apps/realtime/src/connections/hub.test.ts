@@ -10,7 +10,7 @@ import {
 import { fakeSocket } from '../test/fakeSocket.js';
 import { quoteFramesOf } from '../test/frames.js';
 import { manualTimers } from '../test/manualTimers.js';
-import { testOrder } from '../test/orders.js';
+import { testAccountDelta, testOrder } from '../test/orders.js';
 import { testQuote } from '../test/quotes.js';
 
 const subscribe = (symbols: string[], exchange = 'NSE') =>
@@ -337,6 +337,35 @@ describe('hub private order channel (T-133)', () => {
     hub.deliverOrder('usr_a', testOrder('o1'));
     expect(fine.json()).toHaveLength(1);
     expect(logger.warn).toHaveBeenCalledWith('order update send failed', {
+      error: 'Error: socket gone',
+    });
+  });
+});
+
+describe('hub account deltas (NSTOCK-0368)', () => {
+  it("sends each user's account deltas, with no quotes, to their connections only", () => {
+    const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn() };
+    const hub = createHub({ timers: manualTimers(), logger });
+    const broken = fakeSocket();
+    broken.send = () => {
+      throw new Error('socket gone');
+    };
+    const alice = fakeSocket();
+    const bob = fakeSocket();
+    const anonymous = fakeSocket();
+    hub.open(broken, { userId: 'usr_alice' });
+    hub.open(alice, { userId: 'usr_alice' });
+    hub.open(bob, { userId: 'usr_bob' });
+    hub.open(anonymous);
+
+    hub.deliverAccountDelta('usr_alice', testAccountDelta(7));
+
+    expect(alice.json()).toEqual([
+      { v: WS_PROTOCOL_VERSION, type: 'accountDelta', quotes: [], ...testAccountDelta(7) },
+    ]);
+    expect(bob.sent).toEqual([]);
+    expect(anonymous.sent).toEqual([]);
+    expect(logger.warn).toHaveBeenCalledWith('account delta send failed', {
       error: 'Error: socket gone',
     });
   });

@@ -5,6 +5,7 @@ import {
   WS_PROTOCOL_VERSION,
   encodeQuoteFrame,
   instrumentOf,
+  type AccountDeltaEvent,
   type Order,
   type Quote,
   type WsInstrument,
@@ -44,7 +45,10 @@ export type Connection = {
 export type ConnectionIdentity = { userId: string; sessionId?: string };
 
 export type Hub = {
-  /** Opens a connection; with an identity it also gets that user's private order updates. */
+  /**
+   * Opens a connection; with an identity it also gets that user's private order updates and
+   * account deltas.
+   */
   open(socket: ClientSocket, identity?: ConnectionIdentity): Connection;
   /** Quotes from the feed; each goes only to connections subscribed to its symbol. */
   ingest(quotes: readonly Quote[]): void;
@@ -53,6 +57,11 @@ export type Hub = {
    * connection of the user it belongs to and to no one else. It is never conflated or dropped.
    */
   deliverOrder(userId: string, order: Order): void;
+  /**
+   * The same private channel (NSTOCK-0368): an account delta goes, as an `accountDelta` message
+   * with no quotes, to every open connection of its user and to no one else. Never conflated.
+   */
+  deliverAccountDelta(userId: string, delta: AccountDeltaEvent['delta']): void;
   /**
    * Closes every connection of a revoked session with 4401 (T-195), leaving the user's other
    * sessions open. Resolves to how many it closed.
@@ -234,6 +243,21 @@ export function createHub(options: HubOptions = {}): Hub {
     }
   };
 
+  const deliverAccountDelta = (userId: string, delta: AccountDeltaEvent['delta']) => {
+    for (const session of byUser.get(userId) ?? []) {
+      try {
+        sendJson(session.socket, {
+          v: WS_PROTOCOL_VERSION,
+          type: 'accountDelta',
+          quotes: [],
+          ...delta,
+        });
+      } catch (error) {
+        logger.warn('account delta send failed', { error: String(error) });
+      }
+    }
+  };
+
   const closeSession = (sessionId: string) => {
     const revoked = [...(bySession.get(sessionId) ?? [])];
     for (const session of revoked) {
@@ -349,6 +373,7 @@ export function createHub(options: HubOptions = {}): Hub {
     open,
     ingest,
     deliverOrder,
+    deliverAccountDelta,
     closeSession,
     flush,
     heartbeat,

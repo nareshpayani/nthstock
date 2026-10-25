@@ -24,8 +24,9 @@ export type RealtimeServerOptions = {
   /** Where quotes come from; the server closes it on close. Left out, nothing is fanned out. */
   feed?: QuoteFeed;
   /**
-   * Per-user order updates (T-133), delivered on each user's own connections only. The server
-   * watches a user while they have a connection here and closes the feed on close.
+   * Per-user order updates (T-133) and account deltas (NSTOCK-0368), delivered on each user's own
+   * connections only. The server watches a user while they have a connection here and closes the
+   * feed on close.
    */
   orderFeed?: OrderFeed;
   /**
@@ -97,6 +98,7 @@ export function createRealtimeServer(options: RealtimeServerOptions): RealtimeSe
   });
   const detachFeed = options.feed?.onQuotes(hub.ingest);
   const detachOrders = options.orderFeed?.onOrderUpdate(hub.deliverOrder);
+  const detachDeltas = options.orderFeed?.onAccountDelta(hub.deliverAccountDelta);
   const revocations = options.revocations;
   const detachRevocations = revocations?.onRevoked(({ sessionId }) => {
     const closed = hub.closeSession(sessionId);
@@ -205,6 +207,7 @@ export function createRealtimeServer(options: RealtimeServerOptions): RealtimeSe
       closing ??= (async () => {
         detachFeed?.();
         detachOrders?.();
+        detachDeltas?.();
         detachRevocations?.();
         hub.close();
         await options.feed?.close();

@@ -82,7 +82,7 @@ export type PaperDeskOptions = {
   onOrderUpdate?: (userId: string, order: Order) => void;
   /** Every trailing-stop change of every user (SPEC-TFC-1 §10.1). */
   onTrailingStopUpdate?: (userId: string, stop: TrailingStop) => void;
-  /** False refuses trailing stops (apps/api until its store keeps them). Default true. */
+  /** False refuses trailing stops. Default true. */
   trailingStops?: boolean;
   /** After any change to a user's engine (MSW saves a snapshot here). */
   onChange?: (userId: string, engine: PaperEngine) => void;

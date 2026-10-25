@@ -42,6 +42,16 @@ export const paperAccounts = pgTable(
       .references(() => users.id, { onDelete: 'cascade' }),
     openingBalance: paise('opening_balance').notNull(),
     version: bigint('version', { mode: 'number' }).notNull().default(0),
+    /** The engine's sequence number of its last order or trailing-stop change (ADR 0012). */
+    seq: bigint('seq', { mode: 'number' }).notNull().default(0),
+    /**
+     * Today's and live orders the engine placed to close a position (trailing-stop exits and
+     * `closePosition`): reduce-only and never refused for cash, so the flag must survive a reload.
+     */
+    exitOrderIds: text('exit_order_ids')
+      .array()
+      .notNull()
+      .default(sql`'{}'::text[]`),
     syncedTo: instant('synced_to').notNull(),
     createdAt: instant('created_at').notNull(),
     updatedAt: instant('updated_at').notNull(),
@@ -49,6 +59,7 @@ export const paperAccounts = pgTable(
   (table) => [
     check('paper_accounts_opening_balance_check', sql`${table.openingBalance} >= 0`),
     check('paper_accounts_version_check', sql`${table.version} >= 0`),
+    check('paper_accounts_seq_check', sql`${table.seq} >= 0`),
   ],
 );
 
@@ -153,6 +164,87 @@ export const holdingSales = pgTable(
       columns: [table.userId, table.tradeDate, table.token],
     }),
     check('holding_sales_qty_check', sql`${table.qty} > 0`),
+  ],
+);
+
+/**
+ * `TrailingStopStatus`, the trail units and the exit types from packages/contracts (repeated for
+ * drizzle-kit like `LEDGER_ENTRY_TYPES`; `db/schemaEnums.test.ts` keeps them equal).
+ */
+export const TRAILING_STOP_STATUSES = [
+  'PENDING_ENTRY',
+  'ARMED',
+  'TRAILING',
+  'TRIGGERED',
+  'EXECUTED',
+  'CANCELLED',
+  'REJECTED',
+] as const;
+export const TRAIL_UNITS = ['AMOUNT', 'PERCENT'] as const;
+export const TRAILING_STOP_EXIT_TYPES = ['MARKET', 'LIMIT'] as const;
+
+/**
+ * Trailing stops (NSTOCK-0368, SPEC-TFC-1 §6): the `TrailingStop` contract, one row per stop.
+ * The engine owns every field; the store upserts the stops a change touched. `entry_order_id` and
+ * `exit_order_id` point into the partitioned `orders` table, so they have no foreign key.
+ * `client_request_id` is the place request's idempotency key.
+ */
+export const trailingStops = pgTable(
+  'trailing_stops',
+  {
+    id: text('id').primaryKey(),
+    userId: text('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    token: integer('token').notNull(),
+    symbol: text('symbol').notNull(),
+    exchange: text('exchange').notNull(),
+    product: text('product').notNull(),
+    direction: text('direction').notNull(),
+    trailUnit: text('trail_unit').notNull(),
+    /** Set for an AMOUNT trail. */
+    trailAmount: paise('trail_amount'),
+    /** Set for a PERCENT trail. */
+    trailBasisPoints: integer('trail_basis_points'),
+    activationPrice: paise('activation_price'),
+    exitOrderType: text('exit_order_type').notNull(),
+    exitLimitOffset: paise('exit_limit_offset'),
+    status: text('status').notNull(),
+    statusReason: text('status_reason'),
+    watermarkPrice: paise('watermark_price'),
+    stopPrice: paise('stop_price'),
+    protectedQty: integer('protected_qty').notNull(),
+    entryOrderId: text('entry_order_id'),
+    exitOrderId: text('exit_order_id'),
+    clientRequestId: text('client_request_id'),
+    seq: bigint('seq', { mode: 'number' }).notNull(),
+    createdAt: instant('created_at').notNull(),
+    updatedAt: instant('updated_at').notNull(),
+  },
+  (table) => [
+    // `load` reads a user's active stops and today's finished ones.
+    index('trailing_stops_user_id_updated_at_idx').on(table.userId, table.updatedAt),
+    uniqueIndex('trailing_stops_user_id_client_request_id_key').on(
+      table.userId,
+      table.clientRequestId,
+    ),
+    check(
+      'trailing_stops_status_check',
+      sql`${table.status} IN (${sqlList(TRAILING_STOP_STATUSES)})`,
+    ),
+    check('trailing_stops_product_check', sql`${table.product} IN ('INTRADAY', 'DELIVERY')`),
+    check('trailing_stops_exchange_check', sql`${table.exchange} IN ('NSE', 'BSE')`),
+    check('trailing_stops_direction_check', sql`${table.direction} IN ('LONG', 'SHORT')`),
+    check(
+      'trailing_stops_trail_check',
+      sql`(${table.trailUnit} = 'AMOUNT' AND ${table.trailAmount} > 0 AND ${table.trailBasisPoints} IS NULL) OR (${table.trailUnit} = 'PERCENT' AND ${table.trailBasisPoints} > 0 AND ${table.trailAmount} IS NULL)`,
+    ),
+    check(
+      'trailing_stops_exit_check',
+      sql`${table.exitOrderType} IN (${sqlList(TRAILING_STOP_EXIT_TYPES)})`,
+    ),
+    check('trailing_stops_qty_check', sql`${table.protectedQty} >= 0`),
+    check('trailing_stops_seq_check', sql`${table.seq} >= 0`),
   ],
 );
 

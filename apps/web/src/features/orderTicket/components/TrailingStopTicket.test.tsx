@@ -178,15 +178,15 @@ describe('Trailing SL order type (T13, SPEC-TFC-1 §7)', () => {
   );
 
   it(
-    'shows the option as not available where the backend has no trailing stops (api mode)',
+    'shows the option as not available while there is no trading store (signed out or loading)',
     async () => {
-      // No trading store provided: the app's idle store, as in api mode.
+      // No trading store provided: the app's idle store, before the account state loads.
       await renderWithPositions([['DELIVERY', 2]]);
       const option = await within(typeGroup()).findByRole('radio', {
-        name: 'Not available in this mode',
+        name: 'Not available right now',
       });
       expect(option).toBeDisabled();
-      expect(screen.getByText(/not available in this mode yet/)).toBeInTheDocument();
+      expect(screen.getByText(/loaded. Try again in a moment/)).toBeInTheDocument();
     },
     HEAVY,
   );
