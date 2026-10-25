@@ -12,6 +12,16 @@ export const E2E_PORTS = { web: 4173, api: 4100, realtime: 8181 } as const;
 export const API_ORIGIN = `http://127.0.0.1:${String(E2E_PORTS.api)}`;
 export const REALTIME_ORIGIN = `http://127.0.0.1:${String(E2E_PORTS.realtime)}`;
 
+/**
+ * `E2E_DEV=1` (`npm run e2e:dev`, NSTOCK-0361): runs the specs tagged @dev against the Vite dev
+ * server, the way `npm run dev` serves the app on a laptop, instead of a production build. CI runs
+ * it with the packages' `dist` deleted, so a dev server that leans on stale builds fails.
+ */
+export const E2E_DEV = process.env['E2E_DEV'] === '1';
+
+/** Tag for specs that also run on the dev server (`E2E_DEV=1`). */
+export const DEV_TAG = '@dev';
+
 /** Tag for specs that also run in api mode against the real backends. */
 export const API_TAG = '@api';
 

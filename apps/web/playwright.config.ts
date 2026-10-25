@@ -3,6 +3,8 @@ import { defineConfig, devices } from '@playwright/test';
 import {
   API_ORIGIN,
   API_TAG,
+  DEV_TAG,
+  E2E_DEV,
   E2E_MODE,
   E2E_PERF,
   E2E_PORTS,
@@ -57,6 +59,15 @@ const backendEnv = {
   REDIS_URL: redisUrl,
   DB_DRIVER: 'postgres',
   DATABASE_URL: databaseUrl,
+};
+
+// E2E_DEV (NSTOCK-0361): the dev server itself, as `npm run dev` runs it, on the E2E port.
+const devServer = {
+  command: `npx vite --host 127.0.0.1 --port ${String(E2E_PORTS.web)} --strictPort`,
+  url: web,
+  env: { VITE_API_MODE: 'msw', VITE_MOCK_MARKET_OPEN: 'true', VITE_TEST_CONTROLS: 'true' },
+  reuseExistingServer: false,
+  timeout: 180_000,
 };
 
 const mswServer = {
@@ -117,35 +128,45 @@ const touchProjects = [
 
 export default defineConfig({
   testDir: './e2e',
+  // Other specs import package dist at load time; the dev run deletes some of it on purpose.
+  ...(E2E_DEV ? { testMatch: /consoleClean\.spec\.ts$/ } : {}),
   fullyParallel: !api && !E2E_PERF,
   ...(api || E2E_PERF ? { workers: 1 } : {}),
   forbidOnly: Boolean(process.env['CI']),
   retries: process.env['CI'] ? 1 : 0,
   reporter: process.env['CI'] ? [['github'], ['html', { open: 'never' }]] : 'list',
   use: { baseURL: web, trace: 'retain-on-failure' },
-  projects: api
+  projects: E2E_DEV
     ? [
         {
-          name: 'chrome-api',
-          grep: new RegExp(API_TAG),
+          name: 'chrome-dev',
+          grep: new RegExp(DEV_TAG),
           use: { ...devices['Desktop Chrome'], ...launch },
         },
       ]
-    : E2E_PERF
+    : api
       ? [
           {
-            name: 'chrome',
-            grep: new RegExp(PERF_TAG),
+            name: 'chrome-api',
+            grep: new RegExp(API_TAG),
             use: { ...devices['Desktop Chrome'], ...launch },
           },
         ]
-      : [
-          {
-            name: 'chrome',
-            grepInvert: new RegExp(`${PERF_TAG}|${TOUCH_TAG}`),
-            use: { ...devices['Desktop Chrome'], ...launch },
-          },
-          ...touchProjects,
-        ],
-  webServer: api ? apiServers : mswServer,
+      : E2E_PERF
+        ? [
+            {
+              name: 'chrome',
+              grep: new RegExp(PERF_TAG),
+              use: { ...devices['Desktop Chrome'], ...launch },
+            },
+          ]
+        : [
+            {
+              name: 'chrome',
+              grepInvert: new RegExp(`${PERF_TAG}|${TOUCH_TAG}`),
+              use: { ...devices['Desktop Chrome'], ...launch },
+            },
+            ...touchProjects,
+          ],
+  webServer: E2E_DEV ? devServer : api ? apiServers : mswServer,
 });

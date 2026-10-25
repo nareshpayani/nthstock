@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "predev": "turbo run build --filter=@nthstock/web^...",
     "dev": "vite",
     "build": "vite build && node scripts/checkBuild.mjs && npm run build:api-check",
     "preview": "vite preview",
@@ -12,6 +13,7 @@
     "test": "vitest run --coverage",
     "e2e": "playwright test",
     "e2e:api": "E2E_MODE=api playwright test",
+    "e2e:dev": "E2E_DEV=1 playwright test",
     "e2e:perf": "E2E_PERF=1 playwright test",
     "e2e:deployed": "playwright test -c playwright.deployed.config.ts",
     "lhci": "npx --yes @lhci/cli@0.15.1 autorun --config=lighthouserc.cjs",
