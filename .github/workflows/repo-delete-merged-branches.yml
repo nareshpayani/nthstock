@@ -1,10 +1,10 @@
-name: 'Delete merged branches'
+name: 'Repo: Delete merged branches'
 
 # Deletes a pull request's head branch once the PR is merged (owner request 2026-10-22,
 # NSTOCK-0330), for story, bug, epic and agent branches alike. The repository setting
 # "Automatically delete head branches" does the same for merges made by people; this workflow also
-# covers merges made by agent-automerge.yml with GITHUB_TOKEN, which start no workflows, through an
-# hourly sweep of recently merged PRs.
+# covers merges made by pr-auto-merge.yml with GITHUB_TOKEN, which start no workflows, through a
+# daily sweep of recently merged PRs.
 #
 # A branch is deleted only when all of these hold:
 #   - it is in this repository (never a fork) and is not develop or production,
@@ -19,19 +19,21 @@ on:
       pr:
         description: 'Merged PR number (empty = sweep the last 100 closed PRs)'
         required: false
+  # Auto-merge already deletes the branches it merges (--delete-branch), so a daily sweep is enough.
   schedule:
-    - cron: '17 * * * *'
+    - cron: '17 2 * * *'
 
 permissions:
   contents: write
   pull-requests: read
 
 concurrency:
-  group: branch-cleanup
+  group: repo-delete-merged-branches
   cancel-in-progress: false
 
 jobs:
   cleanup:
+    name: Delete merged head branches
     if: github.event_name != 'pull_request' || github.event.pull_request.merged
     runs-on: ubuntu-latest
     timeout-minutes: 10

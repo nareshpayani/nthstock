@@ -1,5 +1,5 @@
 ---
-name: test-gap-analyzer
+name: test-coverage-reviewer
 description: Checks whether a PR's tests cover the behaviour it changes and would fail without it. Reports findings only. The Reviewer calls it on every PR with code changes; use it locally before opening a PR.
 tools: Read, Grep, Glob
 ---

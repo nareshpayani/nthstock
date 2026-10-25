@@ -1,4 +1,4 @@
-name: 'Agent: Planner'
+name: 'Agent: Spec planner'
 
 # Breaks an approved phase/feature into a spec PR + story issues.
 # Starts when the owner labels an issue `plan:approved`, or manually.
@@ -19,11 +19,12 @@ permissions:
   id-token: write
 
 concurrency:
-  group: agent-planner
+  group: agent-spec-planner
   cancel-in-progress: false
 
 jobs:
   plan:
+    name: Plan a spec and its stories
     if: >-
       github.event_name == 'workflow_dispatch' ||
       (github.event.label.name == 'plan:approved' && github.event.sender.login == (vars.OWNER_LOGIN || 'nareshpayani'))
@@ -33,7 +34,7 @@ jobs:
       HAS_AGENT_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN != '' }}
     steps:
       - uses: actions/checkout@v7
-        # No persisted GITHUB_TOKEN, so the agent pushes with its app token (see agent-fixer.yml).
+        # No persisted GITHUB_TOKEN, so the agent pushes with its app token (see agent-pr-fixer.yml).
         with:
           persist-credentials: false
       - name: Block pushes to production and develop
@@ -43,7 +44,7 @@ jobs:
       - if: env.HAS_AGENT_TOKEN != 'true'
         run: echo "::notice::CLAUDE_CODE_OAUTH_TOKEN is not set; agent skipped. See docs/agent-workflow.md."
       - if: env.HAS_AGENT_TOKEN == 'true'
-        uses: anthropics/claude-code-action@v1
+        uses: anthropics/claude-code-action@42619cb7a75ded196ded275cdd529a35178bfd2c # v1
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           # Commits are authored as the owner, not the app (owner decision 2026-10-21).
@@ -54,7 +55,7 @@ jobs:
             TRIGGER ISSUE: ${{ github.event.issue.number || 'none (manual run)' }}
             REQUEST: ${{ github.event.inputs.request || 'see the trigger issue title and body' }}
 
-            Act as the Planner. Follow .claude/agents/planner.md exactly.
+            Act as the Planner. Follow .claude/agents/spec-planner.md exactly.
           claude_args: |
             --max-turns 40
             --allowedTools "Read,Glob,Grep,Edit,Write,Bash(git:*),Bash(gh issue:*),Bash(gh pr create:*),Bash(gh pr view:*),Bash(gh label list:*),Bash(bash tools/github/issueKey.sh:*)"

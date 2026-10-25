@@ -1,4 +1,4 @@
-name: 'Issues: NSTOCK keys'
+name: 'Issues: Assign NSTOCK key'
 
 # Gives every new issue the next NSTOCK key ("NSTOCK-0001 : create login flow") and files stories
 # and bugs under the epic named in their "Epic" field as sub-issues (tools/github/issueKey.sh).
@@ -20,11 +20,12 @@ permissions:
   contents: read
 
 concurrency:
-  group: issue-keys
+  group: issues-assign-keys
   cancel-in-progress: false
 
 jobs:
   key:
+    name: Key the issue and file it under its epic
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:

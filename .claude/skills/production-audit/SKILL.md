@@ -24,14 +24,14 @@ Read the phase in CLAUDE.md, the spec in `docs/specs/` for what is meant to ship
 | Money integrity | order and funds writes are one transaction with a row lock and an idempotency key; paise integers end to end; audit log append-only |
 | Data | migrations run forward from empty and from the last release; destructive ones have a recovery note; DPDP consent and 30-day erase work |
 | Realtime | reconnect with backoff, stale-price indicator, 200-symbol cap, conflation; behaviour when Redis drops |
-| Frontend | every route has `errorComponent` and a skeleton; sections in `SectionBoundary`; no believable empty value on failure (`silent-failure-hunter`); a11y spec green |
+| Frontend | every route has `errorComponent` and a skeleton; sections in `SectionBoundary`; no believable empty value on failure (`error-handling-reviewer`); a11y spec green |
 | Performance | Lighthouse CI budgets (`apps/web/lighthouserc.cjs`) and `renderPerf.spec.ts` green; initial JS < 200 KB gzipped; API p95 < 200 ms |
 | Security | `securityHeaders.ts` (web and API) and its E2E; CodeQL and `npm audit --audit-level=high` clean; no secrets in the tree |
 | Operations | clean-checkout start with documented commands; every env var in `.env.example` and parsed in `config.ts`; health endpoint checks Postgres and Redis; logs carry ids, never PII; rollback written down |
 | Journeys | `goldenPath.spec.ts` and the main E2E specs green at 1440 and 390 widths |
 
 For a deeper pass on changed code, run the `security-reviewer`, `frontend-reviewer` and
-`silent-failure-hunter` agents on it.
+`error-handling-reviewer` agents on it.
 
 ## 3. Score
 | Score | Band |

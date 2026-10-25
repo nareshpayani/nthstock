@@ -1,15 +1,24 @@
 name: CI
 
+# The merge gate for every PR and the full verification of develop and production (ADR 0014,
+# docs/ci-cd.md). Tiers:
+#   - pull_request: `changes` decides which suites a PR can affect. Docs-only PRs run only the
+#     quality checks and scans; backend-only PRs skip Storybook, the msw-mode E2E and web vitals.
+#     Anything under .github/, package.json or package-lock.json runs everything.
+#   - push to develop or production, dispatch and the scheduled health runs: every suite, always.
+# "CI result" is the one check branch rules require: it passes only when every job passed or was
+# skipped by change detection, so required checks never wait on a skipped job.
+
 on:
   pull_request:
   # develop is where PRs merge; production is the live site (ADR 0010, 0011). A promotion pushes to
   # production with PROMOTE_TOKEN (or dispatches this) so CI gates the live deploy.
   push:
     branches: [develop, production]
-  # Started by agent-automerge.yml after it merges (GITHUB_TOKEN merges don't trigger push runs).
+  # Started by pr-auto-merge.yml after it merges (GITHUB_TOKEN merges don't trigger push runs).
   workflow_dispatch:
   # Health runs on the default branch (develop), so breakage that only shows at some hours (market open or closed) or
-  # without a new commit is caught without anyone reporting it. A red run starts agent-fixer.yml,
+  # without a new commit is caught without anyone reporting it. A red run starts agent-pr-fixer.yml,
   # which opens an agent/fix-develop-* PR. Times are UTC: 09:20 and 12:30 IST on weekdays (NSE open),
   # and 20:00 IST every day (market closed).
   schedule:
@@ -22,10 +31,49 @@ permissions:
 
 concurrency:
   # The event is part of the key, so a scheduled health run never cancels a push run on develop.
+  # Only PR runs cancel: a newer push to the PR replaces them. Runs on develop and production finish,
+  # so each merged commit gets its verdict (the release gate and the PR fixer read it).
   group: ci-${{ github.event_name }}-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
+  changes:
+    name: Detect changed areas
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      docs_only: ${{ steps.diff.outputs.docs_only }}
+      backend_only: ${{ steps.diff.outputs.backend_only }}
+    steps:
+      - id: diff
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVENT: ${{ github.event_name }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+          if [ "$EVENT" != pull_request ]; then
+            { echo "docs_only=false"; echo "backend_only=false"; } >> "$GITHUB_OUTPUT"
+            echo "Not a PR: every suite runs."; exit 0
+          fi
+          files=$(gh api --paginate "repos/$GITHUB_REPOSITORY/pulls/$PR/files" --jq '.[].filename')
+          # Prose and agent config that no build, test or deploy reads.
+          docs='^(docs/|\.claude/|LICENSE$|\.github/(ISSUE_TEMPLATE/|pull_request_template\.md$|CODEOWNERS$))|\.md$'
+          # Server code the web app, Storybook and the msw-mode suites never import.
+          backend='^(apps/(api|realtime|quotes)/|infra/)'
+          rest=$(grep -vE "$docs" <<< "$files" || true)
+          code=$(grep -vE "$backend" <<< "$rest" || true)
+          docs_only=false; backend_only=false
+          if [ -z "$rest" ]; then docs_only=true; elif [ -z "$code" ]; then backend_only=true; fi
+          { echo "docs_only=$docs_only"; echo "backend_only=$backend_only"; } >> "$GITHUB_OUTPUT"
+          {
+            echo "### Changed areas"
+            echo "$(wc -l <<< "$files" | tr -d ' ') files. docs only: $docs_only, backend only: $backend_only."
+          } >> "$GITHUB_STEP_SUMMARY"
+
   checks:
     name: Lint, typecheck, test, build
     runs-on: ubuntu-latest
@@ -49,11 +97,7 @@ jobs:
           --health-retries 10
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
-        with:
-          node-version-file: .nvmrc
-          cache: npm
-      - run: npm ci
+      - uses: ./.github/actions/setup-workspace
       - run: npm run format:check
       - run: npm run lint
       - run: npm run typecheck
@@ -83,18 +127,16 @@ jobs:
 
   storybook:
     name: Storybook build and a11y
+    needs: changes
+    if: needs.changes.outputs.docs_only != 'true' && needs.changes.outputs.backend_only != 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
-        with:
-          node-version-file: .nvmrc
-          cache: npm
-      - run: npm ci
+      - uses: ./.github/actions/setup-workspace
       - run: npm run build-storybook
       - name: Install Chromium for the Storybook test runner
-        run: npx playwright install --with-deps chromium
+        uses: ./.github/actions/setup-playwright
       - name: Serve the static Storybook
         run: |
           python3 -m http.server 6006 -d packages/ui/storybook-static >/dev/null 2>&1 &
@@ -111,19 +153,19 @@ jobs:
 
   e2e:
     name: Playwright smoke (Chrome)
+    needs: changes
+    if: needs.changes.outputs.docs_only != 'true' && needs.changes.outputs.backend_only != 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
-        with:
-          node-version-file: .nvmrc
-          cache: npm
-      - run: npm ci
+      - uses: ./.github/actions/setup-workspace
       - run: npx turbo run build --filter=@nthstock/web^...
       # T04: WebKit too, for the webkit-iphone touch project (iPhone Safari, TFC-16).
       - name: Install Chrome for Testing (Chromium) and WebKit
-        run: npx playwright install --with-deps chromium webkit
+        uses: ./.github/actions/setup-playwright
+        with:
+          browsers: chromium webkit
       # playwright.config.ts builds in msw mode with VITE_MOCK_MARKET_OPEN=true. E2E_WEBKIT turns on
       # the webkit-iphone project for the @touch specs.
       - run: npm run e2e
@@ -167,18 +209,16 @@ jobs:
   # Lighthouse CI itself enforces the same budgets plus the performance and accessibility scores.
   perf:
     name: Web vitals and render budgets (Chrome)
+    needs: changes
+    if: needs.changes.outputs.docs_only != 'true' && needs.changes.outputs.backend_only != 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
-        with:
-          node-version-file: .nvmrc
-          cache: npm
-      - run: npm ci
+      - uses: ./.github/actions/setup-workspace
       - run: npx turbo run build --filter=@nthstock/web^...
       - name: Install Chrome for Testing (Chromium)
-        run: npx playwright install --with-deps chromium
+        uses: ./.github/actions/setup-playwright
       - run: npm run e2e:perf
       # The measured vitals, the longest main-thread tasks and the Chrome trace, pass or fail.
       - if: always()
@@ -215,6 +255,8 @@ jobs:
   # them.
   e2e-api:
     name: Playwright golden path (api mode)
+    needs: changes
+    if: needs.changes.outputs.docs_only != 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     services:
@@ -246,11 +288,7 @@ jobs:
           --health-retries 10
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
-        with:
-          node-version-file: .nvmrc
-          cache: npm
-      - run: npm ci
+      - uses: ./.github/actions/setup-workspace
       - name: Create the database roles
         run: psql -v ON_ERROR_STOP=1 -f infra/postgres/init.sql
         env:
@@ -273,7 +311,7 @@ jobs:
         env:
           REDIS_TEST_URL: redis://127.0.0.1:6379
       - name: Install Chrome for Testing (Chromium)
-        run: npx playwright install --with-deps chromium
+        uses: ./.github/actions/setup-playwright
       - run: npm run e2e:api
         env:
           E2E_REDIS_URL: redis://127.0.0.1:6379
@@ -292,7 +330,7 @@ jobs:
           # A list of quoted names: one quoted 'a,b' would be read as a single library name.
           psql -v ON_ERROR_STOP=1 -c "ALTER SYSTEM SET shared_preload_libraries = 'timescaledb', 'pg_stat_statements'"
           docker restart ${{ job.services.postgres.id }}
-          for attempt in $(seq 1 30); do
+          for _ in $(seq 1 30); do
             pg_isready -h 127.0.0.1 -U postgres -d nthstock && break
             sleep 2
           done
@@ -342,3 +380,66 @@ jobs:
           curl -sSfL https://github.com/gitleaks/gitleaks/releases/download/v8.24.3/gitleaks_8.24.3_linux_x64.tar.gz \
             | tar -xz -C /usr/local/bin gitleaks
       - run: gitleaks git --redact --verbose .
+
+  # New or changed dependencies with a known high or critical advisory, or a licence that cannot ship
+  # in a public repo, fail the PR before they reach develop. npm audit (above) covers the whole tree.
+  # Needs the repository's Dependency graph (Settings → Code security), so it runs once the owner
+  # turns that on and sets the variable DEPENDENCY_REVIEW to true (docs/ci-cd.md); skipped until then.
+  dependency-review:
+    name: Dependency review
+    if: github.event_name == 'pull_request' && vars.DEPENDENCY_REVIEW == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/dependency-review-action@v4
+        with:
+          fail-on-severity: high
+          deny-licenses: AGPL-3.0, GPL-3.0
+
+  # actionlint (with shellcheck at warning level) on every workflow, so a broken workflow fails here
+  # instead of silently never running.
+  workflow-lint:
+    name: Workflow lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install actionlint
+        run: |
+          curl -sSfL https://github.com/rhysd/actionlint/releases/download/v1.7.7/actionlint_1.7.7_linux_amd64.tar.gz \
+            | tar -xz -C /usr/local/bin actionlint
+      - run: actionlint -color
+        env:
+          SHELLCHECK_OPTS: --severity=warning
+
+  # The single required check (ADR 0014). Fails when any job failed or was cancelled; a job skipped
+  # by change detection counts as passed.
+  result:
+    name: CI result
+    if: always()
+    needs:
+      [
+        changes,
+        checks,
+        storybook,
+        e2e,
+        perf,
+        e2e-api,
+        audit,
+        secrets,
+        dependency-review,
+        workflow-lint,
+      ]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - env:
+          NEEDS: ${{ toJSON(needs) }}
+        run: |
+          jq -r 'to_entries[] | "\(.key): \(.value.result)"' <<< "$NEEDS"
+          bad=$(jq -r '[to_entries[] | select(.value.result == "failure" or .value.result == "cancelled") | .key] | join(", ")' <<< "$NEEDS")
+          if [ -n "$bad" ]; then
+            echo "::error title=CI failed::$bad"
+            exit 1
+          fi

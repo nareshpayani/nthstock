@@ -1,4 +1,4 @@
-name: 'Agent: Fixer'
+name: 'Agent: PR fixer'
 
 # Self-healing CI. Fixes, on the PR's own branch:
 #   - blocking review findings (label `agent:fix-needed`),
@@ -31,7 +31,11 @@ permissions:
 
 jobs:
   resolve-target:
+    name: Pick what to fix
+    # A label event matters only for agent:fix-needed; every other label skips without a runner.
+    if: github.event_name != 'pull_request' || github.event.label.name == 'agent:fix-needed'
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     outputs:
       mode: ${{ steps.target.outputs.mode }}
       pr: ${{ steps.target.outputs.pr }}
@@ -163,6 +167,7 @@ jobs:
           done
 
   fix:
+    name: Fix the PR or develop
     needs: resolve-target
     if: needs.resolve-target.outputs.mode != ''
     runs-on: ubuntu-latest
@@ -170,7 +175,7 @@ jobs:
     env:
       HAS_AGENT_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN != '' }}
     concurrency:
-      group: agent-fixer-${{ needs.resolve-target.outputs.pr || 'develop' }}
+      group: agent-pr-fixer-${{ needs.resolve-target.outputs.pr || 'develop' }}
       cancel-in-progress: false
     steps:
       - uses: actions/checkout@v7
@@ -196,7 +201,7 @@ jobs:
       - id: before
         run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
       - if: env.HAS_AGENT_TOKEN == 'true'
-        uses: anthropics/claude-code-action@v1
+        uses: anthropics/claude-code-action@42619cb7a75ded196ded275cdd529a35178bfd2c # v1
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           # Commits are authored as the owner, not the app (owner decision 2026-10-21).
@@ -210,7 +215,7 @@ jobs:
             BRANCH: ${{ needs.resolve-target.outputs.branch }}
             REASON: ${{ needs.resolve-target.outputs.reason }}
 
-            Act as the Fixer. Follow .claude/agents/fixer.md exactly.
+            Act as the Fixer. Follow .claude/agents/pr-fixer.md exactly.
           # gh is limited to what fixer.md needs: read PRs, runs and review threads, comment and reply,
           # edit labels, check out, open the fix-develop PR and the needs-human issue. No `gh pr merge`.
           claude_args: |

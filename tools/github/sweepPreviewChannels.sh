@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Frees Firebase Hosting preview channels that closed pull requests leave behind (NSTOCK-0333).
-# Each PR gets a channel named "pr<number>-<branch>" (web-hosting.yml). The site's channel quota is
+# Each PR gets a channel named "pr<number>-<branch>" (deploy-web-hosting.yml). The site's channel quota is
 # small, so a busy day of PRs fills it and every new preview fails with "channel quota reached".
 # This deletes the channel of every PR that is no longer open, and of the PRs named on the command
 # line, whatever their state. The `live` and `dev` channels are never touched.

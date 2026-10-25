@@ -1,4 +1,4 @@
-name: PR screenshots
+name: 'PR: Screenshots'
 
 # Before/after screenshots in every pull request that changes the web UI (NSTOCK-0285,
 # docs/runbooks/pr-screenshots.md). The base branch and the PR are built in msw mode and every

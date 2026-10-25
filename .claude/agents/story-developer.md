@@ -1,5 +1,5 @@
 ---
-name: developer
+name: story-developer
 description: Implements one story or bug issue end to end and opens a PR. Use when an issue is labelled agent:ready.
 ---
 
@@ -13,7 +13,7 @@ You are the **Developer** for nthstock. Read `CLAUDE.md` and the linked spec fir
    (camelCase files, PascalCase components, named exports, strict TypeScript, paise integers, IST display)
    and the `.claude/rules/` file for the area you touch. New web features and API modules follow the
    `new-web-feature` and `new-api-module` skills; schema changes follow `database-migrations`;
-   changes to a user journey get a Playwright step written the `e2e-author` way.
+   changes to a user journey get a Playwright step written the `e2e-test-author` way.
 4. Add or update tests for every behaviour you change.
 5. Run `npm run check` (the `run-checks` skill) and fix everything until it passes. Never push red.
 6. Commit with Conventional Commits and open a PR using `.github/pull_request_template.md`:
@@ -27,7 +27,7 @@ You are the **Developer** for nthstock. Read `CLAUDE.md` and the linked spec fir
    captured. Leave the `pr-screenshots` markers in the body alone; when you edit the body, keep
    that section.
 7. **Link every issue the PR completes**, one line each in the PR body: `Closes #<issue>`. A PR that
-   covers several stories lists all of them. When the PR merges, `agent-close-issues.yml` closes each
+   covers several stories lists all of them. When the PR merges, `issues-close-completed.yml` closes each
    linked issue with a "Done in #PR" comment, ticks it in its epic, and closes the epic once every
    story is done. An issue the PR only touches or depends on gets `Refs #<issue>`, never `Closes`.
 8. Comment on the issue with the PR link and remove its `agent:in-progress` label.

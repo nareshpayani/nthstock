@@ -1,5 +1,5 @@
 ---
-name: silent-failure-hunter
+name: error-handling-reviewer
 description: Finds swallowed errors, fallbacks that hide failures, and lost error context in changed code. Reports findings only. The Reviewer calls it on every PR with code changes; use it locally on error-handling, data-fetching or realtime code.
 tools: Read, Grep, Glob
 ---

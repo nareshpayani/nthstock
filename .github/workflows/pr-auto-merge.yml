@@ -1,6 +1,6 @@
-name: 'Agent: Auto-merge'
+name: 'PR: Auto-merge'
 
-# Squash-merges a PR into develop once the Reviewer has labelled it ready-to-merge and every check
+# Not an LLM agent: plain automation. Squash-merges a PR into develop once the Reviewer has labelled it ready-to-merge and every check
 # on its head commit is green. Owner decision 2026-09-26 (ADR 0006): agent PRs no longer wait for
 # a manual merge. Skipped: PRs without ready-to-merge, drafts, forks, Dependabot, spec PRs (the
 # owner still approves specs), PRs that change .github/**, .claude/** or CLAUDE.md (agent and CI
@@ -10,7 +10,7 @@ name: 'Agent: Auto-merge'
 
 on:
   workflow_run:
-    workflows: [CI, CodeQL]
+    workflows: [CI, 'Security: CodeQL']
     types: [completed]
   pull_request:
     types: [labeled, unlabeled, ready_for_review]
@@ -25,7 +25,7 @@ permissions:
   actions: write
 
 concurrency:
-  group: agent-automerge
+  group: pr-auto-merge
   cancel-in-progress: false
 
 jobs:
@@ -76,7 +76,14 @@ jobs:
             total=$(echo "$runs" | jq length)
             pending=$(echo "$runs" | jq '[.[] | select(.status != "completed")] | length')
             bad=$(echo "$runs" | jq '[.[] | select(.status == "completed" and (.conclusion | IN("success","skipped","neutral") | not))] | length')
-            # CI runs 5+ jobs on every PR; fewer means the checks have not all started yet.
+            # CI's "CI result" job is the gate (ADR 0014): it passes only when every CI job passed or
+            # was skipped by change detection. CI runs 5+ jobs on every PR; fewer means the checks
+            # have not all started yet.
+            gate=$(gh api "repos/$repo/commits/$sha/check-runs?check_name=CI%20result" \
+              --jq '[.check_runs[] | select(.status == "completed")] | sort_by(.completed_at) | last | .conclusion // ""')
+            if [ "$gate" != "success" ]; then
+              echo "#$num: CI result is '${gate:-pending}', skipping"; continue
+            fi
             if [ "$total" -lt 5 ] || [ "$pending" -gt 0 ] || [ "$bad" -gt 0 ]; then
               echo "#$num: checks not all green (total=$total pending=$pending failed=$bad), skipping"; continue
             fi
@@ -90,9 +97,9 @@ jobs:
           done
           # Merges made with GITHUB_TOKEN do not trigger push workflows, so start them on develop explicitly.
           if [ "$merged" -eq 1 ]; then
-            for wf in ci.yml codeql.yml agent-conflicts.yml agent-labels.yml; do
+            for wf in ci.yml security-codeql.yml agent-merge-conflict-resolver.yml repo-sync-labels.yml; do
               gh workflow run "$wf" --repo "$repo" --ref develop
             done
             # Close the story, bug and epic issues this PR completed, with a comment on each.
-            gh workflow run agent-close-issues.yml --repo "$repo" --ref develop -f pr="$merged_pr"
+            gh workflow run issues-close-completed.yml --repo "$repo" --ref develop -f pr="$merged_pr"
           fi

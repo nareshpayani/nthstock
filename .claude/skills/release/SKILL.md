@@ -16,27 +16,28 @@ push to `develop` or `production` yourself.
    included (UI: unit tests, an E2E in `apps/web/e2e/`, axe on the new screen), `run-checks` skill,
    PR into `develop`. Auto-merge merges it when the Reviewer passes it and checks are green
    (`.github/`, `.claude/` or `CLAUDE.md` changes wait for the owner's merge: tell the owner).
-2. Wait for **CI** on the `develop` head commit to finish green, then for **Web hosting / Deploy the
+2. Wait for **CI** on the `develop` head commit to finish green, then for **Deploy: Web hosting / Deploy the
    development environment** on it, which deploys that commit to the development site and
    smoke-tests it. Red: the Fixer opens a fix PR into `develop`; the release waits for it.
 
 ## 2. Promote
-3. Dispatch **Promote to production** (`promote-to-production.yml`, on `develop`; no inputs):
-   `gh workflow run promote-to-production.yml --ref develop`, or the GitHub MCP
+3. Dispatch **Release: Promote to production** (`release-promote-to-production.yml`, on `develop`; no inputs):
+   `gh workflow run release-promote-to-production.yml --ref develop`, or the GitHub MCP
    `actions_run_trigger` with `run_workflow`.
-4. It refuses unless develop's head has green CI and is what the development site last deployed and
-   smoke-tested. A refusal means nothing moved: read its error, wait or fix through `develop`, then
-   run it again. Note the previous production commit from its summary.
+4. It refuses unless develop's head has green CI and a green **Security: CodeQL** run and is what the
+   development site last deployed and smoke-tested. A refusal means nothing moved: read its error, wait or fix through `develop`, then
+   run it again. Note the previous production commit and the
+   `prod-*` release tag from its summary.
 
 ## 3. Live
-5. The move starts CI on `production`; when it is green, **Web hosting / Deploy the live site**
+5. The move starts CI on `production`; when it is green, **Deploy: Web hosting / Deploy the live site**
    deploys that commit, checks the site serves the new build, and runs the reviewer smoke test on
    the live site. Watch both runs.
-6. Failed after the deploy step: roll back at once by dispatching **Web hosting** with `stage=live`
+6. Failed after the deploy step: roll back at once by dispatching **Deploy: Web hosting** with `stage=live`
    and `ref=<previous production commit>`, then tell the owner what failed. CI red on `production`
    means nothing was deployed: fix on `develop` and promote again.
 7. Green: tell the owner it is live, with https://nthstock-a13a5.web.app/dashboard?demo=1 (demo
    login 9000000001, OTP 123456), the commit and the checks.
 
 Redeploying production without a change (for example after a Firebase incident): dispatch
-**Web hosting** with `stage=live` and `ref=production`.
+**Deploy: Web hosting** with `stage=live` and `ref=production`.

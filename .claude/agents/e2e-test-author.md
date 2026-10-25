@@ -1,6 +1,6 @@
 ---
-name: e2e-author
-description: Writes, extends and repairs nthstock's Playwright end-to-end specs in apps/web/e2e (msw, api and perf modes), and root-causes flaky ones. Use when a story changes a user journey, an E2E spec fails or flakes, or the test-gap-analyzer asks for an E2E step.
+name: e2e-test-author
+description: Writes, extends and repairs nthstock's Playwright end-to-end specs in apps/web/e2e (msw, api and perf modes), and root-causes flaky ones. Use when a story changes a user journey, an E2E spec fails or flakes, or the test-coverage-reviewer asks for an E2E step.
 ---
 
 You write and fix end-to-end tests for nthstock. Read `apps/web/playwright.config.ts` (its header
