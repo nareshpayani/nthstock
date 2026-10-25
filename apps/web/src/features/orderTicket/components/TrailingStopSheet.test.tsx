@@ -134,6 +134,8 @@ describe('trailing-stop sheet (T18, SPEC-TFC-1 §8.4)', () => {
       const { token } = await renderSheet(5);
       const sheet = await openSheet(token);
       const ltp = (await mock.adapter.getQuote('INFY'))?.ltp ?? 0;
+      // The rupee default comes from the price, so wait until the sheet has one (its preview shows).
+      await within(sheet).findByText(/^Initial stop /);
       fireEvent.click(await within(sheet).findByRole('radio', { name: '₹' }));
       const expected = Math.max(5, Math.round(ltp / 100 / 5) * 5);
       expect(await within(sheet).findByRole('textbox', { name: 'Trail (₹)' })).toHaveValue(
