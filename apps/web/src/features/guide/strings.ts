@@ -1193,7 +1193,7 @@ export const strings = {
           items: [
             'Agents never push to develop or production; a pre-push hook and branch rules block it.',
             'Only the owner or the agent app can start an agent, so strangers on the public repo cannot spend usage or inject prompts.',
-            'Loop limits: 3 review rounds or 3 CI-fix attempts, then needs-human.',
+            'No attempt or round limits: the Fixer fixes and the Reviewer re-reviews every push until the PR is green; only a no-progress check (the same failure on 5 commits in a row) hands a PR to the owner.',
             'Claude Code hooks in .claude/hooks run format, lint and typecheck on every edit, and block edits to secrets and generated files.',
             'Rules in .claude/rules and skills in .claude/skills give every session the same standards and procedures.',
           ],

@@ -20,5 +20,6 @@ Review findings inside a PR are fixed on the same PR; only out-of-scope bugs bec
 - Everything is versioned in the repo and can be copied to other repos.
 - The Claude GitHub App token is used (not `GITHUB_TOKEN`), so agent PRs and pushes trigger the
   next workflow. Where `GITHUB_TOKEN` must be used, `workflow_dispatch` hands off instead.
-- Usage counts against the owner's Claude plan; turn limits, timeouts and the 3-round loop limit bound it.
+- Usage counts against the owner's Claude plan; job timeouts and the no-progress
+  safeguard bound it (amended 2026-10-25: the 3-round and 3-attempt limits were removed).
 - Public-repo safety depends on the actor checks in each workflow; changes to those checks need owner review.
