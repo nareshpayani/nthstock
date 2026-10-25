@@ -5,7 +5,7 @@ import { createMockServer, TEST_API_ORIGIN } from '@/mocks/node';
 import { renderApp } from '@/test/renderApp';
 import { resetSession, signIn } from '@/test/session';
 import { createSessionApiClient, ensureSession } from '@/shared/lib/sessionClient';
-import { useSessionStore } from '@/shared/lib/sessionStore';
+import { SESSION_HINT_KEY, useSessionStore } from '@/shared/lib/sessionStore';
 
 // A controllable clock for the mock auth backend, so the 15-minute access token can expire.
 let now = Date.parse('2026-09-25T04:00:00.000Z');
@@ -86,6 +86,29 @@ describe('silent refresh on 401 (T-089)', () => {
 
     expect(restored?.user.id).toBe(session.user.id);
     expect(useSessionStore.getState().status).toBe('authenticated');
+  });
+
+  it('a browser known to be signed out skips the refresh that could only answer 401', async () => {
+    const apiClient = createSessionApiClient({ baseUrl: TEST_API_ORIGIN });
+
+    // The first load ever has no hint, so it tries; the 401 marks the browser signed out.
+    expect(await ensureSession(apiClient)).toBeNull();
+    expect(paths).toEqual(['/v1/auth/refresh']);
+    expect(window.localStorage.getItem(SESSION_HINT_KEY)).toBe('none');
+
+    resetSession();
+    paths.length = 0;
+    expect(await ensureSession(apiClient)).toBeNull();
+    expect(paths).toEqual([]);
+    expect(useSessionStore.getState().status).toBe('anonymous');
+  });
+
+  it('logging in clears the signed-out hint, so the next page load restores the session', async () => {
+    window.localStorage.setItem(SESSION_HINT_KEY, 'none');
+    const { apiClient, session } = await loggedIn();
+    resetSession();
+
+    expect((await ensureSession(apiClient))?.user.id).toBe(session.user.id);
   });
 });
 
