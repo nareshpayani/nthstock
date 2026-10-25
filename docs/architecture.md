@@ -109,8 +109,9 @@ streams, so apps/api stops matching in process.
   appends `ADD`, `MODIFY` or `CANCEL` for a LIMIT order to `nthstock:matcher:commands:v1:{shard}` (capped at
   100,000 entries), carrying the account version of that commit. Every matcher process for the shard reads the
   stream with `XREAD BLOCK` and applies each command to the instrument's book by the version rule, so a late or
-  replayed command never undoes a newer one; malformed entries are logged and skipped. `STOP_ADD` and
-  `STOP_CANCEL` are in the contract and applied by the worker; apps/api sends them with its server-side trailing stops (below).
+  replayed command never undoes a newer one; malformed entries are logged and skipped. After each trailing stop
+  change apps/api also sends `STOP_ADD` (an `ARMED` or `TRAILING` stop with the state the book steps; a ratchet
+  is a `STOP_ADD` too) or `STOP_CANCEL` (any other status), at the same account version (NSTOCK-0368).
 - **Reconcile** (NSTOCK-0366): on start and every 60 s the matcher reads its shard's OPEN LIMIT orders and the
   account versions from Postgres in one REPEATABLE READ snapshot, through the `orders_shard_live_idx` partial
   index on `orders.shard` (migration 0016, set on insert as `shardOf(token, QUOTE_SHARDS)`). It upserts every
@@ -124,9 +125,10 @@ streams, so apps/api stops matching in process.
   store with the expected version, publishes the order update and only then acks. The engine re-checks every
   order, so a replayed request fills nothing twice and a request for an order modified since fills only what still
   crosses. A request a crashed process held is claimed after 30 s; an unsent one puts its orders back on the book.
-- **Status:** the book, the worker, the order commands, the reconcile loop and fills are built, and so are
-  server-side trailing stops (NSTOCK-0368). `MATCHER_MODE` and the benchmark are NSTOCK-0369 and 0370; until `MATCHER_MODE=worker` apps/api
-  also fills on its own ticks, and a request that arrives after such a fill finds nothing to do.
+- **Status:** the book, the worker, the order and stop commands, the reconcile loop (orders only) and fills are
+  built, and so are server-side trailing stops (NSTOCK-0368). Reconciling stops (#573), `MATCHER_MODE` and the
+  benchmark are NSTOCK-0369 and 0370; until `MATCHER_MODE=worker` apps/api also fills on its own ticks, and a
+  request that arrives after such a fill finds nothing to do.
 
 ### Server-side trailing stops (NSTOCK-0368)
 In api mode trailing stops run on the server with the same engine rules as the browser mock (SPEC-TFC-1 §6, §10.6).
@@ -143,8 +145,8 @@ In api mode trailing stops run on the server with the same engine rules as the b
   their newest `seq`, positions and funds) on the user's order channel, after the order updates. apps/realtime sends it
   to that user's connections as an `accountDelta` frame with no quotes, so the web app's trading store runs in api mode
   exactly as on MSW: it loads the account state, applies frames, and reloads on a gap.
-- **Matcher:** ticks still step stops in apps/api's process. Once the matcher worker (NSTOCK-0364, 0365) is on
-  `develop`, apps/api sends `STOP_ADD` and `STOP_CANCEL` to it instead.
+- **Matcher:** apps/api sends every committed stop change to the matcher as `STOP_ADD` or `STOP_CANCEL`. Until
+  `MATCHER_MODE` hands the books to the worker, ticks still step stops in apps/api's own process.
 
 ### Market data and chart bars
 - `packages/marketData` generates each range's own bars (1D: 1-minute, 1W: 5-minute, 1M: hourly,
@@ -255,6 +257,20 @@ the chart shows after a reload.
   navigates to `/login?deleted=<purgeAfter>` first (its `beforeLoad` skips the session check), then
   clears the session, the query cache and the trusted-browser record.
 
+### OpenAPI (E20)
+- `packages/contracts/src/openapi.ts` builds an OpenAPI 3.1 document from the route map with Zod 4's
+  `z.toJSONSchema()` (no extra library): one operation per route (`operationId` = route key,
+  `x-auth` = its auth), path and query parameters and bodies as the client sends them, responses as
+  it receives them, the `ApiError` response on every route, and `cookieAuth` (the `nth_at` cookie
+  plus the CSRF header) and `bearerAuth` security schemes. Response types are named component
+  schemas taken from the contracts' exports.
+- `apps/api` serves it at `GET /v1/docs/openapi.json` (outside the route map, public,
+  `Cache-Control: public, no-cache` with an ETag, so a revalidation is a 304). No Swagger UI (spec backend-core §2).
+- `npm run openapi` writes the same text to `docs/api/openapi.json`. CI regenerates it, uploads it
+  as the `openapi` artifact and fails when the committed copy is stale; the docs route test checks
+  the same thing in `npm run check`. A new route in the map joins with no extra wiring: regenerate
+  and commit the file.
+
 ### Security baseline
 - Rate limits per IP and per user; OTP resend throttling; CAPTCHA after 3 failed OTP/PIN attempts; PIN lockout after 5, unlock via OTP.
 - TLS 1.2+ and HSTS; encryption at rest (KMS); phone/PII column-level encryption.
@@ -262,6 +278,18 @@ the chart shows after a reload.
 - Append-only audit log for logins, orders, fund movements.
 - `.env` locally (only `.env.example` committed); AWS Secrets Manager in cloud.
 - CI: Dependabot, `npm audit`, CodeQL, gitleaks.
+
+### Contract tests (E20)
+- `apps/api/src/test/contract.test.ts` walks the route map: every route is registered in Fastify
+  with the same method and path, `user` routes answer 401 with an `ApiError` body without a session
+  and `public` ones do not (the one listed exception is `sessionRefresh`, which needs its cookie),
+  and nothing under `/v1` is registered outside the map apart from `ROUTES_OUTSIDE_THE_MAP` (the
+  OpenAPI document and the test controls). `findContractGaps` names the route key on a gap.
+- `contractChecked(backend)` in `packages/contracts/src/testing` wraps every scenario backend
+  (app.inject, apps/api on Postgres + Redis, the MSW node server). Each response, raw sends
+  included, must parse with its route's response schema on 2xx and with `ApiError` otherwise.
+- `apps/web/src/mocks/routeParity.test.ts`: every route in the map has an MSW handler.
+- All three iterate the map, so a route added by any epic joins with no wiring.
 
 ### Observability
 OpenTelemetry → Grafana (Prometheus, Loki, Tempo); Sentry for frontend errors; real-user Web Vitals with regression alerts.

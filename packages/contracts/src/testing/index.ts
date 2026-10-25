@@ -18,6 +18,15 @@ export {
   type ScenarioClient,
   type ScenarioGroup,
 } from './harness.js';
+export {
+  ContractViolationError,
+  contractChecked,
+  contractViolation,
+  matchRoute,
+  type ContractCheckedBackend,
+  type MatchedRoute,
+  type RouteMap,
+} from './contractChecked.js';
 export { fetchBackend, type FetchBackendOptions, type FetchLike } from './fetchBackend.js';
 export { authScenarios } from './scenarios/auth.js';
 export { fundsScenarios } from './scenarios/funds.js';

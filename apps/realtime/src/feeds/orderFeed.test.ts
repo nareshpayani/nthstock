@@ -1,7 +1,12 @@
 import { describe, expect, it, vi } from 'vitest';
-import { ORDER_UPDATE_EVENT_VERSION, orderUpdatesChannel } from '@nthstock/contracts';
-import { createMemoryOrderFeed, parseUserChannelMessage } from './orderFeed.js';
-import { testAccountDelta, testOrder } from '../test/orders.js';
+import {
+  NOTIFICATION_EVENT_VERSION,
+  ORDER_UPDATE_EVENT_VERSION,
+  notifyChannel,
+  orderUpdatesChannel,
+} from '@nthstock/contracts';
+import { createMemoryOrderFeed, parseNotifyMessage, parseUserChannelMessage } from './orderFeed.js';
+import { testAccountDelta, testNotification, testOrder } from '../test/orders.js';
 
 describe('createMemoryOrderFeed', () => {
   it('delivers only watched users, counting watchers per user', async () => {
@@ -80,5 +85,36 @@ describe('parseUserChannelMessage (NSTOCK-0368)', () => {
     ];
     for (const message of drops) expect(parseUserChannelMessage(channel, message)).toBeNull();
     expect(parseUserChannelMessage('nthstock:other:usr_a', JSON.stringify(delta))).toBeNull();
+  });
+});
+
+describe('notifications on the feed (NSTOCK-0381)', () => {
+  it('delivers notifications to notification listeners only while the user is watched', () => {
+    const feed = createMemoryOrderFeed();
+    const listener = vi.fn();
+    feed.onNotification(listener);
+    feed.emitNotification('usr_a', { notification: testNotification('1') });
+    const unwatch = feed.watch('usr_a');
+    feed.emitNotification('usr_a', { notification: testNotification('2') });
+    unwatch();
+    feed.emitNotification('usr_a', { notification: testNotification('3') });
+
+    expect(listener).toHaveBeenCalledTimes(1);
+    expect(listener).toHaveBeenCalledWith('usr_a', { notification: testNotification('2') });
+  });
+
+  it("parses a notify message only when it is the channel's user's and well formed", () => {
+    const channel = notifyChannel('usr_a');
+    const event = {
+      v: NOTIFICATION_EVENT_VERSION,
+      userId: 'usr_a',
+      notification: testNotification('7'),
+    };
+
+    expect(parseNotifyMessage(channel, JSON.stringify(event))).toEqual(event);
+    expect(parseNotifyMessage(channel, JSON.stringify({ ...event, userId: 'usr_b' }))).toBeNull();
+    expect(parseNotifyMessage(channel, '{')).toBeNull();
+    expect(parseNotifyMessage(channel, JSON.stringify({ ...event, notification: {} }))).toBeNull();
+    expect(parseNotifyMessage(orderUpdatesChannel('usr_a'), JSON.stringify(event))).toBeNull();
   });
 });
