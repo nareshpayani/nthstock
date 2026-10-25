@@ -53,7 +53,10 @@ MOCK_MARKET_ALWAYS_OPEN=true npm run seed:demo
 
 `npm run seed:demo` runs `npm run infra:up` (Postgres 16 with TimescaleDB and Redis 7, loopback
 only), `npm run db:migrate` (as `nthstock_owner`), `npm run db:seed:candles`, then
-`npm run dev:api` with `DEMO_SEED=true`. As apps/api starts it writes the demo user, their terms
+`npm run dev:api` with `DEMO_SEED=true`. `npm run dev:api` starts apps/api, apps/realtime,
+apps/quotes, the web app and the BullMQ jobs worker (`npm run dev:worker -w @nthstock/api`, with
+`JOBS_MODE=bullmq`), so the market-hours jobs, P&L snapshots and the account purge run as they
+would in production. As apps/api starts it writes the demo user, their terms
 and privacy consent, the demo watchlists and the paper account to Postgres (NSTOCK-0239). The
 user is upserted by the mobile's blind index and the rest is replaced, so seeding again gives the
 same state, and a restart of apps/api (including a `tsx watch` reload) keeps whatever you changed

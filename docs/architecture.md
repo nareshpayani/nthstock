@@ -308,8 +308,8 @@ Spec `backend-core.md` §3 and §9, ADR 0007 §11. Code: `apps/api/src/modules/j
   the demo watchlists and the paper account (through the account store) to Postgres. Seeding twice
   or across a restart gives the same state (`seed.integration.test.ts`), equal to MSW's `?demo=1`.
 - Local stack: `npm run dev:api` starts Postgres and Redis, migrates, then runs apps/api,
-  apps/realtime, apps/quotes and the web app; `db:psql` and `db:reset` cover the chores
-  (`docs/runbooks/local-demo.md`).
+  apps/realtime, apps/quotes, the web app and the BullMQ jobs worker (`JOBS_MODE=bullmq`);
+  `db:psql` and `db:reset` cover the chores (`docs/runbooks/local-demo.md`).
 - Proof: the api-mode Playwright job restarts apps/api mid-test and still sees the session,
   watchlists, orders and holdings; the security settings journey (TOTP on, log in with TOTP, log out
   another session, delete the account, axe on every step) runs in msw and api mode; a performance
