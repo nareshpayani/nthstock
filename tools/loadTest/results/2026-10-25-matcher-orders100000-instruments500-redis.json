@@ -1,0 +1,58 @@
+{
+  "at": "2026-10-25T04:52:44.837Z",
+  "machine": "4 vCPU Intel(R) Xeon(R) Processor",
+  "node": "v22.22.0",
+  "setup": {
+    "instruments": 500,
+    "orders": 100000,
+    "stops": 10000,
+    "users": 10000,
+    "tickMs": 250,
+    "durationS": 30,
+    "seed": 42
+  },
+  "loadMs": 126,
+  "restingAtEnd": {
+    "orders": 100000,
+    "stops": 10000
+  },
+  "ticks": 60020,
+  "ticksPerSecond": 2000,
+  "tickBookMs": {
+    "p50": 0.008,
+    "p95": 0.058,
+    "p99": 0.095,
+    "max": 11.044
+  },
+  "crossingTickBookMs": {
+    "p50": 0.026,
+    "p95": 0.079,
+    "p99": 0.115,
+    "max": 11.044
+  },
+  "schedulerLagMs": {
+    "p50": 0,
+    "p95": 0.645,
+    "p99": 0.73,
+    "max": 4.66
+  },
+  "readPerTick": {
+    "mean": 6.8,
+    "max": 163,
+    "fullWalk": 220
+  },
+  "read": 408119,
+  "acted": 355755,
+  "stale": 52364,
+  "crossed": 158623,
+  "triggered": 13772,
+  "moved": 183360,
+  "fillRequests": 172246,
+  "tickToRequestReadMs": {
+    "p50": 1.034,
+    "p95": 3.068,
+    "p99": 5.148,
+    "max": 15.466
+  },
+  "requestsRead": 172246
+}

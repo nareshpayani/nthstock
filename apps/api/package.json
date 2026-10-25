@@ -15,6 +15,7 @@
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "test": "vitest run --coverage",
+    "test:latency": "vitest run --config vitest.latency.config.ts",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "tsx src/db/migrateCli.ts",
     "db:check": "tsx src/db/checkCli.ts",

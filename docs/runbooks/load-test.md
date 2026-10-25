@@ -74,13 +74,64 @@ sockets, and no dropped frames in any run.
 
 - **API:** it keeps no state in the process (sessions, OTPs and rate limits are in Redis, data is
   in Postgres), so more API tasks behind the load balancer add capacity, about 1,300 requests a
-  second each on this hardware. One caveat until Phase 4: order matching and the mock tick pump
-  run in the API process, so only one API process may run them. Phase 4 moves them into their own
-  worker, and then API tasks scale freely.
+  second each on this hardware. Order matching now has its own worker (`apps/matcher`, below);
+  with `MATCHER_MODE=worker` and the quote service, API tasks follow no ticks and scale freely.
 - **Realtime:** add nodes; each takes its share of sockets and reads the same Redis channel.
 - **Postgres:** PgBouncer in transaction mode (already in `infra/docker-compose.yml`, profile
   `pool`), read replicas for portfolio and order history, and day partitions for orders (the `orders` and
   `order_events` tables are already partitioned; only the default partition exists today).
+
+## Matcher (NSTOCK-0370)
+
+Measured on 25 October 2026 on the same 4 vCPU machine, Node 22, Redis 7 and PostgreSQL 16, in
+three parts that add up to tick to fill commit (spec market-data-and-matching §10, ADR 0013).
+
+**1. The books** (`node tools/loadTest/matcher.mjs --duration 30 --redis …`): 1,00,000 resting
+LIMIT orders and 10,000 trailing stops over 500 instruments in one process, every instrument
+ticking every 250 ms (2,000 ticks a second) on a stressed random walk (0.25% a tick, about 40 times
+a real stock's volatility, so a short run fills a lot). Crossed orders and triggered stops are
+replaced at the new price, so the book stays full.
+
+| Measure | Result |
+| --- | --- |
+| Ticks | 60,020 in 30 s, 2,000 a second, scheduler lag p95 0.6 ms |
+| Book time per tick | p50 0.008 ms, p95 0.058 ms, p99 0.095 ms |
+| Book time on a tick that crosses | p50 0.026 ms, p95 0.079 ms, p99 0.115 ms |
+| Heap entries read per tick | mean 6.8, max 163; walking every order and stop would read 220 |
+| Read against acted on | 408,119 read = 158,623 fills + 13,772 triggers + 183,360 ratchets + 52,364 stale |
+| Fill requests | 172,246 (one per user per crossing tick) |
+| Tick to request read by apps/api (Redis) | p50 1.0 ms, p95 3.1 ms, p99 5.1 ms |
+
+Every entry a tick reads is one it fills, triggers or moves, or an entry a ratchet left behind
+(spec §11 criterion 3). Loading 1,00,000 orders takes about 0.1 s.
+
+With `--redis` the run fails (exit code 1) if any fill request is lost, a send or read fails, or
+the reader does not stop: the result then reports `lost`, `sendErrors` and `readErrors`. An empty
+sample prints as `null`, never as 0 ms. Unknown flags and flags without a value are refused.
+
+**2. The commit** (`matcherFill.latency.test.ts`, run alone with
+`MATCHER_BENCH_USERS=400 npm run test:latency -w @nthstock/api` against Postgres and Redis): apps/api
+with `MATCHER_MODE=worker` on Postgres and Redis reads fill requests from the stream and commits
+each through the account store. Latency runs from the `XADD` to the order update, which apps/api
+sends only after the commit.
+
+| Load | p50 | p95 | p99 | Throughput |
+| --- | --- | --- | --- | --- |
+| Steady, 100 requests a second | 4.5 ms | 6.5 ms | 8.9 ms | |
+| One tick that crosses 200 users at once | 170 to 217 ms | 296 to 352 ms | 305 to 362 ms | 550 to 650 commits a second |
+
+**3. To the screen:** the order update goes apps/api → Redis pub/sub → apps/realtime → socket, the
+path the latency test measures at a p95 of 86 to 106 ms.
+
+**Result:** at a steady rate, tick to fill commit is about 10 ms at p95 (0.08 + 3.1 + 6.5 ms),
+against the 100 ms target, and tick to screen about 110 ms, against 500 ms. The gap is a burst:
+one apps/api process commits 550 to 650 fills a second, because each fill is its own Postgres
+transaction (account, order, order event, ledger, position and audit rows). A tick that crosses
+200 users at once therefore commits its last fill about 0.3 s later, and the stressed walk above
+asks for about 5,700 fills a second, nine times what one process commits. That is what ADR 0013
+plans for: every apps/api process in the `api` consumer group takes a share of the requests, so
+fill capacity grows with API tasks (about 600 a second each here) and with the pool, while the
+matcher itself stays far from its limit.
 
 ## Run it
 
