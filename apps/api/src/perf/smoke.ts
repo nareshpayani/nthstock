@@ -420,9 +420,13 @@ export async function runPerfSmoke(options: PerfSmokeOptions): Promise<PerfSmoke
       pinTimes = await inPool(samples, concurrency, (k) => pinLogin(warmup + k));
       orderTimes = await inPool(samples, concurrency, (k) => placeOrder(warmup + k));
     } finally {
-      // Audit entries queued by the orders are part of the work: write them before stopping.
-      await app.deps.orders.flushAudit();
-      clientSamples = recorder.stop();
+      // Audit entries queued by the orders are part of the work: write them before stopping. The
+      // recorder stops even when the flush fails, so the real error is not masked.
+      try {
+        await app.deps.orders.flushAudit();
+      } finally {
+        clientSamples = recorder.stop();
+      }
     }
     const pgStatStatements: PgStatStatements =
       'snapshot' in statements

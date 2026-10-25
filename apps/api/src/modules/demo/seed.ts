@@ -44,6 +44,7 @@ export async function seedDemo(deps: Pick<AppDeps, 'market' | 'repos' | 'orders'
   if (user?.mobile !== DEMO_SEED_USER.mobile) {
     throw new Error('The demo seed needs the seeded demo user');
   }
+  // A fixed development user, not a sign-up: no CONSENT_GRANTED audit entry is written for it.
   await deps.repos.users.ensureConsent(
     DEMO_SEED_USER.id,
     { purpose: 'TERMS_AND_PRIVACY', policyVersion: CONSENT_POLICY_VERSION },

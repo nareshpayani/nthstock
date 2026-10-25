@@ -97,7 +97,8 @@ user data (the demo mobile is the made-up 9000000001, D9).
 Performance (spec §13, NSTOCK-0243): see [`docs/runbooks/perf-smoke.md`](../runbooks/perf-smoke.md)
 for the 10,000-user report. First CI run (25 Oct 2026, PR #565): MARKET order ack p95 29.6 ms
 (budget 300 ms), PIN login p95 42.1 ms (budget 200 ms), slowest query p95 0.6 ms (budget 50 ms), no
-errors in 500 of each.
+errors in 500 of each. The smoke runs on every PR but does not gate CI this phase (spec §14), so a
+regression shows in the report, not as a red build.
 
 ## Owner sign-off checklist
 

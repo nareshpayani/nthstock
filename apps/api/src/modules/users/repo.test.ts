@@ -158,6 +158,14 @@ describeRepoConformance(
         { ...grant, grantedAt: at, withdrawnAt: null },
       ]);
       expect(await repo().ensureConsent('usr_missing', grant, at)).toBe(false);
+
+      // Another policy version is another grant; a deleted user takes none.
+      const next = { ...grant, policyVersion: '2027-01-01' } as const;
+      expect(await repo().ensureConsent(user.id, next, at)).toBe(true);
+      await repo().markDeleted(user.id, at, new Date('2026-02-01T00:00:00.000Z'));
+      expect(
+        await repo().ensureConsent(user.id, { ...grant, policyVersion: '2028-01-01' }, at),
+      ).toBe(false);
     });
 
     it('hides a deleted user from every read, and finds it as deleted by mobile', async () => {

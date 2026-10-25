@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { KycStatus } from '@nthstock/contracts';
 import type { Clock } from '@nthstock/utils';
-import { and, desc, eq, isNotNull, isNull, sql } from 'drizzle-orm';
+import { and, desc, eq, isNotNull, isNull } from 'drizzle-orm';
 import type { Database } from '../../db/client.js';
 import { mobileHash, type PiiCrypto } from '../../db/crypto.js';
 import { consents, users } from '../../db/schema/users.js';
@@ -205,21 +205,36 @@ export function createPgUsersRepo({
     },
 
     async ensureConsent(userId, consent, grantedAt) {
-      // One statement: the insert happens only when the live user lacks this consent.
-      const result = await db.execute(sql`
-        INSERT INTO ${consents} (user_id, purpose, policy_version, granted_at)
-        SELECT ${userId}, ${consent.purpose}, ${consent.policyVersion}, ${grantedAt}
-        WHERE EXISTS (
-          SELECT 1 FROM ${users} WHERE ${users.id} = ${userId} AND ${users.deletedAt} IS NULL
-        )
-        AND NOT EXISTS (
-          SELECT 1 FROM ${consents}
-          WHERE ${consents.userId} = ${userId}
-            AND ${consents.purpose} = ${consent.purpose}
-            AND ${consents.policyVersion} = ${consent.policyVersion}
-            AND ${consents.withdrawnAt} IS NULL
-        )`);
-      return (result.rowCount ?? 0) > 0;
+      // The live user's row is locked first, so two concurrent calls (two instances seeding at
+      // once) serialise and the second sees the first one's consent.
+      return db.transaction(async (tx) => {
+        const live = await tx
+          .select({ id: users.id })
+          .from(users)
+          .where(and(eq(users.id, userId), isNull(users.deletedAt)))
+          .for('update');
+        if (live.length === 0) return false;
+        const held = await tx
+          .select({ id: consents.id })
+          .from(consents)
+          .where(
+            and(
+              eq(consents.userId, userId),
+              eq(consents.purpose, consent.purpose),
+              eq(consents.policyVersion, consent.policyVersion),
+              isNull(consents.withdrawnAt),
+            ),
+          )
+          .limit(1);
+        if (held.length > 0) return false;
+        await tx.insert(consents).values({
+          userId,
+          purpose: consent.purpose,
+          policyVersion: consent.policyVersion,
+          grantedAt,
+        });
+        return true;
+      });
     },
 
     reset: () =>

@@ -1043,7 +1043,7 @@ export const strings = {
             [
               'End to end',
               'Playwright',
-              '33 specs: desktop Chrome, Chromium phone and WebKit iPhone',
+              '41 specs: desktop Chrome, Chromium phone and WebKit iPhone',
             ],
             [
               'User journeys',
