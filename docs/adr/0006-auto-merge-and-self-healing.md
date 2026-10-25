@@ -32,8 +32,8 @@ no longer merge cleanly get `main` merged into their branch (never a rebase, for
 `main`). A clean merge is pushed after `npm run check` passes, and CI is dispatched on the branch;
 a real conflict goes to the Fixer; one that cannot keep both sides gets `needs-human`.
 
-**Fixer heals red CI** (`agent-fixer.yml`). Red CI on a PR is fixed on that PR's branch (3 attempts,
-then `needs-human`). Red CI on `main`, from a push, a post-merge dispatch or a scheduled health run,
+**Fixer heals red CI** (`agent-fixer.yml`). Red CI on a PR is fixed on that PR's branch until it is green
+(amended 2026-10-25: no attempt limit, only the no-progress safeguard in `docs/agent-workflow.md`). Red CI on `main`, from a push, a post-merge dispatch or a scheduled health run,
 makes the Fixer open one `claude/fix-main-*` PR, which then goes through review and auto-merge.
 
 **Scheduled health checks** (`ci.yml`). Full CI runs on `main` at 09:20 and 12:30 IST on weekdays
