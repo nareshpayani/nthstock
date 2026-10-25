@@ -42,6 +42,7 @@ docker compose -f infra/docker-compose.yml down -v   # delete the volume: an emp
 | --- | --- |
 | Start, migrate, seed the demo, run everything in api mode | `MOCK_MARKET_ALWAYS_OPEN=true npm run seed:demo` |
 | Run in api mode on the stored data (no seed) | `npm run dev:api` (runs `infra:up` and `db:migrate` first) |
+| Run the jobs worker alone | `npm run dev:worker -w @nthstock/api` (`dev:api` starts it with `JOBS_MODE=bullmq`) |
 | Apply migrations only | `npm run db:migrate` |
 | psql as `nthstock_app` | `npm run db:psql` (or `psql $DATABASE_MIGRATION_URL` as the owner) |
 | Reset the database | `npm run db:reset`: deletes the volume, starts the containers, migrates |
