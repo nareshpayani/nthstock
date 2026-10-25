@@ -1,12 +1,13 @@
 import { expect, test, type Page } from '@playwright/test';
 import { logIn } from './support/auth';
-import { API_TAG } from './support/env';
+import { API_TAG, DEV_TAG } from './support/env';
 import { SCREENS } from './screens/screens';
 
 // The app on localhost logs no errors or warnings (NSTOCK-0357): every screen in the screenshot
 // list, logged out and then logged in, with the console, uncaught errors and failed requests
-// watched. It runs on every PR and on develop, in mock mode and (tagged @api) on the full stack,
-// so a console error fails CI and the Fixer picks it up like any other failure.
+// watched. It runs on every PR and on develop, in mock mode, on the full stack (@api) and on the
+// Vite dev server with the packages' dist deleted (@dev, as after a fresh pull), so a console
+// error fails CI and the Fixer picks it up like any other failure.
 
 /**
  * The one expected miss: the first page load of a new browser asks `POST /v1/auth/refresh` whether
@@ -53,7 +54,7 @@ async function visitAll(page: Page, authed: boolean) {
   }
 }
 
-test(`every screen loads without console errors, logged out and logged in ${API_TAG}`, async ({
+test(`every screen loads without console errors, logged out and logged in ${API_TAG} ${DEV_TAG}`, async ({
   page,
 }) => {
   test.setTimeout(120_000);
