@@ -10,7 +10,8 @@ export {
   type JobSchedule,
 } from './definitions.js';
 export { createJobs, type JobsDeps } from './jobs.js';
-export { runJob, type JobLog, type JobOutcome } from './runner.js';
+export { PricesNotLive } from './sessionJobs.js';
+export { runJob, safeErrorMessage, type JobLog, type JobOutcome } from './runner.js';
 export {
   JOB_ATTEMPTS,
   JOB_BACKOFF_MS,

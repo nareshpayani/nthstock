@@ -1,4 +1,3 @@
-import { istDateKey } from '@nthstock/utils';
 import { Redis } from 'ioredis';
 import { afterAll, afterEach, beforeAll, expect, it } from 'vitest';
 import {
@@ -12,7 +11,11 @@ import { startJobScheduler, type JobScheduler } from './scheduler.js';
 
 const EVERY_SECOND = () => '* * * * * *';
 
-type Logged = { level: 'info' | 'warn'; message: string; fields: Record<string, unknown> };
+type Logged = {
+  level: 'info' | 'warn' | 'error';
+  message: string;
+  fields: Record<string, unknown>;
+};
 
 function memoryLog() {
   const lines: Logged[] = [];
@@ -22,6 +25,8 @@ function memoryLog() {
       lines.push({ level: 'info', message, fields }),
     warn: (message: string, fields: Record<string, unknown> = {}) =>
       lines.push({ level: 'warn', message, fields }),
+    error: (message: string, fields: Record<string, unknown> = {}) =>
+      lines.push({ level: 'error', message, fields }),
   };
 }
 
@@ -94,9 +99,9 @@ describeWithRedis('BullMQ job scheduler (T-207, T-211)', () => {
 
   it('skips a market-session job on a listed holiday, and still runs maintenance', async () => {
     const prefix = uniqueChannel('jobs-holiday');
-    const today = istDateKey(new Date());
-    // Tomorrow too, in case the test runs across IST midnight.
-    const tomorrow = istDateKey(new Date(Date.now() + 86_400_000));
+    // Every date is a holiday, so the test does not depend on today (runner.test.ts covers the
+    // calendar with fixed dates); this proves the scheduler applies it.
+    const everyDay = new Proxy<Record<string, string>>({}, { get: () => 'Test holiday' });
     let sessionRuns = 0;
     let maintenanceRuns = 0;
     const log = memoryLog();
@@ -113,7 +118,7 @@ describeWithRedis('BullMQ job scheduler (T-207, T-211)', () => {
       ],
       log,
       prefix,
-      holidays: { [today]: 'Test holiday', [tomorrow]: 'Test holiday' },
+      holidays: everyDay,
       cronOverride: EVERY_SECOND,
     });
     await waitFor(() => maintenanceRuns >= 2);
@@ -161,6 +166,23 @@ describeWithRedis('BullMQ job scheduler (T-207, T-211)', () => {
     expect(failures.slice(0, 2).map((line) => line.fields.attempt)).toEqual([1, 2]);
     expect(failures[0]?.fields).toMatchObject({ job: 'auth.tokenCleanup', attempts: 3 });
     expect(JSON.stringify(log.lines)).not.toContain('9876543210');
+  }, 20_000);
+
+  it('logs the last failed attempt as an error', async () => {
+    const prefix = uniqueChannel('jobs-give-up');
+    const log = memoryLog();
+    await start({
+      jobs: [testJob('auth.tokenCleanup', () => Promise.reject(new TypeError('always')))],
+      log,
+      prefix,
+      backoffMs: 50,
+      cronOverride: EVERY_SECOND,
+    });
+    await waitFor(() => log.lines.some((line) => line.level === 'error'));
+    expect(log.lines.find((line) => line.level === 'error')).toMatchObject({
+      message: 'job gave up',
+      fields: { job: 'auth.tokenCleanup', attempt: 3, attempts: 3, error: 'TypeError' },
+    });
   }, 20_000);
 
   it('stops cleanly: close waits for the running job to finish', async () => {

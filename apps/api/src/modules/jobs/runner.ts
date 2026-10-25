@@ -4,6 +4,7 @@ import type { Job, JobResult } from './definitions.js';
 export type JobLog = {
   info(message: string, fields?: Record<string, unknown>): void;
   warn(message: string, fields?: Record<string, unknown>): void;
+  error(message: string, fields?: Record<string, unknown>): void;
 };
 
 export type JobOutcome =
@@ -25,11 +26,23 @@ export async function runJob(
 }
 
 /**
- * The message of a failure without anything that might carry user data: only the error's class
- * name and, for our own errors, the message (a Postgres error's `detail` names row values).
+ * A failure as it may be logged: the error classes down its `cause` chain and the first Postgres
+ * SQLSTATE `code`, never a message. Drizzle's wrapper message holds the SQL and its bound values,
+ * and a driver error's message and `detail` can name row values (a mobile number, an id).
  */
 export function safeErrorMessage(error: unknown): string {
-  if (!(error instanceof Error)) return 'non-error thrown';
-  const detail = (error as { detail?: unknown }).detail;
-  return detail === undefined ? `${error.name}: ${error.message}` : `${error.name} (database)`;
+  const names: string[] = [];
+  let code: string | null = null;
+  let current: unknown = error;
+  for (let depth = 0; depth < 5 && current !== undefined && current !== null; depth += 1) {
+    if (!(current instanceof Error)) {
+      names.push('non-error thrown');
+      break;
+    }
+    names.push(current.name);
+    const own = (current as { code?: unknown }).code;
+    if (code === null && typeof own === 'string' && /^[0-9A-Z]{5}$/.test(own)) code = own;
+    current = current.cause;
+  }
+  return code === null ? names.join(' < ') : `${names.join(' < ')} (SQLSTATE ${code})`;
 }

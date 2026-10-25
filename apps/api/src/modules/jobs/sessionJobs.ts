@@ -5,10 +5,23 @@ import type { JobResult } from './definitions.js';
 export type SessionJobDeps = {
   orders: Pick<OrderService, 'syncAccounts'>;
   accounts: Pick<AccountStore, 'liveAccountIds' | 'accountsTouchedOn'>;
+  /**
+   * Whether the process has live prices (the quote service's snapshots); left out, it always
+   * has (the in-process adapter). Fills at stale prices would be wrong, so the run waits.
+   */
+  pricesLive?: () => boolean;
 };
+
+/** Thrown while the worker has no live prices yet, so BullMQ retries the run. */
+export class PricesNotLive extends Error {
+  override name = 'PricesNotLive';
+}
 
 /** Syncs every account and fails the run (so BullMQ retries it) when any one did not sync. */
 async function syncAll(userIds: Iterable<string>, deps: SessionJobDeps): Promise<JobResult> {
+  if (deps.pricesLive && !deps.pricesLive()) {
+    throw new PricesNotLive('The quote snapshots are not loaded yet');
+  }
   const { synced, failed } = await deps.orders.syncAccounts(userIds);
   if (failed > 0) throw new Error(`${failed} of ${synced + failed} accounts did not sync`);
   return { accounts: synced };

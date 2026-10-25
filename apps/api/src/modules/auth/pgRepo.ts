@@ -1,5 +1,5 @@
 import { base32Decode, base32Encode, type Clock } from '@nthstock/utils';
-import { and, desc, eq, gt, isNull, lt, lte, sql } from 'drizzle-orm';
+import { and, desc, eq, gt, isNull, lt, lte, sql, type SQL } from 'drizzle-orm';
 import type { Database } from '../../db/client.js';
 import type { PiiCrypto } from '../../db/crypto.js';
 import {
@@ -54,6 +54,23 @@ const toDevice = (row: DeviceRow): DeviceRecord => ({
  * failure count only changes in one `UPDATE … RETURNING`, so concurrent wrong PINs each get their
  * own count and the fifth one locks.
  */
+/** Rows one cleanup statement deletes at most (T-210); a session's cascade adds its tokens. */
+export const CLEANUP_CHUNK = 5_000;
+const CLEANUP_STATEMENT_TIMEOUT_MS = 10_000;
+
+/** Runs a `… limit CLEANUP_CHUNK` delete until it deletes less than a chunk; the total deleted. */
+async function deleteInChunks(database: Database, statement: SQL): Promise<number> {
+  let total = 0;
+  for (;;) {
+    const deleted = await database.transaction(
+      async (tx) => (await tx.execute(statement)).rowCount ?? 0,
+      { statementTimeoutMs: CLEANUP_STATEMENT_TIMEOUT_MS },
+    );
+    total += deleted;
+    if (deleted < CLEANUP_CHUNK) return total;
+  }
+}
+
 export function createPgDeviceStore({
   database,
   clock,
@@ -167,8 +184,10 @@ export function createPgDeviceStore({
 
     async deleteExpiredDeviceTokens(now) {
       // On device_tokens_expires_at_idx. The device row stays; an expired token already fails.
-      const result = await db.delete(deviceTokens).where(lt(deviceTokens.expiresAt, now));
-      return result.rowCount ?? 0;
+      return deleteInChunks(
+        database,
+        sql`delete from device_tokens where token_hash in (select token_hash from device_tokens where expires_at < ${now} limit ${CLEANUP_CHUNK})`,
+      );
     },
 
     async getTotpFactor(userId) {
@@ -377,9 +396,17 @@ export function createPgSessionStore({ database }: { database: Database }): Sess
     async deleteExpiredSessions(now, sessionsBefore) {
       // Two statements on the expires_at indexes, each a pure delete, so a rerun finds nothing.
       // Deleting a session cascades to the refresh tokens still in its family.
-      const tokens = await db.delete(refreshTokens).where(lt(refreshTokens.expiresAt, now));
-      const gone = await db.delete(sessions).where(lt(sessions.expiresAt, sessionsBefore));
-      return { refreshTokens: tokens.rowCount ?? 0, sessions: gone.rowCount ?? 0 };
+      // Both run in chunks, each its own short transaction, so a backlog (the first run, or after
+      // an outage) never holds locks or a connection for long.
+      const tokens = await deleteInChunks(
+        database,
+        sql`delete from refresh_tokens where token_hash in (select token_hash from refresh_tokens where expires_at < ${now} limit ${CLEANUP_CHUNK})`,
+      );
+      const gone = await deleteInChunks(
+        database,
+        sql`delete from sessions where id in (select id from sessions where expires_at < ${sessionsBefore} limit ${CLEANUP_CHUNK})`,
+      );
+      return { refreshTokens: tokens, sessions: gone };
     },
 
     reset: refuseReset('session store'),

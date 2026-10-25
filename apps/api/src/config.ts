@@ -49,6 +49,11 @@ export type DbDriver = 'memory' | 'postgres';
 /** Who runs the scheduled jobs (spec backend-core §3, §9). */
 export type JobsMode = 'bullmq' | 'inline' | 'off';
 
+/** Whether the API runs its in-process order sweep: only under `inline`; `bullmq` has the worker. */
+export function runsOrderSweep(mode: JobsMode): boolean {
+  return mode === 'inline';
+}
+
 export type ApiConfig = {
   /** `NODE_ENV=production`: random OTPs, no dev OTP or dev CAPTCHA. */
   production: boolean;

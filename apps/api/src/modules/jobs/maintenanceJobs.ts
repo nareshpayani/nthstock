@@ -13,8 +13,14 @@ export type MaintenanceJobDeps = {
 /** Days of order partitions kept ready ahead, from the IST date of the run (spec §4.3, §9). */
 export const ORDER_PARTITION_DAYS = 14;
 
-/** Creating up to 28 tables can wait on a lock behind a long query; the default 2 s is too short. */
+/** Creating up to 28 tables takes longer than the default 2 s statement timeout. */
 const ORDER_PARTITIONS_TIMEOUT_MS = 30_000;
+/**
+ * `CREATE TABLE … PARTITION OF` locks `orders` exclusively: waiting long for that lock behind a
+ * long query would queue every order read and write behind the DDL. Give up quickly instead; the
+ * BullMQ retry tries again.
+ */
+const ORDER_PARTITIONS_LOCK_TIMEOUT = '3s';
 
 /**
  * 00:30 (T-210): makes sure `orders` and `order_events` have a partition for each of the next 14
@@ -26,6 +32,7 @@ export async function runOrderPartitions(at: Date, deps: MaintenanceJobDeps): Pr
   if (!database) return { partitions: 0 };
   const created = await database.transaction(
     async (tx) => {
+      await tx.execute(sql.raw(`set local lock_timeout = '${ORDER_PARTITIONS_LOCK_TIMEOUT}'`));
       const result = await tx.execute<{ created: number }>(
         sql`select ensure_order_partitions(${istDateKey(at)}::date, ${ORDER_PARTITION_DAYS}) as created`,
       );

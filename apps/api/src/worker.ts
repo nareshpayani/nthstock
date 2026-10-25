@@ -1,7 +1,7 @@
 import { Redis } from 'ioredis';
 import { loadConfig } from './config.js';
 import { createDeps } from './deps.js';
-import { createJobs, startJobScheduler } from './modules/jobs/index.js';
+import { createJobs, safeErrorMessage, startJobScheduler } from './modules/jobs/index.js';
 import { startOrderUpdatePublisher } from './modules/orders/index.js';
 import { createRedisPublisher } from './ticks/publisher.js';
 
@@ -19,6 +19,11 @@ const log = {
   warn(message: string, fields: Record<string, unknown> = {}) {
     process.stderr.write(
       `${JSON.stringify({ level: 40, time: Date.now(), msg: message, ...fields })}\n`,
+    );
+  },
+  error(message: string, fields: Record<string, unknown> = {}) {
+    process.stderr.write(
+      `${JSON.stringify({ level: 50, time: Date.now(), msg: message, ...fields })}\n`,
     );
   },
 };
@@ -45,19 +50,38 @@ const deps = createDeps({
     : {}),
   production: config.production,
   piiKeys: config.pii.keys,
-  onAuditError: (error) => log.warn('audit write failed', { error: error.message }),
+  // Errors are reported as their classes and SQLSTATE only (no PII in logs).
+  onAuditError: (error) => log.warn('account write failed', { error: safeErrorMessage(error) }),
 });
 
 // Orders the jobs release, fill or cancel reach open browsers as they do from the API.
 const publisher = createRedisPublisher(config.redisUrl, log);
 const updates = startOrderUpdatePublisher({ orders: deps.orders, publisher, log });
 
-if (deps.quoteStreams) {
+// On the quote service, session jobs that fill orders refuse to run (and so retry) until the
+// worker has the live prices: a square-off on opening prices would fill at the wrong price.
+let pricesLive = deps.quoteStreams === null;
+const quoteStreams = deps.quoteStreams;
+if (quoteStreams) {
+  const live = (async () => {
+    for (;;) {
+      try {
+        await quoteStreams.ready();
+        pricesLive = true;
+        return true;
+      } catch (error) {
+        log.warn('reading the quote snapshots failed; trying again', {
+          error: error instanceof Error ? error.name : 'non-error thrown',
+        });
+        await new Promise((resolve) => setTimeout(resolve, QUOTE_SNAPSHOT_WAIT_MS));
+      }
+    }
+  })();
   const ready = await Promise.race([
-    deps.quoteStreams.ready().then(() => true),
+    live,
     new Promise<false>((resolve) => setTimeout(() => resolve(false), QUOTE_SNAPSHOT_WAIT_MS)),
-  ]).catch(() => false);
-  if (!ready) log.warn('the quote snapshots are not reachable; starting on opening prices');
+  ]);
+  if (!ready) log.warn('the quote snapshots are not reachable yet; session jobs wait for them');
 }
 
 const scheduler = await startJobScheduler({
@@ -66,6 +90,7 @@ const scheduler = await startJobScheduler({
   jobs: createJobs({
     orders: deps.orders,
     accounts: deps.repos.accounts,
+    pricesLive: () => pricesLive,
     pnlSnapshots: deps.repos.pnlSnapshots,
     database: deps.database,
     auth: deps.repos.auth,

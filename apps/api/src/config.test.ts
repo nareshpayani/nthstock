@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { loadCandleWriterConfig, loadConfig } from './config.js';
+import { loadCandleWriterConfig, loadConfig, runsOrderSweep } from './config.js';
 import { devPiiKeys } from './db/crypto.js';
 
 // Test-only PII keys: base64 of 32 fixed bytes each (not secrets).
@@ -78,6 +78,9 @@ describe('loadConfig', () => {
       /JOBS_MODE=bullmq needs DB_DRIVER=postgres/,
     );
     expect(() => loadConfig({ JOBS_MODE: 'cron' })).toThrow(/JOBS_MODE/);
+    expect(runsOrderSweep('inline')).toBe(true);
+    expect(runsOrderSweep('bullmq')).toBe(false);
+    expect(runsOrderSweep('off')).toBe(false);
   });
 
   it('needs REDIS_URL to follow the quote service (NSTOCK-0354)', () => {

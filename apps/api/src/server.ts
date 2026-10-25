@@ -1,6 +1,6 @@
 import { Redis } from 'ioredis';
 import { buildApp } from './app.js';
-import { loadConfig } from './config.js';
+import { loadConfig, runsOrderSweep } from './config.js';
 import { resolveJwtSecret } from './modules/auth/index.js';
 import { seedDemo } from './modules/demo/index.js';
 import { offsetClock } from './modules/testControls/index.js';
@@ -77,7 +77,7 @@ const app = buildApp({
   ...(publisher ? { tickPublisher: publisher, orderPublisher: publisher } : {}),
   ...(testClock ? { testControls: { setTime: testClock.set } } : {}),
   // JOBS_MODE=bullmq (T-207): the job worker runs the session events, so no in-process sweep.
-  ...(config.jobsMode === 'inline' ? {} : { orderSweepMs: null }),
+  ...(runsOrderSweep(config.jobsMode) ? {} : { orderSweepMs: null }),
 });
 
 app.addHook('onClose', async () => {

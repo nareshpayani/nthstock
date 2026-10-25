@@ -684,11 +684,8 @@ export function createOrderService({
           synced += 1;
         } catch (error) {
           failed += 1;
-          reportError(
-            new Error(
-              `Account ${userId} did not sync: ${error instanceof Error ? error.message : String(error)}`,
-            ),
-          );
+          // No user id or message in the report: the job worker logs it (never log PII).
+          reportError(new Error('An account did not sync', { cause: error }));
         }
       }
       return { synced, failed };

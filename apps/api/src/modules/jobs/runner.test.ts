@@ -65,11 +65,21 @@ describe('job schedules (spec backend-core §9)', () => {
 });
 
 describe('safeErrorMessage', () => {
-  it('keeps our own messages and drops a database error’s row values', () => {
-    expect(safeErrorMessage(new RangeError('bad date'))).toBe('RangeError: bad date');
-    const pg = Object.assign(new Error('duplicate key'), { detail: 'Key (mobile)=(9876543210)' });
-    expect(safeErrorMessage(pg)).toBe('Error (database)');
+  it('logs error classes and the SQLSTATE, never a message or row values', () => {
+    expect(safeErrorMessage(new RangeError('bad date for 9876543210'))).toBe('RangeError');
+    const pg = Object.assign(new Error('duplicate key'), {
+      code: '23505',
+      detail: 'Key (mobile)=(9876543210)',
+    });
+    expect(safeErrorMessage(pg)).toBe('Error (SQLSTATE 23505)');
+    // Drizzle's wrapper: its message holds the SQL and the bound values, the driver error is the cause.
+    const wrapped = Object.assign(
+      new Error('Failed query: insert into users values ($1) params: 9876543210', { cause: pg }),
+      { name: 'DrizzleQueryError' },
+    );
+    expect(safeErrorMessage(wrapped)).toBe('DrizzleQueryError < Error (SQLSTATE 23505)');
     expect(safeErrorMessage('a string')).toBe('non-error thrown');
+    expect(safeErrorMessage(Object.assign(new Error('x'), { code: 'ECONNRESET' }))).toBe('Error');
   });
 });
 
