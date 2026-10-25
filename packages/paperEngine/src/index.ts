@@ -142,3 +142,4 @@ export {
   type AlertDeskSnapshot,
   type AlertMarket,
 } from './alertDesk.js';
+export { OrderBook, type BookOrder, type BookStop, type BookTick } from './orderBook.js';

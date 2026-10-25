@@ -92,6 +92,17 @@ is the piece a licensed vendor feed replaces (D3).
   Locally: p95 240 to 260 ms on the quote service against 86 to 106 ms on the pump, both under the 500 ms target. The
   difference is the 250 ms batch window of the writer; CI asserts the p95 on every PR.
 
+### Matcher (Wave 3, E23)
+Spec `market-data-and-matching.md` §5. A matcher worker will fill resting orders and trigger trailing stops off the tick
+streams, so apps/api stops matching in process.
+- **Order book** (`OrderBook` in `packages/paperEngine`, NSTOCK-0363): per instrument, BUY and SELL LIMIT orders sit
+  in price heaps and trailing stops in heaps on their stop, watermark and activation prices. A tick pops only what it
+  fills, triggers, ratchets or activates, and moves every stop with `stepTrailingStop`, the rule the engine and the
+  browser mock run, so it leaves each stop where stepping every stop would (property-tested against that full walk).
+  A change applies only when its version is newer than the one held.
+- **Status:** the book is built. The worker, commands, reconcile loop, fills, server-side trailing stops,
+  `MATCHER_MODE` and the benchmark are NSTOCK-0364 to 0370.
+
 ### Market data and chart bars
 - `packages/marketData` generates each range's own bars (1D: 1-minute, 1W: 5-minute, 1M: hourly,
   1Y: daily, 5Y: weekly) and `resampleCandles` groups them into a coarser bar size on request
