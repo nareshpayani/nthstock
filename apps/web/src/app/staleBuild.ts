@@ -79,26 +79,23 @@ export function reloadWhenOnline(env: StaleBuildEnv = defaultStaleBuildEnv()): b
 /**
  * Reloads the page to pick up the current build, unless it already did so in the last minute.
  * Offline, the reload waits for the network. Returns whether a reload ran or is queued; false
- * means the error should still reach the route's error card. Without session storage it still
- * reloads, since one reload is the only way out and the browser's own reload limits stop a loop.
+ * means the error should still reach the route's error card. Without working session storage
+ * nothing can record the reload, so it never reloads by itself (that could loop); the card's
+ * Try again still does.
  */
 export function reloadForNewBuild(env: StaleBuildEnv = defaultStaleBuildEnv()): boolean {
-  let last: number;
-  try {
-    last = Number(env.storage?.getItem(KEY) ?? 0);
-  } catch {
-    last = 0;
-  }
-  if (!Number.isFinite(last)) last = 0;
   const now = env.now();
-  if (now - last < MIN_GAP_MS) {
-    env.warn('A code chunk failed to load again within a minute of reloading; not reloading.');
-    return false;
-  }
   try {
-    env.storage?.setItem(KEY, String(now));
+    if (!env.storage) throw new Error('no session storage');
+    const last = Number(env.storage.getItem(KEY) ?? 0);
+    if (Number.isFinite(last) && now - last < MIN_GAP_MS) {
+      env.warn('A code chunk failed to load again within a minute of reloading; not reloading.');
+      return false;
+    }
+    env.storage.setItem(KEY, String(now));
   } catch {
-    // A convenience only: the reload still happens.
+    env.warn('A code chunk failed to load and session storage is unavailable; not reloading.');
+    return false;
   }
   return reloadWhenOnline(env);
 }

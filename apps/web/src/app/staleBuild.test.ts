@@ -107,10 +107,19 @@ describe('reloadForNewBuild', () => {
     expect(e.reload).toHaveBeenCalledOnce();
   });
 
-  it('still reloads when storage is unavailable, throws or holds garbage', () => {
+  it('treats a corrupt stored time as no reload yet', () => {
+    const garbage = env(
+      { value: 1_000_000 },
+      { getItem: () => 'not a number', setItem: () => undefined },
+    );
+    expect(reloadForNewBuild(garbage)).toBe(true);
+    expect(garbage.reload).toHaveBeenCalledOnce();
+  });
+
+  it('never reloads by itself without working storage, which could loop', () => {
     const now = { value: 1_000_000 };
     const noStorage = { ...env(now), storage: undefined };
-    expect(reloadForNewBuild(noStorage)).toBe(true);
+    expect(reloadForNewBuild(noStorage)).toBe(false);
     const throwing = env(now, {
       getItem: () => {
         throw new Error('blocked');
@@ -119,10 +128,9 @@ describe('reloadForNewBuild', () => {
         throw new Error('blocked');
       },
     });
-    expect(reloadForNewBuild(throwing)).toBe(true);
-    const garbage = env(now, { getItem: () => 'not a number', setItem: () => undefined });
-    expect(reloadForNewBuild(garbage)).toBe(true);
-    expect(garbage.reload).toHaveBeenCalledOnce();
+    expect(reloadForNewBuild(throwing)).toBe(false);
+    expect(throwing.reload).not.toHaveBeenCalled();
+    expect(throwing.warn).toHaveBeenCalledOnce();
   });
 });
 
