@@ -286,4 +286,33 @@ describe('order sweep timer', () => {
     sweepMarket.dispose();
     expect(sweeps).toBeGreaterThan(0);
   });
+
+  it('runs only under JOBS_MODE=inline; bullmq leaves session events to the worker', async () => {
+    const counted = async (jobsMode: 'inline' | 'bullmq' | 'off') => {
+      const sweepClock = manualClock(MARKET_OPEN_UTC);
+      const sweepMarket = new MockMarketDataAdapter({
+        master,
+        clock: sweepClock,
+        scheduler: noTimers,
+      });
+      const sweepApp = buildApp({
+        deps: { clock: sweepClock, market: sweepMarket },
+        orderSweepMs: 5,
+        jobsMode,
+      });
+      let sweeps = 0;
+      sweepApp.deps.orders.sweep = () => {
+        sweeps += 1;
+        return Promise.resolve();
+      };
+      await sweepApp.ready();
+      await new Promise((resolve) => setTimeout(resolve, 60));
+      await sweepApp.close();
+      sweepMarket.dispose();
+      return sweeps;
+    };
+    expect(await counted('inline')).toBeGreaterThan(0);
+    expect(await counted('bullmq')).toBe(0);
+    expect(await counted('off')).toBe(0);
+  });
 });

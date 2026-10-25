@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { MockMarketDataAdapter, type MarketDataAdapter } from '@nthstock/marketData';
 import { Redis } from 'ioredis';
 import { systemClock, type Clock } from '@nthstock/utils';
@@ -30,8 +31,10 @@ import {
   createPgAccountStore,
   createOrderService,
   startMatcherCommands,
+  startMatcherFills,
   type AccountStore,
   type MatcherCommands,
+  type MatcherFills,
   type OrderService,
 } from './modules/orders/index.js';
 import {
@@ -41,6 +44,11 @@ import {
   type Notifier,
   type NotificationsRepo,
 } from './modules/notifications/index.js';
+import {
+  createMemoryPnlSnapshotRepo,
+  createPgPnlSnapshotRepo,
+  type PnlSnapshotRepo,
+} from './modules/portfolio/index.js';
 import { createMemoryUsersRepo, createPgUsersRepo, type UsersRepo } from './modules/users/index.js';
 import {
   createMemoryWatchlistsRepo,
@@ -69,6 +77,8 @@ export type Repos = {
   audit: AuditRepo;
   /** The notification centre and its outbox (NSTOCK-0379). */
   notifications: NotificationsRepo;
+  /** End-of-day P&L per account, written by the `pnl.snapshot` job (T-209). */
+  pnlSnapshots: PnlSnapshotRepo;
 };
 
 /** What modules get injected instead of reaching for globals: time, storage and market data. */
@@ -269,6 +279,9 @@ export function createDeps(overrides: DepsOverrides = {}): AppDeps {
             ...(overrides.quoteStreams ? { shards: overrides.quoteStreams.shards } : {}),
           })
         : createMemoryAccountStore({ audit, notifier })),
+    pnlSnapshots:
+      overrides.repos?.pnlSnapshots ??
+      (database ? createPgPnlSnapshotRepo({ database }) : createMemoryPnlSnapshotRepo()),
   };
   const orders = createOrderService({
     clock,
@@ -300,6 +313,25 @@ export function createDeps(overrides: DepsOverrides = {}): AppDeps {
     });
     matcherCommands = { commands, redis };
   }
+  // And this process commits its share of the matcher's fills (ADR 0013, NSTOCK-0367), on a
+  // connection of its own: XREADGROUP BLOCK holds it.
+  let matcherFills: MatcherFills | null = null;
+  if (quoteStreams && overrides.quoteStreams) {
+    const { url, shards, fillsKey, fillClaimIdleMs, blockMs, log } = overrides.quoteStreams;
+    const client = new Redis(url, { maxRetriesPerRequest: null });
+    // A failed read is logged by the reader itself, once per outage.
+    client.on('error', () => undefined);
+    matcherFills = startMatcherFills({
+      orders,
+      client,
+      shards,
+      consumer: `api-${randomUUID()}`,
+      log,
+      ...(fillsKey ? { fillsKey } : {}),
+      ...(fillClaimIdleMs === undefined ? {} : { claimIdleMs: fillClaimIdleMs }),
+      ...(blockMs === undefined ? {} : { blockMs }),
+    });
+  }
   return {
     clock,
     repos,
@@ -330,6 +362,9 @@ export function createDeps(overrides: DepsOverrides = {}): AppDeps {
         })
       : createMemorySessionRevocations(),
     dispose: async () => {
+      // The fill reader stops first, with its in-flight fills, so none commits after the flush
+      // or is acked after the desk is disposed.
+      await matcherFills?.close();
       // Audit entries still queued are written before the pool closes.
       await orders.flushAudit();
       alerts.dispose();

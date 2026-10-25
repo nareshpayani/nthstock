@@ -43,7 +43,7 @@ CDN + WAF ─► Load balancer ─► apps/api (Fastify, stateless)     apps/rea
 
 ### Backend stack
 - Node.js 22 LTS + TypeScript, Fastify. REST under `/v1`, OpenAPI generated from Zod schemas in `packages/contracts`.
-- Drizzle ORM, PostgreSQL 16, Redis 7, BullMQ jobs (EOD settlement, P&L snapshots).
+- Drizzle ORM, PostgreSQL 16, Redis 7, BullMQ jobs (session events, EOD settlement, P&L snapshots, maintenance; see Background jobs).
 - Auth: OTP (mock SMS provider until launch) + device PIN (Argon2id) + optional TOTP; 15-min JWT access token + rotating refresh token in httpOnly SameSite=Strict cookie, revocable in Redis.
 - Testing: Vitest, Supertest, Testcontainers, contract tests.
 
@@ -118,9 +118,21 @@ streams, so apps/api stops matching in process.
   live order and takes off any order Postgres no longer has live, each at the account version, so a lost command
   is repaired within a minute while a command newer than the read stands. An upsert at the same price keeps the
   order's heap entry, so the rounds leave nothing stale. Rows from before the column are matched by token.
-- **Status:** the book, the worker, the order and stop commands and the reconcile loop (orders only) are built.
-  Fills, reconciling stops, `MATCHER_MODE` and the benchmark are NSTOCK-0367 to 0370; until then the worker only
-  logs what a tick crossed.
+  The same round reconciles trailing stops: it reads the ARMED and TRAILING rows of `trailing_stops` (what
+  `STOP_ADD` puts on a book) in that snapshot, keeps those whose token maps to the shard (the table has no shard
+  column), upserts or removes them at the account version, and puts back a stop a tick triggered whose fill never
+  committed.
+- **Fills** (NSTOCK-0367, [ADR 0013](adr/0013-matcher-fills-commit-in-api.md)): the matcher finds fills, apps/api
+  commits them. For each tick that crosses an order or triggers a stop the lease holder writes one `MatcherFill` per
+  user to `nthstock:matcher:fills:v1:{shard}`; every apps/api process reads those streams in the `api` consumer
+  group, runs the user's engine at the tick's price and time (`PaperDesk.ingestFor`), commits through the account
+  store with the expected version, publishes the order update and only then acks. The engine re-checks every
+  order, so a replayed request fills nothing twice and a request for an order modified since fills only what still
+  crosses. A request a crashed process held is claimed after 30 s; an unsent one puts its orders back on the book.
+- **Status:** the book, the worker, the order and stop commands, the reconcile loop (orders only) and fills are
+  built, and so are server-side trailing stops (NSTOCK-0368). Reconciling stops (#573), `MATCHER_MODE` and the
+  benchmark are NSTOCK-0369 and 0370; until `MATCHER_MODE=worker` apps/api also fills on its own ticks, and a
+  request that arrives after such a fill finds nothing to do.
 
 ### Server-side trailing stops (NSTOCK-0368)
 In api mode trailing stops run on the server with the same engine rules as the browser mock (SPEC-TFC-1 §6, §10.6).
@@ -249,6 +261,33 @@ the chart shows after a reload.
   navigates to `/login?deleted=<purgeAfter>` first (its `beforeLoad` skips the session check), then
   clears the session, the query cache and the trusted-browser record.
 
+### Background jobs (Phase 2, E16)
+Spec `backend-core.md` §3 and §9, ADR 0007 §11. Code: `apps/api/src/modules/jobs/`, entry `apps/api/src/worker.ts`.
+- **Worker:** the same codebase as the API with another entry (`npm run worker -w @nthstock/api`; `npm run dev:api`
+  starts it as `dev:worker` with `JOBS_MODE=bullmq`), so jobs share the repos, the paper engine and the quote-service prices.
+  It publishes the order updates its jobs make, and sends them to the matcher as the API does.
+- **`JOBS_MODE`:** `inline` (default) keeps the API's in-process order sweep, which unit tests and the `/v1/__test`
+  clock routes drive; `bullmq` (needs `DB_DRIVER=postgres`) turns the sweep off and leaves session events to the
+  worker; `off` runs neither. Lazy sync stays either way: every read syncs the engine first.
+- **Schedules (IST, BullMQ job schedulers with `tz: 'Asia/Kolkata'`):** `session.amoRelease` 09:15,
+  `session.squareOff` 15:20, `session.dayClose` 15:30 and `pnl.snapshot` 15:45 on trading days (each checks the NSE
+  holiday table in `packages/utils` and exits on a holiday or weekend); `db.orderPartitions` 00:30 and
+  `auth.tokenCleanup` 03:00 daily. `account.purge` (02:00) is scheduled once T-230 adds it.
+- **Jobs are plain functions:** each is `run(at, deps)`, unit-tested with a fixed clock; BullMQ only schedules and
+  retries it (3 attempts, exponential backoff from 30 s). `at` is the run's due time, not when it started.
+- **Idempotency:** a session job reloads each account from Postgres, syncs it to now and commits against its
+  version (`OrderService.syncAccounts`), so a rerun, a retry or the API committing the same event first changes
+  nothing twice. The snapshot upserts on `(user_id, trade_date)`, partitions use `CREATE TABLE IF NOT EXISTS`, the
+  cleanup is a plain delete. The job id (scheduler id plus due time) keeps one run per scheduled time across workers.
+- **P&L snapshot:** one `pnl_snapshots` row per account touched today or holding stock: invested, current value
+  and day P&L over holdings (from the portfolio summary), total P&L (current value − invested) and realised P&L
+  since the account opened or was reset (the close clears the day's realised figure, so a day's realised P&L is the
+  difference between two snapshots).
+- **Shutdown:** SIGTERM closes the worker, which waits for the running job, then flushes audit writes and order
+  updates and closes the pools.
+- **No PII in logs:** a run's result is counts only, and a failure is logged as job, attempt and error class; a
+  Postgres error's `detail` (row values) is dropped.
+
 ### OpenAPI (E20)
 - `packages/contracts/src/openapi.ts` builds an OpenAPI 3.1 document from the route map with Zod 4's
   `z.toJSONSchema()` (no extra library): one operation per route (`operationId` = route key,
@@ -278,6 +317,22 @@ The hosted site is the msw-mode build: the mock backend runs in the browser's se
 - **Walkthrough video:** a Playwright script plays the five journeys on a 390 px touch phone
   against the production build and encodes `public/demo/walkthrough.mp4`
   (`docs/runbooks/demo-walkthrough.md`).
+
+### Phase 2 sign-off (E21)
+- Demo seed: with `DB_DRIVER=postgres`, `DEMO_SEED=true` writes the demo user (upserted by the
+  mobile's blind index), their terms and privacy consent (`UsersRepo.ensureConsent`, idempotent),
+  the demo watchlists and the paper account (through the account store) to Postgres. Seeding twice
+  or across a restart gives the same state (`seed.integration.test.ts`), equal to MSW's `?demo=1`.
+- Local stack: `npm run dev:api` starts Postgres and Redis, migrates, then runs apps/api,
+  apps/realtime, apps/quotes and the web app; `db:psql` and `db:reset` cover the chores
+  (`docs/runbooks/local-demo.md`).
+- Proof: the api-mode Playwright job restarts apps/api mid-test and still sees the session,
+  watchlists, orders and holdings; the security settings journey (TOTP on, log in with TOTP, log out
+  another session, delete the account, axe on every step) runs in msw and api mode; a performance
+  smoke times order acks and PIN logins on 10,000 seeded users (first CI run: order ack p95
+  29.6 ms, PIN login p95 42.1 ms, slowest query p95 0.6 ms; budgets 300, 200 and 50 ms).
+- The ASVS L2 checklist with links to every test and the owner sign-off list:
+  [`docs/security/phase2-asvs-l2.md`](security/phase2-asvs-l2.md).
 
 ### Security baseline
 - Rate limits per IP and per user; OTP resend throttling; CAPTCHA after 3 failed OTP/PIN attempts; PIN lockout after 5, unlock via OTP.

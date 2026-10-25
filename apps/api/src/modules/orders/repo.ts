@@ -141,6 +141,9 @@ export function createMemoryAccountStore({
       ),
 
     accountsTouchedOn: (tradeDate) => {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(tradeDate)) {
+        return Promise.reject(new RangeError(`Not a YYYY-MM-DD date: ${tradeDate}`));
+      }
       const on = (iso: string) => istDateKey(new Date(iso)) === tradeDate;
       return Promise.resolve(
         [...accounts]
@@ -152,6 +155,13 @@ export function createMemoryAccountStore({
           .map(([userId]) => userId),
       );
     },
+
+    accountsWithHoldings: () =>
+      Promise.resolve(
+        [...accounts]
+          .filter(([, account]) => account.workingSet.holdings.length > 0)
+          .map(([userId]) => userId),
+      ),
 
     reset: () => {
       accounts.clear();

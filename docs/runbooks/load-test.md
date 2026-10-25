@@ -2,7 +2,9 @@
 
 NSTOCK-0341, run on 2026-10-24. Script: [`tools/loadTest/loadTest.mjs`](../../tools/loadTest/loadTest.mjs).
 Raw results: [`tools/loadTest/results/`](../../tools/loadTest/results/). The scaling design these
-numbers feed is CLAUDE.md §4 and [architecture.md](../architecture.md#scalability-rules).
+numbers feed is CLAUDE.md §4 and [architecture.md](../architecture.md#scalability-rules). For the
+single-process smoke on order ack, PIN login and the slowest queries (T-243), see
+[perf-smoke.md](perf-smoke.md).
 
 ## What a virtual user does
 

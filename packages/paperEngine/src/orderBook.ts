@@ -94,6 +94,11 @@ export class OrderBook {
     for (const { order } of this.#orders.values()) yield order;
   }
 
+  /** The live trailing stops, in no particular order (the reconcile loop compares them). */
+  *stops(): IterableIterator<BookStop> {
+    for (const { stop } of this.#stops.values()) yield stop;
+  }
+
   /** `ADD` or `MODIFY`: rests the order at its price. False when the version is not newer. */
   upsertOrder(order: BookOrder): boolean {
     if (!newer(this.#orderVersions.get(order.orderId), order.version)) return false;
@@ -143,6 +148,18 @@ export class OrderBook {
     if (resting) this.#placeStop(stop);
     else this.#stops.delete(stop.stopId);
     return true;
+  }
+
+  /**
+   * Puts back a stop a tick triggered, at the same version, when its fill did not commit: the
+   * reconcile loop still finds it active in Postgres at that version. False when a newer change
+   * has arrived since.
+   */
+  restoreStop(stop: BookStop): boolean {
+    const held = this.#stopVersions.get(stop.stopId);
+    if (!held?.crossed || held.version !== stop.version) return this.upsertStop(stop);
+    this.#stopVersions.delete(stop.stopId);
+    return this.upsertStop(stop);
   }
 
   /** `STOP_CANCEL`. False when the version is not newer. */

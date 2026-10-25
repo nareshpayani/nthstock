@@ -36,6 +36,21 @@ docker compose -f infra/docker-compose.yml down -v   # delete the volume: an emp
 
 `init.sql` runs only on an empty volume. After changing it, reset the volume as above.
 
+### Everyday commands (NSTOCK-0240)
+
+| Task | Command |
+| --- | --- |
+| Start, migrate, seed the demo, run everything in api mode | `MOCK_MARKET_ALWAYS_OPEN=true npm run seed:demo` |
+| Run in api mode on the stored data (no seed) | `npm run dev:api` (runs `infra:up` and `db:migrate` first) |
+| Apply migrations only | `npm run db:migrate` |
+| psql as `nthstock_app` | `npm run db:psql` (or `psql $DATABASE_MIGRATION_URL` as the owner) |
+| Reset the database | `npm run db:reset`: deletes the volume, starts the containers, migrates |
+
+Dev keys: outside production apps/api falls back to fixed, non-secret development keys for column
+encryption and the blind index when `PII_ENC_KEYS` and `PII_HMAC_KEY` are empty, and
+`npm run dev:api` generates a per-run `JWT_SECRET`. Production refuses to start without real keys.
+The step-by-step demo is in [`docs/runbooks/local-demo.md`](../docs/runbooks/local-demo.md).
+
 ## PgBouncer (optional, profile `pool`)
 
 Production (Phase 6) puts PgBouncer in **transaction mode** between apps/api and Postgres

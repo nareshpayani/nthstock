@@ -110,7 +110,9 @@ describe('price alert routes (NSTOCK-0344)', () => {
     const list = NotificationsResponse.parse(
       (await app.inject({ method: 'GET', url: '/v1/notifications', headers: bearer() })).json(),
     );
-    expect(list.unread).toBe(1);
+    // The sign-in raised a SECURITY notification before the fill (NSTOCK-0382).
+    expect(list.items.map((item) => item.kind)).toEqual(['ORDER_FILLED', 'SECURITY']);
+    expect(list.unread).toBe(2);
     expect(list.items[0]).toMatchObject({ kind: 'ORDER_FILLED', title: 'Order executed' });
     const read = await app.inject({
       method: 'POST',
