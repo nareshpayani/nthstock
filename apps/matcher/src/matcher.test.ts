@@ -65,7 +65,7 @@ describe('startMatcher (NSTOCK-0364)', () => {
     expect(ticks.map((t) => [t.symbol, t.ltp, t.crossed.map((o) => o.orderId)])).toEqual([
       ['SYM7', 100_00, ['o1']],
     ]);
-    expect(matcher.stats()).toEqual({ ticks: 3, acted: 2 });
+    expect(matcher.stats()).toEqual({ ticks: 3, acted: 2, commands: 0 });
     expect([...matcher.books.keys()]).toEqual([7]);
   });
 

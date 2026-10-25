@@ -1,4 +1,4 @@
-import { TICK_BATCH_VERSION, type Quote } from '@nthstock/contracts';
+import { MATCHER_COMMAND_VERSION, TICK_BATCH_VERSION, type Quote } from '@nthstock/contracts';
 import { startLease, type Lease } from '@nthstock/marketData';
 import { Redis } from 'ioredis';
 import { afterAll, afterEach, beforeAll, expect, it, vi } from 'vitest';
@@ -63,6 +63,10 @@ describeWithRedis('two matchers on one shard (integration, NSTOCK-0364)', () => 
       blockMs: 100,
       streamKey: () => `${prefix}:ticks`,
       snapshotKey: () => `${prefix}:last`,
+      commands: {
+        client: new Redis(server?.url ?? '', { maxRetriesPerRequest: null }),
+        commandsKey: () => `${prefix}:commands`,
+      },
     });
     await matcher.ready();
     // The same resting SELL LIMIT on both books, as the reconcile loop will load it.
@@ -98,5 +102,32 @@ describeWithRedis('two matchers on one shard (integration, NSTOCK-0364)', () => 
     await write(prefix, 2, [quote(1, 100_05)]);
     await vi.waitFor(() => expect(second.ticks).toHaveLength(1));
     expect(first.ticks).toHaveLength(1);
+  });
+
+  it('applies order commands from the stream on every process, before the ticks after them', async () => {
+    const prefix = uniqueChannel('matcher');
+    const clock = { now: 0 };
+    const first = await boot(prefix, 'first', clock);
+    const second = await boot(prefix, 'second', clock);
+    const command = {
+      v: MATCHER_COMMAND_VERSION,
+      type: 'ADD',
+      token: 2,
+      version: 1,
+      orderId: 'o2',
+      userId: 'u2',
+      side: 'BUY',
+      price: 50_00,
+    };
+    await redis.xadd(`${prefix}:commands`, '*', 'command', JSON.stringify(command));
+    // A malformed entry is skipped, not fatal.
+    await redis.xadd(`${prefix}:commands`, '*', 'command', '{');
+    await vi.waitFor(() => expect(first.matcher.book(2).hasOrder('o2')).toBe(true));
+    await vi.waitFor(() => expect(second.matcher.stats().commands).toBe(1));
+
+    await write(prefix, 1, [quote(2, 49_95)]);
+    await vi.waitFor(() => expect(first.ticks).toHaveLength(1));
+    expect(first.ticks[0]?.crossed.map((o) => o.orderId)).toEqual(['o2']);
+    expect(second.ticks).toEqual([]);
   });
 });

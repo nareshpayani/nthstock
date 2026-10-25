@@ -105,8 +105,15 @@ streams, so apps/api stops matching in process.
   `followTickStreams`. Every process for the shard keeps following, so a standby is current when it takes over;
   only the holder runs ticks through the books, and only in market hours (`MOCK_MARKET_ALWAYS_OPEN` for demos).
   `npm run dev:api` starts it.
-- **Status:** the book and the worker are built. Commands, the reconcile loop, fills, server-side trailing stops,
-  `MATCHER_MODE` and the benchmark are NSTOCK-0365 to 0370; until then the worker only logs what a tick crossed.
+- **Order commands** (`MatcherCommand` in `packages/contracts`, NSTOCK-0365): after each order commit apps/api
+  appends `ADD`, `MODIFY` or `CANCEL` for a LIMIT order to `nthstock:matcher:commands:v1:{shard}` (capped at
+  100,000 entries), carrying the account version of that commit. Every matcher process for the shard reads the
+  stream with `XREAD BLOCK` and applies each command to the instrument's book by the version rule, so a late or
+  replayed command never undoes a newer one; malformed entries are logged and skipped. `STOP_ADD` and
+  `STOP_CANCEL` are in the contract and applied by the worker; apps/api sends them with server-side trailing stops.
+- **Status:** the book, the worker and the order commands are built. The reconcile loop, fills, server-side
+  trailing stops, `MATCHER_MODE` and the benchmark are NSTOCK-0366 to 0370; until then the worker only logs what a
+  tick crossed.
 
 ### Market data and chart bars
 - `packages/marketData` generates each range's own bars (1D: 1-minute, 1W: 5-minute, 1M: hourly,

@@ -34,7 +34,7 @@ function fakeOrders() {
       };
     },
     emit: (userId: string, next: Order) => {
-      for (const listener of listeners) listener(userId, next);
+      for (const listener of listeners) listener(userId, next, 1);
     },
     listeners,
   };
