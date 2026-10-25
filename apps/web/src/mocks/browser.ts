@@ -114,7 +114,11 @@ export async function startMockWorker(
  * ServiceWorker ... Not found") although the running worker is fine, and the rejection shows as
  * an uncaught error in the console (NSTOCK-0361). Only that rejection is silenced.
  */
+let workerUpdateMissIgnored = false;
+
 function ignoreWorkerUpdateMiss() {
+  if (workerUpdateMissIgnored) return;
+  workerUpdateMissIgnored = true;
   window.addEventListener('unhandledrejection', (event) => {
     const reason: unknown = event.reason;
     if (
