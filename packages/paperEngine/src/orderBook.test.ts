@@ -97,6 +97,29 @@ describe('OrderBook (NSTOCK-0363)', () => {
     expect(book.hasStop('t1')).toBe(false);
   });
 
+  it('moves a resting trailing stop by a newer version, and the old price no longer triggers', () => {
+    const book = new OrderBook();
+    book.upsertStop(trailing('t1', 'LONG', 100_00, 90_00));
+    // A newer version moves the stop down to 80; an older one is ignored.
+    expect(book.upsertStop(trailing('t1', 'LONG', 100_00, 80_00, undefined, 2))).toBe(true);
+    expect(book.upsertStop(trailing('t1', 'LONG', 100_00, 95_00, undefined, 1))).toBe(false);
+
+    // 85 crosses only the old 90 stop: the replaced entry is dropped, nothing triggers.
+    const stale = book.tick(85_00);
+    expect(stale.triggered).toEqual([]);
+    expect(stale.read).toBe(2); // the replaced stop and watermark entries
+    expect(book.hasStop('t1')).toBe(true);
+
+    const hit = book.tick(80_00);
+    expect(hit.triggered.map((s) => [s.stopId, s.state.status])).toEqual([['t1', 'TRIGGERED']]);
+
+    // A cancel stops it from ever triggering.
+    book.upsertStop(trailing('t2', 'LONG', 100_00, 90_00, undefined, 1));
+    expect(book.removeStop('t2', 2)).toBe(true);
+    expect(book.tick(50_00).triggered).toEqual([]);
+    expect(book.hasStop('t2')).toBe(false);
+  });
+
   it('activates an ARMED stop at its activation price, and at once without one', () => {
     const book = new OrderBook();
     const armed = (stopId: string, direction: PositionDirection, activationPrice: number | null) =>
