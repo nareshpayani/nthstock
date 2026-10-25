@@ -110,7 +110,7 @@ streams, so apps/api stops matching in process.
   100,000 entries), carrying the account version of that commit. Every matcher process for the shard reads the
   stream with `XREAD BLOCK` and applies each command to the instrument's book by the version rule, so a late or
   replayed command never undoes a newer one; malformed entries are logged and skipped. `STOP_ADD` and
-  `STOP_CANCEL` are in the contract and applied by the worker; apps/api sends them with server-side trailing stops.
+  `STOP_CANCEL` are in the contract and applied by the worker; apps/api sends them with its server-side trailing stops (below).
 - **Reconcile** (NSTOCK-0366): on start and every 60 s the matcher reads its shard's OPEN LIMIT orders and the
   account versions from Postgres in one REPEATABLE READ snapshot, through the `orders_shard_live_idx` partial
   index on `orders.shard` (migration 0016, set on insert as `shardOf(token, QUOTE_SHARDS)`). It upserts every
@@ -124,8 +124,8 @@ streams, so apps/api stops matching in process.
   store with the expected version, publishes the order update and only then acks. The engine re-checks every
   order, so a replayed request fills nothing twice and a request for an order modified since fills only what still
   crosses. A request a crashed process held is claimed after 30 s; an unsent one puts its orders back on the book.
-- **Status:** the book, the worker, the order commands, the reconcile loop and fills are built. Server-side
-  trailing stops, `MATCHER_MODE` and the benchmark are NSTOCK-0368 to 0370; until `MATCHER_MODE=worker` apps/api
+- **Status:** the book, the worker, the order commands, the reconcile loop and fills are built, and so are
+  server-side trailing stops (NSTOCK-0368). `MATCHER_MODE` and the benchmark are NSTOCK-0369 and 0370; until `MATCHER_MODE=worker` apps/api
   also fills on its own ticks, and a request that arrives after such a fill finds nothing to do.
 
 ### Server-side trailing stops (NSTOCK-0368)
