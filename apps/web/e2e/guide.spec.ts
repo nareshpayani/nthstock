@@ -36,7 +36,7 @@ test('each topic is a tab with its own link, kept on reload', async ({ page }) =
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto('/guide');
   const tabs = page.getByRole('tablist', { name: 'Documentation topics' });
-  await expect(tabs.getByRole('tab')).toHaveCount(16);
+  await expect(tabs.getByRole('tab')).toHaveCount(17);
   // On a desktop the topics take the watchlist rail's place on the left.
   await expect(page.getByRole('complementary', { name: 'Watchlist and search' })).toHaveCount(0);
   const tabsBox = await tabs.boundingBox();

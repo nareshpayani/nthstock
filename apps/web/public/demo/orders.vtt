@@ -1,0 +1,21 @@
+WEBVTT
+
+1
+00:00:27.668 --> 00:00:31.465
+Orders: Open, Executed and Cancelled, updated live over the WebSocket.
+
+2
+00:00:31.465 --> 00:00:38.202
+Modify an open order: only the quantity and price can change.
+
+3
+00:00:38.202 --> 00:00:43.159
+Modified.
+
+4
+00:00:43.159 --> 00:00:47.313
+Executed: the market buy, with its fill price.
+
+5
+00:00:47.313 --> 00:00:50.328
+Every order keeps its timeline: placed, modified, cancelled, in IST.

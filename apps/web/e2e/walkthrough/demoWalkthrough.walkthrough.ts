@@ -1,5 +1,7 @@
-import { expect, test, type Locator, type Page } from '@playwright/test';
+import { expect, type Locator, type Page } from '@playwright/test';
 import { centreOf, touchscreen, type Point, type Touch } from '../support/touch';
+import { clip, MONDAY_10_00_IST } from './support/clip';
+import { dot, inr, rupees, say } from './support/narration';
 
 // T30 (SPEC-TFC-1 §16, REQ-DEL-04): the demo walkthrough video, recorded from the production build
 // on a 390 × 844 touch phone. It follows the shot list in docs/runbooks/demo-walkthrough.md with
@@ -8,78 +10,8 @@ import { centreOf, touchscreen, type Point, type Touch } from '../support/touch'
 //
 // Each step shows a caption at the top of the screen and a dot where the finger lands, so the video
 // reads without sound. `npm run e2e:walkthrough -w @nthstock/web` writes the .webm to
-// test-results; tools/demo/recordWalkthrough.sh turns it into public/demo/walkthrough.mp4.
-
-const rupees = (text: string) => {
-  const match = /₹([\d,]+\.\d\d)/.exec(text);
-  if (!match?.[1]) throw new Error(`no price in "${text}"`);
-  return Number(match[1].replaceAll(',', ''));
-};
-
-/** A caption bar and touch dots, drawn over the page (pointer-events: none). */
-async function installOverlay(page: Page) {
-  await page.evaluate(() => {
-    if (document.getElementById('walkthrough-caption')) return;
-    const caption = document.createElement('div');
-    caption.id = 'walkthrough-caption';
-    Object.assign(caption.style, {
-      position: 'fixed',
-      left: '8px',
-      right: '8px',
-      top: '8px',
-      zIndex: '2147483647',
-      pointerEvents: 'none',
-      padding: '8px 12px',
-      borderRadius: '10px',
-      background: 'rgba(15, 23, 42, 0.88)',
-      color: '#fff',
-      font: '600 14px/1.35 system-ui, sans-serif',
-      transition: 'opacity 200ms',
-      opacity: '0',
-    });
-    document.body.append(caption);
-  });
-}
-
-const started = Date.now();
-const inr = (value: number) =>
-  `₹${value.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-
-async function say(page: Page, text: string, holdMs = 2200) {
-  if (process.env['WALKTHROUGH_TIMING']) {
-    console.log(`${((Date.now() - started) / 1000).toFixed(1)}s ${text}`);
-  }
-  await installOverlay(page);
-  await page.evaluate((value) => {
-    const caption = document.getElementById('walkthrough-caption');
-    if (!caption) return;
-    caption.textContent = value;
-    caption.style.opacity = value ? '1' : '0';
-  }, text);
-  await page.waitForTimeout(holdMs);
-}
-
-async function dot(page: Page, at: Point) {
-  await page.evaluate(({ x, y }) => {
-    const mark = document.createElement('div');
-    Object.assign(mark.style, {
-      position: 'fixed',
-      left: `${String(x - 18)}px`,
-      top: `${String(y - 18)}px`,
-      width: '36px',
-      height: '36px',
-      borderRadius: '50%',
-      background: 'rgba(20, 99, 216, 0.35)',
-      border: '2px solid rgba(20, 99, 216, 0.9)',
-      zIndex: '2147483646',
-      pointerEvents: 'none',
-      transition: 'opacity 600ms',
-    });
-    document.body.append(mark);
-    setTimeout(() => (mark.style.opacity = '0'), 500);
-    setTimeout(() => mark.remove(), 1200);
-  }, at);
-}
+// test-results/walkthrough/clips; tools/demo/recordWalkthrough.sh turns it into
+// public/demo/walkthrough.mp4. The caption and dot helpers are shared with the feature clips.
 
 function fingers(page: Page, touch: Touch) {
   const tapAt = async (at: Point) => {
@@ -119,11 +51,12 @@ async function clearToasts(page: Page) {
   }
 }
 
-test('demo walkthrough on a phone (T30)', async ({ page }) => {
-  test.setTimeout(240_000);
+clip('walkthrough', 'demo walkthrough on a phone (T30)', async (page) => {
   const touch = await touchscreen(page);
   const finger = fingers(page, touch);
 
+  // A Monday morning, so the paper engine fills orders whatever day the clip is recorded on.
+  await page.clock.setFixedTime(MONDAY_10_00_IST);
   // Cold load, then Try demo: one tap to the demo instrument.
   await page.goto('/login');
   await expect(page.getByRole('button', { name: 'Try demo' })).toBeVisible();
@@ -146,7 +79,7 @@ test('demo walkthrough on a phone (T30)', async ({ page }) => {
   await say(page, 'US-01 · Tap the price axis: a ghost order line appears. Nothing is sent yet.');
   const lane = await gutter.boundingBox();
   if (!lane) throw new Error('no gutter');
-  await finger.tapAt({ x: lane.x + lane.width / 2, y: lane.y + lane.height * 0.58 });
+  await finger.tapAt({ x: lane.x + lane.width / 2, y: lane.y + lane.height * 0.7 });
   const ghost = figure.locator('[data-testid="chart-handle"][data-tone="ghost"]');
   await expect(ghost).toHaveText(/New order @ ₹/);
   await say(
@@ -155,7 +88,7 @@ test('demo walkthrough on a phone (T30)', async ({ page }) => {
     1600,
   );
   const from = await centreOf(ghost);
-  await finger.drag(from, { x: from.x - 20, y: from.y - 18 });
+  await finger.drag(from, { x: from.x - 20, y: from.y - 8 });
   await page.waitForTimeout(800);
 
   // US-02: Buy from the ghost: the compact ticket at that price, with a 1% trailing stop.
@@ -185,16 +118,20 @@ test('demo walkthrough on a phone (T30)', async ({ page }) => {
   await finger.tap(ticket.getByRole('button', { name: 'Confirm' }));
   await expect(ticket).toBeHidden();
   const line = figure.locator('[data-testid="chart-handle"][data-tone="buy"]');
-  await expect(line).toContainText('Buy 4 @ ₹');
-  await say(page, `A blue buy line at ${inr(limit)}. The stop arms when the entry fills.`, 2400);
-
-  // The price comes down to the limit: Pull back until the entry fills.
-  await say(page, 'Pull the simulated price back until the buy fills.', 1200);
   const chip = figure.locator('[data-testid="chart-handle"][data-tone="position"]');
   const pullBack = simulator.getByRole('button', { name: 'Pull back −1%' });
-  for (let attempt = 0; attempt < 6 && (await chip.count()) === 0; attempt += 1) {
-    await finger.tap(pullBack);
-    await page.waitForTimeout(1200);
+  // The random walk can touch a limit close under the price at once; then there is no line to show.
+  await expect(line.or(chip).first()).toBeVisible();
+  if (await line.isVisible()) {
+    await expect(line).toContainText('Buy 4 @ ₹');
+    await say(page, `A blue buy line at ${inr(limit)}. The stop arms when the entry fills.`, 2400);
+
+    // The price comes down to the limit: Pull back until the entry fills.
+    await say(page, 'Pull the simulated price back until the buy fills.', 1200);
+    for (let attempt = 0; attempt < 6 && (await chip.count()) === 0; attempt += 1) {
+      await finger.tap(pullBack);
+      await page.waitForTimeout(1200);
+    }
   }
   await expect(chip).toHaveText(/\+4 @ ₹/, { timeout: 15_000 });
   const stop = figure.locator('[data-testid="chart-handle"][data-tone="trailing"]');
@@ -280,5 +217,4 @@ test('demo walkthrough on a phone (T30)', async ({ page }) => {
     'Every surface reads one engine state: chart, ticket, depth and strip never disagree.',
     3200,
   );
-  await say(page, '', 300);
 });

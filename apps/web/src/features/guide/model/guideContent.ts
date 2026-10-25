@@ -8,6 +8,19 @@ export type DiagramId = 'system' | 'ticks' | 'tslo' | 'cicd' | 'agents' | 'loadT
 
 export type GuideLink = { label: string; href: string };
 
+/**
+ * A walkthrough clip (NSTOCK-0390): `id` names the files the site serves from apps/web/public/demo,
+ * `<id>.mp4`, its captions `<id>.vtt` and its poster `<id>.jpg`.
+ */
+export type GuideVideo = {
+  id: string;
+  title: string;
+  body: string;
+  device: 'Desktop' | 'Phone';
+  /** "0:45": the clip's length, as the recorder printed it. */
+  length: string;
+};
+
 export type GuideBlock =
   | { kind: 'text'; text: string }
   | { kind: 'heading'; text: string }
@@ -22,6 +35,7 @@ export type GuideBlock =
   | { kind: 'code'; label: string; text: string }
   | { kind: 'facts'; label: string; items: readonly { term: string; value: string }[] }
   | { kind: 'cards'; items: readonly { name: string; body: string }[] }
+  | { kind: 'videos'; label: string; items: readonly GuideVideo[] }
   | { kind: 'diagram'; id: DiagramId }
   | { kind: 'links'; label: string; items: readonly GuideLink[] }
   | { kind: 'note'; text: string }
@@ -58,6 +72,10 @@ export function neighboursOf<T extends { id: string }>(
     next: index >= 0 && index < tabs.length - 1 ? (tabs[index + 1] ?? null) : null,
   };
 }
+
+/** Where the site serves a walkthrough clip's files (apps/web/public/demo). */
+export const videoFile = (id: string, extension: 'mp4' | 'vtt' | 'jpg') =>
+  `/demo/${id}.${extension}`;
 
 /** A link to a file or folder in the public repository, on the default branch. */
 export const repoLink = (path: string) =>

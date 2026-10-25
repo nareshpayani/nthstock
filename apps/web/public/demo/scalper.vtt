@@ -1,0 +1,29 @@
+WEBVTT
+
+1
+00:00:07.062 --> 00:00:10.760
+Scalp mode: a one-tap pad for fast in-and-out trades.
+
+2
+00:00:10.760 --> 00:00:13.322
+Pick a size, then Arm. Disarmed, the buttons send nothing.
+
+3
+00:00:13.322 --> 00:00:22.760
+Buy at ask: an immediate-or-cancel limit at the price on the button.
+
+4
+00:00:22.760 --> 00:00:25.991
+Bought 5. The acknowledgement says exactly what happened.
+
+5
+00:00:25.991 --> 00:00:28.990
+Flatten closes the position in one tap.
+
+6
+00:00:28.990 --> 00:00:32.029
+Reverse doubles the exposure, so it is the only one that needs a hold.
+
+7
+00:00:32.029 --> 00:00:35.059
+Reversed: now short 5. The pad disarms itself after 2 minutes idle.
