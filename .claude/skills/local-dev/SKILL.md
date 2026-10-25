@@ -27,8 +27,8 @@ the indices and the NIFTY 50, SENSEX, NIFTY BANK and NIFTY IT members (about 65 
 the as-of time. Rerunning with the same as-of gives the same rows. It writes as `DATABASE_URL`
 (nthstock_app) and refreshes the continuous aggregates as `DATABASE_MIGRATION_URL`
 (nthstock_owner; the app role may not); both default to the local Compose database. Without
-DATABASE_MIGRATION_URL it skips the refresh and charts still read every bar through real-time
-aggregation. Symbols it did not seed keep the generated charts.
+DATABASE_MIGRATION_URL it refuses to run: history that is never materialised drops out of reads
+once a refresh policy runs. Symbols it did not seed keep the generated charts.
 
 Stop: Ctrl+C in its terminal, or `kill $(lsof -ti :5173)`.
 
