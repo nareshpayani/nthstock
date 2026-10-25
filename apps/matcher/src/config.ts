@@ -18,9 +18,22 @@ const EnvSchema = z.object({
   LEASE_TTL_MS: z.coerce.number().int().min(1_000).default(5_000),
   LEASE_RENEW_MS: z.coerce.number().int().min(100).default(2_000),
   MOCK_MARKET_ALWAYS_OPEN: Flag,
+  DATABASE_URL: z
+    .string()
+    .trim()
+    .optional()
+    .transform((value) => (value ? value : null))
+    .pipe(
+      z
+        .url({
+          protocol: /^postgres(ql)?$/,
+          error: 'must be a postgres:// or postgresql:// URL',
+        })
+        .nullable(),
+    ),
 });
 
-export type QuotesConfig = {
+export type MatcherConfig = {
   production: boolean;
   /** Redis carrying the tick streams and the matcher lease. */
   redisUrl: string;
@@ -34,10 +47,15 @@ export type QuotesConfig = {
   leaseRenewMs: number;
   /** Match outside NSE hours, for demos (as apps/quotes and apps/api). */
   alwaysOpen: boolean;
+  /**
+   * Postgres as the DML-only `nthstock_app` role, for the reconcile loop (NSTOCK-0366). Without
+   * it the books hold only what the commands built.
+   */
+  databaseUrl: string | null;
 };
 
 /** Reads and validates the environment; throws at startup on a bad value. */
-export function loadConfig(env: Readonly<Record<string, string | undefined>>): QuotesConfig {
+export function loadConfig(env: Readonly<Record<string, string | undefined>>): MatcherConfig {
   const parsed = EnvSchema.safeParse(env);
   if (!parsed.success) {
     throw new Error(`Invalid apps/matcher environment: ${z.prettifyError(parsed.error)}`);
@@ -61,5 +79,6 @@ export function loadConfig(env: Readonly<Record<string, string | undefined>>): Q
     leaseTtlMs: data.LEASE_TTL_MS,
     leaseRenewMs: data.LEASE_RENEW_MS,
     alwaysOpen: data.MOCK_MARKET_ALWAYS_OPEN,
+    databaseUrl: data.DATABASE_URL,
   };
 }

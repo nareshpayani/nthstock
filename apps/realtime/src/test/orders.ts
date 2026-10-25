@@ -1,4 +1,4 @@
-import type { AccountDeltaEvent, Order } from '@nthstock/contracts';
+import type { AccountDeltaEvent, Notification, Order } from '@nthstock/contracts';
 
 /** A filled paper order for user-channel tests. */
 export const testOrder = (id: string, overrides: Partial<Order> = {}): Order => ({
@@ -33,4 +33,16 @@ export const testAccountDelta = (
   positions: [],
   trailingStops: [],
   ...overrides,
+});
+
+/** A stored notification as apps/api publishes it (NSTOCK-0381). */
+export const testNotification = (id: string): Notification => ({
+  id,
+  kind: 'ORDER_FILLED',
+  title: 'Order executed',
+  body: 'BUY 10 INFY @ ₹1,530.00',
+  symbol: 'INFY',
+  exchange: 'NSE',
+  at: '2026-10-25T04:00:00.000Z',
+  read: false,
 });

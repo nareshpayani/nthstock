@@ -35,6 +35,13 @@ import {
   type OrderService,
 } from './modules/orders/index.js';
 import {
+  createMemoryNotificationsRepo,
+  createNotifier,
+  createPgNotificationsRepo,
+  type Notifier,
+  type NotificationsRepo,
+} from './modules/notifications/index.js';
+import {
   createMemoryPnlSnapshotRepo,
   createPgPnlSnapshotRepo,
   type PnlSnapshotRepo,
@@ -65,6 +72,8 @@ export type Repos = {
   accounts: AccountStore;
   /** The append-only audit log. */
   audit: AuditRepo;
+  /** The notification centre and its outbox (NSTOCK-0379). */
+  notifications: NotificationsRepo;
   /** End-of-day P&L per account, written by the `pnl.snapshot` job (T-209). */
   pnlSnapshots: PnlSnapshotRepo;
 };
@@ -87,6 +96,11 @@ export type AppDeps = {
   orders: OrderService;
   /** Price alerts and notifications (NSTOCK-0344), on the same market and orders. */
   alerts: AlertService;
+  /**
+   * Stores and announces notifications (NSTOCK-0379): the account store writes the ones a change
+   * raises inside its commit; the app's notification publisher sends them to apps/realtime.
+   */
+  notifier: Notifier;
   /** `DB_DRIVER` (T-182): `memory` for unit tests, `postgres` for `npm run dev:api` and E2E. */
   dbDriver: DbDriver;
   /** The process's Postgres pool under `DB_DRIVER=postgres`; null on the memory driver. */
@@ -164,6 +178,16 @@ export type DepsOverrides = {
   piiKeys?: PiiKeys;
   /** Where a failed background audit write (fills, fund movements) is reported; default stderr. */
   onAuditError?: (error: Error) => void;
+  /**
+   * Where a notification that could not be stored or announced is reported, with whose it was
+   * (NSTOCK-0379); default stderr.
+   */
+  onNotifyError?: (error: unknown, context: Record<string, string | null>) => void;
+};
+
+const notifyErrorToStderr = (error: unknown, context: Record<string, string | null>) => {
+  const message = error instanceof Error ? error.message : String(error);
+  process.stderr.write(`notification failed: ${message} ${JSON.stringify(context)}\n`);
 };
 
 function openDatabase(overrides: DepsOverrides, driver: DbDriver): Database | null {
@@ -207,6 +231,18 @@ export function createDeps(overrides: DepsOverrides = {}): AppDeps {
   const audit =
     overrides.repos?.audit ??
     (database ? createPgAuditRepo({ database, clock }) : createMemoryAuditRepo({ clock }));
+  const notificationsRepo =
+    overrides.repos?.notifications ??
+    (database
+      ? createPgNotificationsRepo({ database, clock })
+      : createMemoryNotificationsRepo({ clock }));
+  const onNotifyError = overrides.onNotifyError ?? notifyErrorToStderr;
+  const notifier = createNotifier({
+    repo: notificationsRepo,
+    onListenerError: (error, stored) => {
+      onNotifyError(error, { userId: stored.userId, notificationId: stored.notification.id });
+    },
+  });
   const repos: Repos = {
     users:
       overrides.repos?.users ??
@@ -229,9 +265,17 @@ export function createDeps(overrides: DepsOverrides = {}): AppDeps {
       overrides.repos?.watchlists ??
       (database ? createPgWatchlistsRepo({ database }) : createMemoryWatchlistsRepo()),
     audit,
+    notifications: notificationsRepo,
     accounts:
       overrides.repos?.accounts ??
-      (database ? createPgAccountStore({ database, audit }) : createMemoryAccountStore({ audit })),
+      (database
+        ? createPgAccountStore({
+            database,
+            audit,
+            notifier,
+            ...(overrides.quoteStreams ? { shards: overrides.quoteStreams.shards } : {}),
+          })
+        : createMemoryAccountStore({ audit, notifier })),
     pnlSnapshots:
       overrides.repos?.pnlSnapshots ??
       (database ? createPgPnlSnapshotRepo({ database }) : createMemoryPnlSnapshotRepo()),
@@ -244,7 +288,7 @@ export function createDeps(overrides: DepsOverrides = {}): AppDeps {
     ...(overrides.onAuditError ? { onAuditError: overrides.onAuditError } : {}),
     ...(overrides.newOrderId ? { newId: overrides.newOrderId } : {}),
   });
-  const alerts = createAlertService({ clock, market, orders });
+  const alerts = createAlertService({ clock, market, notifier, onNotifyError });
   // Last, so nothing above can throw after the Redis connections are open.
   const quoteStreams =
     overrides.quoteStreams && market instanceof MockMarketDataAdapter
@@ -279,6 +323,7 @@ export function createDeps(overrides: DepsOverrides = {}): AppDeps {
     pinHasher: overrides.pinHasher ?? createArgon2PinHasher(),
     orders,
     alerts,
+    notifier,
     dbDriver,
     database,
     quoteStreams,

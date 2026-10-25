@@ -18,7 +18,8 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "tsx src/db/migrateCli.ts",
     "db:check": "tsx src/db/checkCli.ts",
-    "db:seed:candles": "tsx src/modules/candles/seedCli.ts"
+    "db:seed:candles": "tsx src/modules/candles/seedCli.ts",
+    "openapi": "tsx src/openapiCli.ts"
   },
   "dependencies": {
     "@fastify/rate-limit": "11.2.1",
