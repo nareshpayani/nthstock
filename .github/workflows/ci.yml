@@ -34,9 +34,12 @@ jobs:
     # a superuser: the test helper creates the roles and one database per worker). Never skipped.
     services:
       postgres:
-        image: postgres:16-alpine
+        # TimescaleDB for the stored candles (migration 0014), like Compose and Testcontainers.
+        image: timescale/timescaledb:2.17.2-pg16
         env:
           POSTGRES_PASSWORD: postgres_ci
+          TIMESCALEDB_TELEMETRY: 'off'
+          NO_TS_TUNE: 'true'
         ports:
           - 5432:5432
         options: >-
@@ -210,9 +213,12 @@ jobs:
       # T-181: apps/api's database, set up like `npm run infra:up`: roles from init.sql, then the
       # migrations as nthstock_owner.
       postgres:
-        image: postgres:16-alpine
+        # TimescaleDB for the stored candles (migration 0014), like Compose and Testcontainers.
+        image: timescale/timescaledb:2.17.2-pg16
         env:
           POSTGRES_PASSWORD: postgres_ci
+          TIMESCALEDB_TELEMETRY: 'off'
+          NO_TS_TUNE: 'true'
           POSTGRES_DB: nthstock
         ports:
           - 5432:5432
