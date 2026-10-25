@@ -62,6 +62,10 @@ const app = buildApp({
     ...(stateRedis ? { redis: stateRedis } : {}),
     onDatabaseError: (error) => process.stderr.write(`postgres pool error: ${error.message}\n`),
     marketAlwaysOpen: config.mockMarketAlwaysOpen,
+    // QUOTE_SHARDS: prices come from apps/quotes, and this process generates no ticks.
+    ...(config.quoteShards !== null && config.redisUrl
+      ? { quoteStreams: { url: config.redisUrl, shards: config.quoteShards, log: tickLog } }
+      : {}),
     production: config.production,
     jwtSecret,
     // PII_ENC_KEYS and PII_HMAC_KEY for the Postgres repos (T-189); development keys when unset.

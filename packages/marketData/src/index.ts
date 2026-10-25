@@ -63,3 +63,11 @@ export { MinuteBars, mergeMinuteBars } from './minuteBars.js';
 export { SECTOR_ABOUT, profileAbout, type ProfileAboutInput } from './profile.js';
 export { LIST_SIZE, MOVERS_LIMIT_DEFAULT, STOCK_LIST_DEFS, rankMovers } from './lists.js';
 export { SEARCH_LIMIT_DEFAULT, SearchIndex, toSearchHit } from './search.js';
+export {
+  followTickStreams,
+  type TickStreamClient,
+  type TickStreamFollower,
+  type TickStreamFollowerLog,
+  type TickStreamFollowerOptions,
+  type TickStreamRecord,
+} from './tickStreamFollower.js';

@@ -61,6 +61,8 @@ export type AppOptions = {
 };
 
 export const DEFAULT_RATE_LIMIT_PER_MINUTE = 600;
+/** How long boot waits for the quote snapshots before it starts on the opening prices. */
+const QUOTE_SNAPSHOT_WAIT_MS = 5_000;
 export const DEFAULT_ORDER_SWEEP_MS = 15_000;
 
 export type App = FastifyInstance & { deps: AppDeps };
@@ -99,11 +101,34 @@ export function buildApp(options: AppOptions = {}): App {
   // (readiness says so) and the order sweep tries again.
   app.addHook('onReady', async () => {
     await deps.orders.hydrateLive().catch((error: unknown) => {
-      app.log.error({ error }, 'loading accounts with live orders failed');
+      app.log.error({ err: error }, 'loading accounts with live orders failed');
     });
   });
+  // On the quote service the prices start from its snapshots (NSTOCK-0354). With Redis down the
+  // API still starts, on the adapter's opening prices, and the follower keeps retrying in the
+  // background until the streams are back.
+  const quoteStreams = deps.quoteStreams;
+  if (quoteStreams) {
+    app.addHook('onReady', async () => {
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      const timedOut = new Promise<'timeout'>((resolve) => {
+        timer = setTimeout(() => resolve('timeout'), QUOTE_SNAPSHOT_WAIT_MS);
+      });
+      try {
+        const result = await Promise.race([quoteStreams.ready(), timedOut]);
+        if (result === 'timeout') {
+          app.log.error('the quote snapshots are not reachable; starting on opening prices');
+        }
+      } catch (error) {
+        app.log.error({ err: error }, 'reading the quote snapshots failed');
+      } finally {
+        clearTimeout(timer);
+      }
+    });
+  }
   const publisher = options.tickPublisher;
-  if (publisher) {
+  // On the quote service no API process generates ticks, so there is nothing to pump.
+  if (publisher && !quoteStreams) {
     let pump: TickPump | null = null;
     app.addHook('onReady', async () => {
       pump = await startTickPump({ market: deps.market, publisher, log: app.log });

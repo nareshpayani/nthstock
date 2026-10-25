@@ -78,8 +78,14 @@ is the piece a licensed vendor feed replaces (D3).
   shard's snapshot, then follows every stream with one blocking `XREAD`. A gap or a restarted writer (its `seq` starts
   again at 1) triggers a snapshot re-read; a malformed entry is logged and skipped. Without `QUOTE_SHARDS` it keeps
   the pub/sub feed from the API's tick pump.
-- **Status:** the writer, lease, streams and the realtime reader are built. apps/api still uses the in-process tick
-  pump until NSTOCK-0354 switches it to the snapshot.
+- **apps/api on the quote service** (`QUOTE_SHARDS` with `REDIS_URL`, `ticks/quoteStreams.ts`): the adapter is built
+  with `externalTicks`, so it never runs its own random walk; it starts from the snapshots and moves on every stream
+  batch (`MockMarketDataAdapter.applyQuotes`), so the paper desk, alerts, lists, movers and candles all follow the one
+  quote service, and the tick pump does not start. `GET /v1/market/quotes` reads the snapshot hashes directly, so
+  two instances answer the same LTP at the same moment. Both apps read the streams through `followTickStreams` in
+  `packages/marketData`. Without `QUOTE_SHARDS` nothing changes: the adapter ticks in process.
+- **Status:** the writer, lease, streams and both readers are built. NSTOCK-0355 starts apps/quotes in Compose and
+  `dev:api` and measures tick-to-screen latency across the three processes.
 
 ### Market data and chart bars
 - `packages/marketData` generates each range's own bars (1D: 1-minute, 1W: 5-minute, 1M: hourly,
