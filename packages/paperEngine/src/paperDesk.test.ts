@@ -177,8 +177,41 @@ describe('PaperDesk', () => {
       status: 'EXECUTED',
       avgFillPrice: 1_490_00, // a LIMIT fills at its limit
     });
-    await desk.ingestFor(['bob'], { token: INFY.token, ltp: 0, ts: AT });
+    // A request it cannot run throws, so the reader does not ack it unfilled (NSTOCK-0388).
+    await expect(desk.ingestFor(['bob'], { token: INFY.token, ltp: 0, ts: AT })).rejects.toThrow(
+      RangeError,
+    );
+    await expect(
+      desk.ingestFor(['bob'], { token: INFY.token, ltp: 1_475_00, ts: 'yesterday' }),
+    ).rejects.toThrow(RangeError);
     expect(changes).toEqual(['alice', 'alice']);
+    desk.dispose();
+    await expect(
+      desk.ingestFor(['bob'], { token: INFY.token, ltp: 1_475_00, ts: AT }),
+    ).rejects.toThrow(/disposed/);
+  });
+
+  it('keeps the newest matcher price, and runs an older request at its own (NSTOCK-0388)', async () => {
+    const { desk } = setup();
+    const a = await desk.place('alice', limitBuy(1_490_00));
+    const b = await desk.place('bob', limitBuy(1_480_00));
+    if (!a.ok || !b.ok) throw new Error('place failed');
+    const later = '2026-09-25T04:30:02.000Z';
+    const earlier = '2026-09-25T04:30:01.000Z';
+
+    // Alice's request for 10:00:02 lands first and leaves its price.
+    await desk.ingestFor(['alice'], { token: INFY.token, ltp: 1_485_00, ts: later });
+    expect(desk.getOrder('alice', a.order.id)?.status).toBe('EXECUTED');
+    // Bob's for 10:00:01 arrives after it: it fills at the price that crossed his order, but
+    // does not replace the newer price.
+    await desk.ingestFor(['bob'], { token: INFY.token, ltp: 1_475_00, ts: earlier });
+    expect(desk.getOrder('bob', b.order.id)).toMatchObject({ status: 'EXECUTED' });
+    expect(desk.ltp(INFY.token)).toBe(1_485_00);
+    // A request at the same instant is not newer either.
+    await desk.ingestFor([], { token: INFY.token, ltp: 1_470_00, ts: later });
+    expect(desk.ltp(INFY.token)).toBe(1_485_00);
+    await desk.ingestFor([], { token: INFY.token, ltp: 1_470_00, ts: '2026-09-25T04:30:03.000Z' });
+    expect(desk.ltp(INFY.token)).toBe(1_470_00);
   });
 
   it('follows no ticks when told not to, and reads the live quote for each action (NSTOCK-0369)', async () => {

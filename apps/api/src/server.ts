@@ -1,6 +1,6 @@
 import { Redis } from 'ioredis';
 import { buildApp } from './app.js';
-import { loadConfig } from './config.js';
+import { loadConfig, matcherModeWarning } from './config.js';
 import { resolveJwtSecret } from './modules/auth/index.js';
 import { seedDemo } from './modules/demo/index.js';
 import { offsetClock } from './modules/testControls/index.js';
@@ -86,6 +86,9 @@ app.addHook('onClose', async () => {
   await rateLimitRedis?.quit();
   await stateRedis?.quit();
 });
+
+const matcherWarning = matcherModeWarning(config);
+if (matcherWarning) app.log.warn(matcherWarning);
 
 if (config.dbDriver === 'postgres' && config.pii.devKeys) {
   app.log.warn('PII_ENC_KEYS and PII_HMAC_KEY are not set: using the throwaway development keys.');

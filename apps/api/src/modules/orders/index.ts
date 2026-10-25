@@ -19,6 +19,7 @@ export {
 } from './matcherCommands.js';
 export {
   FILL_CLAIM_IDLE_MS,
+  logFillClientEvents,
   startMatcherFills,
   type FillStreamClient,
   type MatcherFills,

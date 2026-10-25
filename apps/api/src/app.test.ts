@@ -1,7 +1,7 @@
 import { TICKS_CHANNEL } from '@nthstock/contracts';
 import { generateSymbolMaster, MockMarketDataAdapter } from '@nthstock/marketData';
 import { fixedClock } from '@nthstock/utils';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { DEFAULT_RATE_LIMIT_PER_MINUTE, buildApp } from './app.js';
 import { createMemoryPublisher } from './ticks/publisher.js';
 
@@ -47,5 +47,66 @@ describe('buildApp tick publishing', () => {
     await new Promise<void>((resolve) => setImmediate(resolve));
     expect(tickPublisher.messages).toHaveLength(published);
     market.dispose();
+  });
+});
+
+describe('buildApp order sweep (NSTOCK-0369, NSTOCK-0388)', () => {
+  const market = () =>
+    new MockMarketDataAdapter({
+      master: generateSymbolMaster({ equityCount: 20 }),
+      clock: fixedClock('2026-09-25T05:00:00.000Z'),
+      externalTicks: true,
+      scheduler: { setInterval: () => 0, clearInterval: () => undefined },
+    });
+
+  it('sweeps every orderSweepMs inline, and logs a failed sweep with its error', async () => {
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
+    const lines: string[] = [];
+    const stream = { write: (line: string) => lines.push(line) };
+    const app = buildApp({ orderSweepMs: 1_000, logger: { level: 'error', stream } });
+    try {
+      const sweep = vi.spyOn(app.deps.orders, 'sweep').mockRejectedValue(new Error('pool closed'));
+      await app.ready();
+      await vi.advanceTimersByTimeAsync(3_000);
+      expect(sweep).toHaveBeenCalledTimes(3);
+      const logged = lines.map((line) => JSON.parse(line) as Record<string, unknown>);
+      expect(logged[0]).toMatchObject({
+        msg: 'order sweep failed',
+        err: { type: 'Error', message: 'pool closed' },
+      });
+    } finally {
+      await app.close();
+      vi.useRealTimers();
+    }
+  });
+
+  it('never sweeps under MATCHER_MODE=worker, however short orderSweepMs is', async () => {
+    // Redis is unreachable on purpose: the app starts on opening prices after its wait.
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval', 'setTimeout', 'clearTimeout'] });
+    const adapter = market();
+    const silent = { info: () => undefined, warn: () => undefined };
+    const app = buildApp({
+      orderSweepMs: 1,
+      logger: false,
+      deps: {
+        market: adapter,
+        matcherMode: 'worker',
+        quoteStreams: { url: 'redis://127.0.0.1:1', shards: 1, log: silent, blockMs: 10 },
+      },
+    });
+    try {
+      const sweep = vi.spyOn(app.deps.orders, 'sweep').mockResolvedValue(undefined);
+      const ready = app.ready();
+      await vi.advanceTimersByTimeAsync(5_000);
+      await ready;
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(sweep).not.toHaveBeenCalled();
+    } finally {
+      const closing = app.close();
+      await vi.advanceTimersByTimeAsync(10_000);
+      await closing;
+      vi.useRealTimers();
+      adapter.dispose();
+    }
   });
 });

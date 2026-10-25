@@ -86,6 +86,9 @@ export type AccountDeltaListener = (userId: string, delta: AccountDelta) => void
 
 export type OrderService = ReturnType<typeof createOrderService>;
 
+/** How many times a matcher fill that lost its commit to another writer runs again. */
+export const MATCHER_FILL_RETRIES = 3;
+
 const orderGone = (): never => {
   throw new ApiHttpError(404, 'NOT_FOUND', 'This order was not found.');
 };
@@ -119,8 +122,8 @@ type AccountCache = {
   updates: Order[];
   /** Trailing-stop updates for the change being made, announced with the order updates. */
   stopUpdates: TrailingStop[];
-  /** A commit lost to another writer since the last `settle`: the engine was reloaded. */
-  conflicted: boolean;
+  /** A commit lost to another writer since the last `settle` (the engine was reloaded), or null. */
+  conflict: AccountConflict | null;
   /** A commit failed for another reason: reload before the next use. */
   stale: boolean;
   /** The entry that closes the change being made (the funds reset's), from the funds after it. */
@@ -226,7 +229,7 @@ export function createOrderService({
       pending: [],
       updates: [],
       stopUpdates: [],
-      conflicted: false,
+      conflict: null,
       stale: false,
       closing: null,
     });
@@ -279,7 +282,7 @@ export function createOrderService({
         }
         await hydrate(userId);
         const reloaded = cache.get(userId);
-        if (reloaded) reloaded.conflicted = true;
+        if (reloaded) reloaded.conflict = error;
         return;
       }
       const { version } = account;
@@ -338,17 +341,17 @@ export function createOrderService({
   }
 
   /**
-   * Waits for the user's queued writes and answers whether one of them lost to another writer
-   * (and clears that). A failed commit answers with its error.
+   * Waits for the user's queued writes and answers with the conflict if one of them lost to
+   * another writer (and clears it), else null. A failed commit answers with its error.
    */
-  async function settle(userId: string): Promise<boolean> {
+  async function settle(userId: string): Promise<AccountConflict | null> {
     while (queues.has(userId)) await queues.get(userId);
     const account = cache.get(userId);
     if (account?.stale)
       throw new ApiHttpError(500, 'INTERNAL_ERROR', 'Your account could not be saved.');
-    const conflicted = account?.conflicted ?? false;
-    if (account) account.conflicted = false;
-    return conflicted;
+    const conflict = account?.conflict ?? null;
+    if (account) account.conflict = null;
+    return conflict;
   }
 
   /** Whether the accounts with live orders are on the desk (see `hydrateLive`). */
@@ -747,18 +750,21 @@ export function createOrderService({
      * the tick's price and time and commits what it fills, then announces it, like any tick. The
      * engine re-checks every order, so a request that arrives twice fills nothing twice and one
      * for an order modified or cancelled since fills only what still crosses. Losing to another
-     * writer reloads and runs once more; a failed commit rejects, so the request is retried.
+     * writer reloads and runs again, up to `MATCHER_FILL_RETRIES` times (NSTOCK-0388); a failed
+     * commit rejects, so the request is retried.
      */
     async applyMatcherFill(fill: MatcherFill): Promise<void> {
       await ensure(fill.userId);
-      const run = () => desk.ingestFor([fill.userId], fill);
-      await run();
-      if (await settle(fill.userId)) {
-        await run();
-        // Losing twice rejects: the matcher already dropped the crossed order from its book, so
-        // the request stays pending and is claimed again rather than acked unfilled.
-        if (await settle(fill.userId)) throw new AccountConflict(fill.userId, 0, 0);
+      let conflict: AccountConflict | null = null;
+      for (let attempt = 0; attempt <= MATCHER_FILL_RETRIES; attempt += 1) {
+        await desk.ingestFor([fill.userId], fill);
+        conflict = await settle(fill.userId);
+        if (!conflict) return;
       }
+      // Losing every time rejects with the last conflict's versions: the matcher already dropped
+      // the crossed order from its book, so the request stays pending and is claimed again rather
+      // than acked unfilled.
+      throw conflict ?? new AccountConflict(fill.userId, 0, 0);
     },
 
     /** A scripted tick for tests and scenarios (see `PaperDesk.pinPrice`). */

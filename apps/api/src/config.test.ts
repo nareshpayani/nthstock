@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { loadCandleWriterConfig, loadConfig, runsOrderSweep } from './config.js';
+import {
+  loadCandleWriterConfig,
+  loadConfig,
+  matcherModeWarning,
+  runsOrderSweep,
+} from './config.js';
 import { devPiiKeys } from './db/crypto.js';
 
 // Test-only PII keys: base64 of 32 fixed bytes each (not secrets).
@@ -84,6 +89,15 @@ describe('loadConfig', () => {
     expect(runsOrderSweep('inline')).toBe(true);
     expect(runsOrderSweep('bullmq')).toBe(false);
     expect(runsOrderSweep('off')).toBe(false);
+  });
+
+  it('warns when MATCHER_MODE=worker leaves the session jobs to no one (NSTOCK-0388)', () => {
+    expect(matcherModeWarning({ matcherMode: 'worker', jobsMode: 'inline' })).toMatch(
+      /^MATCHER_MODE=worker with JOBS_MODE=inline: .* next request/,
+    );
+    expect(matcherModeWarning({ matcherMode: 'worker', jobsMode: 'off' })).toMatch(/JOBS_MODE=off/);
+    expect(matcherModeWarning({ matcherMode: 'worker', jobsMode: 'bullmq' })).toBeNull();
+    expect(matcherModeWarning({ matcherMode: 'inline', jobsMode: 'inline' })).toBeNull();
   });
 
   it('needs REDIS_URL to follow the quote service (NSTOCK-0354)', () => {

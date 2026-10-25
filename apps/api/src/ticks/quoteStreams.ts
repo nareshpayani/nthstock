@@ -18,6 +18,9 @@ export type QuoteStreamsOptions = {
   fillsKey?: (shard: number) => string;
   /** How long a fill read by a process that did not ack it waits before another takes it. */
   fillClaimIdleMs?: number;
+  /** The fill dead-letter stream (NSTOCK-0388) and the deliveries before an entry goes there. */
+  fillsDeadKey?: string;
+  fillMaxDeliveries?: number;
   /** How long one `XREAD BLOCK` waits; default 5 s (tests use less, to close fast). */
   blockMs?: number;
   log: PublisherLog;
