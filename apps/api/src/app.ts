@@ -7,6 +7,7 @@ import { installErrorHandling } from './http/errorHandler.js';
 import { installSecurityHeaders } from './http/securityHeaders.js';
 import { alertRoutes } from './modules/alerts/index.js';
 import { authRoutes } from './modules/auth/index.js';
+import { docsRoutes } from './modules/docs/index.js';
 import { fundsRoutes } from './modules/funds/index.js';
 import { healthRoutes, type ReadinessCheck } from './modules/health/index.js';
 import { marketRoutes } from './modules/market/index.js';
@@ -205,6 +206,7 @@ export function buildApp(options: AppOptions = {}): App {
       },
     }),
   );
+  app.register(docsRoutes());
   app.register(marketRoutes(deps));
   app.register(authRoutes(deps));
   app.register(watchlistRoutes(deps));
