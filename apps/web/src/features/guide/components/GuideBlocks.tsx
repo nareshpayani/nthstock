@@ -1,6 +1,6 @@
 import { buttonVariants, cn } from '@nthstock/ui';
 import { Link } from '@tanstack/react-router';
-import type { GuideBlock } from '../model/guideContent';
+import { videoFile, type GuideBlock } from '../model/guideContent';
 import { strings } from '../strings';
 import { GuideDiagram } from './GuideDiagram';
 
@@ -123,6 +123,41 @@ function Block({ block }: { block: GuideBlock }) {
             >
               <h3 className="text-body font-semibold text-ink">{item.name}</h3>
               <p className="text-body text-ink-muted">{item.body}</p>
+            </li>
+          ))}
+        </ul>
+      );
+    case 'videos':
+      return (
+        <ul aria-label={block.label} className="grid gap-4 sm:grid-cols-2">
+          {block.items.map((video) => (
+            <li
+              key={video.id}
+              className="grid content-start gap-2 rounded-md border border-line p-3"
+            >
+              {/* preload="none": nothing downloads until the reader presses play. */}
+              <video
+                controls
+                playsInline
+                preload="none"
+                poster={videoFile(video.id, 'jpg')}
+                aria-label={`${video.title}, ${video.device.toLowerCase()} walkthrough video`}
+                className="aspect-video w-full rounded-sm bg-canvas object-contain"
+              >
+                <source src={videoFile(video.id, 'mp4')} type="video/mp4" />
+                <track
+                  kind="captions"
+                  src={videoFile(video.id, 'vtt')}
+                  srcLang="en"
+                  label="English"
+                  default
+                />
+              </video>
+              <h3 className="text-body font-semibold text-ink">{video.title}</h3>
+              <p className="text-label text-ink-muted">
+                {video.device} · {video.length}
+              </p>
+              <p className="text-body text-ink-muted">{video.body}</p>
             </li>
           ))}
         </ul>

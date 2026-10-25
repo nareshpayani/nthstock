@@ -1,9 +1,9 @@
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { strings } from '../strings';
 import { FLOW_DIAGRAMS, logFraction } from './diagrams';
-import { neighboursOf, repoLink, resolveTab } from './guideContent';
+import { neighboursOf, repoLink, resolveTab, videoFile } from './guideContent';
 
 const TABS = strings.tabs;
 
@@ -117,5 +117,31 @@ describe('the scalability tab', () => {
     });
     const bars = strings.diagrams.loadTest.bars;
     expect(bars.map((bar) => bar.value)).toEqual(runs.map((run) => run.api.p95));
+  });
+});
+
+describe('guide walkthrough videos', () => {
+  const videos = TABS.flatMap((tab) =>
+    tab.blocks.flatMap((block) => (block.kind === 'videos' ? block.items : [])),
+  );
+
+  it('list each clip once, with its length', () => {
+    expect(videos.length).toBeGreaterThan(0);
+    expect(new Set(videos.map((video) => video.id)).size).toBe(videos.length);
+    for (const video of videos) expect(video.length, video.id).toMatch(/^\d+:\d\d$/);
+  });
+
+  it('point at a recorded clip, its captions and its poster (tools/demo/recordWalkthrough.sh)', () => {
+    for (const video of videos) {
+      for (const extension of ['mp4', 'vtt', 'jpg'] as const) {
+        const file = resolve(process.cwd(), `public${videoFile(video.id, extension)}`);
+        expect(existsSync(file), file).toBe(true);
+      }
+      const captions = readFileSync(
+        resolve(process.cwd(), `public${videoFile(video.id, 'vtt')}`),
+        'utf8',
+      );
+      expect(captions.startsWith('WEBVTT'), video.id).toBe(true);
+    }
   });
 });
