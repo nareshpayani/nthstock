@@ -1,8 +1,8 @@
-name: 'Agent: Reviewer'
+name: 'Agent: PR reviewer'
 
 # Reviews every PR from the owner or the agents, then routes it:
 # blocking findings -> `agent:fix-needed` (Fixer runs); none -> `ready-to-merge`, which
-# agent-automerge.yml merges once every check is green (ADR 0006). The owner merges spec PRs
+# pr-auto-merge.yml merges once every check is green (ADR 0006). The owner merges spec PRs
 # and PRs that change .github/, .claude/ or CLAUDE.md.
 
 on:
@@ -16,11 +16,12 @@ permissions:
   id-token: write
 
 concurrency:
-  group: agent-reviewer-${{ github.event.pull_request.number }}
+  group: agent-pr-reviewer-${{ github.event.pull_request.number }}
   cancel-in-progress: true
 
 jobs:
   review:
+    name: Review and route the PR
     if: >-
       !github.event.pull_request.draft &&
       github.event.pull_request.head.repo.full_name == github.repository &&
@@ -51,7 +52,7 @@ jobs:
         if: env.HAS_AGENT_TOKEN == 'true'
         run: echo "at=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
       - if: env.HAS_AGENT_TOKEN == 'true'
-        uses: anthropics/claude-code-action@v1
+        uses: anthropics/claude-code-action@42619cb7a75ded196ded275cdd529a35178bfd2c # v1
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           # Commits are authored as the owner, not the app (owner decision 2026-10-21).
@@ -65,7 +66,7 @@ jobs:
             PR NUMBER: ${{ github.event.pull_request.number }}
             REVIEW ROUND: ${{ steps.rounds.outputs.rounds }} (0 = first review)
 
-            Act as the Reviewer. Follow .claude/agents/reviewer.md exactly.
+            Act as the Reviewer. Follow .claude/agents/pr-reviewer.md exactly.
             Run the specialist subagents in the foreground: all of them in one message, each Agent
             call with run_in_background: false, and wait for every result. A background subagent
             never reports here, because the run exits when your turn ends.

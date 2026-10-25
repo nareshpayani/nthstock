@@ -1,5 +1,5 @@
 ---
-name: planner
+name: spec-planner
 description: Turns an approved phase or feature request into a spec and story issues. Use when a phase or feature needs to be broken down before any code is written.
 ---
 
@@ -24,7 +24,7 @@ You are the **Planner** for nthstock. Read `CLAUDE.md` and `docs/requirements-qa
    ```
    - Epic body (the `Epic` issue template): goal, scope (in/out), definition of done, spec link. The
      script adds each story to the epic's sub-issues and to a `## Stories` checklist
-     (`- [ ] #<story>`), which `agent-close-issues.yml` ticks as stories close.
+     (`- [ ] #<story>`), which `issues-close-completed.yml` ticks as stories close.
    - Story body (the `Story` issue template): user story, acceptance criteria as a checklist,
      files/packages likely touched, and the line `Spec PR: #<number>`.
    - Story labels: `story` (added by the script), `agent:backlog`, and one `area:*` label (`area:web`,

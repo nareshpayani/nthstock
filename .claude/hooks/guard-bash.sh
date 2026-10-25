@@ -14,7 +14,7 @@ deny() { echo "Blocked by .claude/hooks/guard-bash.sh: $1" >&2; exit 2; }
 pushes=$(grep -oE '(^|[;&|(])[[:space:]]*git[[:space:]]+push[^;&|]*' <<< "$cmd" || true)
 if [ -n "$pushes" ]; then
   grep -qE '[[:space:]](origin[[:space:]]+)?(HEAD:)?(refs/heads/)?(production|main|develop)([[:space:]]|$)|:(production|main|develop)([[:space:]]|$)' <<< "$pushes" \
-    && deny "never push to production or develop; open a PR into develop, and promote with promote-to-production.yml (ADR 0011)."
+    && deny "never push to production or develop; open a PR into develop, and promote with release-promote-to-production.yml (ADR 0011)."
   grep -qE '[[:space:]](--force|-f)([[:space:]]|$)' <<< "$pushes" \
     && deny "no force-push; use --force-with-lease on your own branch if you must."
 fi
@@ -22,7 +22,7 @@ grep -qE -- '--no-verify' <<< "$cmd" && deny "do not skip checks with --no-verif
 grep -qE '(cat|less|more|head|tail|bat)[[:space:]]+[^|;&]*\.env([[:space:]]|$|\.local|\.production)' <<< "$cmd" \
   && deny "do not print .env files; they hold secrets. Use .env.example for the variable list."
 grep -qE '(^|[;&|(])[[:space:]]*gh[[:space:]]+pr[[:space:]]+merge' <<< "$cmd" \
-  && deny "agents never merge PRs by hand; agent-automerge.yml or the owner merges (ADR 0006)."
+  && deny "agents never merge PRs by hand; pr-auto-merge.yml or the owner merges (ADR 0006)."
 grep -qE '(^|[;&|(])[[:space:]]*npm[[:space:]]+(install|i|add)[[:space:]]+[^-[:space:]]' <<< "$cmd" \
   && deny "a new dependency needs the owner's approval (CLAUDE.md §8); ask first."
 exit 0

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # NSTOCK issue keys: every epic, story and bug is titled "NSTOCK-0001 : create login flow".
 # Keys are one sequence across all issue types, starting at NSTOCK-0001, and never reused.
-# Used by agents (Planner, Developer, Reviewer, Fixer) and by .github/workflows/issue-keys.yml,
+# Used by agents (Planner, Developer, Reviewer, Fixer) and by .github/workflows/issues-assign-keys.yml,
 # which keys issues people open from the templates. Needs gh, jq and GH_TOKEN (or gh auth).
 #
 #   issueKey.sh next                         print the next free key
@@ -65,7 +65,7 @@ link() { # epic child
   id=$(gh api "repos/$REPO/issues/$child" --jq .id)
   gh api -X POST "repos/$REPO/issues/$epic/sub_issues" -F "sub_issue_id=$id" >/dev/null 2>&1 \
     || echo "issueKey.sh: #$child may already be a sub-issue of #$epic" >&2
-  # Keep the epic's "- [ ] #N" checklist too: agent-close-issues.yml ticks it as stories close.
+  # Keep the epic's "- [ ] #N" checklist too: issues-close-completed.yml ticks it as stories close.
   body=$(gh issue view "$epic" --repo "$REPO" --json body --jq '.body // ""')
   if ! grep -qE "^- \[[ x]\] #$child\$" <<< "$body"; then
     if ! grep -q '^## Stories' <<< "$body"; then body="$body"$'\n\n## Stories\n'; fi

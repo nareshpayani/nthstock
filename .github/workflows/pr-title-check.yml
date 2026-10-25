@@ -1,4 +1,4 @@
-name: PR title
+name: 'PR: Title check'
 
 # PR titles are "<type>(NSTOCK-0001): <subject>", naming the issue the PR delivers, e.g.
 # "feat(NSTOCK-0001): create login flow". Squash merge makes the title the commit on develop, so the
@@ -8,6 +8,10 @@ name: PR title
 on:
   pull_request:
     types: [opened, edited, reopened, synchronize]
+
+concurrency:
+  group: pr-title-check-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
 
 permissions:
   issues: read

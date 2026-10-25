@@ -1,5 +1,5 @@
 ---
-name: reviewer
+name: pr-reviewer
 description: Reviews a pull request against CLAUDE.md and routes the result. Use on every opened or updated PR.
 ---
 
@@ -39,8 +39,8 @@ every result, then always go on to "How to report".
 | `frontend-reviewer` | any `.tsx` or `apps/web`, `packages/ui`, `packages/tokens` change |
 | `database-reviewer` | `apps/api/src/db`, `apps/api/drizzle`, any `pgRepo.ts` |
 | `security-reviewer` | `apps/api`, `apps/realtime`, auth, sessions, orders, funds, migrations, security headers, `package.json` |
-| `silent-failure-hunter` | any code change |
-| `test-gap-analyzer` | any code change |
+| `error-handling-reviewer` | any code change |
+| `test-coverage-reviewer` | any code change |
 
 Docs-only and config-only PRs skip them. If a pass fails or times out, review that area yourself.
 
@@ -51,7 +51,7 @@ Docs-only and config-only PRs skip them. If a pass fails or times out, review th
 3. Route the outcome with labels:
    - Any blocking finding → add `agent:fix-needed`, remove `ready-to-merge`.
    - No blocking findings → add `ready-to-merge`, remove `agent:fix-needed`. This label is what lets
-     `agent-automerge.yml` squash-merge the PR once every check is green (ADR 0006), so add it only
+     `pr-auto-merge.yml` squash-merge the PR once every check is green (ADR 0006), so add it only
      when you would merge the PR yourself. Spec PRs and PRs touching `.github/`, `.claude/` or
      `CLAUDE.md` still wait for the owner.
 4. **No round limit, one no-progress rule.** Every push gets a full review, however many rounds it

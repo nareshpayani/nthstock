@@ -1229,10 +1229,13 @@ export const strings = {
           kind: 'links',
           label: 'Read the code',
           items: [
-            { label: 'Web hosting workflow', href: repoLink('.github/workflows/web-hosting.yml') },
+            {
+              label: 'Web hosting workflow',
+              href: repoLink('.github/workflows/deploy-web-hosting.yml'),
+            },
             {
               label: 'Promote to production',
-              href: repoLink('.github/workflows/promote-to-production.yml'),
+              href: repoLink('.github/workflows/release-promote-to-production.yml'),
             },
             { label: 'Release runbook', href: repoLink('docs/runbooks/release.md') },
             {
@@ -1259,20 +1262,24 @@ export const strings = {
           caption: 'The agents',
           head: ['Agent', 'When it runs', 'What it does'],
           rows: [
-            ['Planner', 'An issue labelled plan:approved', 'Writes a spec PR and the story issues'],
             [
-              'Developer',
+              'Spec planner',
+              'An issue labelled plan:approved',
+              'Writes a spec PR and the story issues',
+            ],
+            [
+              'Story developer',
               'A story labelled agent:ready',
               'Builds the story end to end and opens a PR with “Closes #N”',
             ],
             [
-              'Reviewer',
+              'PR reviewer',
               'Every PR opened or updated',
               'Reviews against CLAUDE.md; labels ready-to-merge or agent:fix-needed',
             ],
             [
               'Frontend reviewer',
-              'Called by the Reviewer',
+              'Called by the PR reviewer',
               'React hooks, render and state bugs, accessibility, render performance',
             ],
             [
@@ -1286,22 +1293,27 @@ export const strings = {
               'Indexes, locking, constraints, transactions, roles',
             ],
             [
-              'Silent-failure hunter',
+              'Error-handling reviewer',
               'Every code PR',
               'Swallowed errors and fallbacks that hide failures',
             ],
             [
-              'Test-gap analyzer',
+              'Test-coverage reviewer',
               'Every code PR',
               'Whether the tests would fail without the change',
             ],
             [
-              'Fixer',
-              'Blocking findings, red CI, conflicts, red develop',
+              'PR fixer',
+              'Blocking findings, red CI, red develop',
               'Root-causes and pushes a fix; opens a fix PR when develop is red',
             ],
             [
-              'E2E author',
+              'Merge conflict resolver',
+              'A push to develop leaves a PR conflicting',
+              'Merges develop into the PR branch, keeping both sides',
+            ],
+            [
+              'E2E test author',
               'On request',
               'Writes and repairs Playwright specs, root-causes flaky ones',
             ],
@@ -1314,7 +1326,6 @@ export const strings = {
             'Auto-merge squash-merges a PR once the Reviewer labels it ready-to-merge and every check is green. Spec PRs and changes to CI or agent config wait for the owner.',
             'Issue closer: a merged PR closes its stories with “Done in #PR”, and an epic closes when all its stories are done.',
             'Scheduled health runs of the full suite (09:20 and 12:30 IST on weekdays, 20:00 IST daily); a red run sends the Fixer.',
-            'Conflict resolver: when develop moves, it merges develop into open PR branches.',
             'Issue keys: every issue is titled NSTOCK-0001 : title, and stories are filed under their epic.',
           ],
         },
@@ -1551,7 +1562,7 @@ export const strings = {
         'The owner labels an issue plan:approved.',
         'The Planner writes a spec PR and story issues. When the owner merges the spec, the stories become agent:ready.',
         'The Developer builds a story and opens a PR.',
-        'The Reviewer, helped by the frontend, security, database, silent-failure and test-gap specialists, labels the PR ready-to-merge or agent:fix-needed.',
+        'The Reviewer, helped by the frontend, security, database, error-handling and test-coverage specialists, labels the PR ready-to-merge or agent:fix-needed.',
         'The Fixer pushes fixes for blocking findings and red CI to the same PR, and the Reviewer looks again.',
         'Auto-merge squash-merges green, approved PRs and closes their issues.',
       ],

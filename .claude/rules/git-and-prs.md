@@ -6,7 +6,7 @@
   `production`: it moves only when the `release` skill runs the Promote to production workflow.
 - Issues are keyed: `NSTOCK-0001 : create login flow` (one sequence for epics, stories and bugs).
   Create them with `bash tools/github/issueKey.sh create` (agents) or the issue templates (people);
-  `issue-keys.yml` keys template issues. A story always names its epic and becomes its sub-issue.
+  `issues-assign-keys.yml` keys template issues. A story always names its epic and becomes its sub-issue.
   Older task numbers map directly: T-181 is NSTOCK-0181; epics E1 to E21 are NSTOCK-0245 to 0265.
 - PR titles and commits are Conventional Commits with the issue key as the scope:
   `feat(NSTOCK-0001): create login flow`, `fix(NSTOCK-0042): …`. The `PR title` check enforces it

@@ -1,4 +1,4 @@
-name: Web hosting
+name: 'Deploy: Web hosting'
 
 # Free Firebase Hosting (Spark plan) for the msw-mode web build: the whole app, mock market and
 # paper engine included, runs in the browser, so a static deploy is a working demo (WF-06).
@@ -10,7 +10,7 @@ name: Web hosting
 #   long-lived `dev` channel. Never the live site.
 # - production → the `production` environment, https://<project>.web.app: every green CI run on
 #   the production branch deploys live. production only moves through Promote to production
-#   (promote-to-production.yml, docs/runbooks/release.md), which first checks develop is tested.
+#   (release-promote-to-production.yml, docs/runbooks/release.md), which first checks develop is tested.
 # Both deploys check the site serves the new build and run the reviewer smoke test.
 # Run workflow redeploys either environment (stage development or live) from a commit on its branch
 # with green CI; rolling production back is a live dispatch with an older commit on production.
@@ -22,8 +22,18 @@ on:
     workflows: [CI]
     types: [completed]
     branches: [develop, production]
+  # Previews only for PRs that can change the deployed app (ADR 0014). Informational, never a
+  # required check; closed PRs outside these paths never had a channel to delete.
   pull_request:
     types: [opened, synchronize, reopened, closed]
+    paths:
+      - 'apps/web/**'
+      - 'packages/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'firebase.json'
+      - 'tools/github/sweepPreviewChannels.sh'
+      - '.github/workflows/deploy-web-hosting.yml'
   workflow_dispatch:
     inputs:
       stage:
@@ -52,7 +62,7 @@ concurrency:
   # share one. A red CI run (every job skipped) gets its own group, so it never replaces a pending
   # deploy.
   group: >-
-    web-hosting-${{ github.event.pull_request.number || inputs.stage ||
+    deploy-web-hosting-${{ github.event.pull_request.number || inputs.stage ||
     (github.event.workflow_run.conclusion == 'success' &&
     (github.event.workflow_run.head_branch == 'production' && 'live' || 'development') || github.run_id) }}
   # A deploy to an environment is never cancelled halfway; a newer one waits for it.

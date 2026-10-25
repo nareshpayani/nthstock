@@ -1,4 +1,4 @@
-name: 'Agent: Resolve conflicts'
+name: 'Agent: Merge conflict resolver'
 
 # When develop moves, finds open PRs that no longer merge cleanly and resolves them on the PR
 # branch. develop and production are never modified: the job merges the PR's base INTO the PR
@@ -18,12 +18,14 @@ permissions:
   actions: write
 
 concurrency:
-  group: agent-conflicts
+  group: agent-merge-conflict-resolver
   cancel-in-progress: false
 
 jobs:
   find:
+    name: Find conflicting PRs
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     outputs:
       prs: ${{ steps.scan.outputs.prs }}
     steps:
@@ -34,7 +36,7 @@ jobs:
           BOT: ${{ vars.AGENT_BOT_LOGIN || 'claude[bot]' }}
         run: |
           # GitHub computes mergeability lazily after a push; retry while any PR is UNKNOWN.
-          for attempt in 1 2 3 4 5 6; do
+          for _ in 1 2 3 4 5 6; do
             prs=$(gh pr list --repo "$GITHUB_REPOSITORY" --state open --limit 100 \
               --json number,mergeable,headRefName,baseRefName,isCrossRepository,author,labels)
             unknown=$(jq '[.[] | select(.mergeable == "UNKNOWN")] | length' <<< "$prs")
@@ -53,6 +55,7 @@ jobs:
           echo "prs=$targets" >> "$GITHUB_OUTPUT"
 
   resolve:
+    name: 'Resolve #${{ matrix.pr.number }}'
     needs: find
     if: needs.find.outputs.prs != '[]' && needs.find.outputs.prs != ''
     runs-on: ubuntu-latest
@@ -70,7 +73,7 @@ jobs:
       BASE: ${{ matrix.pr.base }}
     steps:
       - uses: actions/checkout@v7
-        # No persisted GITHUB_TOKEN, so the agent pushes with its app token (see agent-fixer.yml);
+        # No persisted GITHUB_TOKEN, so the agent pushes with its app token (see agent-pr-fixer.yml);
         # the clean-merge push below names its token explicitly.
         with:
           persist-credentials: false
@@ -98,7 +101,7 @@ jobs:
         run: |
           git config user.name "Naresh Payani"
           git config user.email "${{ vars.OWNER_ID || '15100692' }}+${{ vars.OWNER_LOGIN || 'nareshpayani' }}@users.noreply.github.com"
-          gh pr edit "$PR" --repo "$GITHUB_REPOSITORY" --add-label agent:conflict
+          gh pr edit "$PR" --repo "$GITHUB_REPOSITORY" --add-label agent:merge-conflict
           if git merge --no-edit "origin/$BASE"; then
             echo "clean=true" >> "$GITHUB_OUTPUT"
           else
@@ -113,13 +116,13 @@ jobs:
           git push "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" "HEAD:$BRANCH"
           # This push used GITHUB_TOKEN, which starts no workflows, so start CI on the new head.
           gh workflow run ci.yml --repo "$GITHUB_REPOSITORY" --ref "$BRANCH"
-          gh pr edit "$PR" --repo "$GITHUB_REPOSITORY" --remove-label agent:conflict
+          gh pr edit "$PR" --repo "$GITHUB_REPOSITORY" --remove-label agent:merge-conflict
       - if: steps.merge.outputs.clean == 'false' && env.HAS_AGENT_TOKEN != 'true'
         run: |
           echo "::notice::CLAUDE_CODE_OAUTH_TOKEN is not set; conflict on #$PR left for the owner."
           gh pr edit "$PR" --repo "$GITHUB_REPOSITORY" --add-label needs-human
       - if: steps.merge.outputs.clean == 'false' && env.HAS_AGENT_TOKEN == 'true'
-        uses: anthropics/claude-code-action@v1
+        uses: anthropics/claude-code-action@42619cb7a75ded196ded275cdd529a35178bfd2c # v1
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           # Commits are authored as the owner, not the app (owner decision 2026-10-21).
@@ -132,6 +135,6 @@ jobs:
             BRANCH: ${{ matrix.pr.branch }}
             REASON: merge conflict with ${{ matrix.pr.base }}
 
-            Act as the Fixer and follow the "Merge conflicts" section of .claude/agents/fixer.md exactly.
+            Act as the Merge conflict resolver. Follow .claude/agents/merge-conflict-resolver.md exactly.
           claude_args: |
             --allowedTools "Read,Glob,Grep,Edit,Write,Bash(npm:*),Bash(npx:*),Bash(node:*),Bash(git merge:*),Bash(git status:*),Bash(git diff:*),Bash(git log:*),Bash(git add:*),Bash(git commit:*),Bash(git checkout:*),Bash(git push:*),Bash(git fetch:*),Bash(gh pr view:*),Bash(gh pr diff:*),Bash(gh pr comment:*),Bash(gh pr edit:*)"

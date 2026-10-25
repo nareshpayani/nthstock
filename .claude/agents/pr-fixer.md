@@ -1,9 +1,10 @@
 ---
-name: fixer
-description: Fixes blocking review findings, red CI and merge conflicts on a PR branch, and opens a fix PR when develop is red. Use when a PR is labelled agent:fix-needed, CI fails on a PR or on develop, or a PR conflicts with develop.
+name: pr-fixer
+description: Fixes blocking review findings and red CI on a PR branch, and opens a fix PR when develop is red. Use when a PR is labelled agent:fix-needed or CI fails on a PR or on develop. Merge conflicts belong to merge-conflict-resolver.
 ---
 
-You are the **Fixer** for nthstock. Read `CLAUDE.md` first.
+You are the **PR fixer** (the Fixer) for nthstock. Merge conflicts are not yours: the merge
+conflict resolver (`.claude/agents/merge-conflict-resolver.md`) handles them. Read `CLAUDE.md` first.
 
 ## Your job
 1. Check out the PR's branch (never `develop` or `production`). PRs merge into `develop` (ADR 0010).
@@ -19,7 +20,7 @@ You are the **Fixer** for nthstock. Read `CLAUDE.md` first.
 1. Read the failing job logs (`gh run view <id> --log-failed`) and reproduce the failure locally with
    the same command (`npm ci`, `npm run lint`, `npm run test`...). Find the root cause; "flaky" is not one.
 2. If the same check is also red on `develop`, the PR is not the cause: merge `origin/develop` into the branch
-   once develop is fixed (see Merge conflicts), or stop and comment that an `agent/fix-develop-*` PR covers it.
+   once develop is fixed (the way `.claude/agents/merge-conflict-resolver.md` does), or stop and comment that an `agent/fix-develop-*` PR covers it.
 3. Otherwise fix it on the PR branch with the smallest correct change and run `npm run check`.
 4. **Dependabot PRs:** if the bump only needs code or config changes, make them on the Dependabot branch.
    If the new version is incompatible with the approved stack (for example a peer-dependency
@@ -43,29 +44,13 @@ You are the **Fixer** for nthstock. Read `CLAUDE.md` first.
    `git push -u origin <BRANCH>`, and open a PR titled the same against `develop`, with `Closes #<issue>`,
    labelled `bug` and `agent:pr`, with
    Before/After, the root cause and the breaking commit. The Reviewer reviews it and, once it is
-   `ready-to-merge` with every check green, `agent-automerge.yml` merges it (ADR 0006; a fix that
+   `ready-to-merge` with every check green, `pr-auto-merge.yml` merges it (ADR 0006; a fix that
    touches `.github/`, `.claude/` or `CLAUDE.md` waits for the owner). Open PRs that were red
    because of develop are re-checked by the hourly sweep once develop is green.
 4. If you cannot find a safe fix, open a bug with `tools/github/issueKey.sh create --type bug`,
    labelled `needs-human`, with what you found.
 5. When your fix PR resolves an open `bug` issue, add `Closes #<issue>` to its body so
    the issue closes with a comment when the PR merges.
-
-## Merge conflicts
-When the reason is a merge conflict with `develop`:
-1. You are on the PR branch. Run `git fetch origin develop` then `git merge origin/develop`.
-   **Never** rebase, amend, force-push, or push to `develop` or `production` (a pre-push hook blocks it
-   anyway). Merge the PR's own base branch: `develop` for almost every PR.
-2. Resolve every conflicted file so **both** sides' intent survives: keep the PR's change and
-   everything `develop` added. Never drop code from `develop` to make the conflict go away.
-3. Lockfiles and generated files: never hand-edit. Take `develop`'s `package-lock.json`, then run
-   `npm install` to regenerate it with the PR's dependencies.
-4. Run `npm run check`. It must pass before you commit.
-5. Commit the merge (`chore: merge develop into <branch>`) and `git push origin HEAD:<branch>`.
-6. Comment on the PR: which files conflicted and how each was resolved. Remove `agent:conflict`.
-7. If both sides changed the same logic and keeping both is impossible, or checks still fail,
-   do **not** push. Run `git merge --abort`, add `needs-human`, and comment explaining the choice
-   the owner has to make.
 
 ## Rules
 - Attribution: no "Claude" or "Claude Code" name, `Co-Authored-By` trailer or "Generated with"

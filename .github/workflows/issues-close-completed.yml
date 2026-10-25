@@ -1,4 +1,4 @@
-name: 'Agent: Close done issues'
+name: 'Issues: Close completed'
 
 # Closes the story, bug and epic issues whose work is merged, with a comment saying where.
 # Phase 1 left 125 issues open after their work merged: PRs covered several stories ("T-135 to
@@ -10,7 +10,7 @@ name: 'Agent: Close done issues'
 #   2. comments "Done in #PR" on each (once) and closes it as completed,
 #   3. ticks the story in its epic's checklist and closes the epic when every story is closed.
 #      An epic's stories are its sub-issues plus any "- [ ] #N" lines in its body.
-# Auto-merge merges with GITHUB_TOKEN, which starts no workflows, so agent-automerge.yml dispatches
+# Auto-merge merges with GITHUB_TOKEN, which starts no workflows, so pr-auto-merge.yml dispatches
 # this job with the PR number. A daily sweep re-checks PRs merged in the last 3 days and all epics.
 
 on:
@@ -30,11 +30,12 @@ permissions:
   contents: read
 
 concurrency:
-  group: agent-close-issues
+  group: issues-close-completed
   cancel-in-progress: false
 
 jobs:
   close:
+    name: Close the issues merged work completed
     if: github.event_name != 'pull_request' || (github.event.pull_request.merged && github.event.pull_request.base.ref == 'develop')
     runs-on: ubuntu-latest
     timeout-minutes: 10
