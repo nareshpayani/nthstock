@@ -66,6 +66,7 @@ const scheduler = await startJobScheduler({
   jobs: createJobs({
     orders: deps.orders,
     accounts: deps.repos.accounts,
+    pnlSnapshots: deps.repos.pnlSnapshots,
     database: deps.database,
     auth: deps.repos.auth,
   }),

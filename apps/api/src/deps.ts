@@ -34,6 +34,11 @@ import {
   type MatcherCommands,
   type OrderService,
 } from './modules/orders/index.js';
+import {
+  createMemoryPnlSnapshotRepo,
+  createPgPnlSnapshotRepo,
+  type PnlSnapshotRepo,
+} from './modules/portfolio/index.js';
 import { createMemoryUsersRepo, createPgUsersRepo, type UsersRepo } from './modules/users/index.js';
 import {
   createMemoryWatchlistsRepo,
@@ -60,6 +65,8 @@ export type Repos = {
   accounts: AccountStore;
   /** The append-only audit log. */
   audit: AuditRepo;
+  /** End-of-day P&L per account, written by the `pnl.snapshot` job (T-209). */
+  pnlSnapshots: PnlSnapshotRepo;
 };
 
 /** What modules get injected instead of reaching for globals: time, storage and market data. */
@@ -225,6 +232,9 @@ export function createDeps(overrides: DepsOverrides = {}): AppDeps {
     accounts:
       overrides.repos?.accounts ??
       (database ? createPgAccountStore({ database, audit }) : createMemoryAccountStore({ audit })),
+    pnlSnapshots:
+      overrides.repos?.pnlSnapshots ??
+      (database ? createPgPnlSnapshotRepo({ database }) : createMemoryPnlSnapshotRepo()),
   };
   const orders = createOrderService({
     clock,

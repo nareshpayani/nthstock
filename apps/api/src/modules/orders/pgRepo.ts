@@ -787,6 +787,15 @@ export function createPgAccountStore({ database, audit }: PgAccountStoreOptions)
       return [...new Set([...fromOrders, ...fromLedger].map((row) => row.userId))].sort();
     },
 
+    async accountsWithHoldings() {
+      // A holdings row always has qty > 0 (holdings_qty_check): a sold-out holding is deleted.
+      const rows = await database.db
+        .selectDistinct({ userId: holdings.userId })
+        .from(holdings)
+        .orderBy(holdings.userId);
+      return rows.map((row) => row.userId);
+    },
+
     reset: () =>
       Promise.reject(
         new Error(

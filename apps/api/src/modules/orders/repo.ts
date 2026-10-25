@@ -139,6 +139,13 @@ export function createMemoryAccountStore({ audit }: { audit: AuditRepo }): Accou
       );
     },
 
+    accountsWithHoldings: () =>
+      Promise.resolve(
+        [...accounts]
+          .filter(([, account]) => account.workingSet.holdings.length > 0)
+          .map(([userId]) => userId),
+      ),
+
     reset: () => {
       accounts.clear();
       return Promise.resolve();

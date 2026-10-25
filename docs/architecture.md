@@ -260,6 +260,10 @@ Spec `backend-core.md` §3 and §9, ADR 0007 §11. Code: `apps/api/src/modules/j
   version (`OrderService.syncAccounts`), so a rerun, a retry or the API committing the same event first changes
   nothing twice. The snapshot upserts on `(user_id, trade_date)`, partitions use `CREATE TABLE IF NOT EXISTS`, the
   cleanup is a plain delete. The job id (scheduler id plus due time) keeps one run per scheduled time across workers.
+- **P&L snapshot:** one `pnl_snapshots` row per account touched today or holding stock: invested, current value
+  and day P&L over holdings (from the portfolio summary), total P&L (current value − invested) and realised P&L
+  since the account opened or was reset (the close clears the day's realised figure, so a day's realised P&L is the
+  difference between two snapshots).
 - **Shutdown:** SIGTERM closes the worker, which waits for the running job, then flushes audit writes and order
   updates and closes the pools.
 - **No PII in logs:** a run's result is counts only, and a failure is logged as job, attempt and error class; a

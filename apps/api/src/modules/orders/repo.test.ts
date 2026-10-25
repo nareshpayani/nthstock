@@ -318,6 +318,27 @@ describeRepoConformance<Fixture>(
       expect(await store.accountsTouchedOn('2026-09-26')).toEqual([]);
     });
 
+    it('lists the accounts holding stock, and drops one that sold out (T-209)', async () => {
+      const { store } = repo();
+      await commitOrders('usr_a', 1);
+      const { engine } = newEngine(at(25, 10), 'held', {
+        holdings: [[INFY.token, { qty: 5, investedValue: 7_000_00 }]],
+      });
+      const holding = engine.workingSet();
+      await store.commit('usr_b', { before: null, after: holding }, 0, []);
+      expect(await store.accountsWithHoldings()).toEqual(['usr_b']);
+
+      engine.place({
+        token: INFY.token,
+        side: 'SELL',
+        type: 'MARKET',
+        product: 'DELIVERY',
+        qty: 5,
+      });
+      await store.commit('usr_b', { before: holding, after: engine.workingSet() }, 1, []);
+      expect(await store.accountsWithHoldings()).toEqual([]);
+    });
+
     it('round-trips trailing stops, their exits, keys and seq as they ratchet (NSTOCK-0368)', async () => {
       const { store } = repo();
       const { engine } = newEngine();
