@@ -1,5 +1,6 @@
 import { Redis } from 'ioredis';
 import { loadConfig } from './config.js';
+import { createDatabase } from './db/client.js';
 import { createDeps } from './deps.js';
 import { createJobs, safeErrorMessage, startJobScheduler } from './modules/jobs/index.js';
 import { startOrderUpdatePublisher } from './modules/orders/index.js';
@@ -7,7 +8,8 @@ import { createRedisPublisher } from './ticks/publisher.js';
 
 // The job worker (spec backend-core §3, §9; T-207): the same codebase as the API with another
 // entry, so the jobs share its repos and the paper engine. `npm run worker -w @nthstock/api`
-// with JOBS_MODE=bullmq, DB_DRIVER=postgres, DATABASE_URL and REDIS_URL, like `npm run dev:api`.
+// with JOBS_MODE=bullmq, DB_DRIVER=postgres, DATABASE_URL, PURGE_DATABASE_URL and REDIS_URL, like
+// `npm run dev:api`.
 
 /** One JSON line per event, as the API's Fastify logger writes them. */
 const log = {
@@ -35,6 +37,13 @@ if (config.jobsMode !== 'bullmq' || !config.redisUrl) {
   log.warn('the job worker needs JOBS_MODE=bullmq (with DB_DRIVER=postgres and REDIS_URL)');
   process.exit(1);
 }
+if (config.dbDriver === 'postgres' && !config.purgeDatabaseUrl) {
+  // The account purge deletes ledger rows, which only the nthstock_purge role may do (T-230).
+  log.warn(
+    'the job worker needs PURGE_DATABASE_URL (the nthstock_purge role) with DB_DRIVER=postgres',
+  );
+  process.exit(1);
+}
 
 const stateRedis = new Redis(config.redisUrl, { maxRetriesPerRequest: 2 });
 const deps = createDeps({
@@ -55,6 +64,18 @@ const deps = createDeps({
   // Errors are reported as their classes and SQLSTATE only (no PII in logs).
   onAuditError: (error) => log.warn('orders background error', { error: safeErrorMessage(error) }),
 });
+
+// The account purge's own connection, as nthstock_purge: one job, one account at a time.
+const purgeDatabase =
+  config.dbDriver === 'postgres' && config.purgeDatabaseUrl
+    ? createDatabase({
+        url: config.purgeDatabaseUrl,
+        poolMax: 1,
+        applicationName: 'nthstock-purge',
+        onIdleError: (error) =>
+          log.warn('postgres purge pool error', { error: safeErrorMessage(error) }),
+      })
+    : null;
 
 // Orders the jobs release, fill or cancel reach open browsers as they do from the API.
 const publisher = createRedisPublisher(config.redisUrl, log);
@@ -96,6 +117,7 @@ const scheduler = await startJobScheduler({
     pnlSnapshots: deps.repos.pnlSnapshots,
     database: deps.database,
     auth: deps.repos.auth,
+    purgeDatabase,
   }),
   log,
   // Tests keep their queues apart; one deployment uses the default.
@@ -117,6 +139,7 @@ const shutdown = (signal: string) => {
       return publisher.close();
     })
     .then(() => deps.dispose())
+    .then(() => purgeDatabase?.close())
     .then(() => stateRedis.quit())
     .then(
       () => process.exit(0),

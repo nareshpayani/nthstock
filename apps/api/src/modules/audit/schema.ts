@@ -54,6 +54,7 @@ export const AUDIT_ACTIONS = [
   'TRAILING_STOP_CANCEL',
   'TRAILING_STOP_UPDATE',
   'POSITION_CLOSE',
+  'ACCOUNT_PURGED',
 ] as const;
 
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];

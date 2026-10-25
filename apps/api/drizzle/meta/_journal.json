@@ -141,6 +141,13 @@
       "when": 1792914123089,
       "tag": "0019_price_alerts",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1792925270473,
+      "tag": "0020_account_purged_audit_action",
+      "breakpoints": true
     }
   ]
 }

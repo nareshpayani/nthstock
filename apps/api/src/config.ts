@@ -35,6 +35,19 @@ const EnvSchema = z.object({
         })
         .nullable(),
     ),
+  PURGE_DATABASE_URL: z
+    .string()
+    .trim()
+    .optional()
+    .transform((value) => (value ? value : null))
+    .pipe(
+      z
+        .url({
+          protocol: /^postgres(ql)?$/,
+          error: 'must be a postgres:// or postgresql:// URL',
+        })
+        .nullable(),
+    ),
   PG_POOL_MAX: z.coerce.number().int().min(1).max(100).default(10),
   DB_DRIVER: z.enum(['memory', 'postgres']).default('memory'),
   JOBS_MODE: z.enum(['bullmq', 'inline', 'off']).default('inline'),
@@ -91,6 +104,12 @@ export type ApiConfig = {
    * null when blank. Migrations use `DATABASE_MIGRATION_URL` instead (`npm run db:migrate`).
    */
   databaseUrl: string | null;
+  /**
+   * `PURGE_DATABASE_URL` (T-230): the job worker's connection as the `nthstock_purge` role, the only
+   * role that may delete a purged account's ledger rows. The worker needs it with DB_DRIVER=postgres;
+   * apps/api never opens it. Null when blank.
+   */
+  purgeDatabaseUrl: string | null;
   /** `PG_POOL_MAX`: connections in this process's one `pg` Pool (default 10). */
   pgPoolMax: number;
   /**
@@ -225,6 +244,7 @@ export function loadConfig(env: Readonly<Record<string, string | undefined>>): A
     jwtSecret: parsed.data.JWT_SECRET,
     redisUrl: parsed.data.REDIS_URL,
     databaseUrl: parsed.data.DATABASE_URL,
+    purgeDatabaseUrl: parsed.data.PURGE_DATABASE_URL,
     pgPoolMax: parsed.data.PG_POOL_MAX,
     dbDriver: parsed.data.DB_DRIVER,
     jobsMode: parsed.data.JOBS_MODE,
