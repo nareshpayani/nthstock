@@ -1,169 +1,9 @@
 {
-  "id": "9af150cf-23a1-416b-961d-04a91a568f33",
+  "id": "1c24f8a6-7c52-43e6-9885-fe3356629d63",
   "prevId": "9ec4ce64-724a-4d30-b038-3179fea889da",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
-    "public.price_alerts": {
-      "name": "price_alerts",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "text",
-          "primaryKey": true,
-          "notNull": true
-        },
-        "user_id": {
-          "name": "user_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "token": {
-          "name": "token",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "symbol": {
-          "name": "symbol",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "exchange": {
-          "name": "exchange",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "condition": {
-          "name": "condition",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "price": {
-          "name": "price",
-          "type": "bigint",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "note": {
-          "name": "note",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "status": {
-          "name": "status",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp (3) with time zone",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "created_ltp": {
-          "name": "created_ltp",
-          "type": "bigint",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "triggered_at": {
-          "name": "triggered_at",
-          "type": "timestamp (3) with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "triggered_ltp": {
-          "name": "triggered_ltp",
-          "type": "bigint",
-          "primaryKey": false,
-          "notNull": false
-        }
-      },
-      "indexes": {
-        "price_alerts_user_id_created_at_idx": {
-          "name": "price_alerts_user_id_created_at_idx",
-          "columns": [
-            {
-              "expression": "user_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "created_at",
-              "isExpression": false,
-              "asc": false,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "price_alerts_active_token_idx": {
-          "name": "price_alerts_active_token_idx",
-          "columns": [
-            {
-              "expression": "token",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "where": "\"price_alerts\".\"status\" = 'ACTIVE'",
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "price_alerts_user_id_users_id_fk": {
-          "name": "price_alerts_user_id_users_id_fk",
-          "tableFrom": "price_alerts",
-          "tableTo": "users",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {
-        "price_alerts_condition_check": {
-          "name": "price_alerts_condition_check",
-          "value": "\"price_alerts\".\"condition\" IN ('ABOVE', 'BELOW')"
-        },
-        "price_alerts_status_check": {
-          "name": "price_alerts_status_check",
-          "value": "\"price_alerts\".\"status\" IN ('ACTIVE', 'TRIGGERED', 'CANCELLED')"
-        },
-        "price_alerts_exchange_check": {
-          "name": "price_alerts_exchange_check",
-          "value": "\"price_alerts\".\"exchange\" IN ('NSE', 'BSE')"
-        },
-        "price_alerts_price_check": {
-          "name": "price_alerts_price_check",
-          "value": "\"price_alerts\".\"price\" > 0 AND \"price_alerts\".\"created_ltp\" >= 0"
-        }
-      },
-      "isRLSEnabled": false
-    },
     "public.audit_log": {
       "name": "audit_log",
       "schema": "",
@@ -1351,6 +1191,21 @@
               "expression": "\"seq\" DESC",
               "asc": true,
               "isExpression": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "ledger_entries_created_at_idx": {
+          "name": "ledger_entries_created_at_idx",
+          "columns": [
+            {
+              "expression": "created_at",
+              "isExpression": false,
+              "asc": true,
               "nulls": "last"
             }
           ],

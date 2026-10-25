@@ -422,6 +422,63 @@ describeRepoConformance(
       expect(await repo().listRecoveryCodes('usr_a')).toEqual([]);
     });
 
+    // ---- Cleanup of expired rows (T-210) -----------------------------------------------------
+    it('deletes expired tokens and sessions expired over 30 days, and keeps live ones', async () => {
+      const now = at('2026-11-30T21:30:00.000Z');
+      const days = (n: number) => new Date(now.getTime() + n * 24 * 60 * 60 * 1000);
+      await repo().createDevice(device('dev_1'));
+      await repo().createDevice(device('dev_2'));
+      await repo().createDevice(device('dev_3', 'usr_b'));
+      await repo().putDeviceToken(hashOf('t_expired'), { deviceId: 'dev_1', expiresAt: days(-1) });
+      await repo().putDeviceToken(hashOf('t_live'), { deviceId: 'dev_2', expiresAt: days(90) });
+      await repo().putDeviceToken(hashOf('t_now'), { deviceId: 'dev_3', expiresAt: now });
+      const expiringOn = (id: string, expiresAt: Date) => ({ ...session(id), expiresAt });
+      await repo().createSession(expiringOn('ses_live', days(1)));
+      await repo().createSession(expiringOn('ses_recent', days(-1)));
+      await repo().createSession(expiringOn('ses_edge', days(-30)));
+      await repo().createSession(expiringOn('ses_old', days(-31)));
+      const token = (sessionId: string, expiresAt: Date) => ({
+        sessionId,
+        expiresAt,
+        usedAt: null,
+      });
+      await repo().putRefreshToken(hashOf('r_live'), token('ses_live', days(1)));
+      await repo().putRefreshToken(hashOf('r_expired'), token('ses_live', days(-1)));
+      await repo().putRefreshToken(hashOf('r_recent'), token('ses_recent', days(-1)));
+      await repo().putRefreshToken(hashOf('r_old'), token('ses_old', days(-31)));
+      // Not expired itself, but in an expired family: it goes with its session.
+      await repo().putRefreshToken(hashOf('r_family'), token('ses_old', days(1)));
+
+      expect(await repo().deleteExpired(now)).toEqual({
+        refreshTokens: 3,
+        deviceTokens: 1,
+        sessions: 1,
+      });
+
+      expect(await repo().getDeviceToken(hashOf('t_expired'))).toBeNull();
+      expect(await repo().getDeviceToken(hashOf('t_live'))).not.toBeNull();
+      expect(await repo().getDeviceToken(hashOf('t_now'))).not.toBeNull();
+      expect(await repo().getDevice('dev_1')).toEqual(device('dev_1'));
+      expect(await repo().getSession('ses_old')).toBeNull();
+      for (const id of ['ses_live', 'ses_recent', 'ses_edge']) {
+        expect(await repo().getSession(id)).not.toBeNull();
+      }
+      for (const gone of ['r_expired', 'r_recent', 'r_old', 'r_family']) {
+        expect(await repo().useRefreshToken(hashOf(gone), now)).toBeNull();
+      }
+      expect(await repo().useRefreshToken(hashOf('r_live'), now)).toMatchObject({
+        sessionId: 'ses_live',
+        usedAt: null,
+      });
+
+      // A pure delete: running it again finds nothing.
+      expect(await repo().deleteExpired(now)).toEqual({
+        refreshTokens: 0,
+        deviceTokens: 0,
+        sessions: 0,
+      });
+    });
+
     if (driver === 'postgres') {
       it('refuses reset: tests truncate the tables as the owner', async () => {
         await expect(repo().reset()).rejects.toThrow(/does not reset/);

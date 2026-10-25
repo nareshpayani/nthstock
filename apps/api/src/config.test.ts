@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { loadCandleWriterConfig, loadConfig } from './config.js';
+import { loadCandleWriterConfig, loadConfig, runsOrderSweep } from './config.js';
 import { devPiiKeys } from './db/crypto.js';
 
 // Test-only PII keys: base64 of 32 fixed bytes each (not secrets).
@@ -18,6 +18,7 @@ describe('loadConfig', () => {
       databaseUrl: null,
       pgPoolMax: 10,
       dbDriver: 'memory',
+      jobsMode: 'inline',
       quoteShards: null,
       testControls: false,
       demoSeed: false,
@@ -39,6 +40,7 @@ describe('loadConfig', () => {
         DATABASE_URL: 'postgres://nthstock_app:pw@127.0.0.1:5432/nthstock',
         PG_POOL_MAX: '20',
         DB_DRIVER: 'postgres',
+        JOBS_MODE: 'bullmq',
         QUOTE_SHARDS: '4',
         PII_ENC_KEYS: `2:${ENC_KEY}`,
         PII_HMAC_KEY: HMAC_KEY,
@@ -53,6 +55,7 @@ describe('loadConfig', () => {
       databaseUrl: 'postgres://nthstock_app:pw@127.0.0.1:5432/nthstock',
       pgPoolMax: 20,
       dbDriver: 'postgres',
+      jobsMode: 'bullmq',
       quoteShards: 4,
       testControls: false,
       demoSeed: false,
@@ -66,6 +69,18 @@ describe('loadConfig', () => {
       },
     });
     expect(loadConfig({ MOCK_MARKET_ALWAYS_OPEN: '0' }).mockMarketAlwaysOpen).toBe(false);
+  });
+
+  it('picks who runs the jobs; bullmq needs DB_DRIVER=postgres (T-207)', () => {
+    expect(loadConfig({}).jobsMode).toBe('inline');
+    expect(loadConfig({ JOBS_MODE: 'off' }).jobsMode).toBe('off');
+    expect(() => loadConfig({ JOBS_MODE: 'bullmq' })).toThrow(
+      /JOBS_MODE=bullmq needs DB_DRIVER=postgres/,
+    );
+    expect(() => loadConfig({ JOBS_MODE: 'cron' })).toThrow(/JOBS_MODE/);
+    expect(runsOrderSweep('inline')).toBe(true);
+    expect(runsOrderSweep('bullmq')).toBe(false);
+    expect(runsOrderSweep('off')).toBe(false);
   });
 
   it('needs REDIS_URL to follow the quote service (NSTOCK-0354)', () => {

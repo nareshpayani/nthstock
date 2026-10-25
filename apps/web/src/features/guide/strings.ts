@@ -411,7 +411,8 @@ export const strings = {
             'After each order commit, apps/api appends an ADD, MODIFY or CANCEL command to the shard’s command stream, stamped with the account version, and a STOP_ADD or STOP_CANCEL after each trailing stop change. A late or replayed command never undoes a newer one.',
             'Each instrument has an order book: limit orders and trailing stops sit in price heaps, so a tick reads only what it fills, triggers or moves, not every resting order. A property test checks it against a full walk.',
             'Every minute, and on start, the matcher reads its shard’s live orders from Postgres, the record, and repairs its books, so a lost command is fixed within a minute.',
-            'Still to come: fills committed through the account store, reconciling trailing stops, a switch to turn it on, and a benchmark. Until then apps/api steps trailing stops in its own process.',
+            'When a tick crosses an order, the matcher sends a fill request per user to a Redis stream. Every API process reads it in one consumer group, runs the user’s paper engine at that price, commits with the account version and only then acknowledges it. A request sent twice fills nothing twice, and one a crashed process held is picked up by another (ADR 0013).',
+            'Still to come: reconciling trailing stops, a switch that moves all matching to the worker, and a benchmark. Until then apps/api also steps trailing stops in its own process.',
           ],
         },
         {
@@ -548,6 +549,54 @@ export const strings = {
             'POST /v1/account/deletion needs a step-up and confirm: DELETE. The user is marked deleted first, so no login can start a new session; then every session is revoked with reason ACCOUNT_DELETED (tokens refused, sockets closed), OPEN and AMO paper orders are cancelled, and ACCOUNT_DELETION_REQUESTED is audited with the purge date.',
             'For 30 days an OTP login for that mobile answers 403 ACCOUNT_DELETED with purgeAfter, and the login page says, in IST, when the data is erased. The purge job (a BullMQ job, with the other Phase 2 jobs) then erases the PII and leaves a tombstone; audit entries never held a mobile or a name.',
             'The web app navigates to /login?deleted=… before it clears the session, forgets the trusted browser and empties the query cache, so nothing from the account stays on the device.',
+          ],
+        },
+        { kind: 'heading', text: 'Background jobs on BullMQ' },
+        {
+          kind: 'text',
+          text: 'Market-session events happen on time for every account, including users who are not online: a job worker (the same apps/api codebase, another entry) runs them on BullMQ queues in Redis, with cron in Asia/Kolkata.',
+        },
+        {
+          kind: 'table',
+          caption: 'Scheduled jobs (IST)',
+          head: ['Job', 'When', 'What it does'],
+          rows: [
+            [
+              'session.amoRelease',
+              '09:15, trading days',
+              'Syncs every account with an AMO to the open, so AMOs are released and market AMOs fill',
+            ],
+            [
+              'session.squareOff',
+              '15:20, trading days',
+              'Squares off intraday positions and cancels live intraday orders',
+            ],
+            [
+              'session.dayClose',
+              '15:30, trading days',
+              'Cancels open day orders and settles today’s delivery buys into holdings',
+            ],
+            [
+              'pnl.snapshot',
+              '15:45, trading days',
+              'Writes one P&L row per account touched today or holding stock',
+            ],
+            ['db.orderPartitions', '00:30, daily', 'Keeps 14 days of order partitions ahead'],
+            [
+              'auth.tokenCleanup',
+              '03:00, daily',
+              'Deletes expired refresh and device tokens and sessions expired over 30 days',
+            ],
+          ],
+        },
+        {
+          kind: 'list',
+          items: [
+            'Each job is a plain run(at) function of its scheduled time, unit-tested with a fixed clock; BullMQ only schedules and retries it (3 attempts, exponential backoff from 30 s).',
+            'Session jobs check the NSE holiday calendar and exit on a holiday or weekend. Each run reloads the accounts from Postgres, syncs them to now and commits against their version, so a second run, or the API writing at the same moment, changes nothing twice.',
+            'Several workers can run: BullMQ hands each scheduled run to one of them, and the job id (scheduler and due time) keeps it to one run per time. SIGTERM lets the running job finish before the worker exits.',
+            'Failures are logged as the job, attempt and error class only: a database error’s row values never reach a log line.',
+            'JOBS_MODE=inline keeps the in-process sweep for tests that move a manual clock; with JOBS_MODE=bullmq the API leaves session events to the worker.',
           ],
         },
         { kind: 'heading', text: 'OpenAPI 3.1, generated from the contracts' },
@@ -952,10 +1001,25 @@ export const strings = {
             'Exchange data: real-time NSE or BSE prices need a licence, so v1 uses a simulated feed.',
           ],
         },
+        { kind: 'heading', text: 'How Phase 2 is signed off' },
+        {
+          kind: 'list',
+          items: [
+            'An OWASP ASVS 4.0.3 Level 2 checklist maps every item the backend touches to the tests that prove it, and names the gaps that are left.',
+            'A restart test in the browser: log in, watch a stock, buy it, then restart apps/api. The session, the watchlist, the order and the holding are all still there, read back from Postgres.',
+            'A security journey runs in both modes, against the in-browser mock and against apps/api on Postgres and Redis: turn on two-factor, log out, log back in with the authenticator code, log out another device and delete the account, with an accessibility check on every step.',
+            'The demo account is written to Postgres with its consent, and seeding twice gives the same state.',
+            'A performance smoke on a database of 10,000 users runs in CI: market-order acknowledgement p95 29.6 ms (budget 300 ms), PIN login p95 42.1 ms (budget 200 ms) and the slowest query p95 0.6 ms from pg_stat_statements (budget 50 ms), measured on 25 Oct 2026.',
+          ],
+        },
         {
           kind: 'links',
           label: 'Read the code',
           items: [
+            {
+              label: 'Phase 2 ASVS L2 checklist',
+              href: repoLink('docs/security/phase2-asvs-l2.md'),
+            },
             { label: 'Security baseline', href: repoLink('docs/architecture.md') },
             { label: 'Auth module', href: repoLink('apps/api/src/modules/auth') },
             { label: 'Database roles', href: repoLink('infra/postgres/init.sql') },
@@ -1028,7 +1092,7 @@ export const strings = {
             [
               'End to end',
               'Playwright',
-              '33 specs: desktop Chrome, Chromium phone and WebKit iPhone',
+              '41 specs: desktop Chrome, Chromium phone and WebKit iPhone',
             ],
             [
               'User journeys',

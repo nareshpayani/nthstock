@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { OrderSide } from './orders.js';
-import { Id, InstrumentToken, Paise, TickPrice } from './primitives.js';
+import { Id, InstrumentToken, IsoUtc, Paise, TickPrice } from './primitives.js';
 import { Trail } from './trailingStopParams.js';
 import { PriceAlertCondition } from './alerts.js';
 import { PositionDirection, TrailingStopStatus } from './trailingStops.js';
@@ -66,3 +66,33 @@ export const MatcherCommand = z.discriminatedUnion('type', [
   z.object({ ...base, type: z.literal('ALERT_CANCEL'), alertId: Id }),
 ]);
 export type MatcherCommand = z.infer<typeof MatcherCommand>;
+
+/**
+ * A fill request from the matcher to apps/api (ADR 0013, NSTOCK-0367): one tick crossed or
+ * triggered something of this user's in `token`. apps/api loads the account, runs the paper engine
+ * at `ltp` and `ts`, and commits with the expected version, so the engine decides what fills and a
+ * request that arrives twice fills nothing twice.
+ */
+export const MATCHER_FILL_VERSION = 1;
+
+/** The fill stream of one shard, read by every apps/api process in one consumer group. */
+export const matcherFillsKey = (shard: number): string =>
+  `nthstock:matcher:fills:v1:${String(shard)}`;
+
+/** The apps/api consumer group on the fill streams. */
+export const MATCHER_FILLS_GROUP = 'api';
+
+/** About a day of fills at a busy pace; acknowledged entries are only history. */
+export const MATCHER_FILLS_MAXLEN = 100_000;
+
+export const MatcherFill = z.object({
+  v: z.literal(MATCHER_FILL_VERSION),
+  userId: Id,
+  token: InstrumentToken,
+  ltp: Paise.positive(),
+  ts: IsoUtc,
+  /** What the book saw cross or trigger, for the logs; the engine re-checks every order. */
+  orderIds: z.array(Id),
+  stopIds: z.array(Id),
+});
+export type MatcherFill = z.infer<typeof MatcherFill>;

@@ -24,3 +24,6 @@ lighthouse-report/
 
 # Redis snapshots written by local test runs
 dump.rdb
+
+# Performance smoke report (npm run perf:smoke, T-243)
+perf-report.md

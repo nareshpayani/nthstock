@@ -1,7 +1,13 @@
-import { MATCHER_COMMAND_VERSION, TICK_BATCH_VERSION, type Quote } from '@nthstock/contracts';
+import {
+  MATCHER_COMMAND_VERSION,
+  MatcherFill,
+  TICK_BATCH_VERSION,
+  type Quote,
+} from '@nthstock/contracts';
 import { startLease, type Lease } from '@nthstock/marketData';
 import { Redis } from 'ioredis';
 import { afterAll, afterEach, beforeAll, expect, it, vi } from 'vitest';
+import { createFillWriter } from './fills.js';
 import { startMatcher, type Matcher, type MatcherTick } from './matcher.js';
 import { quote } from './test/quotes.js';
 import {
@@ -129,5 +135,32 @@ describeWithRedis('two matchers on one shard (integration, NSTOCK-0364)', () => 
     await vi.waitFor(() => expect(first.ticks).toHaveLength(1));
     expect(first.ticks[0]?.crossed.map((o) => o.orderId)).toEqual(['o2']);
     expect(second.ticks).toEqual([]);
+  });
+
+  it('sends a fill request for each user a tick crossed (NSTOCK-0367)', async () => {
+    const prefix = uniqueChannel('matcher');
+    const { matcher, ticks } = await boot(prefix, 'only', { now: 0 });
+    const sendFills = createFillWriter({
+      stream: redis,
+      shard: 0,
+      book: (token) => matcher.book(token),
+      log: silent,
+      fillsKey: () => `${prefix}:fills`,
+    });
+    await write(prefix, 1, [quote(1, 100_05)]);
+    await vi.waitFor(() => expect(ticks).toHaveLength(1));
+    await sendFills(ticks[0] as MatcherTick);
+    const entries = await redis.xrange(`${prefix}:fills`, '-', '+');
+    expect(entries.map(([, fields]) => MatcherFill.parse(JSON.parse(fields[1] ?? '')))).toEqual([
+      {
+        v: 1,
+        userId: 'u1',
+        token: 1,
+        ltp: 100_05,
+        ts: quote(1, 100_05).ts,
+        orderIds: ['o1'],
+        stopIds: [],
+      },
+    ]);
   });
 });

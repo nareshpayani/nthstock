@@ -5,7 +5,8 @@ import { Pool } from 'pg';
 import { createPgAlertStore, startAlertDesk, type AlertDesk } from './alerts.js';
 import { loadConfig } from './config.js';
 import { jsonLogger } from './logger.js';
-import { startMatcher } from './matcher.js';
+import { createFillWriter } from './fills.js';
+import { startMatcher, type MatcherTick } from './matcher.js';
 import {
   CONNECTION_TIMEOUT_MS,
   QUERY_TIMEOUT_MS,
@@ -56,6 +57,8 @@ const lease = startLease({
 });
 // Bound once the books exist: the alert desk puts the shard's active alerts on them.
 let alerts: AlertDesk | null = null;
+// Set once the matcher exists: a failed send puts the crossed orders back on its books.
+let sendFills: ((tick: MatcherTick) => Promise<void>) | null = null;
 const matcher = startMatcher({
   client: streams,
   shard: config.shard,
@@ -72,6 +75,7 @@ const matcher = startMatcher({
       triggered: tick.triggered.length,
       moved: tick.moved.length,
     });
+    void sendFills?.(tick);
   },
 });
 alerts = pool
@@ -85,6 +89,12 @@ alerts = pool
       log: jsonLogger,
     })
   : null;
+sendFills = createFillWriter({
+  stream: redis,
+  shard: config.shard,
+  book: (token) => matcher.book(token),
+  log: jsonLogger,
+});
 await Promise.all([matcher.ready(), alerts?.ready()]);
 jsonLogger.info('matcher started', { shard: config.shard, shards: config.shards });
 

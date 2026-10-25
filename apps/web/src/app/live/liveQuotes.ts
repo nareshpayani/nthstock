@@ -47,6 +47,13 @@ export function createLiveQuotes(
       wsClient.onMessage((message) => {
         if (message.type === 'notification') listener(message);
       }),
+    onReconnect: (listener) => {
+      let last = wsClient.status();
+      return wsClient.onStatus((status) => {
+        if (status === 'open' && last === 'reconnecting') listener();
+        last = status;
+      });
+    },
   };
   const tradingStore = trading
     ? createTradingStore({

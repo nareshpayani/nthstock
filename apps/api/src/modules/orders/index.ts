@@ -17,4 +17,10 @@ export {
   type CommandStream,
   type MatcherCommands,
 } from './matcherCommands.js';
+export {
+  FILL_CLAIM_IDLE_MS,
+  startMatcherFills,
+  type FillStreamClient,
+  type MatcherFills,
+} from './matcherFills.js';
 export { startOrderUpdatePublisher, type OrderUpdatePublisher } from './updatePublisher.js';

@@ -25,6 +25,7 @@ import {
 } from './modules/notifications/index.js';
 import type { Publisher } from './ticks/publisher.js';
 import { startTickPump, type TickPump } from './ticks/tickPump.js';
+import { runsOrderSweep, type JobsMode } from './config.js';
 
 export type AppOptions = {
   logger?: FastifyServerOptions['logger'];
@@ -52,6 +53,11 @@ export type AppOptions = {
    * pushed without a tick or a request. `null` turns it off (tests drive time themselves).
    */
   orderSweepMs?: number | null;
+  /**
+   * `JOBS_MODE` (T-207): only `inline` (default) runs the order sweep; under `bullmq` the job
+   * worker runs the session events, and `off` runs neither.
+   */
+  jobsMode?: JobsMode;
   /**
    * How often the notification outbox relay runs, and how old a row must be before it takes it
    * (NSTOCK-0380); default `OUTBOX_RELAY_MS`. `null` runs no timer. Only with `orderPublisher`.
@@ -184,8 +190,11 @@ export function buildApp(options: AppOptions = {}): App {
   for (const owned of new Set([publisher, orderPublisher])) {
     if (owned) app.addHook('onClose', () => owned.close());
   }
-  const sweepMs =
-    options.orderSweepMs === undefined ? DEFAULT_ORDER_SWEEP_MS : options.orderSweepMs;
+  const sweepMs = !runsOrderSweep(options.jobsMode ?? 'inline')
+    ? null
+    : options.orderSweepMs === undefined
+      ? DEFAULT_ORDER_SWEEP_MS
+      : options.orderSweepMs;
   if (sweepMs !== null) {
     let sweeper: ReturnType<typeof setInterval> | null = null;
     app.addHook('onReady', async () => {

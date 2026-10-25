@@ -5,6 +5,7 @@ import type {
   FundsSummary,
   Holding,
   LedgerPage,
+  MatcherFill,
   InstrumentToken,
   ModifyOrderRequest,
   Order,
@@ -690,6 +691,37 @@ export function createOrderService({
     },
 
     /**
+     * Reloads each account from the store, syncs its engine to now and commits (the session jobs,
+     * T-208): reloading first takes in what another process (the API, or an earlier run) wrote,
+     * and a rerun at the same time finds nothing left to do. One account that fails is counted
+     * and skipped, so the rest still get their session event; the job retries the run when any
+     * failed.
+     */
+    syncAccounts: async (
+      userIds: Iterable<string>,
+    ): Promise<{ synced: number; failed: number }> => {
+      let synced = 0;
+      let failed = 0;
+      for (const userId of new Set(userIds)) {
+        try {
+          await settle(userId);
+          const known = cache.get(userId);
+          if (known) known.stale = true;
+          await ensure(userId);
+          desk.fundsSummary(userId);
+          // A commit that lost to another writer reloaded the account: sync that one once more.
+          if (await settle(userId)) await read(userId, () => desk.fundsSummary(userId));
+          synced += 1;
+        } catch (error) {
+          failed += 1;
+          // No user id or message in the report: the job worker logs it (never log PII).
+          reportError(new Error('An account did not sync', { cause: error }));
+        }
+      }
+      return { synced, failed };
+    },
+
+    /**
      * Replaces the user's account with a saved one (the demo seed, T-174). Its ledger history is
      * taken as already audited: those movements happened before this process, not in it.
      */
@@ -701,6 +733,25 @@ export function createOrderService({
       auditedLedger.set(userId, engine.ledger.size);
       persist(userId, engine, { replace: true });
       await settle(userId);
+    },
+
+    /**
+     * A fill request from the matcher worker (ADR 0013, NSTOCK-0367): runs the user's engine at
+     * the tick's price and time and commits what it fills, then announces it, like any tick. The
+     * engine re-checks every order, so a request that arrives twice fills nothing twice and one
+     * for an order modified or cancelled since fills only what still crosses. Losing to another
+     * writer reloads and runs once more; a failed commit rejects, so the request is retried.
+     */
+    async applyMatcherFill(fill: MatcherFill): Promise<void> {
+      await ensure(fill.userId);
+      const run = () => desk.ingestFor([fill.userId], fill);
+      await run();
+      if (await settle(fill.userId)) {
+        await run();
+        // Losing twice rejects: the matcher already dropped the crossed order from its book, so
+        // the request stays pending and is claimed again rather than acked unfilled.
+        if (await settle(fill.userId)) throw new AccountConflict(fill.userId, 0, 0);
+      }
     },
 
     /** A scripted tick for tests and scenarios (see `PaperDesk.pinPrice`). */

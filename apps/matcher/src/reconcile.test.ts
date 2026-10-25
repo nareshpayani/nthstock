@@ -65,6 +65,30 @@ describe('reconcileBooks (NSTOCK-0366)', () => {
     });
   });
 
+  it('restores a crossed order whose fill was lost, unless a newer user version removed it', () => {
+    const order = { orderId: 'o1', userId: 'u1', version: 5, side: 'BUY' as const, price: 100_00 };
+    // The order crossed and left the book, but Postgres still lists it open at the same version.
+    const lost = harness();
+    lost.book(T1).upsertOrder(order);
+    expect(lost.book(T1).tick(100_00).crossed).toEqual([order]);
+    expect(lost.book(T1).hasOrder('o1')).toBe(false);
+    const result = lost.reconcile({
+      orders: [live('o1', T1, 5)],
+      versions: new Map([['u1', 5]]),
+    });
+    expect(result).toEqual({ added: 1, removed: 0 });
+    expect(lost.book(T1).hasOrder('o1')).toBe(true);
+
+    // A newer user version took the order off before the read: it stays off.
+    const gone = harness();
+    gone.book(T1).upsertOrder(order);
+    gone.book(T1).tick(100_00);
+    gone.book(T1).removeOrder('o1', 6);
+    const none = gone.reconcile({ orders: [], versions: new Map([['u1', 6]]) });
+    expect(none).toEqual({ added: 0, removed: 0 });
+    expect(gone.book(T1).hasOrder('o1')).toBe(false);
+  });
+
   it('keeps a command newer than the read', () => {
     const { book, reconcile } = harness();
     // A modify at version 7 arrived after Postgres was read at version 6.

@@ -39,7 +39,8 @@ export const positionsKeys = {
 
 /**
  * Price alerts and the notification centre (NSTOCK-0344). A `notification` message on the socket
- * invalidates both: a fired alert changes the alerts list too.
+ * is added to the centre's cache (NSTOCK-0384), and a fired alert invalidates the alerts list; a
+ * socket reconnect invalidates both.
  */
 export const alertsKeys = {
   all: ['alerts'] as const,

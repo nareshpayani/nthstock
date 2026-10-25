@@ -17,6 +17,7 @@ import { PaperDesk, type DeskMarket } from './paperDesk.js';
 import { INFY, TCS, ist } from './testHarness.js';
 
 const NIFTY_TOKEN = 99_001;
+const AT = '2026-09-25T04:30:00.000Z';
 
 const instrument = (token: number, symbol: string, type: Instrument['type']): Instrument => ({
   token,
@@ -155,6 +156,28 @@ describe('PaperDesk', () => {
     ]);
     expect(desk.getOrder('bob', a.order.id)).toBeNull();
     expect(desk.getOrder('bob', b.order.id)?.status).toBe('OPEN');
+  });
+
+  it('fills from a matcher tick for the named users only (NSTOCK-0367)', async () => {
+    const { desk, changes } = setup();
+    const a = await desk.place('alice', limitBuy(1_490_00));
+    const b = await desk.place('bob', limitBuy(1_480_00));
+    if (!a.ok || !b.ok) throw new Error('place failed');
+    changes.length = 0;
+
+    // A price that crosses neither changes nothing.
+    await desk.ingestFor(['alice', 'bob'], { token: INFY.token, ltp: 1_495_00, ts: AT });
+    expect(changes).toEqual([]);
+    // Both cross at 1,475, but the matcher named only Alice: only her engine runs.
+    await desk.ingestFor(['alice'], { token: INFY.token, ltp: 1_475_00, ts: AT });
+    expect(changes).toEqual(['alice']);
+    // Reads sync with the price the request left, as after any tick.
+    expect(desk.getOrder('alice', a.order.id)).toMatchObject({
+      status: 'EXECUTED',
+      avgFillPrice: 1_490_00, // a LIMIT fills at its limit
+    });
+    await desk.ingestFor(['bob'], { token: INFY.token, ltp: 0, ts: AT });
+    expect(changes).toEqual(['alice', 'alice']);
   });
 
   it('a pinned price wins over the feed and syncs live orders at once', async () => {
