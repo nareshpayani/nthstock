@@ -63,6 +63,20 @@ is a cache of it.
 - **Reset and demo seed:** a reset clears the stored orders and their history (the ledger is append-only and keeps
   every row); the demo seed replaces the whole account.
 
+### Quote service (Wave 3, E22)
+Spec `market-data-and-matching.md` §4. `apps/quotes` will be the one source of ticks, so every API instance,
+apps/realtime, the matcher and the candle writer see the same prices. It depends on nothing but Redis, because it
+is the piece a licensed vendor feed replaces (D3).
+- **Shards:** an instrument's shard is `shardOf(token, SHARDS)` (`@nthstock/utils`, FNV-1a). Locally `SHARDS=1`.
+- **One writer per shard:** a process writes only while it holds `lease:quotes:{shard}` (`SET … NX PX 5000`, renewed
+  every 2 s). A second process waits and takes over when the holder stops, or within the TTL when it dies.
+- **Streams:** each batch is appended to `nthstock:ticks:v1:{shard}` (`XADD MAXLEN ~ 2400`, about 10 minutes) with a
+  per-shard `seq`, and its quotes go to the snapshot hash `nthstock:quotes:last:v1:{shard}` in the same MULTI. A
+  consumer that sees any `seq` other than the next one re-reads the snapshot (`tickStreamStep` in
+  `packages/contracts`).
+- **Status:** the writer, lease and streams are built. apps/realtime and apps/api still use the in-process tick pump
+  until NSTOCK-0353 and NSTOCK-0354 switch them to the streams.
+
 ### Market data and chart bars
 - `packages/marketData` generates each range's own bars (1D: 1-minute, 1W: 5-minute, 1M: hourly,
   1Y: daily, 5Y: weekly) and `resampleCandles` groups them into a coarser bar size on request

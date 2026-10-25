@@ -1,8 +1,9 @@
-import { TickBatch } from '@nthstock/contracts';
+import type { TickStreamEntry } from '@nthstock/contracts';
 import { generateSymbolMaster, MockMarketDataAdapter } from '@nthstock/marketData';
 import { fixedClock, shardOf } from '@nthstock/utils';
 import { afterEach, describe, expect, it } from 'vitest';
-import { startQuoteWriter, type TickPublisher } from './quoteWriter.js';
+import { startQuoteWriter } from './quoteWriter.js';
+import type { TickSink } from './tickStream.js';
 
 const silent = { info: () => undefined, warn: () => undefined };
 const master = generateSymbolMaster({ equityCount: 80 });
@@ -19,16 +20,16 @@ function newMarket() {
 }
 
 function recorder() {
-  const messages: { channel: string; batch: TickBatch }[] = [];
+  const entries: TickStreamEntry[] = [];
   let failure: Error | null = null;
-  const publisher: TickPublisher = {
-    publish(channel, message) {
+  const sink: TickSink = {
+    append(entry) {
       if (failure) return Promise.reject(failure);
-      messages.push({ channel, batch: TickBatch.parse(JSON.parse(message)) });
-      return Promise.resolve(1);
+      entries.push(entry);
+      return Promise.resolve();
     },
   };
-  return { publisher, messages, fail: (error: Error | null) => (failure = error) };
+  return { sink, entries, fail: (error: Error | null) => (failure = error) };
 }
 
 afterEach(() => {
@@ -36,17 +37,16 @@ afterEach(() => {
 });
 
 describe('startQuoteWriter', () => {
-  it("publishes only its shard's instruments, while it holds the lease", async () => {
+  it("writes only its shard's instruments, numbered, while it holds the lease", async () => {
     const market = newMarket();
-    const { publisher, messages } = recorder();
+    const { sink, entries } = recorder();
     let held = false;
     const writer = await startQuoteWriter({
       market,
       shard: 1,
       shards: 4,
       holdsLease: () => held,
-      publisher,
-      channel: 'test:ticks',
+      sink,
       log: silent,
     });
 
@@ -61,28 +61,32 @@ describe('startQuoteWriter', () => {
     expect(writer.tokens.size).toBeLessThan(all.length);
 
     market.tick();
-    expect(messages).toEqual([]);
+    expect(entries).toEqual([]);
+    expect(writer.seq).toBe(0);
 
     held = true;
     market.tick();
     await Promise.resolve();
-    expect(messages.length).toBeGreaterThan(0);
-    for (const { channel, batch } of messages) {
-      expect(channel).toBe('test:ticks');
-      for (const quote of batch.quotes) expect(writer.tokens.has(quote.token)).toBe(true);
+    expect(entries.length).toBeGreaterThan(0);
+    // Numbered 1, 2, … in the order written, all for shard 1.
+    expect(entries.map((entry) => entry.seq)).toEqual(entries.map((_, index) => index + 1));
+    expect(writer.seq).toBe(entries.length);
+    for (const entry of entries) {
+      expect(entry.shard).toBe(1);
+      for (const quote of entry.quotes) expect(writer.tokens.has(quote.token)).toBe(true);
     }
 
     writer.stop();
     writer.stop();
-    const count = messages.length;
+    const count = entries.length;
     market.tick();
     await Promise.resolve();
-    expect(messages).toHaveLength(count);
+    expect(entries).toHaveLength(count);
   });
 
-  it('logs a failing publish once, and its recovery', async () => {
+  it('logs a failing write once, and its recovery', async () => {
     const market = newMarket();
-    const { publisher, fail } = recorder();
+    const { sink, fail } = recorder();
     const warnings: string[] = [];
     const infos: string[] = [];
     const writer = await startQuoteWriter({
@@ -90,7 +94,7 @@ describe('startQuoteWriter', () => {
       shard: 0,
       shards: 1,
       holdsLease: () => true,
-      publisher,
+      sink,
       log: { info: (m) => infos.push(m), warn: (m) => warnings.push(m) },
     });
 

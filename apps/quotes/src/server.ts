@@ -5,6 +5,7 @@ import { loadConfig } from './config.js';
 import { startLease } from './lease.js';
 import { jsonLogger } from './logger.js';
 import { startQuoteWriter } from './quoteWriter.js';
+import { createRedisTickSink } from './tickStream.js';
 
 // apps/quotes (spec market-data-and-matching §4): the one source of ticks. It runs the mock
 // market for one shard and writes its ticks while it holds the shard's lease. It depends on
@@ -31,7 +32,7 @@ const writer = await startQuoteWriter({
   shard: config.shard,
   shards: config.shards,
   holdsLease: lease.isHeld,
-  publisher: redis,
+  sink: createRedisTickSink({ redis }),
   log: jsonLogger,
 });
 jsonLogger.info('quotes started', {

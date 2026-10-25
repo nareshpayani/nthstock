@@ -6,6 +6,10 @@ import {
   TICK_BATCH_VERSION,
   TICKS_CHANNEL,
   TickBatch,
+  TickStreamEntry,
+  quoteSnapshotKey,
+  tickStreamKey,
+  tickStreamStep,
   SESSION_REVOKED_EVENT_VERSION,
   SessionRevokedEvent,
   orderUpdatesChannel,
@@ -91,5 +95,26 @@ describe('SessionRevokedEvent (T-194)', () => {
     expect(SessionRevokedEvent.parse(event)).toEqual(event);
     expect(SessionRevokedEvent.safeParse({ ...event, v: 2 }).success).toBe(false);
     expect(SessionRevokedEvent.safeParse({ ...event, sessionId: 'a b' }).success).toBe(false);
+  });
+});
+
+describe('tick streams (spec market-data-and-matching §4)', () => {
+  it('names one stream and one snapshot per shard', () => {
+    expect(tickStreamKey(0)).toBe('nthstock:ticks:v1:0');
+    expect(quoteSnapshotKey(3)).toBe('nthstock:quotes:last:v1:3');
+  });
+
+  it('applies the next entry and resyncs after a gap, a restart or a fresh start', () => {
+    expect(tickStreamStep(41, { seq: 42 })).toBe('apply');
+    expect(tickStreamStep(41, { seq: 44 })).toBe('resync'); // trimmed or missed
+    expect(tickStreamStep(41, { seq: 1 })).toBe('resync'); // the writer restarted
+    expect(tickStreamStep(null, { seq: 7 })).toBe('resync'); // nothing applied yet
+  });
+
+  it('parses an entry with its shard and seq', () => {
+    const entry = { v: 1, shard: 0, seq: 1, quotes: [quote] };
+    expect(TickStreamEntry.parse(entry)).toEqual(entry);
+    expect(TickStreamEntry.safeParse({ ...entry, seq: 0 }).success).toBe(false);
+    expect(TickStreamEntry.safeParse({ ...entry, quotes: [] }).success).toBe(false);
   });
 });
