@@ -113,4 +113,15 @@ describe('applyMatcherFill', () => {
     // A socket never sees a fill the database does not have.
     expect(events).toEqual([]);
   });
+
+  it('rejects when both commits lose on version, and publishes nothing', async () => {
+    const { service, fill, executed, calls, events } = await setup(
+      () => new AccountConflict(USER, 1, 2),
+    );
+
+    await expect(service.applyMatcherFill(fill)).rejects.toBeInstanceOf(AccountConflict);
+    expect(calls()).toBe(2);
+    expect(await executed()).toHaveLength(0);
+    expect(events).toEqual([]);
+  });
 });

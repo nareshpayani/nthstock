@@ -352,13 +352,15 @@ export function createDeps(overrides: DepsOverrides = {}): AppDeps {
         })
       : createMemorySessionRevocations(),
     dispose: async () => {
+      // The fill reader stops first, with its in-flight fills, so none commits after the flush
+      // or is acked after the desk is disposed.
+      await matcherFills?.close();
       // Audit entries still queued are written before the pool closes.
       await orders.flushAudit();
       alerts.dispose();
       orders.dispose();
       matcherCommands?.commands.stop();
       matcherCommands?.redis.disconnect();
-      await matcherFills?.close();
       await quoteStreams?.close();
       owned?.dispose();
       await ownedDatabase?.close();

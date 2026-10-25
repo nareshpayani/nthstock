@@ -155,4 +155,39 @@ describe('startMatcherFills (NSTOCK-0367)', () => {
     await reader.close();
     await reader.ready();
   });
+
+  it('waits for a fill in flight when it closes', async () => {
+    const { client } = scripted([[['k0', [entry('1-0', fill('u1', 100))]]]]);
+    let finish: () => void = () => undefined;
+    let committed = false;
+    let started = false;
+    const reader = startMatcherFills({
+      orders: {
+        applyMatcherFill: () => {
+          started = true;
+          return new Promise<void>((resolve) => {
+            finish = () => {
+              committed = true;
+              resolve();
+            };
+          });
+        },
+      },
+      client,
+      shards: 1,
+      consumer: 'c1',
+      log: { info: () => undefined, warn: () => undefined },
+      fillsKey: (shard) => `k${String(shard)}`,
+    });
+    await vi.waitFor(() => expect(started).toBe(true));
+    let closed = false;
+    const closing = reader.close().then(() => {
+      closed = true;
+    });
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(closed).toBe(false);
+    finish();
+    await closing;
+    expect(committed).toBe(true);
+  });
 });

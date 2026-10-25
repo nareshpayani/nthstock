@@ -717,8 +717,9 @@ export function createOrderService({
       await run();
       if (await settle(fill.userId)) {
         await run();
-        // Losing twice: the newer writer's engine saw the same price, or the next tick will.
-        await settle(fill.userId);
+        // Losing twice rejects: the matcher already dropped the crossed order from its book, so
+        // the request stays pending and is claimed again rather than acked unfilled.
+        if (await settle(fill.userId)) throw new AccountConflict(fill.userId, 0, 0);
       }
     },
 
