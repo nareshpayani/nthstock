@@ -35,6 +35,9 @@ jobs:
       ISSUE: ${{ github.event.issue.number || github.event.inputs.issue }}
     steps:
       - uses: actions/checkout@v7
+        # No persisted GITHUB_TOKEN, so the agent pushes with its app token (see agent-fixer.yml).
+        with:
+          persist-credentials: false
       - name: Block pushes to production and develop
         run: |
           printf '#!/bin/sh\nwhile read -r _ _ ref _; do case "$ref" in refs/heads/production|refs/heads/main|refs/heads/develop) echo "Pushing to production or develop is not allowed." >&2; exit 1 ;; esac; done\nexit 0\n' > .git/hooks/pre-push
