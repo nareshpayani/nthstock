@@ -1,6 +1,7 @@
 import { createTradingStore, type ApiClient } from '@nthstock/apiClient';
 import { fixedClock, fromIst } from '@nthstock/utils';
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
+import { http } from 'msw';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { createMockServer } from '@/mocks/node';
 import type { MarketSession } from '@/shared/lib/marketSessionContext';
@@ -72,7 +73,10 @@ beforeAll(() => mock.server.listen({ onUnhandledFrame: 'error' }));
 beforeEach(() => {
   installResizeObserver();
 });
+let releaseQuotes = () => {};
 afterEach(() => {
+  releaseQuotes();
+  mock.server.resetHandlers();
   resetSession();
   useTrailingSheetStore.setState(initialTrailingSheetState);
 });
@@ -136,9 +140,58 @@ describe('trailing-stop sheet (T18, SPEC-TFC-1 §8.4)', () => {
       const ltp = (await mock.adapter.getQuote('INFY'))?.ltp ?? 0;
       fireEvent.click(await within(sheet).findByRole('radio', { name: '₹' }));
       const expected = Math.max(5, Math.round(ltp / 100 / 5) * 5);
-      expect(await within(sheet).findByRole('textbox', { name: 'Trail (₹)' })).toHaveValue(
-        (expected / 100).toFixed(2),
-      );
+      const field = await within(sheet).findByRole('textbox', { name: 'Trail (₹)' });
+      await waitFor(() => expect(field).toHaveValue((expected / 100).toFixed(2)));
+    },
+    HEAVY,
+  );
+
+  /** Holds the REST quote snapshot back (the test quote store never ticks) until `release()`. */
+  function holdQuotes() {
+    let release = () => {};
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    mock.server.use(
+      http.get('*/v1/market/quotes', async () => {
+        await held;
+        return undefined;
+      }),
+    );
+    releaseQuotes = release;
+    return release;
+  }
+
+  it(
+    'switching to rupees before the first price fills the field once the price lands',
+    async () => {
+      const release = holdQuotes();
+      const { token } = await renderSheet(5);
+      const sheet = await openSheet(token);
+      fireEvent.click(await within(sheet).findByRole('radio', { name: '₹' }));
+      const field = await within(sheet).findByRole('textbox', { name: 'Trail (₹)' });
+      expect(field).toHaveValue('');
+
+      release();
+      // 1% of INFY's seeded mock price, rounded to the 5-paise tick.
+      await waitFor(() => expect(field).toHaveValue('15.25'));
+    },
+    HEAVY,
+  );
+
+  it(
+    'a trail typed while the price is pending is kept when the price lands',
+    async () => {
+      const release = holdQuotes();
+      const { token } = await renderSheet(5);
+      const sheet = await openSheet(token);
+      fireEvent.click(await within(sheet).findByRole('radio', { name: '₹' }));
+      const field = await within(sheet).findByRole('textbox', { name: 'Trail (₹)' });
+      fireEvent.change(field, { target: { value: '9' } });
+
+      release();
+      expect(await within(sheet).findByText(/^Initial stop /)).toBeInTheDocument();
+      expect(field).toHaveValue('9');
     },
     HEAVY,
   );
