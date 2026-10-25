@@ -100,13 +100,12 @@ clip('watchlists', 'watchlists: create, add, reorder, sort and remove', async (p
   await act.hover(last);
   const handle = rail.locator('[data-drag-handle="WIPRO"]');
   const box = await handle.boundingBox();
-  if (box) {
-    await say(page, 'Drag a row by its handle to reorder.', 1200);
-    await act.drag(
-      { x: box.x + box.width / 2, y: box.y + box.height / 2 },
-      { x: box.x + box.width / 2, y: box.y - 120 },
-    );
-  }
+  if (!box) throw new Error('the drag handle has no box');
+  await say(page, 'Drag a row by its handle to reorder.', 1200);
+  await act.drag(
+    { x: box.x + box.width / 2, y: box.y + box.height / 2 },
+    { x: box.x + box.width / 2, y: box.y - 120 },
+  );
   await say(page, 'Or with the keyboard: Alt+↑ and Alt+↓ on a focused row.', 1400);
   await rows.getByRole('link', { name: /^TCS NSE/ }).focus();
   await act.press('Alt+ArrowDown', 900);

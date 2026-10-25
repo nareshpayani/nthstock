@@ -78,9 +78,10 @@ test('each topic is a tab with its own link, kept on reload', async ({ page }) =
 
   // The walkthrough videos: players with a poster and a captions track (NSTOCK-0390).
   await page.goto('/guide?tab=walkthroughs');
-  const player = page.getByRole('tabpanel').locator('video').first();
-  await expect(player).toBeVisible();
-  await expect(player.locator('track[kind="captions"]')).toHaveCount(1);
+  const players = page.getByRole('tabpanel').locator('video');
+  await expect(players.first()).toBeVisible();
+  // Every player carries its captions track (WCAG 1.2.2).
+  await expect(players.filter({ hasNot: page.locator('track[kind="captions"]') })).toHaveCount(0);
   await expectNoSeriousA11yViolations(page, '/guide?tab=walkthroughs');
 });
 

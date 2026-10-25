@@ -147,9 +147,7 @@ describe('GuidePage', () => {
     const players = panel.querySelectorAll('video');
     expect(players).toHaveLength(block.items.length);
     for (const video of block.items) {
-      const player = within(panel).getByLabelText(
-        `${video.title}, ${video.device.toLowerCase()} walkthrough video`,
-      );
+      const player = within(panel).getByLabelText(strings.videoLabel(video.title, video.device));
       expect(player.tagName).toBe('VIDEO');
       expect(player).toHaveAttribute('poster', videoFile(video.id, 'jpg'));
       expect(player).toHaveAttribute('preload', 'none');
@@ -159,6 +157,12 @@ describe('GuidePage', () => {
       expect(track).toHaveAttribute('kind', 'captions');
       expect(track).toHaveAttribute('src', videoFile(video.id, 'vtt'));
       expect(track).toHaveAttribute('srclang', 'en');
+      expect(track).toHaveAttribute('label', strings.captionsLabel);
+      // Off by default: the clip already shows its captions in the picture.
+      expect(track).not.toHaveAttribute('default');
+      const fallback = within(player).getByText(strings.videoFallback(video.title));
+      expect(fallback).toHaveAttribute('href', videoFile(video.id, 'mp4'));
+      expect(player).toHaveClass(video.device === 'Phone' ? 'aspect-[390/844]' : 'aspect-video');
     }
   });
 
