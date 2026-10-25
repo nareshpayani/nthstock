@@ -691,6 +691,37 @@ export function createOrderService({
     },
 
     /**
+     * Reloads each account from the store, syncs its engine to now and commits (the session jobs,
+     * T-208): reloading first takes in what another process (the API, or an earlier run) wrote,
+     * and a rerun at the same time finds nothing left to do. One account that fails is counted
+     * and skipped, so the rest still get their session event; the job retries the run when any
+     * failed.
+     */
+    syncAccounts: async (
+      userIds: Iterable<string>,
+    ): Promise<{ synced: number; failed: number }> => {
+      let synced = 0;
+      let failed = 0;
+      for (const userId of new Set(userIds)) {
+        try {
+          await settle(userId);
+          const known = cache.get(userId);
+          if (known) known.stale = true;
+          await ensure(userId);
+          desk.fundsSummary(userId);
+          // A commit that lost to another writer reloaded the account: sync that one once more.
+          if (await settle(userId)) await read(userId, () => desk.fundsSummary(userId));
+          synced += 1;
+        } catch (error) {
+          failed += 1;
+          // No user id or message in the report: the job worker logs it (never log PII).
+          reportError(new Error('An account did not sync', { cause: error }));
+        }
+      }
+      return { synced, failed };
+    },
+
+    /**
      * Replaces the user's account with a saved one (the demo seed, T-174). Its ledger history is
      * taken as already audited: those movements happened before this process, not in it.
      */

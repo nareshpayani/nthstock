@@ -205,6 +205,13 @@ export type PgAccountStoreOptions = {
  * events, all holdings, the ledger as a carried balance plus today's entries, and the active and
  * today's trailing stops.
  */
+/**
+ * How far past day D an order changed on D can trade: an AMO placed on D after the close trades
+ * on the next session, which a long holiday run can push a week out. Every other order changed on
+ * D trades on D (day orders end at the close).
+ */
+const AMO_TRADE_DATE_DAYS = 8;
+
 export function createPgAccountStore({
   database,
   audit,
@@ -807,13 +814,31 @@ export function createPgAccountStore({
         database.db
           .selectDistinct({ userId: orders.userId })
           .from(orders)
-          .where(and(gte(orders.updatedAt, start), lt(orders.updatedAt, end))),
+          .where(
+            and(
+              // An order changed on day D trades on D, or later when it is an AMO placed after
+              // the close; the bound lets Postgres prune every older (and far later) partition.
+              gte(orders.tradeDate, tradeDate),
+              lt(orders.tradeDate, istDateKey(fromIst(year, month, day + AMO_TRADE_DATE_DAYS, 0))),
+              gte(orders.updatedAt, start),
+              lt(orders.updatedAt, end),
+            ),
+          ),
         database.db
           .selectDistinct({ userId: ledgerEntries.userId })
           .from(ledgerEntries)
           .where(and(gte(ledgerEntries.createdAt, start), lt(ledgerEntries.createdAt, end))),
       ]);
       return [...new Set([...fromOrders, ...fromLedger].map((row) => row.userId))].sort();
+    },
+
+    async accountsWithHoldings() {
+      // A holdings row always has qty > 0 (holdings_qty_check): a sold-out holding is deleted.
+      const rows = await database.db
+        .selectDistinct({ userId: holdings.userId })
+        .from(holdings)
+        .orderBy(holdings.userId);
+      return rows.map((row) => row.userId);
     },
 
     reset: () =>

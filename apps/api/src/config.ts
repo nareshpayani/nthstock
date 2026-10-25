@@ -37,6 +37,7 @@ const EnvSchema = z.object({
     ),
   PG_POOL_MAX: z.coerce.number().int().min(1).max(100).default(10),
   DB_DRIVER: z.enum(['memory', 'postgres']).default('memory'),
+  JOBS_MODE: z.enum(['bullmq', 'inline', 'off']).default('inline'),
   QUOTE_SHARDS: z.coerce.number().int().min(1).max(64).optional(),
   PII_ENC_KEYS: z.string().optional(),
   PII_HMAC_KEY: z.string().optional(),
@@ -44,6 +45,14 @@ const EnvSchema = z.object({
 
 /** Where repos keep their data (ADR 0007): in process, or in Postgres at DATABASE_URL. */
 export type DbDriver = 'memory' | 'postgres';
+
+/** Who runs the scheduled jobs (spec backend-core §3, §9). */
+export type JobsMode = 'bullmq' | 'inline' | 'off';
+
+/** Whether the API runs its in-process order sweep: only under `inline`; `bullmq` has the worker. */
+export function runsOrderSweep(mode: JobsMode): boolean {
+  return mode === 'inline';
+}
 
 export type ApiConfig = {
   /** `NODE_ENV=production`: random OTPs, no dev OTP or dev CAPTCHA. */
@@ -68,6 +77,12 @@ export type ApiConfig = {
    * which needs DATABASE_URL and REDIS_URL.
    */
   dbDriver: DbDriver;
+  /**
+   * `JOBS_MODE` (T-207): `inline` (default) keeps the in-process order sweep, which tests drive
+   * with a manual clock and the `/v1/__test` clock routes; `bullmq` leaves the session events to
+   * the job worker (`npm run worker`), and needs DB_DRIVER=postgres; `off` runs neither.
+   */
+  jobsMode: JobsMode;
   /**
    * `QUOTE_SHARDS` (NSTOCK-0354): follow this many apps/quotes shards on Redis instead of ticking
    * in process, and serve `GET /v1/market/quotes` from their snapshots. Needs REDIS_URL. Unset:
@@ -145,6 +160,10 @@ export function loadConfig(env: Readonly<Record<string, string | undefined>>): A
     // that apps/api holds no state of its own (T-193).
     throw new Error('Invalid apps/api environment: DB_DRIVER=postgres needs REDIS_URL');
   }
+  if (parsed.data.JOBS_MODE === 'bullmq' && parsed.data.DB_DRIVER !== 'postgres') {
+    // The worker is another process: it shares the accounts only through Postgres.
+    throw new Error('Invalid apps/api environment: JOBS_MODE=bullmq needs DB_DRIVER=postgres');
+  }
   if (parsed.data.QUOTE_SHARDS !== undefined && !parsed.data.REDIS_URL) {
     throw new Error('Invalid apps/api environment: QUOTE_SHARDS needs REDIS_URL');
   }
@@ -177,6 +196,7 @@ export function loadConfig(env: Readonly<Record<string, string | undefined>>): A
     databaseUrl: parsed.data.DATABASE_URL,
     pgPoolMax: parsed.data.PG_POOL_MAX,
     dbDriver: parsed.data.DB_DRIVER,
+    jobsMode: parsed.data.JOBS_MODE,
     quoteShards: parsed.data.QUOTE_SHARDS ?? null,
     testControls: parsed.data.ENABLE_TEST_CONTROLS,
     demoSeed: parsed.data.DEMO_SEED,
