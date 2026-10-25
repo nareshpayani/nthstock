@@ -28,7 +28,11 @@ export function useNotificationUpdates(onNotification: (message: WsNotification)
   }, [onNotification]);
 
   useEffect(() => {
-    if (status !== 'authenticated' || !source.onNotification) return undefined;
+    if (status !== 'authenticated') {
+      seen.current.clear();
+      return undefined;
+    }
+    if (!source.onNotification) return undefined;
     source.connect();
     const stopNotifications = source.onNotification((message) => {
       const { notification } = message;
