@@ -41,16 +41,16 @@ export type TestPostgres = {
   truncate(): Promise<void>;
 };
 
-export const POSTGRES_TEST_IMAGE = 'timescale/timescaledb:2.17.2-pg16';
+const POSTGRES_TEST_IMAGE = 'timescale/timescaledb:2.17.2-pg16';
 
 /** The non-secret local passwords from infra/postgres/init.sql. */
-export const ROLE_PASSWORDS = {
+const ROLE_PASSWORDS = {
   nthstock_owner: 'nthstock_owner_dev',
   nthstock_app: 'nthstock_app_dev',
   nthstock_purge: 'nthstock_purge_dev',
 } as const;
 
-export const INIT_SQL_PATH = fileURLToPath(
+const INIT_SQL_PATH = fileURLToPath(
   new URL('../../../../infra/postgres/init.sql', import.meta.url),
 );
 
@@ -69,7 +69,7 @@ export function describeWithPostgres(name: string, body: () => void) {
 }
 
 /** `url` with another user, password and database. */
-export function withCredentials(
+function withCredentials(
   url: string,
   change: { user?: string; password?: string; database?: string },
 ): string {

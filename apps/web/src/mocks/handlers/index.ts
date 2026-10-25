@@ -65,36 +65,14 @@ export function createMockHandlers({
 
 type RequestHandlers = (HttpHandler | ReturnType<typeof quoteStreamHandler>)[];
 
-/** Every MSW handler the app uses, REST and WebSocket, over one adapter. */
-export function createHandlers(options: MockHandlersOptions): RequestHandlers {
-  return createMockHandlers(options).handlers;
-}
-
-export { marketHandlers, MOCK_VERSION } from './market';
-export { authHandlers, createAuthMock, MSW_SESSION_COOKIE, type AuthMockOptions } from './auth';
-export {
-  createWatchlistMock,
-  WATCHLIST_MOCK_STORAGE_KEY,
-  type WatchlistMockOptions,
-} from './watchlists';
-export {
-  QUOTE_FLUSH_MS,
-  quoteStreamHandler,
-  type OrderUpdateSource,
-  type QuoteStreamOptions,
-} from './quoteStream';
-export {
-  ALERTS_MOCK_STORAGE_KEY,
-  createAlertsMock,
-  type AlertsMock,
-  type AlertsMockOptions,
-} from './alerts';
+export { type AuthMockOptions } from './auth';
+export { WATCHLIST_MOCK_STORAGE_KEY, type WatchlistMockOptions } from './watchlists';
+export { type OrderUpdateSource, type QuoteStreamOptions } from './quoteStream';
+export { type AlertsMock, type AlertsMockOptions } from './alerts';
 export {
   ORDER_SWEEP_MS,
   ORDERS_MOCK_STORAGE_KEY,
-  ORDERS_SAVE_THROTTLE_MS,
   READABLE_SAVED_VERSIONS,
-  createOrdersMock,
   type OrdersMock,
   type OrdersMockOptions,
 } from './orders';

@@ -7,7 +7,7 @@ export interface PinHasher {
 }
 
 /** Argon2id with the OWASP minimum (19 MiB, 2 passes, 1 lane); parameters live in the hash. */
-export const ARGON2_OPTIONS = {
+const ARGON2_OPTIONS = {
   // `Algorithm` is an ambient const enum, which isolated modules cannot read; 2 is Argon2id.
   algorithm: 2 as Algorithm.Argon2id,
   memoryCost: 19_456,

@@ -108,7 +108,7 @@ export type RefreshTokenRecord = {
 export type RefreshTokenUse = RefreshTokenRecord & { sessionRevokedAt: Date | null };
 
 /** An expired session is deleted this many days after `expiresAt` (spec backend-core §9). */
-export const EXPIRED_SESSION_RETENTION_DAYS = 30;
+const EXPIRED_SESSION_RETENTION_DAYS = 30;
 const EXPIRED_SESSION_RETENTION_MS = EXPIRED_SESSION_RETENTION_DAYS * 24 * 60 * 60 * 1000;
 
 /** What `deleteExpired` removed, as counts (the cleanup job logs them). */
@@ -438,7 +438,7 @@ export function createMemoryOtpStore(): OtpStore {
   };
 }
 
-export function createMemoryDeviceStore(): DeviceStore {
+function createMemoryDeviceStore(): DeviceStore {
   const devices = new Map<string, DeviceRecord>();
   const deviceTokens = new Map<string, DeviceTokenRecord>();
   const pins = new Map<string, PinRecord>();
@@ -559,7 +559,7 @@ export function createMemoryDeviceStore(): DeviceStore {
   };
 }
 
-export function createMemorySessionStore(): SessionStore {
+function createMemorySessionStore(): SessionStore {
   const sessions = new Map<string, SessionRecord>();
   const refreshTokens = new Map<string, RefreshTokenRecord>();
   return {

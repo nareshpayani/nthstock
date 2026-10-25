@@ -79,7 +79,7 @@ export type AppOptions = {
 export const DEFAULT_RATE_LIMIT_PER_MINUTE = 600;
 /** How long boot waits for the quote snapshots before it starts on the opening prices. */
 const QUOTE_SNAPSHOT_WAIT_MS = 5_000;
-export const DEFAULT_ORDER_SWEEP_MS = 15_000;
+const DEFAULT_ORDER_SWEEP_MS = 15_000;
 
 export type App = FastifyInstance & { deps: AppDeps };
 

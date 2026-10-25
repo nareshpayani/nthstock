@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 
-export const APP_NAME = 'nthstock';
+const APP_NAME = 'nthstock';
 
 /** "Infosys Ltd (INFY)" → "Infosys Ltd (INFY) · nthstock". */
 export const documentTitle = (page: string) => `${page} · ${APP_NAME}`;

@@ -20,7 +20,7 @@ export type OrderUpdateSource = {
 };
 
 /** A source that never delivers: tests and Storybook without a socket. */
-export const detachedOrderUpdates: OrderUpdateSource = {
+const detachedOrderUpdates: OrderUpdateSource = {
   onOrderUpdate: () => () => undefined,
   connect: () => undefined,
 };

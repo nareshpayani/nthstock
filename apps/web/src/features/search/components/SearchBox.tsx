@@ -20,7 +20,7 @@ import { strings } from '../strings';
 import { SearchOption } from './SearchOption';
 
 /** Typing pauses this long before a search request goes out (T-103). */
-export const SEARCH_DEBOUNCE_MS = 150;
+const SEARCH_DEBOUNCE_MS = 150;
 
 /** Adds a result to the open watchlist (T-121); the watchlist feature provides it. */
 export type SearchAddTarget = {

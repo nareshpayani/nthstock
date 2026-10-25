@@ -29,7 +29,7 @@ export type SessionServiceDeps = {
 };
 
 /** `sessions.last_seen_at` is written at most once per this long per session (T-194). */
-export const LAST_SEEN_WRITE_INTERVAL_MS = 60_000;
+const LAST_SEEN_WRITE_INTERVAL_MS = 60_000;
 
 /** A freshly issued (or rotated) session with everything the route needs to answer. */
 export type IssuedSession = {

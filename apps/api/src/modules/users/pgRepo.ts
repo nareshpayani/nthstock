@@ -16,7 +16,7 @@ import {
 type UserRow = typeof users.$inferSelect;
 
 /** The AES-GCM context (additional data) of each encrypted column. */
-export const USER_PII_CONTEXT = {
+const USER_PII_CONTEXT = {
   mobile: 'users.mobile_enc',
   name: 'users.name_enc',
   email: 'users.email_enc',

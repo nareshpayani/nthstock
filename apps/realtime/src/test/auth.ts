@@ -9,7 +9,7 @@ import { createJwtCookieAuthenticator } from '../connections/auth.js';
 import { connectTestClient, type TestClient } from './wsTestClient.js';
 
 /** A key for tests only; apps/api signs with JWT_SECRET. */
-export const TEST_SECRET = new TextEncoder().encode('realtime-tests-only-key-0123456789');
+const TEST_SECRET = new TextEncoder().encode('realtime-tests-only-key-0123456789');
 /** The instant test tokens are issued at, epoch ms. */
 export const TEST_NOW = Date.parse('2026-09-25T04:00:00.000Z');
 

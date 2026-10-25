@@ -2,7 +2,7 @@ import { useToast } from '@nthstock/ui';
 import { useEffect } from 'react';
 import { useTradingStore } from '@/shared/lib/tradingStoreContext';
 
-export const INTENT_TIMEOUT_TOAST = {
+const INTENT_TIMEOUT_TOAST = {
   title: 'Still waiting for a reply',
   description: 'Your last action has not been confirmed. Your orders and positions were refreshed.',
 } as const;

@@ -169,7 +169,7 @@ export function createPgAlertStore(pool: Pick<Pool, 'connect' | 'query'>): Alert
 export type AlertPublisher = { publish(channel: string, message: string): Promise<unknown> };
 
 /** How often the matcher reloads the active alerts, like the order reconcile (spec §5.3). */
-export const ALERT_RELOAD_MS = 60_000;
+const ALERT_RELOAD_MS = 60_000;
 
 export type AlertDesk = {
   /** The `onAlerts` callback for `startMatcher`. */

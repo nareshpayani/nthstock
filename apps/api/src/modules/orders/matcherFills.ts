@@ -34,19 +34,19 @@ type StreamRecord = [id: string, fields: string[]];
 const RETRY_MS = 500;
 const MAX_RETRY_MS = 10_000;
 /** A fill a process took and did not ack in this long (it crashed) is taken by another. */
-export const FILL_CLAIM_IDLE_MS = 30_000;
+const FILL_CLAIM_IDLE_MS = 30_000;
 /**
  * A request delivered more than this many times without committing goes to the dead-letter
  * stream (NSTOCK-0388): with a 30 s claim, about two and a half minutes of retries.
  */
-export const FILL_MAX_DELIVERIES = 5;
+const FILL_MAX_DELIVERIES = 5;
 /** `XAUTOCLAIM` pages one claim round follows at most, so new fills are not starved. */
 const MAX_CLAIM_PAGES = 50;
 const CLAIM_COUNT = 100;
 /** How long `close()` waits for the fills in flight before it disconnects anyway. */
 const CLOSE_GRACE_MS = 5_000;
 /** The fill client's Redis `error` events are logged at most once in this long. */
-export const FILL_CLIENT_LOG_EVERY_MS = 60_000;
+const FILL_CLIENT_LOG_EVERY_MS = 60_000;
 
 /**
  * Commits the matcher's fill requests (ADR 0013, NSTOCK-0367). Every apps/api process reads the

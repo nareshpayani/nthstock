@@ -43,7 +43,7 @@ import type { AuthMock } from './auth';
 export const ORDERS_MOCK_STORAGE_KEY = 'nthstock.msw.orders';
 
 /** At most one save in this window for changes that are not a status change (SPEC-TFC-1 §10.3). */
-export const ORDERS_SAVE_THROTTLE_MS = 2_000;
+const ORDERS_SAVE_THROTTLE_MS = 2_000;
 
 /** How often the browser syncs every account, so 9:15 AMO release and end of day push updates. */
 export const ORDER_SWEEP_MS = 15_000;

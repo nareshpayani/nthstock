@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 /** The Redis `npm run infra:up` starts (infra/docker-compose.yml). */
-export const DEFAULT_REDIS_URL = 'redis://127.0.0.1:6379';
+const DEFAULT_REDIS_URL = 'redis://127.0.0.1:6379';
 
 const Flag = z
   .enum(['true', 'false', '1', '0'])

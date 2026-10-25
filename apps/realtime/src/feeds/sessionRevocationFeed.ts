@@ -9,7 +9,7 @@ import { Redis } from 'ioredis';
 import { silentLogger, type Logger } from '../logger.js';
 
 /** Longest an upgrade waits for the revocation check before going ahead. */
-export const REVOCATION_CHECK_TIMEOUT_MS = 250;
+const REVOCATION_CHECK_TIMEOUT_MS = 250;
 
 export type RevokedSessionListener = (event: { sessionId: string; userId: string }) => void;
 

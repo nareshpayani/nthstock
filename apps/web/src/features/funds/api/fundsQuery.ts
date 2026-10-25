@@ -4,7 +4,7 @@ import { infiniteQueryOptions, queryOptions } from '@tanstack/react-query';
 import { fundsKeys } from '@/shared/lib/queryKeys';
 
 /** Ledger entries per page (T-159). */
-export const LEDGER_PAGE_SIZE = 50;
+const LEDGER_PAGE_SIZE = 50;
 
 /** `GET /v1/funds`: balance, blocked and available paper cash in paise. */
 export function fundsSummaryQuery(api: ApiClient) {

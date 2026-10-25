@@ -4,7 +4,7 @@ import { mobileHash, type PiiCrypto } from '../../db/crypto.js';
 import type { OtpChallenge, OtpStore, TotpChallenge } from './repo.js';
 
 /** Where apps/api keeps its keys in Redis unless told otherwise (tests use their own). */
-export const DEFAULT_REDIS_KEY_PREFIX = 'nthstock:';
+const DEFAULT_REDIS_KEY_PREFIX = 'nthstock:';
 
 export type RedisOtpStoreOptions = {
   redis: Redis;

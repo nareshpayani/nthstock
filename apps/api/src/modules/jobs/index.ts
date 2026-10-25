@@ -2,19 +2,14 @@
 // wiring import it only through this file; tests may import internals.
 export {
   JOB_NAMES,
-  JOB_SCHEDULES,
-  JOB_TIME_ZONE,
   type Job,
   type JobName,
   type JobResult,
   type JobSchedule,
 } from './definitions.js';
 export { createJobs, type JobsDeps } from './jobs.js';
-export { PricesNotLive } from './sessionJobs.js';
-export { runJob, safeErrorMessage, type JobLog, type JobOutcome } from './runner.js';
+export { safeErrorMessage, type JobLog, type JobOutcome } from './runner.js';
 export {
-  JOB_ATTEMPTS,
-  JOB_BACKOFF_MS,
   JOBS_QUEUE,
   startJobScheduler,
   type JobScheduler,

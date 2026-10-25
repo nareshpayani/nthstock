@@ -3,4 +3,4 @@
 export { createPgAlertsRepo } from './pgRepo.js';
 export { createMemoryAlertsRepo, type AlertsRepo } from './repo.js';
 export { alertRoutes } from './routes.js';
-export { alertNotification, createAlertService, type AlertService } from './service.js';
+export { createAlertService, type AlertService } from './service.js';
