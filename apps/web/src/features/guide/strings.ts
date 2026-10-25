@@ -1479,7 +1479,7 @@ export const strings = {
         realtime: ['apps/realtime', 'WebSocket fan-out'],
         api: ['apps/api', 'Fastify modular monolith'],
         postgres: ['PostgreSQL 16', '+ TimescaleDB, the record'],
-        workers: ['Job worker, candle writer', 'BullMQ · 1-minute bars'],
+        workers: ['Workers', 'jobs · candle writer'],
         quotes: ['apps/quotes', 'ticks, 1 writer per shard'],
         redis: ['Redis 7', 'streams, pub/sub, leases'],
         matcher: ['apps/matcher', 'order books per shard'],

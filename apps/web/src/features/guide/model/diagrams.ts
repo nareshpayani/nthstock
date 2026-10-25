@@ -120,8 +120,8 @@ export const FLOW_DIAGRAMS = {
       },
       reconcile: {
         points: [
-          [540, 312],
           [450, 312],
+          [540, 312],
         ],
         label: { at: [486, 304] },
       },
