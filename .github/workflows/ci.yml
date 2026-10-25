@@ -283,6 +283,40 @@ jobs:
           name: playwright-report-api
           path: apps/web/playwright-report
           retention-days: 7
+      # T-243: the performance smoke on 10,000 seeded users (docs/runbooks/perf-smoke.md). The
+      # image preloads only timescaledb: add pg_stat_statements and restart the service. If that
+      # fails the smoke still runs, on client-side query timings, and its report says so.
+      - name: Preload pg_stat_statements
+        continue-on-error: true
+        run: |
+          # A list of quoted names: one quoted 'a,b' would be read as a single library name.
+          psql -v ON_ERROR_STOP=1 -c "ALTER SYSTEM SET shared_preload_libraries = 'timescaledb', 'pg_stat_statements'"
+          docker restart ${{ job.services.postgres.id }}
+          for attempt in $(seq 1 30); do
+            pg_isready -h 127.0.0.1 -U postgres -d nthstock && break
+            sleep 2
+          done
+          psql -v ON_ERROR_STOP=1 -c 'CREATE EXTENSION IF NOT EXISTS pg_stat_statements'
+        env:
+          PGHOST: 127.0.0.1
+          PGUSER: postgres
+          PGPASSWORD: postgres_ci
+          PGDATABASE: nthstock
+      # Order ack p95 < 300 ms, PIN login p95 < 200 ms, slowest query p95 < 50 ms. Not a CI gate
+      # this phase (spec backend-core §14): a failed budget marks this step, not the job.
+      - name: Performance smoke
+        continue-on-error: true
+        run: npm run perf:smoke -w @nthstock/api
+        env:
+          DATABASE_URL: postgres://nthstock_app:nthstock_app_dev@127.0.0.1:5432/nthstock
+          PERF_STATS_URL: postgres://postgres:postgres_ci@127.0.0.1:5432/nthstock
+      - if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: perf-report
+          path: apps/api/perf-report.md
+          if-no-files-found: ignore
+          retention-days: 30
 
   audit:
     name: Dependency audit

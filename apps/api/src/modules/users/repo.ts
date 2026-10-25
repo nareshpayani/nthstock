@@ -60,6 +60,11 @@ export interface UsersRepo {
    */
   ensureSeeded(user: UserRecord): Promise<boolean>;
   /**
+   * Records `consent` for the user at `grantedAt` unless they already hold it (same purpose and
+   * policy version, not withdrawn); resolves true when it did. For seed users (NSTOCK-0239).
+   */
+  ensureConsent(userId: string, consent: ConsentGrant, grantedAt: Date): Promise<boolean>;
+  /**
    * Tests only: drops every change and restores the seeded demo user. The Postgres repo refuses
    * (tests truncate its tables as the owner).
    */
@@ -171,6 +176,21 @@ export function createMemoryUsersRepo({
         return Promise.resolve(false);
       }
       byId.set(user.id, copy(user));
+      return Promise.resolve(true);
+    },
+    ensureConsent: (userId, consent, grantedAt) => {
+      const held = consents.get(userId) ?? [];
+      const has = held.some(
+        (c) =>
+          c.purpose === consent.purpose &&
+          c.policyVersion === consent.policyVersion &&
+          c.withdrawnAt === null,
+      );
+      if (has || !byId.has(userId)) return Promise.resolve(false);
+      consents.set(userId, [
+        ...held,
+        { ...consent, grantedAt: new Date(grantedAt), withdrawnAt: null },
+      ]);
       return Promise.resolve(true);
     },
     reset: () => {

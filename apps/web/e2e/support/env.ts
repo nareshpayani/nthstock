@@ -6,10 +6,14 @@ export type E2eMode = 'msw' | 'api';
 
 export const E2E_MODE: E2eMode = process.env['E2E_MODE'] === 'api' ? 'api' : 'msw';
 
-/** Ports clear of `npm run dev` / `npm run dev:api` (5173, 4000, 8081), so both can run at once. */
-export const E2E_PORTS = { web: 4173, api: 4100, realtime: 8181 } as const;
+/**
+ * Ports clear of `npm run dev` / `npm run dev:api` (5173, 4000, 8081), so both can run at once.
+ * `apiSupervisor` is the api-mode control port that restarts apps/api (T-241).
+ */
+export const E2E_PORTS = { web: 4173, api: 4100, apiSupervisor: 4101, realtime: 8181 } as const;
 
 export const API_ORIGIN = `http://127.0.0.1:${String(E2E_PORTS.api)}`;
+export const API_SUPERVISOR_ORIGIN = `http://127.0.0.1:${String(E2E_PORTS.apiSupervisor)}`;
 export const REALTIME_ORIGIN = `http://127.0.0.1:${String(E2E_PORTS.realtime)}`;
 
 /**
