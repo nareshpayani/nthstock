@@ -89,7 +89,8 @@ describeWithRedis('tick streams on real Redis (integration)', () => {
     const length = await redis.xlen(stream);
     expect(length).toBeGreaterThanOrEqual(2_400);
     expect(length).toBeLessThan(2_600);
-  });
+    // 2,600 MULTI blocks take about 0.3 s locally but over 5 s on a CI runner under coverage.
+  }, 30_000);
 
   it('lets a consumer that missed entries catch up from the snapshot', async () => {
     const { stream, snapshot, sink } = keys();
