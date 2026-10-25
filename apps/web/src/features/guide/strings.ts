@@ -550,6 +550,16 @@ export const strings = {
             'The web app navigates to /login?deleted=… before it clears the session, forgets the trusted browser and empties the query cache, so nothing from the account stays on the device.',
           ],
         },
+        { kind: 'heading', text: 'OpenAPI 3.1, generated from the contracts' },
+        {
+          kind: 'list',
+          items: [
+            'packages/contracts builds an OpenAPI 3.1 document from the same route map that types the client, validates the server and drives the mocks, using Zod 4’s own z.toJSONSchema. Nothing is written by hand and no extra library is needed.',
+            'Every route appears once with its method, path, path and query parameters, request body, response schema, its auth (cookie or Bearer JWT) and the ApiError envelope for every error. Response types are shared component schemas, so Order is described once.',
+            'apps/api serves it at GET /v1/docs/openapi.json, public and cacheable for an hour with an ETag. npm run openapi writes the same text to docs/api/openapi.json, ready for Postman, Swagger Editor or a client generator.',
+            'CI regenerates the file on every pull request, uploads it as a build artifact and fails when the committed copy is stale, so the published API description can never drift from the code. A new route joins automatically.',
+          ],
+        },
         { kind: 'heading', text: 'Rules every layer follows' },
         {
           kind: 'list',
@@ -575,6 +585,8 @@ export const strings = {
             },
             { label: 'Trading store', href: repoLink('packages/apiClient/src/tradingStore.ts') },
             { label: 'Binary quote frame', href: repoLink('packages/contracts/src/quoteFrame.ts') },
+            { label: 'OpenAPI document', href: repoLink('docs/api/openapi.json') },
+            { label: 'OpenAPI generator', href: repoLink('packages/contracts/src/openapi.ts') },
           ],
         },
       ],
@@ -960,7 +972,7 @@ export const strings = {
         {
           kind: 'code',
           label: 'nthstock/',
-          text: 'CLAUDE.md               project rules every agent reads first\nWRITEUP.md              design rationale for the assignment\napps/\n  web/                  React SPA\n    e2e/                Playwright specs: journeys, phone, perf, a11y\n    scripts/            build budgets, no raw colours, import rules\n    src/\n      main.tsx          boot: config, mocks, providers, router\n      app/              app-wide wiring: layouts, live quotes, router\n      routes/           file routes; thin, they load a feature page\n      features/<name>/  dashboard, stockDetail, orderTicket, chartTrading,\n                        scalper, orders, positions, holdings, funds,\n                        watchlist, search, guide, …\n      shared/           cross-feature components and hooks\n      mocks/            MSW handlers and the in-browser market\n  api/                  Fastify modular monolith\n    drizzle/            SQL migrations\n    src/\n      app.ts server.ts config.ts deps.ts\n      db/               Postgres client, migrator, column crypto\n      http/             errors, cookies, CSRF, security headers\n      modules/<name>/   auth, users, watchlists, orders, portfolio,\n                        funds, market, audit, health, demo\n      ticks/            tick pump and Redis publisher\n  realtime/             WebSocket server\n    src/connections/    auth, hub, subscription registry\n    src/feeds/          Redis quote, order and revocation feeds\n  quotes/               tick writer, one per shard behind a Redis lease\npackages/\n  ui/                   design system components and Storybook\n  tokens/               design tokens → CSS variables and Tailwind\n  contracts/            Zod schemas for every REST and WS message\n  marketData/           the mock market\n  paperEngine/          orders, fills, ledger, P&L, trailing stops\n  apiClient/            REST and WS clients, quote and trading stores\n  config/               shared ESLint, TypeScript, Vitest presets\n  utils/                INR formatting, market hours, IST dates, shards\ninfra/                  Docker Compose, PgBouncer, k6\ntools/                  issue keys, release checks, load test\ndocs/                   product, architecture, ADRs, specs, runbooks\n.claude/                agents, rules, skills, hooks\n.github/                workflows, PR template, CODEOWNERS',
+          text: 'CLAUDE.md               project rules every agent reads first\nWRITEUP.md              design rationale for the assignment\napps/\n  web/                  React SPA\n    e2e/                Playwright specs: journeys, phone, perf, a11y\n    scripts/            build budgets, no raw colours, import rules\n    src/\n      main.tsx          boot: config, mocks, providers, router\n      app/              app-wide wiring: layouts, live quotes, router\n      routes/           file routes; thin, they load a feature page\n      features/<name>/  dashboard, stockDetail, orderTicket, chartTrading,\n                        scalper, orders, positions, holdings, funds,\n                        watchlist, search, guide, …\n      shared/           cross-feature components and hooks\n      mocks/            MSW handlers and the in-browser market\n  api/                  Fastify modular monolith\n    drizzle/            SQL migrations\n    src/\n      app.ts server.ts config.ts deps.ts\n      db/               Postgres client, migrator, column crypto\n      http/             errors, cookies, CSRF, security headers\n      modules/<name>/   auth, users, watchlists, orders, portfolio,\n                        funds, market, audit, health, docs, demo\n      ticks/            tick pump and Redis publisher\n  realtime/             WebSocket server\n    src/connections/    auth, hub, subscription registry\n    src/feeds/          Redis quote, order and revocation feeds\n  quotes/               tick writer, one per shard behind a Redis lease\npackages/\n  ui/                   design system components and Storybook\n  tokens/               design tokens → CSS variables and Tailwind\n  contracts/            Zod schemas for every REST and WS message\n  marketData/           the mock market\n  paperEngine/          orders, fills, ledger, P&L, trailing stops\n  apiClient/            REST and WS clients, quote and trading stores\n  config/               shared ESLint, TypeScript, Vitest presets\n  utils/                INR formatting, market hours, IST dates, shards\ninfra/                  Docker Compose, PgBouncer, k6\ntools/                  issue keys, release checks, load test\ndocs/                   product, architecture, ADRs, specs, runbooks,\n                        api/openapi.json (generated)\n.claude/                agents, rules, skills, hooks\n.github/                workflows, PR template, CODEOWNERS',
         },
         {
           kind: 'list',

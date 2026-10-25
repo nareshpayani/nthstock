@@ -63,6 +63,22 @@ jobs:
         env:
           POSTGRES_TEST_URL: postgres://postgres:postgres_ci@127.0.0.1:5432/postgres
       - run: npm run build
+      # T-237: the OpenAPI document is generated from packages/contracts. A contract change
+      # without `npm run openapi` and the regenerated docs/api/openapi.json committed fails here.
+      - name: OpenAPI document is up to date
+        run: |
+          npm run openapi -w @nthstock/api
+          if ! git diff --exit-code --stat -- docs/api/openapi.json; then
+            echo "::error file=docs/api/openapi.json::Stale OpenAPI document. Run 'npm run openapi' and commit docs/api/openapi.json."
+            exit 1
+          fi
+      - name: Upload the OpenAPI document
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: openapi
+          path: docs/api/openapi.json
+          if-no-files-found: error
 
   storybook:
     name: Storybook build and a11y
