@@ -2,9 +2,6 @@ import type { ApiClient } from '@nthstock/apiClient';
 import { queryOptions } from '@tanstack/react-query';
 import { alertsKeys, notificationsKeys } from '@/shared/lib/queryKeys';
 
-/** How often the bell refetches without a socket push (api mode reads notifications over REST). */
-export const NOTIFICATIONS_POLL_MS = 30_000;
-
 /** `GET /v1/alerts`: active alerts first, then recently ended ones. */
 export function priceAlertsQuery(api: ApiClient) {
   return queryOptions({
@@ -14,12 +11,15 @@ export function priceAlertsQuery(api: ApiClient) {
   });
 }
 
-/** `GET /v1/notifications`: newest first, with the unread count for the bell. */
+/**
+ * `GET /v1/notifications`: newest first, with the unread count for the bell. Not polled
+ * (NSTOCK-0384): the socket pushes each new notification into this cache in both modes, and the
+ * list is read again only after the socket reconnects (`useNotificationUpdates`).
+ */
 export function notificationsQuery(api: ApiClient) {
   return queryOptions({
     queryKey: notificationsKeys.list(),
     queryFn: ({ signal }) => api.request('notificationsList', { signal }),
     staleTime: 10_000,
-    refetchInterval: NOTIFICATIONS_POLL_MS,
   });
 }
