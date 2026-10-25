@@ -71,3 +71,10 @@ export {
   type TickStreamFollowerOptions,
   type TickStreamRecord,
 } from './tickStreamFollower.js';
+export {
+  startLease,
+  type Lease,
+  type LeaseClient,
+  type LeaseLog,
+  type LeaseOptions,
+} from './shardLease.js';
