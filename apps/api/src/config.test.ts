@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { loadConfig } from './config.js';
+import { loadCandleWriterConfig, loadConfig } from './config.js';
 import { devPiiKeys } from './db/crypto.js';
 
 // Test-only PII keys: base64 of 32 fixed bytes each (not secrets).
@@ -149,5 +149,33 @@ describe('loadConfig', () => {
     expect(() => loadConfig({ REDIS_URL: 'http://x' })).toThrow(/REDIS_URL/);
     expect(() => loadConfig({ NODE_ENV: 'prod' })).toThrow(/NODE_ENV/);
     expect(() => loadConfig({ NODE_ENV: 'production' })).toThrow(/JWT_SECRET must be set/);
+  });
+});
+
+describe('loadCandleWriterConfig', () => {
+  const urls = {
+    DATABASE_URL: 'postgres://nthstock_app:x@127.0.0.1:5432/nthstock',
+    REDIS_URL: 'redis://127.0.0.1:6379',
+  };
+
+  it('reads the URLs and SHARDS, default 1', () => {
+    expect(loadCandleWriterConfig(urls)).toEqual({
+      databaseUrl: urls.DATABASE_URL,
+      redisUrl: urls.REDIS_URL,
+      shards: 1,
+    });
+    expect(loadCandleWriterConfig({ ...urls, SHARDS: '4' }).shards).toBe(4);
+  });
+
+  it('needs both URLs and a valid SHARDS', () => {
+    expect(() => loadCandleWriterConfig({ REDIS_URL: urls.REDIS_URL })).toThrow(
+      /DATABASE_URL must be set/,
+    );
+    expect(() => loadCandleWriterConfig({ DATABASE_URL: urls.DATABASE_URL })).toThrow(
+      /REDIS_URL must be set/,
+    );
+    expect(() => loadCandleWriterConfig({ ...urls, SHARDS: '0' })).toThrow(
+      /Invalid candle writer environment/,
+    );
   });
 });

@@ -403,6 +403,16 @@ export const strings = {
             'The order update goes out over Redis and the WebSocket, and every screen updates from it.',
           ],
         },
+        { kind: 'heading', text: 'Matching off the API process (being built)' },
+        {
+          kind: 'steps',
+          items: [
+            'apps/matcher runs one process per shard of instruments. A Redis lease picks the one that acts; the others follow the same streams, so a standby is current the moment it takes over.',
+            'After each order commit, apps/api appends an ADD, MODIFY or CANCEL command to the shard’s command stream, stamped with the account version. A late or replayed command never undoes a newer one.',
+            'Each instrument has an order book: limit orders and trailing stops sit in price heaps, so a tick reads only what it fills, triggers or moves, not every resting order. A property test checks it against a full walk.',
+            'Still to come: the reconcile loop from Postgres, fills committed through the account store, server-side trailing stops, a switch to turn it on, and a benchmark.',
+          ],
+        },
         {
           kind: 'links',
           label: 'Read the code',
@@ -607,6 +617,21 @@ export const strings = {
             'The Demo simulator can nudge or gap one instrument’s real feed, so every screen sees the same move.',
           ],
         },
+        { kind: 'heading', text: 'Stored candles on TimescaleDB' },
+        {
+          kind: 'text',
+          text: 'On the full stack, chart bars are stored, not made up on request: the 1-minute bar a user watched form is the bar the chart shows after a reload, and a year of daily bars is one indexed read.',
+        },
+        {
+          kind: 'list',
+          items: [
+            'candles_1m is a TimescaleDB hypertable (one row per instrument and minute, prices in paise) in 1-day chunks, compressed by instrument after 7 days.',
+            'Continuous aggregates build 5, 15, 30 and 60-minute and daily bars from it with time_bucket counted from 09:15 IST, so a 15-minute bar opens at 09:15, 09:30 and so on and a daily bar is one NSE session. Real-time aggregation adds the minutes not yet materialised, so a read always includes every closed minute.',
+            'The candle writer reads the tick streams in its own Redis consumer group, keeps the forming bar of every instrument in memory, and writes each closed minute in one multi-row upsert. It acknowledges a minute only after it is stored, so a restart re-reads from there: no minute is lost and none is counted twice.',
+            'A seed writes 2 years of daily history and 30 days of 1-minute bars from the same deterministic generator, so charts have depth on day one and every machine stores the same rows.',
+            'GET /v1/market/instruments/:symbol/candles keeps its contract: 1-minute bars come from the hypertable, 5 minutes to 1 hour and daily from the aggregates, weekly from the daily bars, and the forming bar is finished with the live price from the quote service.',
+          ],
+        },
         {
           kind: 'links',
           label: 'Read the code',
@@ -618,6 +643,11 @@ export const strings = {
               href: repoLink('packages/marketData/src/sectors.ts'),
             },
             { label: 'Symbol master', href: repoLink('packages/marketData/src/symbolMaster.ts') },
+            {
+              label: 'Candle store migration',
+              href: repoLink('apps/api/drizzle/0014_timescaledb_candles.sql'),
+            },
+            { label: 'Candle store and writer', href: repoLink('apps/api/src/modules/candles') },
             {
               label: 'ADR 0004: mock backend',
               href: repoLink('docs/adr/0004-mock-backend-and-paper-engine.md'),
@@ -659,6 +689,7 @@ export const strings = {
             ['Fastify 5', 'REST API with per-route schemas and rate limits'],
             ['ws', 'The WebSocket server'],
             ['PostgreSQL 16 and Drizzle ORM', 'System of record and migrations'],
+            ['TimescaleDB 2.17', 'Stored candles: a 1-minute hypertable and continuous aggregates'],
             ['Redis 7 and ioredis', 'Pub/sub, OTPs, revocation, rate limits'],
             ['jose', 'Signed 15-minute access tokens'],
             ['Argon2id', 'PIN hashing'],

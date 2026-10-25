@@ -247,11 +247,18 @@ describe('order routes (T-131)', () => {
     const amo = Order.parse((await place({ type: 'LIMIT', price: limit })).json());
     expect(amo.status).toBe('AMO');
     const updates: string[] = [];
-    app.deps.orders.onOrderUpdate((_userId, order) => updates.push(order.status));
+    const seen: string[] = [];
+    app.deps.orders.onOrderUpdate((_userId, order, version, last) => {
+      updates.push(order.status);
+      seen.push(`${version}:${String(last)}`);
+    });
 
     clock.advance((13 * 60 + 16) * 60_000); // Tuesday 9:16 IST
     await app.deps.orders.sweep();
     expect(updates).toEqual(['OPEN', 'EXECUTED']);
+    // Both updates are one commit: one version, and only the final one is `last`.
+    expect(seen[0]?.split(':')[0]).toBe(seen[1]?.split(':')[0]);
+    expect(seen.map((s) => s.split(':')[1])).toEqual(['false', 'true']);
   });
 });
 

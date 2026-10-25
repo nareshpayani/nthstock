@@ -2,15 +2,19 @@
 
 Local infrastructure for development (CLAUDE.md D7). Terraform for AWS arrives in Phase 6.
 
-## Docker Compose: Redis 7 and PostgreSQL 16
+## Docker Compose: Redis 7 and PostgreSQL 16 with TimescaleDB
 
 `npm run infra:up` starts both and waits for their health checks; `npm run infra:down` stops them.
 Both ports are bound to `127.0.0.1` only.
 
 ## PostgreSQL 16
 
-`docker-compose.yml` runs `postgres:16-alpine` on `127.0.0.1:5432` with database `nthstock` in the
-named volume `postgres-data`, so data survives `infra:down`. On the first start of an empty volume,
+`docker-compose.yml` runs `timescale/timescaledb:2.17.2-pg16` (PostgreSQL 16 with the TimescaleDB
+extension, for the stored candles of spec market-data-and-matching §7) on `127.0.0.1:5432` with
+database `nthstock` in the named volume `postgres-data`, so data survives `infra:down`. Migration
+`0014_timescaledb_candles` creates the extension as `nthstock_owner`. A volume made by the old
+`postgres:16-alpine` image does not preload the extension, so `db:migrate` fails on it; recreate it
+once with `docker compose -f infra/docker-compose.yml down -v` (local data only). On the first start of an empty volume,
 [`postgres/init.sql`](./postgres/init.sql) creates three roles (ADR 0007):
 
 | Role | Used for | May |
@@ -107,12 +111,14 @@ Without Docker and without either variable, those suites fail with a message say
 ## Postgres in tests
 
 Postgres integration tests in `apps/api` (`describeWithPostgres`, helper
-`apps/api/src/test/testPostgres.ts`) start `postgres:16-alpine` with Testcontainers, so they need
+`apps/api/src/test/testPostgres.ts`) start `timescale/timescaledb:2.17.2-pg16` with Testcontainers, so they need
 Docker. Each test worker gets its own database (`nthstock_test_api_<n>`) with the roles from
 `postgres/init.sql` and every migration applied; suites connect as `nthstock_app` and the helper
 truncates as `nthstock_owner` between tests.
 
-Locally without Docker, point them at any Postgres 16 **superuser** URL, or skip them explicitly:
+Locally without Docker, point them at any Postgres 16 **superuser** URL whose server has the
+TimescaleDB extension installed (`shared_preload_libraries = 'timescaledb'`), or skip them
+explicitly:
 
 ```bash
 POSTGRES_TEST_URL=postgres://postgres:postgres_dev@127.0.0.1:5432/postgres npm run test

@@ -1,11 +1,12 @@
 import { MockMarketDataAdapter, type MarketDataAdapter } from '@nthstock/marketData';
-import type { Redis } from 'ioredis';
+import { Redis } from 'ioredis';
 import { systemClock, type Clock } from '@nthstock/utils';
 import type { DbDriver } from './config.js';
 import { createDatabase, type Database } from './db/client.js';
 import { createPiiCrypto, resolvePiiKeys, type PiiKeys } from './db/crypto.js';
 import { createMemoryAuditRepo, createPgAuditRepo, type AuditRepo } from './modules/audit/index.js';
 import { createAlertService, type AlertService } from './modules/alerts/index.js';
+import { createPgCandleStore, type CandleStore } from './modules/candles/index.js';
 import {
   createArgon2PinHasher,
   createMemoryAuthRepo,
@@ -28,7 +29,9 @@ import {
   createMemoryAccountStore,
   createPgAccountStore,
   createOrderService,
+  startMatcherCommands,
   type AccountStore,
+  type MatcherCommands,
   type OrderService,
 } from './modules/orders/index.js';
 import { createMemoryUsersRepo, createPgUsersRepo, type UsersRepo } from './modules/users/index.js';
@@ -93,6 +96,12 @@ export type AppDeps = {
    */
   quoteStreams: QuoteStreams | null;
   /**
+   * Stored candles on TimescaleDB (NSTOCK-0375) under `DB_DRIVER=postgres`: the candles route reads
+   * them and falls back to the adapter's generated bars where the store has none. Null on the
+   * memory driver, where the route serves the adapter's bars as before.
+   */
+  candleStore: CandleStore | null;
+  /**
    * Releases what `createDeps` created itself (the orders desk's subscriptions, the adapter's
    * timers, the Postgres pool). Injected parts are left alone.
    */
@@ -111,6 +120,8 @@ export type DepsOverrides = {
    * `market` passed with it must be a `MockMarketDataAdapter` built with `externalTicks`.
    */
   quoteStreams?: QuoteStreamsOptions;
+  /** Use this candle store (tests); null turns stored candles off under `postgres`. */
+  candleStore?: CandleStore | null;
   production?: boolean;
   sms?: SmsProvider;
   /** Where the default mock SMS provider writes its dev log line; default: nowhere. */
@@ -229,6 +240,22 @@ export function createDeps(overrides: DepsOverrides = {}): AppDeps {
     overrides.quoteStreams && market instanceof MockMarketDataAdapter
       ? startQuoteStreams(market, overrides.quoteStreams)
       : null;
+  // On the quote service, every committed order change goes to the matcher too (NSTOCK-0365).
+  let matcherCommands: { commands: MatcherCommands; redis: Redis } | null = null;
+  if (quoteStreams && overrides.quoteStreams) {
+    const { url, shards, commandsKey, log } = overrides.quoteStreams;
+    const redis = new Redis(url, { maxRetriesPerRequest: 1, commandTimeout: 1_000 });
+    // A failed send is logged by the commands themselves, once per outage.
+    redis.on('error', () => undefined);
+    const commands = startMatcherCommands({
+      orders,
+      stream: redis,
+      shards,
+      ...(commandsKey ? { commandsKey } : {}),
+      log,
+    });
+    matcherCommands = { commands, redis };
+  }
   return {
     clock,
     repos,
@@ -245,6 +272,12 @@ export function createDeps(overrides: DepsOverrides = {}): AppDeps {
     dbDriver,
     database,
     quoteStreams,
+    candleStore:
+      overrides.candleStore !== undefined
+        ? overrides.candleStore
+        : database
+          ? createPgCandleStore({ database })
+          : null,
     sessionRevocations: redisState
       ? createRedisSessionRevocations({
           redis: redisState,
@@ -256,6 +289,8 @@ export function createDeps(overrides: DepsOverrides = {}): AppDeps {
       await orders.flushAudit();
       alerts.dispose();
       orders.dispose();
+      matcherCommands?.commands.stop();
+      matcherCommands?.redis.disconnect();
       await quoteStreams?.close();
       owned?.dispose();
       await ownedDatabase?.close();

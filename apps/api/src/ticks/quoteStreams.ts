@@ -12,6 +12,8 @@ export type QuoteStreamsOptions = {
   /** Key names for a shard; tests pass their own so suites can share one Redis. */
   streamKey?: (shard: number) => string;
   snapshotKey?: (shard: number) => string;
+  /** The matcher command stream of a shard (NSTOCK-0365); apps/api writes it, apps/matcher reads it. */
+  commandsKey?: (shard: number) => string;
   /** How long one `XREAD BLOCK` waits; default 5 s (tests use less, to close fast). */
   blockMs?: number;
   log: PublisherLog;

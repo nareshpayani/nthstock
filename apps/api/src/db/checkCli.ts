@@ -2,12 +2,16 @@ import { spawnSync } from 'node:child_process';
 import { cpSync, mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, relative } from 'node:path';
+import { checkLiveSchema } from './liveSchemaCheck.js';
 
 // `npm run db:check -w @nthstock/api` (T-179, run in CI by T-181): fails when the schema files and
 // the committed migrations disagree.
 //   1. `drizzle-kit check`: the migration folder and its snapshots are consistent.
 //   2. `drizzle-kit generate` into a scratch copy of ./drizzle must produce nothing: a schema edit
 //      without `npm run db:generate` and a committed migration fails here.
+//   3. With `DB_CHECK_URL` (a migrated database, any role that can read pg_catalog): its relations
+//      match the schema files plus the hand-written ones (src/db/liveSchemaCheck.ts), skipping
+//      TimescaleDB's catalog, chunks and internal schemas. CI runs it on the api-mode E2E database.
 // drizzle-kit exits 0 even when it throws, so each step also needs its success message.
 
 const MIGRATIONS = 'drizzle';
@@ -77,3 +81,13 @@ if (problem) {
   process.exit(1);
 }
 process.stdout.write('db:check: migrations match the schema.\n');
+
+const liveUrl = process.env.DB_CHECK_URL;
+if (liveUrl) {
+  const drift = await checkLiveSchema(liveUrl);
+  if (drift.length > 0) {
+    process.stderr.write(`db:check failed: the database does not match\n  ${drift.join('\n  ')}\n`);
+    process.exit(1);
+  }
+  process.stdout.write('db:check: the database matches (TimescaleDB catalog objects skipped).\n');
+}

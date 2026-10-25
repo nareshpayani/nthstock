@@ -52,12 +52,29 @@ export {
 export { aggregateValue, computeIndexLevel, type WeightedPrice } from './indexLevels.js';
 export {
   CANDLE_SPECS,
+  bridgeCandles,
   candleTimes,
   generateCandles,
   latestSessionOpen,
+  resampleCandles,
+  type BridgeInput,
   type CandleInput,
   type CandleOutput,
 } from './candles.js';
+export {
+  DAILY_TURNOVER,
+  INDEX_GBM,
+  defaultMinuteSymbols,
+  equityGbm,
+  historyCalendar,
+  instrumentHistory,
+  latestClosedSessionOpen,
+  sessionMinuteBars,
+  type HistoryCalendar,
+  type HistoryCalendarOptions,
+  type InstrumentHistory,
+  type SessionMinutesInput,
+} from './candleHistory.js';
 export { generateDepth, type DepthBook } from './depth.js';
 export { MinuteBars, mergeMinuteBars } from './minuteBars.js';
 export { SECTOR_ABOUT, profileAbout, type ProfileAboutInput } from './profile.js';
@@ -71,3 +88,10 @@ export {
   type TickStreamFollowerOptions,
   type TickStreamRecord,
 } from './tickStreamFollower.js';
+export {
+  startLease,
+  type Lease,
+  type LeaseClient,
+  type LeaseLog,
+  type LeaseOptions,
+} from './shardLease.js';
