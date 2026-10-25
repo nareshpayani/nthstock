@@ -43,7 +43,7 @@ CDN + WAF ─► Load balancer ─► apps/api (Fastify, stateless)     apps/rea
 
 ### Backend stack
 - Node.js 22 LTS + TypeScript, Fastify. REST under `/v1`, OpenAPI generated from Zod schemas in `packages/contracts`.
-- Drizzle ORM, PostgreSQL 16, Redis 7, BullMQ jobs (EOD settlement, P&L snapshots).
+- Drizzle ORM, PostgreSQL 16, Redis 7, BullMQ jobs (session events, EOD settlement, P&L snapshots, maintenance; see Background jobs).
 - Auth: OTP (mock SMS provider until launch) + device PIN (Argon2id) + optional TOTP; 15-min JWT access token + rotating refresh token in httpOnly SameSite=Strict cookie, revocable in Redis.
 - Testing: Vitest, Supertest, Testcontainers, contract tests.
 
@@ -241,6 +241,29 @@ the chart shows after a reload.
 - Web: Settings, Security has a danger card (DELETE typed, then step-up). On success the app
   navigates to `/login?deleted=<purgeAfter>` first (its `beforeLoad` skips the session check), then
   clears the session, the query cache and the trusted-browser record.
+
+### Background jobs (Phase 2, E16)
+Spec `backend-core.md` §3 and §9, ADR 0007 §11. Code: `apps/api/src/modules/jobs/`, entry `apps/api/src/worker.ts`.
+- **Worker:** the same codebase as the API with another entry (`npm run worker`, locally `npm run dev:worker -w
+  @nthstock/api` beside `npm run dev:api`), so jobs share the repos, the paper engine and the quote-service prices.
+  It publishes the order updates its jobs make, and sends them to the matcher as the API does.
+- **`JOBS_MODE`:** `inline` (default) keeps the API's in-process order sweep, which unit tests and the `/v1/__test`
+  clock routes drive; `bullmq` (needs `DB_DRIVER=postgres`) turns the sweep off and leaves session events to the
+  worker; `off` runs neither. Lazy sync stays either way: every read syncs the engine first.
+- **Schedules (IST, BullMQ job schedulers with `tz: 'Asia/Kolkata'`):** `session.amoRelease` 09:15,
+  `session.squareOff` 15:20, `session.dayClose` 15:30 and `pnl.snapshot` 15:45 on trading days (each checks the NSE
+  holiday table in `packages/utils` and exits on a holiday or weekend); `db.orderPartitions` 00:30 and
+  `auth.tokenCleanup` 03:00 daily. `account.purge` (02:00) is scheduled once T-230 adds it.
+- **Jobs are plain functions:** each is `run(at, deps)`, unit-tested with a fixed clock; BullMQ only schedules and
+  retries it (3 attempts, exponential backoff from 30 s). `at` is the run's due time, not when it started.
+- **Idempotency:** a session job reloads each account from Postgres, syncs it to now and commits against its
+  version (`OrderService.syncAccounts`), so a rerun, a retry or the API committing the same event first changes
+  nothing twice. The snapshot upserts on `(user_id, trade_date)`, partitions use `CREATE TABLE IF NOT EXISTS`, the
+  cleanup is a plain delete. The job id (scheduler id plus due time) keeps one run per scheduled time across workers.
+- **Shutdown:** SIGTERM closes the worker, which waits for the running job, then flushes audit writes and order
+  updates and closes the pools.
+- **No PII in logs:** a run's result is counts only, and a failure is logged as job, attempt and error class; a
+  Postgres error's `detail` (row values) is dropped.
 
 ### Security baseline
 - Rate limits per IP and per user; OTP resend throttling; CAPTCHA after 3 failed OTP/PIN attempts; PIN lockout after 5, unlock via OTP.

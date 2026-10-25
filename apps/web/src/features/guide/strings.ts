@@ -549,6 +549,54 @@ export const strings = {
             'The web app navigates to /login?deleted=… before it clears the session, forgets the trusted browser and empties the query cache, so nothing from the account stays on the device.',
           ],
         },
+        { kind: 'heading', text: 'Background jobs on BullMQ' },
+        {
+          kind: 'text',
+          text: 'Market-session events happen on time for every account, including users who are not online: a job worker (the same apps/api codebase, another entry) runs them on BullMQ queues in Redis, with cron in Asia/Kolkata.',
+        },
+        {
+          kind: 'table',
+          caption: 'Scheduled jobs (IST)',
+          head: ['Job', 'When', 'What it does'],
+          rows: [
+            [
+              'session.amoRelease',
+              '09:15, trading days',
+              'Syncs every account with an AMO to the open, so AMOs are released and market AMOs fill',
+            ],
+            [
+              'session.squareOff',
+              '15:20, trading days',
+              'Squares off intraday positions and cancels live intraday orders',
+            ],
+            [
+              'session.dayClose',
+              '15:30, trading days',
+              'Cancels open day orders and settles today’s delivery buys into holdings',
+            ],
+            [
+              'pnl.snapshot',
+              '15:45, trading days',
+              'Writes one P&L row per account touched today or holding stock',
+            ],
+            ['db.orderPartitions', '00:30, daily', 'Keeps 14 days of order partitions ahead'],
+            [
+              'auth.tokenCleanup',
+              '03:00, daily',
+              'Deletes expired refresh and device tokens and sessions expired over 30 days',
+            ],
+          ],
+        },
+        {
+          kind: 'list',
+          items: [
+            'Each job is a plain run(at) function of its scheduled time, unit-tested with a fixed clock; BullMQ only schedules and retries it (3 attempts, exponential backoff from 30 s).',
+            'Session jobs check the NSE holiday calendar and exit on a holiday or weekend. Each run reloads the accounts from Postgres, syncs them to now and commits against their version, so a second run, or the API writing at the same moment, changes nothing twice.',
+            'Several workers can run: BullMQ hands each scheduled run to one of them, and the job id (scheduler and due time) keeps it to one run per time. SIGTERM lets the running job finish before the worker exits.',
+            'Failures are logged as the job, attempt and error class only: a database error’s row values never reach a log line.',
+            'JOBS_MODE=inline keeps the in-process sweep for tests that move a manual clock; with JOBS_MODE=bullmq the API leaves session events to the worker.',
+          ],
+        },
         { kind: 'heading', text: 'Rules every layer follows' },
         {
           kind: 'list',
