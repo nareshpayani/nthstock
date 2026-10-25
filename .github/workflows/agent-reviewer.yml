@@ -62,7 +62,9 @@ jobs:
           # Commits are authored as the owner, not the app (owner decision 2026-10-21).
           bot_name: ${{ vars.OWNER_LOGIN || 'nareshpayani' }}
           bot_id: ${{ vars.OWNER_ID || '15100692' }}
-          allowed_bots: ${{ (vars.AGENT_BOT_LOGIN || 'claude[bot]') }}
+          # github-actions[bot] covers a GITHUB_TOKEN push (the clean conflict merge) whose review
+          # run the owner starts by hand.
+          allowed_bots: ${{ (vars.AGENT_BOT_LOGIN || 'claude[bot]') }},github-actions[bot]
           prompt: |
             REPO: ${{ github.repository }}
             PR NUMBER: ${{ github.event.pull_request.number }}
