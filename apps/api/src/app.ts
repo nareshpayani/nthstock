@@ -102,8 +102,19 @@ export function buildApp(options: AppOptions = {}): App {
       app.log.error({ error }, 'loading accounts with live orders failed');
     });
   });
+  // On the quote service the prices start from its snapshots (NSTOCK-0354). With Redis down the
+  // API still starts, on the adapter's opening prices, and the streams catch up when it is back.
+  const quoteStreams = deps.quoteStreams;
+  if (quoteStreams) {
+    app.addHook('onReady', async () => {
+      await quoteStreams.ready().catch((error: unknown) => {
+        app.log.error({ error }, 'reading the quote snapshots failed');
+      });
+    });
+  }
   const publisher = options.tickPublisher;
-  if (publisher) {
+  // On the quote service no API process generates ticks, so there is nothing to pump.
+  if (publisher && !quoteStreams) {
     let pump: TickPump | null = null;
     app.addHook('onReady', async () => {
       pump = await startTickPump({ market: deps.market, publisher, log: app.log });

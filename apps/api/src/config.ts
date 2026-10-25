@@ -37,6 +37,7 @@ const EnvSchema = z.object({
     ),
   PG_POOL_MAX: z.coerce.number().int().min(1).max(100).default(10),
   DB_DRIVER: z.enum(['memory', 'postgres']).default('memory'),
+  QUOTE_SHARDS: z.coerce.number().int().min(1).max(64).optional(),
   PII_ENC_KEYS: z.string().optional(),
   PII_HMAC_KEY: z.string().optional(),
 });
@@ -67,6 +68,12 @@ export type ApiConfig = {
    * which needs DATABASE_URL and REDIS_URL.
    */
   dbDriver: DbDriver;
+  /**
+   * `QUOTE_SHARDS` (NSTOCK-0354): follow this many apps/quotes shards on Redis instead of ticking
+   * in process, and serve `GET /v1/market/quotes` from their snapshots. Needs REDIS_URL. Unset:
+   * the in-process adapter ticks and the tick pump publishes, as before.
+   */
+  quoteShards: number | null;
   /**
    * `ENABLE_TEST_CONTROLS=true` with `NODE_ENV=test`: registers the `/v1/__test` clock and price
    * routes for E2E suites (T-162). Off by default; refused in any other NODE_ENV.
@@ -108,6 +115,9 @@ export function loadConfig(env: Readonly<Record<string, string | undefined>>): A
     // that apps/api holds no state of its own (T-193).
     throw new Error('Invalid apps/api environment: DB_DRIVER=postgres needs REDIS_URL');
   }
+  if (parsed.data.QUOTE_SHARDS !== undefined && !parsed.data.REDIS_URL) {
+    throw new Error('Invalid apps/api environment: QUOTE_SHARDS needs REDIS_URL');
+  }
   if (production && parsed.data.DEMO_SEED) {
     throw new Error('Invalid apps/api environment: DEMO_SEED is for local demos, not production');
   }
@@ -137,6 +147,7 @@ export function loadConfig(env: Readonly<Record<string, string | undefined>>): A
     databaseUrl: parsed.data.DATABASE_URL,
     pgPoolMax: parsed.data.PG_POOL_MAX,
     dbDriver: parsed.data.DB_DRIVER,
+    quoteShards: parsed.data.QUOTE_SHARDS ?? null,
     testControls: parsed.data.ENABLE_TEST_CONTROLS,
     demoSeed: parsed.data.DEMO_SEED,
     pii: { keys: piiKeys, devKeys },

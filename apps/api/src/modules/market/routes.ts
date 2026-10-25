@@ -8,7 +8,7 @@ import { registerRoute } from '../../http/registerRoute.js';
  * 404 NOT_FOUND with the same messages as the MSW handlers.
  */
 export const marketRoutes =
-  ({ market }: Pick<AppDeps, 'market'>): FastifyPluginAsync =>
+  ({ market, quoteStreams }: Pick<AppDeps, 'market' | 'quoteStreams'>): FastifyPluginAsync =>
   async (app) => {
     registerRoute(app, 'marketIndices', async () => ({ items: await market.getIndices() }));
 
@@ -28,8 +28,9 @@ export const marketRoutes =
         notFound(`Index ${query.index}`),
     );
 
+    // On the quote service, from its snapshots, so every instance answers the same LTP.
     registerRoute(app, 'marketQuotes', async ({ query }) => ({
-      items: await market.getQuotes(query.symbols, query.exchange),
+      items: await (quoteStreams ?? market).getQuotes(query.symbols, query.exchange),
     }));
 
     registerRoute(app, 'marketSearch', async ({ query }) => ({

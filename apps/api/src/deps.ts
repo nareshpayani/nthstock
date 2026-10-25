@@ -37,6 +37,11 @@ import {
   createPgWatchlistsRepo,
   type WatchlistsRepo,
 } from './modules/watchlists/index.js';
+import {
+  startQuoteStreams,
+  type QuoteStreams,
+  type QuoteStreamsOptions,
+} from './ticks/quoteStreams.js';
 
 /**
  * Every module's storage seam (ADR 0004 §3). Each module's Postgres repo (`pgRepo.ts`) takes over
@@ -82,6 +87,12 @@ export type AppDeps = {
    */
   sessionRevocations: SessionRevocations;
   /**
+   * The quote service's streams and snapshots (NSTOCK-0354) when `QUOTE_SHARDS` is set: the
+   * adapter then moves only on them, and `GET /v1/market/quotes` reads the snapshots. Null: the
+   * adapter ticks on its own, as before.
+   */
+  quoteStreams: QuoteStreams | null;
+  /**
    * Releases what `createDeps` created itself (the orders desk's subscriptions, the adapter's
    * timers, the Postgres pool). Injected parts are left alone.
    */
@@ -95,6 +106,11 @@ export type DepsOverrides = {
   market?: MarketDataAdapter;
   /** `MOCK_MARKET_ALWAYS_OPEN`: let the mock market tick outside NSE hours. */
   marketAlwaysOpen?: boolean;
+  /**
+   * `QUOTE_SHARDS` with `REDIS_URL`: follow apps/quotes instead of ticking here (NSTOCK-0354). A
+   * `market` passed with it must be a `MockMarketDataAdapter` built with `externalTicks`.
+   */
+  quoteStreams?: QuoteStreamsOptions;
   production?: boolean;
   sms?: SmsProvider;
   /** Where the default mock SMS provider writes its dev log line; default: nowhere. */
@@ -150,8 +166,19 @@ export function createDeps(overrides: DepsOverrides = {}): AppDeps {
   const clock = overrides.clock ?? systemClock;
   const market =
     overrides.market ??
-    new MockMarketDataAdapter({ clock, alwaysOpen: overrides.marketAlwaysOpen ?? false });
+    new MockMarketDataAdapter({
+      clock,
+      alwaysOpen: overrides.marketAlwaysOpen ?? false,
+      externalTicks: overrides.quoteStreams !== undefined,
+    });
   const owned = overrides.market ? null : market;
+  if (overrides.quoteStreams && !(market instanceof MockMarketDataAdapter)) {
+    throw new Error('quoteStreams needs a MockMarketDataAdapter to apply the quotes to');
+  }
+  const quoteStreams =
+    overrides.quoteStreams && market instanceof MockMarketDataAdapter
+      ? startQuoteStreams(market, overrides.quoteStreams)
+      : null;
   const production = overrides.production ?? false;
   const dbDriver = overrides.dbDriver ?? (overrides.database ? 'postgres' : 'memory');
   const database = openDatabase(overrides, dbDriver);
@@ -216,6 +243,7 @@ export function createDeps(overrides: DepsOverrides = {}): AppDeps {
     alerts,
     dbDriver,
     database,
+    quoteStreams,
     sessionRevocations: redisState
       ? createRedisSessionRevocations({
           redis: redisState,
@@ -227,6 +255,7 @@ export function createDeps(overrides: DepsOverrides = {}): AppDeps {
       await orders.flushAudit();
       alerts.dispose();
       orders.dispose();
+      await quoteStreams?.close();
       owned?.dispose();
       await ownedDatabase?.close();
     },

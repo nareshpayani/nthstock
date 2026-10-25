@@ -18,6 +18,7 @@ describe('loadConfig', () => {
       databaseUrl: null,
       pgPoolMax: 10,
       dbDriver: 'memory',
+      quoteShards: null,
       testControls: false,
       demoSeed: false,
       pii: { keys: devPiiKeys(), devKeys: true },
@@ -38,6 +39,7 @@ describe('loadConfig', () => {
         DATABASE_URL: 'postgres://nthstock_app:pw@127.0.0.1:5432/nthstock',
         PG_POOL_MAX: '20',
         DB_DRIVER: 'postgres',
+        QUOTE_SHARDS: '4',
         PII_ENC_KEYS: `2:${ENC_KEY}`,
         PII_HMAC_KEY: HMAC_KEY,
       }),
@@ -51,6 +53,7 @@ describe('loadConfig', () => {
       databaseUrl: 'postgres://nthstock_app:pw@127.0.0.1:5432/nthstock',
       pgPoolMax: 20,
       dbDriver: 'postgres',
+      quoteShards: 4,
       testControls: false,
       demoSeed: false,
       pii: {
@@ -63,6 +66,13 @@ describe('loadConfig', () => {
       },
     });
     expect(loadConfig({ MOCK_MARKET_ALWAYS_OPEN: '0' }).mockMarketAlwaysOpen).toBe(false);
+  });
+
+  it('needs REDIS_URL to follow the quote service (NSTOCK-0354)', () => {
+    expect(() => loadConfig({ QUOTE_SHARDS: '2' })).toThrow(/QUOTE_SHARDS needs REDIS_URL/);
+    expect(() => loadConfig({ QUOTE_SHARDS: '0', REDIS_URL: 'redis://x:6379' })).toThrow(
+      /QUOTE_SHARDS/,
+    );
   });
 
   it('turns the test controls on only with NODE_ENV=test and the explicit flag (T-162)', () => {
