@@ -191,7 +191,7 @@ describe('Try demo outside demo mode (TFC-12)', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Try demo' }));
 
-    await new Promise((resolve) => setTimeout(resolve, 50));
+    await waitFor(() => expect(screen.getByRole('button', { name: /Starting/ })).toBeDisabled());
     expect(paths).not.toContain('/v1/auth/otp/request');
   });
 

@@ -21,12 +21,14 @@ if [ -z "$base_url" ]; then
   npx vite preview --outDir dist-e2e-walkthrough --host 127.0.0.1 --port 4180 --strictPort >/dev/null 2>&1 &
   preview_pid=$!
   for _ in $(seq 1 30); do curl -sf -o /dev/null http://127.0.0.1:4180/login && break; sleep 1; done
+  curl -sf -o /dev/null http://127.0.0.1:4180/login || { echo "vite preview did not start" >&2; exit 1; }
   base_url="http://127.0.0.1:4180"
 fi
 
 rm -rf test-results/walkthrough
 WALKTHROUGH_BASE_URL="$base_url" npx playwright test -c playwright.walkthrough.config.ts
 video="$(find test-results/walkthrough -name '*.webm' | head -n 1)"
+[ -n "$video" ] || { echo "no video recorded under test-results/walkthrough" >&2; exit 1; }
 mkdir -p public/demo
 ffmpeg -v error -y -i "$video" -c:v libx264 -preset slow -crf 23 -pix_fmt yuv420p \
   -movflags +faststart -an public/demo/walkthrough.mp4

@@ -73,6 +73,15 @@ export function markDemoPending(storage: Pick<Storage, 'setItem'>): boolean {
   }
 }
 
+/** Drops a Try demo pending flag. */
+export function clearDemoPending(storage: Pick<Storage, 'removeItem'>): void {
+  try {
+    storage.removeItem(DEMO_PENDING_STORAGE_KEY);
+  } catch {
+    // Nothing to clear without storage.
+  }
+}
+
 let current: SimulatorActions | null = null;
 const listeners = new Set<() => void>();
 

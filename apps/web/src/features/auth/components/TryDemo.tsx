@@ -1,7 +1,7 @@
 import { Button } from '@nthstock/ui';
 import { useNavigate } from '@tanstack/react-router';
 import { useEffect, useEffectEvent, useState } from 'react';
-import { DEMO_PENDING_STORAGE_KEY, startDemo } from '@/shared/lib/demoSimulator';
+import { clearDemoPending, DEMO_PENDING_STORAGE_KEY, startDemo } from '@/shared/lib/demoSimulator';
 import { useRequestOtp, useVerifyOtp } from '../hooks/useAuthMutations';
 import { authFailure } from '../model/authError';
 import { DEMO_INSTRUMENT, DEMO_MOBILE } from '../model/demo';
@@ -12,14 +12,6 @@ function isDemoPending(): boolean {
     return window.sessionStorage.getItem(DEMO_PENDING_STORAGE_KEY) === '1';
   } catch {
     return false;
-  }
-}
-
-function clearDemoPending(): void {
-  try {
-    window.sessionStorage.removeItem(DEMO_PENDING_STORAGE_KEY);
-  } catch {
-    // Nothing to clear without storage.
   }
 }
 
@@ -58,7 +50,11 @@ export function TryDemo({ devOtp }: { devOtp: string }) {
   };
 
   const resumeDemo = useEffectEvent(() => {
-    clearDemoPending();
+    try {
+      clearDemoPending(window.sessionStorage);
+    } catch {
+      // No storage, so no flag.
+    }
     void run();
   });
   useEffect(() => {

@@ -2,6 +2,7 @@ import { setupWorker } from 'msw/browser';
 import { resolveWsUrl, type RuntimeConfig } from '@/app/config/runtimeConfig';
 import {
   enterDemoMode,
+  clearDemoPending,
   isDemoMode,
   markDemoPending,
   registerSimulator,
@@ -67,6 +68,10 @@ export async function startMockWorker(
         ? '[MSW] Demo seed loaded (?demo=1): log in as 9000000001 with OTP 123456.'
         : '[MSW] Demo seed skipped: sessionStorage is unavailable.',
     );
+  } else if (listStorage) {
+    // A Try demo reload carries on only on the ?demo=1 load it started; a flag left by a reload
+    // that never landed must not log a later /login in as the demo user.
+    clearDemoPending(listStorage);
   }
   // E2E builds only (VITE_TEST_CONTROLS, T-162): the mocks share the test clock, so auth,
   // watchlists and orders all move when a test sets it.

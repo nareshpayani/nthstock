@@ -109,7 +109,7 @@ function fingers(page: Page, touch: Touch) {
 async function clearToasts(page: Page) {
   const touch = await touchscreen(page);
   const toasts = page.getByRole('region', { name: /^Notifications/ }).locator('li');
-  for (let left = await toasts.count(); left > 0; left = await toasts.count()) {
+  for (let swipes = 0; swipes < 6 && (await toasts.count()) > 0; swipes += 1) {
     const box = await toasts.first().boundingBox();
     if (!box) break;
     const at = { x: box.x + box.width / 2, y: box.y + box.height / 2 };
