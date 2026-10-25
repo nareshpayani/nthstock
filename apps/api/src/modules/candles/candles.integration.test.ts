@@ -149,6 +149,21 @@ describeWithPostgres('candle history seed and stored candles (integration)', () 
       expect(await digest()).toBe(before);
     });
 
+    it('refreshes the aggregates once over the whole seeded range', async () => {
+      const calls: [Date, Date][] = [];
+      await seedCandles({
+        store,
+        master,
+        clock: seedClock,
+        symbols: ['INFY'],
+        refresh: (from, to) => {
+          calls.push([from, to]);
+          return Promise.resolve();
+        },
+      });
+      expect(calls).toEqual([[calendar.daily[0], new Date(Date.parse(FRIDAY_OPEN) + 86_400_000)]]);
+    });
+
     it('makes candles_1d the generated daily bars for all two years', async () => {
       const history = instrumentHistory(master, 'INFY', calendar, { minutes: false });
       const { rows } = await owner.query(

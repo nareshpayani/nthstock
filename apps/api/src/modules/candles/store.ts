@@ -37,9 +37,10 @@ export type CandleStore = {
    */
   upsertMinuteBars(bars: readonly StoredBar[]): Promise<void>;
   /**
-   * Like `upsertMinuteBars`, but a bar whose token and minute are already stored is left as it is
-   * (`ON CONFLICT DO NOTHING`). The seed writes its one-row daily history this way, so a session
-   * that already holds minute bars from an earlier seed keeps them.
+   * Like `upsertMinuteBars`, but a bar is skipped when its token already has any bar in the 24
+   * hours from its minute, its IST session for a 09:15 bar. The seed writes its one-row daily
+   * history this way, so a session that holds minute bars (from an earlier seed or the candle
+   * writer, whole or partial) keeps them and never gains a whole-day row on top.
    */
   insertMinuteBarsIfAbsent(bars: readonly StoredBar[]): Promise<void>;
   /** Bars of `interval` for `token` opening in `[from, to)`, oldest first. */
@@ -69,8 +70,14 @@ const toBar = (row: BarRow): StoredBar => ({
 
 /** The candle store on TimescaleDB (migration 0014), as the DML-only app role. */
 export function createPgCandleStore({ database }: { database: Database }): CandleStore {
-  /** One multi-row INSERT per `UPSERT_CHUNK_ROWS` bars, all in one transaction. */
-  const writeBars = async (bars: readonly StoredBar[], onConflict: SQL): Promise<void> => {
+  /**
+   * One multi-row INSERT per `UPSERT_CHUNK_ROWS` bars, all in one transaction. `insert` turns the
+   * VALUES list (columns token, bucket, open, high, low, close, volume, typed) into the statement.
+   */
+  const writeBars = async (
+    bars: readonly StoredBar[],
+    insert: (values: SQL) => SQL,
+  ): Promise<void> => {
     if (bars.length === 0) return;
     await database.transaction(async (tx) => {
       for (let start = 0; start < bars.length; start += UPSERT_CHUNK_ROWS) {
@@ -78,12 +85,9 @@ export function createPgCandleStore({ database }: { database: Database }): Candl
           .slice(start, start + UPSERT_CHUNK_ROWS)
           .map(
             (bar) =>
-              sql`(${bar.token}, ${bar.bucket.toISOString()}::timestamptz, ${bar.open}, ${bar.high}, ${bar.low}, ${bar.close}, ${bar.volume})`,
+              sql`(${bar.token}::integer, ${bar.bucket.toISOString()}::timestamptz, ${bar.open}::bigint, ${bar.high}::bigint, ${bar.low}::bigint, ${bar.close}::bigint, ${bar.volume}::bigint)`,
           );
-        await tx.execute(sql`
-          INSERT INTO candles_1m (token, bucket, open, high, low, close, volume)
-          VALUES ${sql.join(rows, sql`, `)}
-          ${onConflict}`);
+        await tx.execute(insert(sql`VALUES ${sql.join(rows, sql`, `)}`));
       }
     });
   };
@@ -91,16 +95,31 @@ export function createPgCandleStore({ database }: { database: Database }): Candl
     upsertMinuteBars: (bars) =>
       writeBars(
         bars,
-        sql`ON CONFLICT (token, bucket) DO UPDATE SET
-              open = EXCLUDED.open, high = EXCLUDED.high, low = EXCLUDED.low,
-              close = EXCLUDED.close, volume = EXCLUDED.volume`,
+        (values) => sql`
+          INSERT INTO candles_1m (token, bucket, open, high, low, close, volume) ${values}
+          ON CONFLICT (token, bucket) DO UPDATE SET
+            open = EXCLUDED.open, high = EXCLUDED.high, low = EXCLUDED.low,
+            close = EXCLUDED.close, volume = EXCLUDED.volume`,
       ),
 
     insertMinuteBarsIfAbsent: (bars) =>
-      writeBars(bars, sql`ON CONFLICT (token, bucket) DO NOTHING`),
+      writeBars(
+        bars,
+        (values) => sql`
+          INSERT INTO candles_1m (token, bucket, open, high, low, close, volume)
+          SELECT * FROM (${values}) AS v (token, bucket, open, high, low, close, volume)
+           WHERE NOT EXISTS (
+             SELECT 1 FROM candles_1m c
+              WHERE c.token = v.token AND c.bucket >= v.bucket
+                AND c.bucket < v.bucket + interval '1 day')
+          ON CONFLICT (token, bucket) DO NOTHING`,
+      ),
 
     async readBars(token, interval, from, to) {
-      const relation = sql.raw(RELATION[interval]);
+      const name = RELATION[interval];
+      // The type already limits `interval`; a value from outside it must never reach sql.raw.
+      if (!name) throw new Error(`No stored candles for interval ${String(interval)}`);
+      const relation = sql.raw(name);
       const result = await database.db.execute<BarRow>(sql`
         SELECT token, bucket, open, high, low, close, volume FROM ${relation}
          WHERE token = ${token}
