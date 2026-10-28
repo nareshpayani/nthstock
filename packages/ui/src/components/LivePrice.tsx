@@ -1,5 +1,6 @@
 import { formatInr } from '@nthstock/utils';
 import { cn } from '../lib/cn.js';
+import { DigitRoll } from './DigitRoll.js';
 import { formatIndexLevel } from './IndexTicker.js';
 
 export type LivePriceTick = 'up' | 'down' | 'flat';
@@ -12,6 +13,8 @@ export type LivePriceProps = {
   /** `inr` → "₹1,512.35"; `index` → "25,418.60". */
   format?: 'inr' | 'index';
   size?: 'sm' | 'md' | 'lg';
+  /** Roll the changed digits (SPEC-CR-1 §5.6), for a price the eye rests on. */
+  roll?: boolean;
   className?: string | undefined;
 };
 
@@ -22,7 +25,14 @@ const sizeClass = { sm: 'text-label', md: 'text-body', lg: 'text-title' } as con
  * the quote store). The value updates in place with no background flash (the owner asked for none,
  * 2026-09-28); ▲ or ▼ in green or red shows the last direction, so colour is never the only signal.
  */
-export function LivePrice({ value, tick, format = 'inr', size = 'md', className }: LivePriceProps) {
+export function LivePrice({
+  value,
+  tick,
+  format = 'inr',
+  size = 'md',
+  roll = false,
+  className,
+}: LivePriceProps) {
   const text = format === 'index' ? formatIndexLevel(value) : formatInr(value);
   return (
     <span
@@ -33,7 +43,7 @@ export function LivePrice({ value, tick, format = 'inr', size = 'md', className 
         className,
       )}
     >
-      {text}
+      {roll ? <DigitRoll value={text} /> : text}
       <span
         aria-hidden="true"
         className={cn(

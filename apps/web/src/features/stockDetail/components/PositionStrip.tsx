@@ -59,7 +59,7 @@ function StripLine({ position }: { position: Position }) {
         </span>
       )}
       <span aria-hidden="true">·</span>
-      <PnlAmount value={live.pnl} size="sm" />
+      <PnlAmount value={live.pnl} size="sm" roll />
       {stopPrice === null ? null : (
         <>
           <span aria-hidden="true">·</span>

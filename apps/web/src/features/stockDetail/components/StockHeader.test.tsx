@@ -25,6 +25,12 @@ afterEach(() => {
   useTicketIntentStore.setState(initialTicketIntentState);
 });
 
+// The header price rolls its digits (CR-T12), one span per character: match the element whose
+// whole text is the price.
+const wholeText = (text: string) => (_: string, element: Element | null) =>
+  element?.textContent === text &&
+  ![...element.children].some((child) => child.textContent === text);
+
 async function openStock(url: string) {
   const quotes = createTestQuoteStore();
   const view = renderApp(url, { apiClient: api.apiClient, quoteStore: quotes.store });
@@ -52,14 +58,14 @@ describe('stock detail header (T-106)', () => {
     const header = screen.getByRole('heading', { level: 1 }).closest('div.grid.gap-4');
     expect(header).not.toBeNull();
     expect(
-      await within(header as HTMLElement).findByText(formatInr(snapshot?.ltp ?? 0)),
+      await within(header as HTMLElement).findByText(wholeText(formatInr(snapshot?.ltp ?? 0))),
     ).toBeInTheDocument();
   });
 
   it('shows the live price and change from the quote store, with ▲▼ in the text', async () => {
     const { quotes } = await openStock('/stocks/INFY');
     act(() => quotes.push(testQuote('INFY', 151235, { prevClose: 150000 })));
-    expect(screen.getByText('₹1,512.35')).toBeInTheDocument();
+    expect(screen.getByText(wholeText('₹1,512.35'))).toBeInTheDocument();
     expect(screen.getByText('+₹12.35, up 0.82 percent')).toBeInTheDocument();
     expect(screen.getByText(/▲ 0\.82%/)).toBeInTheDocument();
     expect(quotes.subscribed.get('NSE:INFY')).toBe(1);

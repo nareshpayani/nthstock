@@ -1,5 +1,5 @@
 import type { Exchange } from '@nthstock/contracts';
-import { Skeleton } from '@nthstock/ui';
+import { DigitRoll, Skeleton } from '@nthstock/ui';
 import { formatInr } from '@nthstock/utils';
 import { useWatch, type Control } from 'react-hook-form';
 import { useQuote } from '@/shared/hooks/useQuote';
@@ -44,7 +44,7 @@ export function OrderEstimate({
             className="font-mono text-body font-semibold text-ink tabular-nums"
             data-testid="order-value"
           >
-            {value === null ? strings.form.unknownAmount : formatInr(value)}
+            {value === null ? strings.form.unknownAmount : <DigitRoll value={formatInr(value)} />}
           </dd>
         </div>
         <div className="grid gap-0.5 text-right">
