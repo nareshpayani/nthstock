@@ -7,8 +7,11 @@ export type SegmentOption<T extends string> = {
   label: string;
   /** Accessible name when the visible label is terse or clashes with another, e.g. "1m" vs "1M". */
   ariaLabel?: string;
-  /** Colour of the selected segment: brand by default, up for Buy, down for Sell. */
-  tone?: 'brand' | 'up' | 'down';
+  /**
+   * Colour of the selected segment: `brand` (a raised white chip) by default for neutral choices,
+   * `solid` (filled brand blue) for Buy, `down` for Sell, and `up` where gain green is meant.
+   */
+  tone?: 'brand' | 'solid' | 'up' | 'down';
   /** Unavailable option (e.g. an exchange the stock is not listed on): skipped by arrow keys. */
   disabled?: boolean;
 };
@@ -31,6 +34,7 @@ export type SegmentedControlProps<T extends string> = {
 const selectedTone = {
   brand:
     'data-[state=checked]:bg-surface data-[state=checked]:text-ink data-[state=checked]:shadow-raised',
+  solid: 'data-[state=checked]:bg-brand data-[state=checked]:text-surface',
   up: 'data-[state=checked]:bg-up data-[state=checked]:text-surface',
   down: 'data-[state=checked]:bg-down data-[state=checked]:text-surface',
 } as const;

@@ -23,7 +23,7 @@ function OrderControls() {
         value={side}
         onValueChange={setSide}
         options={[
-          { value: 'BUY', label: 'Buy', tone: 'up' },
+          { value: 'BUY', label: 'Buy', tone: 'solid' },
           { value: 'SELL', label: 'Sell', tone: 'down' },
         ]}
       />

@@ -187,6 +187,10 @@ describe('order ticket with the market open', () => {
       await waitFor(() => expect(priceInput()).toHaveValue((ltp / 100).toFixed(2)));
       expect(priceInput()).toBeDisabled();
       expect(screen.getByRole('radio', { name: 'Buy' })).toHaveAttribute('aria-checked', 'true');
+      // The selected Buy is solid brand blue, like the trade bar's Buy (SPEC-CR-1 §4.1).
+      expect(screen.getByRole('radio', { name: 'Buy' }).className).toContain(
+        'data-[state=checked]:bg-brand',
+      );
       expect(screen.getByRole('radio', { name: 'Market' })).toHaveAttribute('aria-checked', 'true');
       expect(screen.getByRole('radio', { name: 'Delivery' })).toHaveAttribute(
         'aria-checked',

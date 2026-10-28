@@ -308,7 +308,7 @@ export function TicketForm({
             value={field.value}
             onValueChange={field.onChange}
             options={[
-              { value: 'BUY', label: strings.form.buy, tone: 'brand' },
+              { value: 'BUY', label: strings.form.buy, tone: 'solid' },
               { value: 'SELL', label: strings.form.sell, tone: 'down' },
             ]}
           />
