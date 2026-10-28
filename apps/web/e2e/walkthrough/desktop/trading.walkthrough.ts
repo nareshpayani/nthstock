@@ -184,10 +184,10 @@ clip('trailingStop', 'a trailing stop-loss that ratchets up and triggers once', 
     2600,
   );
   await marketBuy(page, 'INFY', '5');
-  await say(page, 'Bought 5 INFY. With a position, the ticket offers Trailing SL.', 2200);
+  await say(page, 'Bought 5 INFY. With a position, the ticket offers Trailing stop.', 2200);
   await act.click(page.getByRole('button', { name: 'Sell INFY' }).first());
   const ticket = ticketOf(page, 'INFY');
-  await act.click(ticket.getByRole('radio', { name: 'Trailing SL' }));
+  await act.click(ticket.getByRole('radio', { name: 'Trailing stop' }));
   await say(
     page,
     'Trail in rupees or percent, an optional activation price, a market or limit exit.',
@@ -201,7 +201,7 @@ clip('trailingStop', 'a trailing stop-loss that ratchets up and triggers once', 
   await expect(ticket).toBeHidden();
   const figure = page.getByRole('figure', { name: /INFY area chart/ });
   const line = figure.locator('[data-testid="chart-handle"][data-tone="trailing"]');
-  await expect(line).toContainText('Trailing SL');
+  await expect(line).toContainText('Trailing stop');
   await figure.evaluate((element) =>
     element.scrollIntoView({ behavior: 'smooth', block: 'center' }),
   );

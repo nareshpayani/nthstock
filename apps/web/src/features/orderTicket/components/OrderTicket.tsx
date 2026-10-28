@@ -125,7 +125,7 @@ function TicketFlow({
   const [error, setError] = useState<TicketError | null>(null);
   const [trailingMode, setTrailingMode] = useState(false);
   const [attach, setAttach] = useState<AttachState>(initialAttachState);
-  // Trailing SL (T13): offered on a position in this instrument, never when modifying an order.
+  // Trailing stop (T13): offered on a position in this instrument, never when modifying an order.
   const positions = useQuery({ ...positionsQuery(api), enabled: !intent.modify });
   const held = openPositions(positions.data?.items ?? [], instrument.token);
   const trailingAvailable = useTradingSelector(tradingAvailable);

@@ -37,7 +37,7 @@ export type TicketFormProps = {
   error: TicketError | null;
   onSubmit: FormEventHandler<HTMLFormElement>;
   /**
-   * The Trailing SL order type (T13), offered when the user holds a position in the instrument;
+   * The Trailing stop order type (T13), offered when the user holds a position in the instrument;
    * `available` is false where the backend has no trailing stops yet (api mode).
    */
   trailing?: { available: boolean; onSelect: () => void } | undefined;
@@ -139,7 +139,7 @@ function ImmediateFillNote({
 /** The order type value that switches the ticket to the trailing-stop form (T13). */
 export const TRAILING_SL = 'TRAILING_SL';
 
-/** Market, Limit, and Trailing SL when the user holds a position (disabled where unavailable). */
+/** Market, Limit, and Trailing stop when the user holds a position (disabled where unavailable). */
 export function orderTypeOptions(trailing: TicketFormProps['trailing']) {
   return [
     { value: 'MARKET' as const, label: strings.form.market },
@@ -305,7 +305,7 @@ export function TicketForm({
             value={field.value}
             onValueChange={field.onChange}
             options={[
-              { value: 'BUY', label: strings.form.buy, tone: 'up' },
+              { value: 'BUY', label: strings.form.buy, tone: 'brand' },
               { value: 'SELL', label: strings.form.sell, tone: 'down' },
             ]}
           />

@@ -124,7 +124,7 @@ test.describe(`journeys US-01 to US-05 (T26) ${JOURNEY_TAG}`, () => {
     await expect(chip).toHaveText(/\+4 @ ₹/, { timeout: 15_000 });
     await expect(line).toHaveCount(0);
     const stop = figure.locator('[data-testid="chart-handle"][data-tone="trailing"]');
-    await expect(stop).toHaveText(/Trailing SL ₹[\d,]+\.\d\d · 1% · Trailing$/, {
+    await expect(stop).toHaveText(/Trailing stop ₹[\d,]+\.\d\d · 1% · Trailing$/, {
       timeout: 15_000,
     });
     await input.press(chip);

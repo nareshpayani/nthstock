@@ -32,7 +32,7 @@ export const strings = {
     long: 'Long',
     short: 'Short',
     description: (direction: string, qty: number, avg: string, pnl: string, stop: string | null) =>
-      `${direction} ${String(qty)} shares at ${avg}, P&L ${pnl}. ${stop ? `Trailing SL: ${stop}. Open to change it.` : 'Open to set a trailing stop.'}`,
+      `${direction} ${String(qty)} shares at ${avg}, P&L ${pnl}. ${stop ? `Trailing stop: ${stop}. Open to change it.` : 'Open to set a trailing stop.'}`,
   },
   stop: {
     label: (name: string, price: string, trail: string, status: string) =>
@@ -41,7 +41,7 @@ export const strings = {
       `Trailing stop at ${price}, trailing by ${trail}, ${status.toLowerCase()}. Open to change it.`,
     dragDescription: (price: string, trail: string) =>
       `Trailing stop at ${price}, trailing by ${trail}. Drag, or use the arrow keys (one tick, Shift for ten), to move the stop and change the trail; Enter saves, Escape restores.`,
-    updating: (price: string) => `Updating… ${price}`,
+    updating: (price: string) => `Saving… ${price}`,
     activation: (price: string) => `Activates at ${price}`,
     activationDescription: (price: string) =>
       `The trailing stop starts trailing once the price reaches ${price}. Open to change it.`,
@@ -54,12 +54,12 @@ export const strings = {
     label: (side: string, qty: number, price: string) => `${side} ${String(qty)} @ ${price}`,
     description: (side: string, qty: number, price: string) =>
       `${side} limit, ${String(qty)} shares at ${price}. Drag, or use the arrow keys (one tick, Shift for ten), to move it; Enter saves, Escape restores, Delete cancels.`,
-    updating: (price: string) => `Updating… ${price}`,
+    updating: (price: string) => `Saving… ${price}`,
     cancelDescription: (side: string, qty: number, price: string) =>
       `Cancel the ${side.toLowerCase()} limit for ${String(qty)} at ${price}`,
     confirmCancel: 'Cancel?',
     confirmCancelDescription: (side: string, qty: number, price: string) =>
-      `Tap again to cancel the ${side.toLowerCase()} limit for ${String(qty)} at ${price}`,
+      `Press again to cancel the ${side.toLowerCase()} limit for ${String(qty)} at ${price}`,
     modified: 'Order modified',
     modifiedBody: (side: string, qty: number, price: string) =>
       `${side} ${String(qty)} now at ${price}.`,

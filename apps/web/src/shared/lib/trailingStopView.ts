@@ -12,7 +12,7 @@ export const TRAILING_STOP_STATUS_WORDS: Record<TrailingStopStatus, string> = {
   REJECTED: 'Exit failed',
 };
 
-export const TRAILING_STOP_NAME = 'Trailing SL';
+export const TRAILING_STOP_NAME = 'Trailing stop';
 
 /** Statuses that show the stop price beside the word (§6.2). */
 const SHOWS_STOP: ReadonlySet<TrailingStopStatus> = new Set(['TRAILING', 'TRIGGERED']);

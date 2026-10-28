@@ -48,7 +48,7 @@ test(`a trailing stop ratchets with scripted ticks and closes the position when 
   await sheet.getByRole('button', { name: 'Set trailing stop' }).click();
   await expect(sheet).toBeHidden();
   const line = figure.locator('[data-testid="chart-handle"][data-tone="trailing"]');
-  await expect(line).toHaveText(/Trailing SL ₹[\d,]+\.\d\d · 2% · Trailing$/);
+  await expect(line).toHaveText(/Trailing stop ₹[\d,]+\.\d\d · 2% · Trailing$/);
   const placed = rupeesIn(await line.innerText());
   expect(placed).toBeLessThan(base);
 
@@ -68,7 +68,7 @@ test(`a trailing stop ratchets with scripted ticks and closes the position when 
     return (await response.json()) as { items: { stopPrice: number | null; status: string }[] };
   })) as { items: { stopPrice: number | null; status: string }[] };
   expect(stops.items[0]).toMatchObject({ status: 'TRAILING', stopPrice: raised });
-  await expect(line).toHaveText(new RegExp(`Trailing SL ${escape(inr(raised))} `));
+  await expect(line).toHaveText(new RegExp(`Trailing stop ${escape(inr(raised))} `));
 
   // Through the stop: the market exit sells the 5 and the stop ends Executed.
   await setPrice(page, 'INFY', raised - TICK_SIZE_PAISE);

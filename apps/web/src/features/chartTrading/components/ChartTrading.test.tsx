@@ -162,9 +162,9 @@ describe('order lines (T16, SPEC-TFC-1 §8.1, §8.3)', () => {
     expect(calls.map((call) => [call.route, call.args])).toEqual([
       ['orderModify', { params: { id: 'ord_1' }, body: { price: 152_000 } }],
     ]);
-    // Sent: dotted at the new price, "Updating…", until the engine answers.
+    // Sent: dotted at the new price, "Saving…", until the engine answers.
     await waitFor(() => expect(handleFor('ord_1')).toHaveAttribute('data-tone', 'pending'));
-    expect(handleFor('ord_1')).toHaveTextContent('Updating… ₹1,520.00');
+    expect(handleFor('ord_1')).toHaveTextContent('Saving… ₹1,520.00');
     expect(store.getState().pending).toMatchObject([{ kind: 'modify', price: 152_000 }]);
 
     await act(async () => calls[0]?.answer.resolve(limit({ price: 152_000, seq: 2 })));
@@ -357,22 +357,22 @@ describe('trailing-stop line (T19, SPEC-TFC-1 §6.5, §6.6, §8.1)', () => {
     updatedAt: AT,
   };
 
-  it('a drag sends one modify with the new stop, shown as Updating… until the engine answers', async () => {
+  it('a drag sends one modify with the new stop, shown as Saving… until the engine answers', async () => {
     const { calls, quotes } = await setup([], [position], [trailing]);
     act(() => quotes.push(testQuote('INFY', 150_000)));
     const line = handleFor('stop:ts_1');
-    expect(line).toHaveTextContent('Trailing SL ₹1,485.00 · 1% · Trailing');
+    expect(line).toHaveTextContent('Trailing stop ₹1,485.00 · 1% · Trailing');
 
     // ₹1,485.00 is at y = 230, its label pushed to 244 by the position chip at 200; 10 px up
     // from wherever it is grabbed is ₹1,490.00.
     expect(line.dataset.y).toBe('244');
     pointer(line, 'pointerdown', 244);
     pointer(line, 'pointermove', 234);
-    expect(line).toHaveTextContent('Trailing SL ₹1,490.00');
+    expect(line).toHaveTextContent('Trailing stop ₹1,490.00');
     // The loupe says what the stop would lose against the ₹1,500.00 average on 10 shares.
     expect(screen.getByTestId('chart-loupe')).toHaveTextContent('Est. P&L −₹100.00');
     pointer(line, 'pointerup', 234);
-    expect(handleFor('stop:ts_1')).toHaveTextContent('Updating… ₹1,490.00');
+    expect(handleFor('stop:ts_1')).toHaveTextContent('Saving… ₹1,490.00');
     const sent = calls.filter((call) => call.route === 'trailingStopModify');
     expect(sent.map((call) => call.args)).toEqual([
       { params: { id: 'ts_1' }, body: { stopPrice: 149_000 } },
@@ -389,7 +389,9 @@ describe('trailing-stop line (T19, SPEC-TFC-1 §6.5, §6.6, §8.1)', () => {
     });
     expect(await screen.findByText('Stop now ₹1,490.00, trailing by ₹10.00.')).toBeInTheDocument();
     await waitFor(() =>
-      expect(handleFor('stop:ts_1')).toHaveTextContent('Trailing SL ₹1,490.00 · ₹10.00 · Trailing'),
+      expect(handleFor('stop:ts_1')).toHaveTextContent(
+        'Trailing stop ₹1,490.00 · ₹10.00 · Trailing',
+      ),
     );
   });
 
@@ -403,7 +405,7 @@ describe('trailing-stop line (T19, SPEC-TFC-1 §6.5, §6.6, §8.1)', () => {
     pointer(line, 'pointerup', 204);
     expect(await screen.findByText('That stop would trigger immediately.')).toBeInTheDocument();
     expect(calls.filter((call) => call.route === 'trailingStopModify')).toEqual([]);
-    expect(handleFor('stop:ts_1')).toHaveTextContent('Trailing SL ₹1,485.00');
+    expect(handleFor('stop:ts_1')).toHaveTextContent('Trailing stop ₹1,485.00');
     expect(haptics.haptic).toHaveBeenLastCalledWith('reject');
   });
 
@@ -424,7 +426,7 @@ describe('trailing-stop line (T19, SPEC-TFC-1 §6.5, §6.6, §8.1)', () => {
     const line = handleFor('activation:ts_1');
     expect(line).toHaveTextContent('Activates at ₹1,560.00');
     expect(line.dataset.tone).toBe('activation');
-    expect(screen.queryByText(/^Trailing SL ₹/)).toBeNull();
+    expect(screen.queryByText(/^Trailing stop ₹/)).toBeNull();
     pointer(line, 'pointerdown', 80);
     pointer(line, 'pointerup', 80);
     expect(useTrailingSheetStore.getState().target).toMatchObject({ product: 'INTRADAY' });

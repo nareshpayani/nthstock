@@ -33,7 +33,7 @@ export type TrailingStopFormProps = {
 };
 
 /**
- * The Trailing SL order type (T13, SPEC-TFC-1 §7): an exit for an open position. The quantity is
+ * The Trailing stop order type (T13, SPEC-TFC-1 §7): an exit for an open position. The quantity is
  * the position's and is stated, not typed; with both a Delivery and an Intraday position the user
  * picks which. The §6.6 messages show under the fields as the user types, a live preview states
  * the initial stop, and the review restates the behaviour in one sentence before confirming.

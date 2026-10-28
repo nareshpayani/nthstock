@@ -94,7 +94,7 @@ afterAll(() => {
   mock.adapter.dispose();
 });
 
-describe('Trailing SL order type (T13, SPEC-TFC-1 §7)', () => {
+describe('Trailing stop order type (T13, SPEC-TFC-1 §7)', () => {
   it(
     'is offered beside Market and Limit only when the user holds a position',
     async () => {
@@ -112,7 +112,7 @@ describe('Trailing SL order type (T13, SPEC-TFC-1 §7)', () => {
     'states the fixed quantity, previews the stop, shows margin and charges, and places a stop the store holds',
     async () => {
       const { tradingStore } = await renderWithPositions([['DELIVERY', 10]], liveStore);
-      fireEvent.click(await within(typeGroup()).findByRole('radio', { name: 'Trailing SL' }));
+      fireEvent.click(await within(typeGroup()).findByRole('radio', { name: 'Trailing stop' }));
       expect(await screen.findByTestId('trailing-protects')).toHaveTextContent(
         'Exit for your long position: Sell 10 shares when the stop is hit.',
       );
@@ -160,7 +160,7 @@ describe('Trailing SL order type (T13, SPEC-TFC-1 §7)', () => {
         ],
         liveStore,
       );
-      fireEvent.click(await within(typeGroup()).findByRole('radio', { name: 'Trailing SL' }));
+      fireEvent.click(await within(typeGroup()).findByRole('radio', { name: 'Trailing stop' }));
       const choice = await screen.findByRole('radiogroup', { name: 'Position to protect' });
       expect(
         within(choice)

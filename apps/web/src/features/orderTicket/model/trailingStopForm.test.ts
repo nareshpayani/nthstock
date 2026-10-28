@@ -34,7 +34,7 @@ const values = (extra: Partial<TrailingFormValues>): TrailingFormValues => ({
 const LTP = 150_000; // ₹1,500.00
 const long = { position: position(10), ltp: LTP };
 
-describe('Trailing SL ticket rules (T13, SPEC-TFC-1 §6.6)', () => {
+describe('Trailing stop ticket rules (T13, SPEC-TFC-1 §6.6)', () => {
   it('shows each §6.6 message, word for word', () => {
     expect(checkTrailing(values({ value: 150 }), { position: undefined, ltp: LTP })).toEqual({
       ok: false,

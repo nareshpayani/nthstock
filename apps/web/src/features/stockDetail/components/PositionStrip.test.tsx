@@ -84,7 +84,7 @@ describe('phone position strip (T12, SPEC-TFC-1 §9.4)', () => {
     const strip = await screen.findByRole('region', { name: 'Your INFY position' });
     expect(strip).toHaveTextContent(`+10@ ${formatInr(123_450)}`);
     expect(strip).toHaveTextContent(`+${formatInr(12_000)}`);
-    expect(strip).toHaveTextContent(`Trailing SL ${formatInr(122_840)}`);
+    expect(strip).toHaveTextContent(`Trailing stop ${formatInr(122_840)}`);
     store.dispose();
   });
 
