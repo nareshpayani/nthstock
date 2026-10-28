@@ -267,7 +267,8 @@ export function ChartOverlay({
     } else if (effect.kind === 'commit') {
       haptic('commit');
       announce(strings.drag.released(formatInr(effect.price)));
-    } else if (effect.kind === 'cancel') {
+    } else if (effect.kind === 'cancel' && line(effect.id)) {
+      // A line that went away mid-drag (filled, cancelled) is not "back where it was".
       announce(strings.drag.cancelled);
     }
   };
@@ -519,12 +520,14 @@ export function ChartOverlay({
       event.stopPropagation();
       keyMoveRef.current = null;
       on.onDragEnd?.(line.id, null);
+      announce(strings.drag.cancelled);
       return;
     }
     if (event.key === 'Enter' && current) {
       event.preventDefault();
       keyMoveRef.current = null;
       on.onDragEnd?.(line.id, current.price);
+      announce(strings.drag.released(formatInr(current.price)));
       return;
     }
     if (!line.draggable && (event.key === 'Enter' || event.key === ' ')) {
@@ -538,11 +541,14 @@ export function ChartOverlay({
     const price = snapToTick((current?.price ?? line.price) + steps * tickSize, tickSize);
     keyMoveRef.current = { id: line.id, price };
     on.onDragMove?.(line.id, price);
+    // The live region speaks the start only; each step is the handle's own value change.
+    if (!current) announce(strings.drag.keyStarted(line.label, formatInr(price)));
   };
   const onHandleBlur = (line: OverlayLine) => () => {
     if (keyMoveRef.current?.id !== line.id) return;
     keyMoveRef.current = null;
     latestRef.current.on.onDragEnd?.(line.id, null);
+    announce(strings.drag.cancelled);
   };
 
   const onGutterPointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
