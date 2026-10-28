@@ -8,7 +8,7 @@ import {
 } from '@nthstock/contracts';
 import { ErrorState, SegmentedControl, Skeleton } from '@nthstock/ui';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
-import { useState } from 'react';
+import { useId, useState } from 'react';
 import { ChartTrading } from '@/features/chartTrading';
 import { AlertLines } from '@/features/notifications';
 import {
@@ -40,7 +40,10 @@ export type StockChartCardProps = {
   onChartTypeChange: (type: ChartType) => void;
   /** Chart height in px; the phone layout sizes it to the screen (T12). */
   height?: number;
-  /** `touch` on phones: 44 px range and type segments in a row that scrolls sideways (T12). */
+  /**
+   * `touch` is the phone layout (T12, SPEC-CR-1 §6.1): no card chrome, an edge-to-edge plot, the
+   * chart type and bar size above it and 44 px range segments across the full width below it.
+   */
   controls?: 'sm' | 'touch';
   /** Trade from the chart: pan and pinch, and the trading overlay (T15). Equities only. */
   trading?: boolean;
@@ -68,6 +71,7 @@ export function StockChartCard({
   trading = false,
 }: StockChartCardProps) {
   const [chart, setChart] = useState<ChartHandle | null>(null);
+  const headingId = useId();
   const api = useApiClient();
   const marketOpen = useMarketOpen();
   const { symbol, exchange } = instrument;
@@ -94,28 +98,122 @@ export function StockChartCard({
     barMinutes ?? 1,
   );
 
+  const touch = controls === 'touch';
+  const liveBadge = marketOpen && range === '1D' ? <LiveBadge /> : null;
+  const rangeControl = (
+    <SegmentedControl
+      label={strings.chart.rangeLabel}
+      size={controls}
+      value={range}
+      onValueChange={onRangeChange}
+      options={CHART_RANGES.map((value) => ({ value, label: value }))}
+      {...(touch ? { className: 'w-full' } : {})}
+    />
+  );
+  const typeControl = (
+    <SegmentedControl
+      label={strings.chart.typeLabel}
+      size={controls}
+      value={chartType}
+      onValueChange={onChartTypeChange}
+      options={CHART_TYPES.map((value) => ({ value, label: strings.chart.types[value] }))}
+    />
+  );
+  const showIntervals = intervals.length > 1 && onIntervalChange !== undefined;
+  const plot = (
+    <div aria-busy={candles.isFetching} className="relative">
+      {candles.isError && !candles.data ? (
+        <div style={{ height }} className="grid place-items-center">
+          <ErrorState
+            title={strings.chart.errorTitle}
+            description={strings.chart.errorBody}
+            retryLabel={strings.chart.retry}
+            onRetry={() => void candles.refetch()}
+          />
+        </div>
+      ) : candles.data ? (
+        <PriceChart
+          candles={bars}
+          label={strings.chart.label(
+            symbol,
+            strings.chart.typeNames[chartType],
+            rangeLabel(range),
+            interval === intervals[0] ? undefined : intervalLabel(interval),
+          )}
+          type={chartType}
+          format={format}
+          intraday={isIntraday(range)}
+          height={height}
+          tooltip
+          interactive={trading}
+          onReady={trading ? setChart : undefined}
+          overlay={
+            trading && chart ? (
+              <>
+                <ChartTrading handle={chart} instrument={instrument} />
+                <AlertLines handle={chart} symbol={symbol} exchange={exchange} />
+              </>
+            ) : null
+          }
+          className={candles.isPlaceholderData ? 'opacity-60' : undefined}
+        />
+      ) : (
+        <div role="status" aria-label={strings.chart.loading} style={{ height }}>
+          <Skeleton className="h-full w-full" />
+        </div>
+      )}
+    </div>
+  );
+
+  if (touch) {
+    // The phone instrument page (SPEC-CR-1 §6.1): no card chrome, the plot edge to edge, the chart
+    // type and bar size in a slim row above it and the ranges in a full-width row under it, where
+    // the thumb is. The heading stays for screen readers, so the section is still "Price chart".
+    return (
+      <section aria-labelledby={headingId} className="grid gap-2" data-part="phone-chart">
+        <div className="flex items-center gap-2">
+          <h2 id={headingId} className="sr-only">
+            {strings.chart.title}
+          </h2>
+          {liveBadge}
+          <div className="ml-auto flex items-center gap-2">
+            {typeControl}
+            {showIntervals ? (
+              // Five more segments would not fit beside the type, so the bar size is a native
+              // select: one row, and the OS picker.
+              <select
+                aria-label={strings.chart.intervalLabel}
+                value={interval}
+                onChange={(event) => {
+                  const next = intervals.find((value) => value === event.target.value);
+                  if (next) onIntervalChange(next);
+                }}
+                className="h-11 rounded-md border border-line bg-canvas px-3 text-body font-medium text-ink focus-visible:border-brand focus-visible:ring-3 focus-visible:ring-brand-soft focus-visible:outline-none"
+              >
+                {intervals.map((value) => (
+                  <option key={value} value={value}>
+                    {value}
+                  </option>
+                ))}
+              </select>
+            ) : null}
+          </div>
+        </div>
+        <div className="-mx-4">{plot}</div>
+        {rangeControl}
+      </section>
+    );
+  }
+
   return (
     <Card
       // The LIVE badge sits beside the heading, not in it, so the section is named "Price chart".
       title={strings.chart.title}
       aside={
-        // The controls wrap onto a second row on a narrow phone rather than scroll sideways, so
-        // "Candles" is never cut off at the card's edge. There the LIVE badge goes last, beside
-        // the chart type, so two rows hold everything down to 340 px.
         <div className="flex flex-wrap items-center gap-2">
-          {marketOpen && range === '1D' ? (
-            <span className={controls === 'touch' ? 'order-last' : undefined}>
-              <LiveBadge />
-            </span>
-          ) : null}
-          <SegmentedControl
-            label={strings.chart.rangeLabel}
-            size={controls}
-            value={range}
-            onValueChange={onRangeChange}
-            options={CHART_RANGES.map((value) => ({ value, label: value }))}
-          />
-          {intervals.length > 1 && onIntervalChange && controls !== 'touch' ? (
+          {liveBadge}
+          {rangeControl}
+          {showIntervals ? (
             <SegmentedControl
               label={strings.chart.intervalLabel}
               size={controls}
@@ -128,77 +226,11 @@ export function StockChartCard({
               }))}
             />
           ) : null}
-          <SegmentedControl
-            label={strings.chart.typeLabel}
-            size={controls}
-            value={chartType}
-            onValueChange={onChartTypeChange}
-            options={CHART_TYPES.map((value) => ({ value, label: strings.chart.types[value] }))}
-          />
-          {intervals.length > 1 && onIntervalChange && controls === 'touch' ? (
-            // On a phone five more segments would push the chart under the trade bar, so the bar
-            // size is a native select beside the chart type: one row, and the OS picker.
-            <select
-              aria-label={strings.chart.intervalLabel}
-              value={interval}
-              onChange={(event) => {
-                const next = intervals.find((value) => value === event.target.value);
-                if (next) onIntervalChange(next);
-              }}
-              className="h-11 rounded-md border border-line bg-canvas px-3 text-body font-medium text-ink focus-visible:border-brand focus-visible:ring-3 focus-visible:ring-brand-soft focus-visible:outline-none"
-            >
-              {intervals.map((value) => (
-                <option key={value} value={value}>
-                  {value}
-                </option>
-              ))}
-            </select>
-          ) : null}
+          {typeControl}
         </div>
       }
     >
-      <div aria-busy={candles.isFetching} className="relative">
-        {candles.isError && !candles.data ? (
-          <div style={{ height }} className="grid place-items-center">
-            <ErrorState
-              title={strings.chart.errorTitle}
-              description={strings.chart.errorBody}
-              retryLabel={strings.chart.retry}
-              onRetry={() => void candles.refetch()}
-            />
-          </div>
-        ) : candles.data ? (
-          <PriceChart
-            candles={bars}
-            label={strings.chart.label(
-              symbol,
-              strings.chart.typeNames[chartType],
-              rangeLabel(range),
-              interval === intervals[0] ? undefined : intervalLabel(interval),
-            )}
-            type={chartType}
-            format={format}
-            intraday={isIntraday(range)}
-            height={height}
-            tooltip
-            interactive={trading}
-            onReady={trading ? setChart : undefined}
-            overlay={
-              trading && chart ? (
-                <>
-                  <ChartTrading handle={chart} instrument={instrument} />
-                  <AlertLines handle={chart} symbol={symbol} exchange={exchange} />
-                </>
-              ) : null
-            }
-            className={candles.isPlaceholderData ? 'opacity-60' : undefined}
-          />
-        ) : (
-          <div role="status" aria-label={strings.chart.loading} style={{ height }}>
-            <Skeleton className="h-full w-full" />
-          </div>
-        )}
-      </div>
+      {plot}
     </Card>
   );
 }

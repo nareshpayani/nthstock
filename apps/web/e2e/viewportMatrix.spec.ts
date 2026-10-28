@@ -32,7 +32,6 @@ type Frame = 'page' | 'ticket';
  * What today's flow still gets wrong, measured on 28 Oct 2026 before the craft round, each with the
  * story that fixes it. The story's pull request removes its rows; a row that passes fails the run.
  */
-const TOUCH = VIEWPORT_MATRIX.filter(isTouchViewport).map((viewport) => viewport.name);
 const KNOWN_GAPS: readonly {
   frame: Frame;
   check: Check;
@@ -41,29 +40,12 @@ const KNOWN_GAPS: readonly {
 }[] = [
   {
     frame: 'page',
-    check: 'sideScroll',
-    viewports: ['phone-320x640', 'phone-344x882'],
-    story: 'CR-T13',
-  },
-  {
-    frame: 'page',
-    check: 'primaryAction',
-    viewports: ['phone-320x640', 'phone-344x882'],
-    story: 'CR-T13',
-  },
-  { frame: 'page', check: 'touchTargets', viewports: TOUCH, story: 'CR-T13, CR-T15' },
-  {
-    frame: 'ticket',
-    check: 'sideScroll',
-    viewports: ['phone-320x640', 'phone-344x882'],
-    story: 'CR-T13',
-  },
-  // The page scrolls sideways at these widths, which pushes the pinned footer past the edge.
-  {
-    frame: 'ticket',
-    check: 'primaryAction',
-    viewports: ['phone-320x640'],
-    story: 'CR-T13',
+    check: 'touchTargets',
+    // Below 768 px the phone layout sizes every control for touch (CR-T13).
+    viewports: VIEWPORT_MATRIX.filter((v) => isTouchViewport(v) && v.width >= 768).map(
+      (v) => v.name,
+    ),
+    story: 'CR-T15',
   },
   {
     frame: 'ticket',
