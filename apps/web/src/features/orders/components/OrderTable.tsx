@@ -246,27 +246,29 @@ export function OrderTable({
 
   if (orders.length > VIRTUAL_ORDER_ROWS) {
     return (
-      <VirtualList
-        items={orders}
-        label={label}
-        rowHeight={ROW_HEIGHT}
-        height="min(70dvh, 640px)"
-        columns={VIRTUAL_COLUMNS}
-        className="min-w-[960px]"
-        getKey={(order) => order.id}
-        header={columns.map((column) => (
-          <VirtualHeaderCell key={column.key} numeric={column.numeric ?? false}>
-            {column.header}
-          </VirtualHeaderCell>
-        ))}
-        renderRow={(order) =>
-          columns.map((column) => (
-            <VirtualCell key={column.key} numeric={column.numeric ?? false}>
-              {column.render(order)}
-            </VirtualCell>
-          ))
-        }
-      />
+      <div className="relative overflow-x-auto" data-testid="order-virtual-scroller">
+        <VirtualList
+          items={orders}
+          label={label}
+          rowHeight={ROW_HEIGHT}
+          height="min(70dvh, 640px)"
+          columns={VIRTUAL_COLUMNS}
+          className="min-w-[960px]"
+          getKey={(order) => order.id}
+          header={columns.map((column) => (
+            <VirtualHeaderCell key={column.key} numeric={column.numeric ?? false}>
+              {column.header}
+            </VirtualHeaderCell>
+          ))}
+          renderRow={(order) =>
+            columns.map((column) => (
+              <VirtualCell key={column.key} numeric={column.numeric ?? false}>
+                {column.render(order)}
+              </VirtualCell>
+            ))
+          }
+        />
+      </div>
     );
   }
 
