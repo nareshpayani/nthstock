@@ -197,7 +197,8 @@ export function OrderTable({
   ];
 
   // On a phone each order is a two-line row with its actions under it, so nothing is cut off or
-  // scrolls sideways. A long book keeps the virtualised grid, which scrolls inside its card.
+  // scrolls sideways. A long book keeps the virtualised grid in a wrapper that scrolls sideways
+  // inside the card (the grid's own root is the vertical scroller, so it can't take the min width).
   if (phone && orders.length <= VIRTUAL_ORDER_ROWS) {
     return (
       <ul aria-label={label} className="grid divide-y divide-line" data-layout="phone">
@@ -246,27 +247,29 @@ export function OrderTable({
 
   if (orders.length > VIRTUAL_ORDER_ROWS) {
     return (
-      <VirtualList
-        items={orders}
-        label={label}
-        rowHeight={ROW_HEIGHT}
-        height="min(70dvh, 640px)"
-        columns={VIRTUAL_COLUMNS}
-        className="min-w-[960px]"
-        getKey={(order) => order.id}
-        header={columns.map((column) => (
-          <VirtualHeaderCell key={column.key} numeric={column.numeric ?? false}>
-            {column.header}
-          </VirtualHeaderCell>
-        ))}
-        renderRow={(order) =>
-          columns.map((column) => (
-            <VirtualCell key={column.key} numeric={column.numeric ?? false}>
-              {column.render(order)}
-            </VirtualCell>
-          ))
-        }
-      />
+      <div className="relative overflow-x-auto" data-testid="order-grid-scroller">
+        <VirtualList
+          items={orders}
+          label={label}
+          rowHeight={ROW_HEIGHT}
+          height="min(70dvh, 640px)"
+          columns={VIRTUAL_COLUMNS}
+          className="min-w-[960px]"
+          getKey={(order) => order.id}
+          header={columns.map((column) => (
+            <VirtualHeaderCell key={column.key} numeric={column.numeric ?? false}>
+              {column.header}
+            </VirtualHeaderCell>
+          ))}
+          renderRow={(order) =>
+            columns.map((column) => (
+              <VirtualCell key={column.key} numeric={column.numeric ?? false}>
+                {column.render(order)}
+              </VirtualCell>
+            ))
+          }
+        />
+      </div>
     );
   }
 
