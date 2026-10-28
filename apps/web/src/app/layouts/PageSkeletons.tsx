@@ -1,8 +1,12 @@
 import { Skeleton, cn } from '@nthstock/ui';
 import { useSyncExternalStore, type ReactNode } from 'react';
 import { ChartSkeleton } from '@/shared/components/ChartSkeleton';
-import { usePhoneLayout } from '@/shared/hooks/usePhoneLayout';
-import { DESKTOP_CHART_HEIGHT, phoneChartHeight } from '@/shared/lib/phoneChart';
+import { useLandscapePhone, usePhoneLayout } from '@/shared/hooks/usePhoneLayout';
+import {
+  DESKTOP_CHART_HEIGHT,
+  landscapeChartHeight,
+  phoneChartHeight,
+} from '@/shared/lib/phoneChart';
 import { strings } from '../strings';
 
 /**
@@ -12,7 +16,7 @@ import { strings } from '../strings';
  */
 export function ShellSkeleton({ children }: { children: ReactNode }) {
   return (
-    <div className="min-h-dvh bg-canvas [--header-h:97px] min-[1360px]:[--header-h:57px]">
+    <div className="min-h-dvh bg-canvas">
       <div
         aria-hidden="true"
         data-testid="shell-skeleton"
@@ -60,11 +64,15 @@ const viewportHeight = () => window.innerHeight;
  */
 export function InstrumentSkeleton() {
   const phone = usePhoneLayout();
+  // Sized like the page it stands in for, so the chart does not jump when the page loads (CLS).
+  const landscape = useLandscapePhone();
   const height = useSyncExternalStore(subscribeResize, viewportHeight, () => 800);
   return (
     <div role="status" aria-label={strings.loading} data-testid="instrument-skeleton">
       {phone ? (
-        <PhoneInstrumentSkeleton chartHeight={phoneChartHeight(height)} />
+        <PhoneInstrumentSkeleton
+          chartHeight={landscape ? landscapeChartHeight(height) : phoneChartHeight(height)}
+        />
       ) : (
         <DesktopInstrumentSkeleton />
       )}

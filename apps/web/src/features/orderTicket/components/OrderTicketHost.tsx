@@ -1,9 +1,9 @@
 import { Sheet } from '@nthstock/ui';
 import { Suspense, lazy, useLayoutEffect, useRef } from 'react';
-import { usePhoneLayout } from '@/shared/hooks/usePhoneLayout';
 import { useSession } from '@/shared/hooks/useSession';
 import { useTicketIntentStore } from '@/shared/lib/ticketIntentStore';
 import { strings } from '../strings';
+import { usePanelPlacement } from './panelPlacement';
 import { TicketSkeleton } from './TicketSkeleton';
 
 // The ticket (form, React Hook Form, depth, review) is its own chunk, fetched on first open, so it
@@ -17,14 +17,15 @@ const OrderTicket = lazy(() =>
  * intent (Buy/Sell on stock detail, watchlist rows and their B/S keys) once a session is held; a
  * signed-out Buy keeps the intent through /login, so the ticket opens on return. It slides in from
  * the right over a light overlay, so the chart and watchlist stay in view; on a phone it rises
- * from the bottom, within thumb reach (T12, SPEC-TFC-1 §9.4). Focus is trapped inside, Esc closes
+ * from the bottom, within thumb reach (T12, SPEC-TFC-1 §9.4), full height in landscape, and from
+ * 600 to 1023 px it docks beside the page, which makes room for it (SPEC-CR-1 §6.2). Focus is trapped inside, Esc closes
  * it, and focus goes back to the control that opened it.
  */
 export function OrderTicketHost() {
   const intent = useTicketIntentStore((s) => s.intent);
   const closeTicket = useTicketIntentStore((s) => s.closeTicket);
   const { status } = useSession();
-  const phone = usePhoneLayout();
+  const placement = usePanelPlacement('w-[min(440px,calc(100vw-24px))]');
   const open = intent !== null && status === 'authenticated';
   const returnFocus = useRef<HTMLElement | null>(null);
   const wasOpen = useRef(false);
@@ -58,8 +59,7 @@ export function OrderTicketHost() {
       description={strings.description}
       returnFocus={returnFocus}
       overlay="light"
-      side={phone ? 'bottom' : 'right'}
-      {...(phone ? {} : { className: 'w-[min(440px,calc(100vw-24px))]' })}
+      {...placement}
     >
       {open ? (
         <Suspense fallback={<TicketSkeleton />}>

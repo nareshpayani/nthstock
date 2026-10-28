@@ -165,7 +165,11 @@ export function StockChartCard({
     // type and bar size in a slim row above it and the ranges in a full-width row under it, where
     // the thumb is. The heading stays for screen readers, so the section is still "Price chart".
     return (
-      <section aria-labelledby={headingId} className="grid gap-2" data-part="phone-chart">
+      <section
+        aria-labelledby={headingId}
+        className="grid grid-cols-[minmax(0,1fr)] gap-2"
+        data-part="phone-chart"
+      >
         <div className="flex items-center gap-2">
           <h2 id={headingId} className="sr-only">
             {strings.chart.title}

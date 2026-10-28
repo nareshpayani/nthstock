@@ -1,11 +1,11 @@
 import type { Instrument } from '@nthstock/contracts';
-import { cn } from '@nthstock/ui';
+import { TouchTargets, cn } from '@nthstock/ui';
 import { useQuery } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 import { keepInterval } from '@/features/charts';
 import { SectionBoundary } from '@/shared/components/SectionBoundary';
 import { useDocumentTitle } from '@/shared/hooks/useDocumentTitle';
-import { usePhoneLayout } from '@/shared/hooks/usePhoneLayout';
+import { usePhoneLayout, useTouchScreen } from '@/shared/hooks/usePhoneLayout';
 import { useApiClient } from '@/shared/lib/apiClientContext';
 import { quoteSnapshotQuery } from '../api/stockDetailQueries';
 import { DEFAULT_STOCK_RANGE, type StockDetailSearch } from '../model/stockDetailSearch';
@@ -60,6 +60,7 @@ export function StockDetailPage({
   const snapshot = useQuery(quoteSnapshotQuery(api, listing));
   const equity = instrument.type === 'EQUITY';
   const phone = usePhoneLayout();
+  const touchScreen = useTouchScreen();
 
   if (phone && equity) {
     return (
@@ -74,63 +75,66 @@ export function StockDetailPage({
   }
 
   return (
-    <div className="mx-auto grid w-full max-w-[1200px] animate-content-in grid-cols-[minmax(0,1fr)] gap-4 lg:gap-6">
-      <StockHeader
-        instrument={instrument}
-        snapshot={snapshot.data}
-        onExchangeChange={(exchange) => onSearchChange({ exchange })}
-      />
-      {/*
+    // On a tablet the page keeps this layout, with touch-size controls (SPEC-CR-1 §6.3).
+    <TouchTargets enabled={touchScreen}>
+      <div className="mx-auto grid w-full max-w-[1200px] animate-content-in grid-cols-[minmax(0,1fr)] gap-4 lg:gap-6">
+        <StockHeader
+          instrument={instrument}
+          snapshot={snapshot.data}
+          onExchangeChange={(exchange) => onSearchChange({ exchange })}
+        />
+        {/*
         T-112: one column under 1024 px, in reading order chart, depth, stats, overview. From
         1024 px (lg) chart, stats and overview fill the left column and depth sits at the top of
         a narrower right column, spanning the left column's rows.
       */}
-      <div
-        className={cn(
-          'grid grid-cols-[minmax(0,1fr)] gap-4 lg:gap-6',
-          equity && 'lg:grid-cols-[minmax(0,1fr)_minmax(17rem,22rem)] lg:items-start',
-        )}
-      >
-        <Section label={strings.chart.title}>
-          <div className="grid gap-3">
-            {equity ? <SimulatorPanel symbol={instrument.symbol} /> : null}
-            <StockChartCard
-              instrument={instrument}
-              range={search.range ?? DEFAULT_STOCK_RANGE}
-              chartType={search.chart ?? rememberedChartType()}
-              interval={search.interval}
-              onRangeChange={(range) =>
-                onSearchChange({ range, interval: keepInterval(range, search.interval) })
-              }
-              onIntervalChange={(interval) => onSearchChange({ interval })}
-              onChartTypeChange={(chart) => {
-                rememberChartType(chart);
-                onSearchChange({ chart });
-              }}
-              trading={equity}
-            />
-          </div>
-        </Section>
-        {equity ? (
-          <>
-            <div className="min-w-0 lg:col-start-2 lg:row-span-3 lg:row-start-1">
-              <Section label={strings.depth.title}>
-                <MarketDepthCard instrument={instrument} />
-              </Section>
+        <div
+          className={cn(
+            'grid grid-cols-[minmax(0,1fr)] gap-4 lg:gap-6',
+            equity && 'lg:grid-cols-[minmax(0,1fr)_minmax(17rem,22rem)] lg:items-start',
+          )}
+        >
+          <Section label={strings.chart.title}>
+            <div className="grid grid-cols-[minmax(0,1fr)] gap-3">
+              {equity ? <SimulatorPanel symbol={instrument.symbol} /> : null}
+              <StockChartCard
+                instrument={instrument}
+                range={search.range ?? DEFAULT_STOCK_RANGE}
+                chartType={search.chart ?? rememberedChartType()}
+                interval={search.interval}
+                onRangeChange={(range) =>
+                  onSearchChange({ range, interval: keepInterval(range, search.interval) })
+                }
+                onIntervalChange={(interval) => onSearchChange({ interval })}
+                onChartTypeChange={(chart) => {
+                  rememberChartType(chart);
+                  onSearchChange({ chart });
+                }}
+                trading={equity}
+              />
             </div>
-            <div className="min-w-0 lg:col-start-1">
-              <Section label={strings.stats.title}>
-                <KeyStatsCard instrument={instrument} snapshot={snapshot.data} />
-              </Section>
-            </div>
-            <div className="min-w-0 lg:col-start-1">
-              <Section label={strings.overview.title}>
-                <OverviewCard instrument={instrument} />
-              </Section>
-            </div>
-          </>
-        ) : null}
+          </Section>
+          {equity ? (
+            <>
+              <div className="min-w-0 lg:col-start-2 lg:row-span-3 lg:row-start-1">
+                <Section label={strings.depth.title}>
+                  <MarketDepthCard instrument={instrument} />
+                </Section>
+              </div>
+              <div className="min-w-0 lg:col-start-1">
+                <Section label={strings.stats.title}>
+                  <KeyStatsCard instrument={instrument} snapshot={snapshot.data} />
+                </Section>
+              </div>
+              <div className="min-w-0 lg:col-start-1">
+                <Section label={strings.overview.title}>
+                  <OverviewCard instrument={instrument} />
+                </Section>
+              </div>
+            </>
+          ) : null}
+        </div>
       </div>
-    </div>
+    </TouchTargets>
   );
 }

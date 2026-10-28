@@ -84,6 +84,28 @@ describe('Sheet', () => {
     expect(sheet).toHaveClass('inset-x-0', 'bottom-0', 'max-h-[90dvh]');
   });
 
+  it('docks beside the page on a tablet: no overlay, and a tap outside leaves it open (SPEC-CR-1 §6.2)', async () => {
+    const onOpenChange = vi.fn();
+    render(
+      <>
+        <button type="button">Chart</button>
+        <Sheet title="Trade INFY" docked defaultOpen onOpenChange={onOpenChange}>
+          <input aria-label="Quantity" />
+        </Sheet>
+      </>,
+    );
+    const sheet = await screen.findByRole('dialog', { name: 'Trade INFY' });
+    expect(sheet).toHaveAttribute('data-docked', 'true');
+    expect(sheet).toHaveClass('right-0', 'border-l');
+    expect(document.querySelector('[data-overlay]')).toBeNull();
+    const chart = screen.getByRole('button', { name: 'Chart' });
+    fireEvent.pointerDown(chart);
+    fireEvent.focusIn(chart);
+    expect(onOpenChange).not.toHaveBeenCalled();
+    fireEvent.keyDown(sheet, { key: 'Escape' });
+    expect(onOpenChange).toHaveBeenCalledWith(false);
+  });
+
   it('returns focus to returnFocus when opened without a trigger, over a light overlay', async () => {
     function Ticket() {
       const buy = useRef<HTMLButtonElement>(null);

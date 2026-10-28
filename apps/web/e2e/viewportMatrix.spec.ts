@@ -37,23 +37,7 @@ const KNOWN_GAPS: readonly {
   check: Check;
   viewports: readonly string[];
   story: string;
-}[] = [
-  {
-    frame: 'page',
-    check: 'touchTargets',
-    // Below 768 px the phone layout sizes every control for touch (CR-T13).
-    viewports: VIEWPORT_MATRIX.filter((v) => isTouchViewport(v) && v.width >= 768).map(
-      (v) => v.name,
-    ),
-    story: 'CR-T15',
-  },
-  {
-    frame: 'ticket',
-    check: 'touchTargets',
-    viewports: ['landscape-844x390', 'tablet-820x1180', 'tablet-1180x820'],
-    story: 'CR-T15',
-  },
-];
+}[] = [];
 
 const gapFor = (viewport: MatrixViewport, frame: Frame, check: Check) =>
   KNOWN_GAPS.find(

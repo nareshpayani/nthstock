@@ -63,8 +63,10 @@ function About({ name, text }: { name: string; text: string }) {
 function OverviewBody({ profile }: { profile: InstrumentProfile }) {
   const touch = useTouchTargets();
   return (
-    <div className="grid gap-5">
-      <dl className="m-0 grid gap-4 sm:grid-cols-[auto_auto_minmax(0,1fr)] sm:gap-x-8">
+    // Sized by its own width, not the screen's: beside a docked trading panel (SPEC-CR-1 §6.2) a
+    // wide screen still leaves the card phone-narrow.
+    <div className="@container grid gap-5">
+      <dl className="m-0 grid gap-4 @min-[576px]:grid-cols-[auto_auto_minmax(0,1fr)] @min-[576px]:gap-x-8">
         <Fact label={strings.overview.sector}>
           <span className={chip}>{profile.sector}</span>
         </Fact>
