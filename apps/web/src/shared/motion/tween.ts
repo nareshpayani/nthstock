@@ -35,6 +35,8 @@ export function animateTween(
   }
   let start: number | undefined;
   let frame = 0;
+  // Checked in `tick` so a stop called from inside `onFrame` also ends the frame already running.
+  let stopped = false;
   const tick = (now: number) => {
     start ??= now;
     const t = (now - start) / durationMs;
@@ -44,8 +46,11 @@ export function animateTween(
       return;
     }
     onFrame(from + (to - from) * easeOut(t));
-    frame = requestAnimationFrame(tick);
+    if (!stopped) frame = requestAnimationFrame(tick);
   };
   frame = requestAnimationFrame(tick);
-  return () => cancelAnimationFrame(frame);
+  return () => {
+    stopped = true;
+    cancelAnimationFrame(frame);
+  };
 }

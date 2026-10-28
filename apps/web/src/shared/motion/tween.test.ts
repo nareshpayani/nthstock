@@ -52,4 +52,28 @@ describe('animateTween', () => {
     expect(frames.length).toBe(count);
     expect(frames.at(-1)).toBeLessThan(40);
   });
+
+  it('stops from inside its own frame callback', () => {
+    const frames: number[] = [];
+    const stops: (() => void)[] = [];
+    stops.push(
+      animateTween(0, 40, RATCHET_GLIDE_MS, (value) => {
+        frames.push(value);
+        stops[0]?.();
+      }),
+    );
+    vi.advanceTimersByTime(1_000);
+    expect(frames).toHaveLength(1);
+  });
+
+  it.each([
+    ['from equals to', 5, 5, 240],
+    ['the duration is zero', 0, 5, 0],
+  ])('lands on the target at once when %s', (_name, from, to, ms) => {
+    const frames: number[] = [];
+    const done = vi.fn();
+    animateTween(from, to, ms, (value) => frames.push(value), { onDone: done });
+    expect(frames).toEqual([to]);
+    expect(done).toHaveBeenCalledOnce();
+  });
 });

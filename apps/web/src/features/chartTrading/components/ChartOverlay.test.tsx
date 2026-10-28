@@ -868,6 +868,86 @@ describe('chart overlay (T15, SPEC-TFC-1 §10.5)', () => {
       expect(frames).toHaveLength(0);
     });
 
+    describe('keys on a trailing stop', () => {
+      function KeyHarness() {
+        const [price, setPrice] = useState(150_000);
+        return (
+          <ChartOverlay
+            handle={keyHandle}
+            tickSize={5}
+            label="Chart orders"
+            lines={[stopLine(price)]}
+            onDragMove={(_id, next) => setPrice(next)}
+            onDragEnd={(_id, saved) => setPrice(saved ?? 150_000)}
+          />
+        );
+      }
+      let keyHandle = makeHandle();
+      const framesFor = () => {
+        const frames: FrameRequestCallback[] = [];
+        vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
+          frames.push(callback);
+          return frames.length;
+        });
+        vi.stubGlobal('cancelAnimationFrame', () => undefined);
+        vi.stubGlobal('matchMedia', (query: string) => ({ matches: false, media: query }));
+        keyHandle = makeHandle();
+        return frames;
+      };
+      const springBack = (frames: FrameRequestCallback[]) => {
+        let now = 0;
+        const seen: number[] = [];
+        for (let i = 0; i < 90 && frames.length > 0; i += 1) {
+          now += 1000 / 60;
+          frames.shift()?.(now);
+          seen.push(Number(stopPrice()));
+        }
+        return seen;
+      };
+
+      it('draws an arrow-key move at once, with no trace and no queued frames', () => {
+        const frames = framesFor();
+        render(<KeyHarness />);
+        fireEvent.keyDown(screen.getByTestId('chart-handle'), { key: 'ArrowUp', shiftKey: true });
+        expect(stopPrice()).toBe(150_050);
+        expect(traces()).toHaveLength(0);
+        expect(frames).toHaveLength(0);
+      });
+
+      it.each([
+        ['Escape', (handle: HTMLElement) => fireEvent.keyDown(handle, { key: 'Escape' })],
+        ['blur', (handle: HTMLElement) => fireEvent.blur(handle)],
+      ])('%s springs the line back from the keyed price, leaving no trace', (_name, cancel) => {
+        const frames = framesFor();
+        render(<KeyHarness />);
+        const handle = screen.getByTestId('chart-handle');
+        fireEvent.keyDown(handle, { key: 'ArrowUp', shiftKey: true });
+        act(() => {
+          cancel(handle);
+        });
+        expect(stopPrice()).toBe(150_050);
+        const seen = springBack(frames);
+        expect(seen.some((price) => price > 150_000 && price < 150_050)).toBe(true);
+        expect(seen.at(-1)).toBe(150_000);
+        expect(traces()).toHaveLength(0);
+      });
+    });
+
+    it('a second ratchet mid-glide starts from the drawn price and leaves a second trace', () => {
+      const { frames, view, element } = ratchet(false);
+      view.rerender(element(151_000));
+      run(frames, 100);
+      const drawn = Number(stopPrice());
+      expect(drawn).toBeGreaterThan(150_000);
+      view.rerender(element(152_000));
+      expect(Number(stopPrice())).toBe(drawn);
+      expect(traces()).toHaveLength(2);
+      expect(traces()[1]?.options).toMatchObject({ price: drawn, lineStyle: 2 });
+      run(frames, 1_500);
+      expect(stopPrice()).toBe(152_000);
+      expect(traces()).toHaveLength(0);
+    });
+
     it('removes a fading trace with the chart', () => {
       const { view, element } = ratchet(false);
       view.rerender(element(151_000));

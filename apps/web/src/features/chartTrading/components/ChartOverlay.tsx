@@ -281,8 +281,11 @@ export function ChartOverlay({
       (alpha) => line.applyOptions({ color: withAlpha(color, alpha) }),
       {
         onDone: () => {
-          tracesRef.current.delete(trace);
-          series.removePriceLine(line);
+          try {
+            series.removePriceLine(line);
+          } finally {
+            tracesRef.current.delete(trace);
+          }
         },
       },
     );
@@ -418,8 +421,10 @@ export function ChartOverlay({
       if (active.phase !== 'idle' && active.id === line.id) continue;
       if (keyMoveRef.current?.id === line.id || settleFromRef.current?.id === line.id) continue;
       // A glide or spring already under way carries on from where the line is drawn now.
-      settle(line.id, settlingRef.current.get(line.id)?.price ?? was.price, line.price, 'glide');
-      leaveTrace(was.price);
+      if (!drawnRef.current.has(line.id)) continue;
+      const drawnFrom = settlingRef.current.get(line.id)?.price ?? was.price;
+      settle(line.id, drawnFrom, line.price, 'glide');
+      leaveTrace(drawnFrom);
     }
     for (const [id, entry] of settlingRef.current) {
       const drawn = drawnRef.current.get(id);
@@ -579,9 +584,11 @@ export function ChartOverlay({
     }
     apply(release(gestureRef.current, event.pointerId, paneY(event.clientY)));
   };
-  const onHandlePointerCancel = () => {
-    if (chipRef.current) pressChip(null);
-    chipRef.current = null;
+  const onHandlePointerCancel = (event: ReactPointerEvent<HTMLElement>) => {
+    if (chipRef.current?.pointerId === event.pointerId) {
+      pressChip(null);
+      chipRef.current = null;
+    }
     apply(cancel(gestureRef.current));
   };
 
