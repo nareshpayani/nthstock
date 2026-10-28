@@ -9,7 +9,7 @@ import {
   type KeyboardEvent,
   type PointerEvent as ReactPointerEvent,
 } from 'react';
-import type { ChartHandle } from '@/features/charts';
+import { withAlpha, type ChartHandle } from '@/features/charts';
 import { animateSpring } from '@/shared/motion/spring';
 import { prefersReducedMotion } from '@/shared/motion/useReducedMotion';
 import { lockChart } from '../lib/chartLock';
@@ -66,8 +66,8 @@ type Elements = {
 type Settling = Map<string, { price: number; stop: () => void }>;
 type Drawn = Map<string, { line: IPriceLine; price: number; tone: OverlayLine['tone'] }>;
 type KeyMove = { id: string; price: number } | null;
-/** Other lines while one is held: 45% opacity, as a hex alpha on the line's colour (§5.2). */
-const DIMMED_ALPHA = '73';
+/** Other lines while one is held: 45% opacity on the line's colour (§5.2). */
+const DIMMED_ALPHA = 0.45;
 /** How long after a drag a price change still counts as its answer (a rollback after a reject). */
 const SETTLE_WINDOW_MS = 10_000;
 /** The rail's width in px, from the axis's left edge. */
@@ -171,7 +171,7 @@ export function ChartOverlay({
           ? { color, lineWidth: 1 }
           : lineId === id
             ? { color, lineWidth: 2 }
-            : { color: `${color}${DIMMED_ALPHA}`, lineWidth: 1 },
+            : { color: withAlpha(color, DIMMED_ALPHA), lineWidth: 1 },
       );
     }
   };
@@ -733,7 +733,7 @@ function drawRail(
   );
   context.lineWidth = 1;
   context.beginPath();
-  context.strokeStyle = RAIL_MINOR;
+  context.strokeStyle = withAlpha(colors['ink-muted'], RAIL_MINOR_ALPHA);
   for (const tick of ticks) {
     if (tick.major) continue;
     const y = Math.round(tick.y) + 0.5;
@@ -753,7 +753,7 @@ function drawRail(
 }
 
 /** The rail's minor ticks: a quiet grey between the hairline and the muted text. */
-const RAIL_MINOR = '#C5CCD6';
+const RAIL_MINOR_ALPHA = 0.4;
 
 const TONE_CLASSES: Record<OverlayLine['tone'], string> = {
   buy: 'border-brand bg-brand text-surface',

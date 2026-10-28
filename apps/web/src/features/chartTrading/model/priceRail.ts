@@ -8,7 +8,8 @@ export const RAIL_MAJOR_EVERY = 5;
  * paise, and never less than the instrument's tick, that keeps ticks `RAIL_MIN_GAP` px apart.
  */
 export function railStep(paisePerPx: number, tickSize: number): number {
-  if (!(paisePerPx > 0)) return Math.max(tickSize, 1);
+  if (!Number.isFinite(tickSize) || !(tickSize > 0)) return railStep(paisePerPx, 1);
+  if (!(paisePerPx > 0) || !Number.isFinite(paisePerPx)) return Math.max(tickSize, 1);
   const wanted = Math.max(paisePerPx * RAIL_MIN_GAP, tickSize, 1);
   let decade = 10 ** Math.floor(Math.log10(wanted));
   for (;;) {
