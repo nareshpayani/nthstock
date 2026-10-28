@@ -261,6 +261,7 @@ export function ChartTrading({ handle, instrument }: ChartTradingProps) {
   };
 
   const onAction = (id: string, action: string) => {
+    if (offline) return;
     if (id === GHOST) {
       if (action === 'BUY' || action === 'SELL') placeFromGhost(action);
       return;
@@ -309,6 +310,13 @@ export function ChartTrading({ handle, instrument }: ChartTradingProps) {
         else setDraft({ orderId: id, price });
       }}
       onDragEnd={(id, price) => {
+        // A drag already in flight when the connection drops must not send a modify.
+        if (offline) {
+          setDraft(null);
+          setGhostDrag(null);
+          setStopMove(null);
+          return;
+        }
         if (id === GHOST) {
           setGhostDrag(null);
           if (price !== null) setGhost(price);
@@ -329,6 +337,7 @@ export function ChartTrading({ handle, instrument }: ChartTradingProps) {
         if (price !== null && price !== order.price) modify(order, price);
       }}
       onHandleDelete={(id) => {
+        if (offline) return;
         if (id === GHOST) {
           setGhost(null);
           return;

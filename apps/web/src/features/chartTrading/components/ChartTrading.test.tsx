@@ -3,6 +3,7 @@ import type { AccountState, Order, Position, TrailingStop } from '@nthstock/cont
 import { act, fireEvent, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { ChartHandle } from '@/features/charts';
+import { useConnectivityStore } from '@/shared/lib/connectivity';
 import { initialOrderDraftState, useOrderDraftStore } from '@/shared/lib/orderDraftStore';
 import { initialTicketIntentState, useTicketIntentStore } from '@/shared/lib/ticketIntentStore';
 import { initialTrailingSheetState, useTrailingSheetStore } from '@/shared/lib/trailingSheetStore';
@@ -115,7 +116,53 @@ afterEach(() => {
   useOrderDraftStore.setState(initialOrderDraftState);
   useTicketIntentStore.setState(initialTicketIntentState);
   useTrailingSheetStore.setState(initialTrailingSheetState);
+  useConnectivityStore.getState().setForced('live');
   vi.useRealTimers();
+});
+
+describe('offline (SPEC-CR-1 §7)', () => {
+  const setForced = (state: 'offline' | 'live') =>
+    act(() => useConnectivityStore.getState().setForced(state));
+
+  it('locks the line, says why, and a gutter tap starts no ghost; going live restores it', async () => {
+    await setup([limit()]);
+    expect(screen.getByTestId('chart-handle-action')).toBeInTheDocument();
+    setForced('offline');
+    await waitFor(() =>
+      expect(screen.queryByTestId('chart-handle-action')).not.toBeInTheDocument(),
+    );
+    expect(handleFor('ord_1')).toHaveAccessibleDescription(/Locked/);
+    expect(screen.getByTestId('chart-tab-lock')).toBeInTheDocument();
+
+    const gutter = screen.getByTestId('chart-gutter');
+    pointer(gutter, 'pointerdown', 100);
+    pointer(gutter, 'pointerup', 100);
+    expect(screen.getAllByTestId('chart-handle')).toHaveLength(1);
+
+    setForced('live');
+    await waitFor(() => expect(screen.getByTestId('chart-handle-action')).toBeInTheDocument());
+    expect(screen.queryByTestId('chart-tab-lock')).not.toBeInTheDocument();
+  });
+
+  it('Delete or Backspace on a locked line cancels nothing', async () => {
+    const { calls } = await setup([limit()]);
+    setForced('offline');
+    await waitFor(() => expect(handleFor('ord_1')).toHaveAccessibleDescription(/Locked/));
+    fireEvent.keyDown(handleFor('ord_1'), { key: 'Delete' });
+    fireEvent.keyDown(handleFor('ord_1'), { key: 'Backspace' });
+    expect(calls).toEqual([]);
+  });
+
+  it('a drag in flight when the connection drops sends no modify', async () => {
+    const { calls } = await setup([limit()]);
+    const handle = handleFor('ord_1');
+    pointer(handle, 'pointerdown', 200);
+    pointer(handle, 'pointermove', 160);
+    setForced('offline');
+    pointer(handle, 'pointerup', 160);
+    expect(calls).toEqual([]);
+    expect(useOrderDraftStore.getState().draft).toBeNull();
+  });
 });
 
 describe('order lines (T16, SPEC-TFC-1 §8.1, §8.3)', () => {
