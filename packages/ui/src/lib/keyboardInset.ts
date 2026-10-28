@@ -12,20 +12,35 @@ export function useKeyboardInset(enabled: boolean): (element: HTMLElement | null
     (element: HTMLElement | null) => {
       cleanup.current?.();
       cleanup.current = null;
+      // Deliberate: without a visual viewport (older browsers, jsdom) the sheet keeps its CSS
+      // position, which is correct wherever the keyboard does not cover fixed elements.
       const viewport = typeof window === 'undefined' ? undefined : window.visualViewport;
       if (!enabled || !element || !viewport) return;
-      const place = () => {
+      let frame = 0;
+      const apply = () => {
+        frame = 0;
         const inset = Math.max(0, window.innerHeight - viewport.height - viewport.offsetTop);
         element.style.bottom = inset > 0 ? `${String(Math.round(inset))}px` : '';
         element.style.maxHeight = inset > 0 ? `${String(Math.round(viewport.height * 0.9))}px` : '';
         element.dataset.keyboard = inset > 0 ? 'open' : 'closed';
       };
-      place();
+      // A keyboard animation fires many resize events: place once per frame.
+      const place = () => {
+        if (frame !== 0) return;
+        frame = -1;
+        const id = requestAnimationFrame(apply);
+        if (frame === -1) frame = id;
+      };
+      apply();
       viewport.addEventListener('resize', place);
       viewport.addEventListener('scroll', place);
       cleanup.current = () => {
         viewport.removeEventListener('resize', place);
         viewport.removeEventListener('scroll', place);
+        cancelAnimationFrame(frame);
+        element.style.bottom = '';
+        element.style.maxHeight = '';
+        delete element.dataset.keyboard;
       };
     },
     [enabled],

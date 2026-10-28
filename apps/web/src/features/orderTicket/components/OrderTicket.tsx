@@ -212,6 +212,8 @@ function TicketFlow({
     const plan = modifying ? null : attachPlan(values, attach, { trailingAvailable, ltp });
     if (plan?.attaching && !plan.check.ok) {
       setAttach((current) => ({ ...current, touched: true }));
+      // The stop's fields may sit behind "More options" on a phone: say what failed up here too.
+      setError({ title: strings.errors.cannotPlace, message: plan.check.message });
       return;
     }
     const attached = plan?.attaching ? toAttachedParams(attach.values) : null;
@@ -386,6 +388,7 @@ function TicketFlow({
           onSubmit={(event) => void onSubmit(event)}
           trailing={trailingOffer}
           compact={intent.compact === true && !modifying}
+          attachNeedsAttention={!modifying && attach.enabled && attach.touched}
           attach={
             modifying ? undefined : (
               <AttachedStop

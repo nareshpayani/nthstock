@@ -48,6 +48,8 @@ export type TicketFormProps = {
    * price, so no order-type switch and no depth panel.
    */
   compact?: boolean | undefined;
+  /** The attached stop was edited or refused: keep its fields in view on a phone. */
+  attachNeedsAttention?: boolean | undefined;
 };
 
 export type AttachProps = {
@@ -174,6 +176,7 @@ export function TicketForm({
   trailing,
   attach,
   compact = false,
+  attachNeedsAttention = false,
 }: TicketFormProps) {
   const { control, formState, setValue, trigger } = form;
   const [side, type, product] = useWatch({ control, name: ['side', 'type', 'product'] });
@@ -182,7 +185,9 @@ export function TicketForm({
   const phone = usePhoneLayout();
   const [moreOpen, setMoreOpen] = useState(false);
   const moreId = useId();
-  const showMore = !phone || moreOpen || formState.errors.product !== undefined;
+  // An error in a hidden control holds the section open, so Place never fails silently.
+  const forcedOpen = formState.errors.product !== undefined || attachNeedsAttention;
+  const showMore = !phone || moreOpen || forcedOpen;
   const qtyBox = useRef<HTMLDivElement>(null);
   const errorBox = useRef<HTMLDivElement>(null);
 
@@ -407,6 +412,7 @@ export function TicketForm({
             type="button"
             aria-expanded={showMore}
             aria-controls={moreId}
+            disabled={forcedOpen}
             onClick={() => setMoreOpen((open) => !open)}
             className="flex min-h-11 items-center justify-between gap-3 rounded-lg border border-line px-3 text-body text-ink focus-visible:outline-2 focus-visible:outline-brand"
           >
@@ -432,11 +438,9 @@ export function TicketForm({
               </svg>
             </span>
           </button>
-          {showMore ? (
-            <div id={moreId} className="grid gap-4">
-              {more}
-            </div>
-          ) : null}
+          <div id={moreId} hidden={!showMore} className="grid gap-4">
+            {showMore ? more : null}
+          </div>
         </div>
       ) : null}
 

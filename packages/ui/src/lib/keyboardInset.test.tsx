@@ -1,5 +1,5 @@
 import { render } from '@testing-library/react';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useKeyboardInset } from './keyboardInset.js';
 
 class FakeViewport extends EventTarget {
@@ -14,7 +14,14 @@ function Panel({ enabled }: { enabled: boolean }) {
 
 describe('useKeyboardInset (SPEC-CR-1 §5.5)', () => {
   const original = Object.getOwnPropertyDescriptor(window, 'visualViewport');
+  beforeEach(() => {
+    vi.stubGlobal('requestAnimationFrame', (run: FrameRequestCallback) => {
+      run(0);
+      return 1;
+    });
+  });
   afterEach(() => {
+    vi.unstubAllGlobals();
     if (original) Object.defineProperty(window, 'visualViewport', original);
     else Reflect.deleteProperty(window, 'visualViewport');
   });
@@ -35,6 +42,31 @@ describe('useKeyboardInset (SPEC-CR-1 §5.5)', () => {
     viewport.dispatchEvent(new Event('resize'));
     expect(panel.style.bottom).toBe('');
     expect(panel).toHaveAttribute('data-keyboard', 'closed');
+  });
+
+  it('subtracts the visual viewport offset from the inset', () => {
+    const viewport = new FakeViewport();
+    Object.defineProperty(window, 'visualViewport', { value: viewport, configurable: true });
+    Object.defineProperty(window, 'innerHeight', { value: 800, configurable: true });
+    const { getByTestId } = render(<Panel enabled />);
+    viewport.height = 460;
+    viewport.offsetTop = 100;
+    viewport.dispatchEvent(new Event('scroll'));
+    expect(getByTestId('panel').style.bottom).toBe('240px');
+  });
+
+  it('lets go of the sheet when turned off', () => {
+    const viewport = new FakeViewport();
+    viewport.height = 460;
+    Object.defineProperty(window, 'visualViewport', { value: viewport, configurable: true });
+    Object.defineProperty(window, 'innerHeight', { value: 800, configurable: true });
+    const { getByTestId, rerender } = render(<Panel enabled />);
+    expect(getByTestId('panel').style.bottom).toBe('340px');
+    rerender(<Panel enabled={false} />);
+    const panel = getByTestId('panel');
+    expect(panel.style.bottom).toBe('');
+    expect(panel.style.maxHeight).toBe('');
+    expect(panel).not.toHaveAttribute('data-keyboard');
   });
 
   it('does nothing when off or where there is no visual viewport', () => {
