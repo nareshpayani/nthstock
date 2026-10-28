@@ -111,7 +111,8 @@ describeWithPostgres('candle history seed and stored candles (integration)', () 
     await clearCandles();
     await owner.end();
     await database.close();
-  });
+    // Truncating and refreshing five aggregates can pass Vitest's 10 s hook default on a CI runner.
+  }, 60_000);
 
   const boot = (clock: Clock) => {
     const market = new MockMarketDataAdapter({ master, clock, scheduler: noTimers });
