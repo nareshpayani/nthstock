@@ -40,6 +40,7 @@ handle, and the chart's price axis becomes a ruler you set prices on.
 | IBM Plex Sans for words, IBM Plex Mono with tabular figures for every number | Prices don't jitter sideways as they tick; the mono gives the instrument feel |
 | Darker ink (#0B1526), finer hairlines (#E4E8EE), cooler canvas | More contrast and a quieter ground, so the chart and the numbers lead |
 | Marigold for the trailing stop, as fill only, with `marigold-ink` (#A86B00) for its stroke | The stop is its own kind of thing, neither buy nor sell. Marigold fails contrast as text, so it never is text. |
+| A new wordmark and app icon: a bold two-tone "nth" with a lighter "stock", in brand blue and IBM Plex | The mark matches the type and the blue the screens use, and it reads at favicon size |
 | Full-bleed sections divided by hairlines on phones, not cards | Cards cost 32 px of width and a border on a 360 px screen |
 | Motion tokens: one ease-out, one ease-in, 120 / 180 / 280 ms, one critically damped spring | Every movement in the flow uses the same few curves, so it feels like one system |
 | Haptics follow Apple's three meanings (impact, selection, notification) | They feel native on both platforms. They never carry meaning alone, and a setting turns them off. |
