@@ -1,0 +1,4 @@
+{
+  "viewport": "landscape-844x390",
+  "frames": ["instrument", "ticket", "orderLine"]
+}

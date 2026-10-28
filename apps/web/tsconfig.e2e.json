@@ -9,6 +9,7 @@
     "e2e",
     "playwright.config.ts",
     "playwright.deployed.config.ts",
-    "playwright.walkthrough.config.ts"
+    "playwright.walkthrough.config.ts",
+    "playwright.design.config.ts"
   ]
 }

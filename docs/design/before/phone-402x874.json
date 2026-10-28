@@ -1,0 +1,4 @@
+{
+  "viewport": "phone-402x874",
+  "frames": ["instrument", "ticket", "orderLine"]
+}
