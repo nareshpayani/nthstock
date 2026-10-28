@@ -7,10 +7,12 @@ import {
   useId,
   useLayoutEffect,
   useRef,
+  useState,
   type KeyboardEvent,
   type PointerEvent as ReactPointerEvent,
 } from 'react';
 import { withAlpha, type ChartHandle } from '@/features/charts';
+import { safeStorage } from '@/shared/lib/safeStorage';
 import { haptic } from '@/shared/motion/haptics';
 import { animateSpring } from '@/shared/motion/spring';
 import { RATCHET_GLIDE_MS, RATCHET_TRACE_MS, animateTween } from '@/shared/motion/tween';
@@ -91,6 +93,9 @@ const RAIL_WIDTH = 10;
 /** How long a new order's line takes to arrive from the rail (SPEC-CR-1 §5.7). */
 const LINE_ARRIVAL_MS = 280;
 
+/** Set once the first-run drag hint has been dismissed; it is never shown again (§5.7). */
+export const DRAG_HINT_KEY = 'nthstock.dragHintSeen';
+
 /** How strongly the trace left by a ratchet starts, before it fades (SPEC-CR-1 §5.3). */
 const TRACE_ALPHA = 0.5;
 
@@ -136,6 +141,17 @@ export function ChartOverlay({
 }: ChartOverlayProps) {
   const ordered = byPriority(lines);
   const describedBy = useId();
+  // The first-run hint (SPEC-CR-1 §5.7, CR-T20): beside the first draggable line until any press
+  // on the chart or a key on a line, then never again.
+  const [hintSeen, setHintSeen] = useState(() => safeStorage.get(DRAG_HINT_KEY) !== null);
+  const hintFor = hintSeen
+    ? undefined
+    : ordered.find((line) => line.draggable && line.tone !== 'pending')?.id;
+  const dismissHint = () => {
+    if (hintSeen) return;
+    safeStorage.set(DRAG_HINT_KEY, '1');
+    setHintSeen(true);
+  };
   const elementsRef = useRef<Elements>({
     rows: new Map(),
     bands: new Map(),
@@ -494,6 +510,20 @@ export function ChartOverlay({
     }
   });
 
+  // Any press on the chart, line or not, dismisses the hint.
+  const hintShown = hintFor !== undefined;
+  const dismissHintRef = useRef(dismissHint);
+  useLayoutEffect(() => {
+    dismissHintRef.current = dismissHint;
+  });
+  useEffect(() => {
+    const area = elementsRef.current.root?.parentElement;
+    if (!hintShown || !area) return;
+    const onPress = () => dismissHintRef.current();
+    area.addEventListener('pointerdown', onPress, true);
+    return () => area.removeEventListener('pointerdown', onPress, true);
+  }, [hintShown]);
+
   // A second finger anywhere, or Escape, cancels what the first finger started (§9.1, T20): a
   // drag restores its line, a press on the chip neither opens it nor keeps panning, and a press
   // on the gutter places no ghost (it was the start of a pinch).
@@ -643,6 +673,7 @@ export function ChartOverlay({
 
   // Keyboard (§13): arrows move one tick, Shift ten; Enter saves; Escape restores.
   const onHandleKeyDown = (line: OverlayLine) => (event: KeyboardEvent<HTMLElement>) => {
+    if (event.key !== 'Tab' && event.key !== 'Shift') dismissHint();
     const { on } = latestRef.current;
     if (event.key === 'Delete' || event.key === 'Backspace') {
       event.preventDefault();
@@ -795,7 +826,11 @@ export function ChartOverlay({
                 type="button"
                 // The name is the visible label (WCAG 2.5.3); what the keys do is the description.
                 aria-label={line.label}
-                aria-describedby={`${describedBy}-${line.id}`}
+                aria-describedby={
+                  line.id === hintFor
+                    ? `${describedBy}-${line.id} ${describedBy}-hint`
+                    : `${describedBy}-${line.id}`
+                }
                 data-testid="chart-handle"
                 data-line={line.id}
                 data-tone={line.tone}
@@ -825,6 +860,7 @@ export function ChartOverlay({
                     'data-[arrived=true]:animate-line-in',
                     'group-data-[pressed=true]:scale-[0.96] group-data-[pressed=true]:shadow-none',
                     TONE_CLASSES[line.tone],
+                    line.id === hintFor && 'animate-drag-hint motion-reduce:animate-none',
                   )}
                 >
                   {line.draggable ? (
@@ -862,6 +898,19 @@ export function ChartOverlay({
                   {action.label}
                 </button>
               ))}
+              {line.id === hintFor ? (
+                <span
+                  id={`${describedBy}-hint`}
+                  data-testid="chart-drag-hint"
+                  className={cn(
+                    'pointer-events-none absolute right-0 rounded-sm bg-ink px-2 py-1 text-label whitespace-nowrap text-surface shadow-sm',
+                    // Under a line in the top half of the plot, over one in the bottom half.
+                    'top-full mt-1 group-data-[low=true]/row:top-auto group-data-[low=true]/row:bottom-full group-data-[low=true]/row:mt-0 group-data-[low=true]/row:mb-1',
+                  )}
+                >
+                  {strings.drag.hint}
+                </span>
+              ) : null}
             </div>
           </div>
         ))}
@@ -965,6 +1014,7 @@ function placeHandles(
     const row = rows.get(place.id);
     if (row) {
       row.style.transform = `translateY(${String(Math.round(place.labelY))}px) translateY(-50%)`;
+      row.dataset.low = String(place.labelY > height / 2);
     }
     const element = handles.get(place.id);
     if (element) {
