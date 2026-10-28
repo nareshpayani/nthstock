@@ -66,6 +66,15 @@ describe('Header profile slot', () => {
     renderHeader(null);
     expect(await screen.findByRole('link', { name: 'Log in' })).toBeInTheDocument();
   });
+
+  it('More offers help by name, for screens under 360 px where the support icon hides (CR-T13)', async () => {
+    const { onOpenHelp } = renderHeader(null);
+    fireEvent.keyDown(await screen.findByRole('button', { name: 'More' }), { key: 'Enter' });
+    const help = await screen.findByRole('menuitem', { name: 'Help and support' });
+    expect(help).toHaveClass('min-[360px]:hidden');
+    fireEvent.click(help);
+    expect(onOpenHelp).toHaveBeenCalled();
+  });
 });
 
 describe('Header live tickers (T-092)', () => {

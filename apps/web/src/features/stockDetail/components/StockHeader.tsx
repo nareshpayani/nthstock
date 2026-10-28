@@ -77,7 +77,8 @@ export function StockHeader({
   if (phone) {
     // The phone price block (SPEC-CR-1 §6.1, 72 to 110 px): no card chrome, the name and symbol
     // beside alert and watchlist, then the price and change beside the exchange. An exchange the
-    // stock is not listed on is a disabled segment that says so when focused.
+    // stock is not listed on is a disabled segment named "BSE, not listed"; the symbol line says
+    // "NSE only" so the reason is visible too.
     return (
       <div className="grid gap-2" data-part="price-block">
         <div className="flex items-center gap-2">
@@ -87,6 +88,7 @@ export function StockHeader({
               <span className="font-mono font-medium text-ink">{symbol}</span>
               {` · ${strings.instrumentType[type]}`}
               {instrument.sector ? ` · ${instrument.sector}` : null}
+              {unlisted.length > 0 ? ` · ${strings.header.listedOnly(exchange)}` : null}
             </p>
           </div>
           {type === 'EQUITY' ? (

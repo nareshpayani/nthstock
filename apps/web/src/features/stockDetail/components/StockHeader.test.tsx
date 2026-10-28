@@ -121,6 +121,7 @@ describe('stock detail header (T-106)', () => {
     await waitFor(() =>
       expect(within(exchange).getByRole('radio', { name: 'BSE, not listed' })).toBeDisabled(),
     );
+    await waitFor(() => expect(screen.getByText(/· NSE only/)).toBeInTheDocument());
     // Buy and Sell live in the bottom bar only, not in the price block.
     expect(within(block as HTMLElement).queryByRole('button', { name: 'Buy INFY' })).toBeNull();
     expect(

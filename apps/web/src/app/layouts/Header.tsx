@@ -82,6 +82,10 @@ export function Header({ onOpenMenu, onOpenHelp }: HeaderProps) {
               <IconButton label={strings.header.more} icon={<IconMore />} />
             </DropdownMenuTrigger>
             <DropdownMenuContent>
+              {/* The support icon is hidden under 360 px, so help stays reachable by name here. */}
+              <DropdownMenuItem onSelect={onOpenHelp} className="min-[360px]:hidden">
+                <IconSupport size={16} /> {strings.header.support}
+              </DropdownMenuItem>
               <DropdownMenuItem onSelect={onOpenHelp}>
                 <IconKeyboard size={16} /> {strings.header.shortcuts}
                 <kbd className="ml-auto font-mono text-label text-ink-muted">?</kbd>
