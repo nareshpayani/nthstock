@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { ChartHandle } from '@/features/charts';
 import { AreaSeries, chartsMock, createChart } from '@/test/chartsMock';
 import type { OverlayLine } from '../model/overlayLine';
-import { ChartOverlay } from './ChartOverlay';
+import { ChartOverlay, nearestLine } from './ChartOverlay';
 
 // The fake scale: ₹1,600.00 at y = 0, 50 paise per px, a 300 px pane and a 64 px price axis.
 function makeHandle(): ChartHandle {
@@ -15,6 +15,12 @@ function makeHandle(): ChartHandle {
   return { chart, series, host } as unknown as ChartHandle;
 }
 const series = () => chartsMock.active().at(-1)?.series[0];
+const chartOptions = () => chartsMock.active().at(-1)?.options as Record<string, unknown>;
+const band = (id: string) => {
+  const element = screen.getAllByTestId('chart-grab-band').find((el) => el.dataset.line === id);
+  if (!element) throw new Error(`no band for ${id}`);
+  return element;
+};
 
 function pointer(target: Element, type: string, clientY: number, pointerId = 1, clientX = 0) {
   const event = new MouseEvent(type, { bubbles: true, cancelable: true, clientY, clientX });
@@ -359,5 +365,122 @@ describe('chart overlay (T15, SPEC-TFC-1 §10.5)', () => {
     // 10 px down from the line, not from the label: ₹1,490.00, not ₹1,473.00.
     expect(onDragMove).toHaveBeenLastCalledWith('o2', 149_000);
     pointer(o2, 'pointerup', 254);
+  });
+  describe('grab band and gesture ownership (CR-T05, SPEC-CR-1 §5.1)', () => {
+    it('puts a 44 px band across the plot on each draggable line, and none on the chip', () => {
+      render(
+        <ChartOverlay
+          handle={makeHandle()}
+          tickSize={5}
+          label="Chart orders"
+          lines={[
+            line({ id: 'o1', price: 150_000 }),
+            line({ id: 'far', price: 200_000 }),
+            line({ id: 'pos', price: 140_000, tone: 'position', draggable: false }),
+          ]}
+        />,
+      );
+      expect(band('o1')).not.toHaveAttribute('hidden');
+      expect(band('o1').style.transform).toBe('translateY(178px)');
+      // Off the plot, only the pinned label takes a press.
+      expect(band('far')).toHaveAttribute('hidden');
+      expect(() => band('pos')).toThrow();
+    });
+
+    it('a press beside the line drags it by the finger, with the crosshair, scroll and scale off until release', () => {
+      const onDragMove = vi.fn();
+      const onDragEnd = vi.fn();
+      const onHandleTap = vi.fn();
+      render(
+        <ChartOverlay
+          handle={makeHandle()}
+          tickSize={5}
+          label="Chart orders"
+          lines={[line({ id: 'o1', price: 150_000 })]}
+          onDragMove={onDragMove}
+          onDragEnd={onDragEnd}
+          onHandleTap={onHandleTap}
+        />,
+      );
+      expect(chartOptions()).toMatchObject({ handleScroll: true, crosshair: { mode: 0 } });
+      // 15 px under the line (y = 200), well off its label.
+      pointer(band('o1'), 'pointerdown', 215);
+      expect(chartOptions()).toMatchObject({
+        crosshair: { mode: 2 },
+        handleScroll: false,
+        handleScale: false,
+      });
+      pointer(band('o1'), 'pointermove', 195);
+      // 20 px up from the line, not from the finger: ₹1,510.00.
+      expect(onDragMove).toHaveBeenLastCalledWith('o1', 151_000);
+      pointer(band('o1'), 'pointerup', 195);
+      expect(onDragEnd).toHaveBeenCalledWith('o1', 151_000);
+      expect(chartOptions()).toMatchObject({
+        crosshair: { mode: 0 },
+        handleScroll: true,
+        handleScale: true,
+      });
+
+      // A tap on the band opens nothing, and still gives the chart back.
+      pointer(band('o1'), 'pointerdown', 205);
+      pointer(band('o1'), 'pointerup', 205);
+      expect(onHandleTap).not.toHaveBeenCalled();
+      expect(chartOptions()).toMatchObject({ handleScroll: true });
+    });
+
+    it('Escape or a second finger mid-drag restores the line and the chart', () => {
+      const onDragEnd = vi.fn();
+      render(
+        <ChartOverlay
+          handle={makeHandle()}
+          tickSize={5}
+          label="Chart orders"
+          lines={[line({ id: 'o1', price: 150_000 })]}
+          onDragEnd={onDragEnd}
+        />,
+      );
+      pointer(band('o1'), 'pointerdown', 200);
+      pointer(band('o1'), 'pointermove', 170);
+      fireEvent.keyDown(document, { key: 'Escape' });
+      expect(onDragEnd).toHaveBeenLastCalledWith('o1', null);
+      expect(chartOptions()).toMatchObject({ crosshair: { mode: 0 }, handleScroll: true });
+
+      pointer(band('o1'), 'pointerdown', 200, 1);
+      pointer(band('o1'), 'pointermove', 170, 1);
+      pointer(document.body, 'pointerdown', 100, 2);
+      expect(onDragEnd).toHaveBeenCalledTimes(2);
+      expect(chartOptions()).toMatchObject({ crosshair: { mode: 0 }, handleScroll: true });
+    });
+
+    it('gives the chart back when unmounted mid-drag', () => {
+      const { unmount } = render(
+        <ChartOverlay
+          handle={makeHandle()}
+          tickSize={5}
+          label="Chart orders"
+          lines={[line({ id: 'o1', price: 150_000 })]}
+        />,
+      );
+      pointer(band('o1'), 'pointerdown', 200);
+      unmount();
+      expect(chartsMock.charts.at(-1)?.options).toMatchObject({ handleScroll: true });
+    });
+
+    it('where bands overlap, the nearer line wins; a tie goes to the line drawn on top', () => {
+      const toY = (price: number) => (160_000 - price) / 50;
+      const lines = [
+        line({ id: 'a', price: 150_000 }), // y 200
+        line({ id: 'b', price: 149_000 }), // y 220
+        line({ id: 'ghost', price: 145_000, tone: 'ghost' }), // y 300
+        line({ id: 'pos', price: 148_000, tone: 'position', draggable: false }), // y 240
+      ];
+      expect(nearestLine(lines, 206, toY)?.id).toBe('a');
+      expect(nearestLine(lines, 214, toY)?.id).toBe('b');
+      expect(nearestLine(lines, 210, toY)?.id).toBe('b');
+      // The chip moves no price, so a press near it takes the nearest draggable line or nothing.
+      expect(nearestLine(lines, 241, toY)?.id).toBe('b');
+      expect(nearestLine(lines, 260, toY)).toBeNull();
+      expect(nearestLine(lines, 290, toY)?.id).toBe('ghost');
+    });
   });
 });

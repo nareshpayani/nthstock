@@ -9,6 +9,7 @@ import {
   type PointerEvent as ReactPointerEvent,
 } from 'react';
 import type { ChartHandle } from '@/features/charts';
+import { lockChart } from '../lib/chartLock';
 import { panBy } from '../lib/panChart';
 import { syncPriceLines } from '../lib/priceLines';
 import { RepaintPrimitive } from '../lib/repaintPrimitive';
@@ -49,6 +50,7 @@ export type ChartOverlayProps = {
 
 type Elements = {
   rows: Map<string, HTMLElement>;
+  bands: Map<string, HTMLElement>;
   handles: Map<string, HTMLElement>;
   leaders: Map<string, HTMLElement>;
   gutter: HTMLElement | null;
@@ -56,6 +58,9 @@ type Elements = {
 };
 type Drawn = Map<string, { line: IPriceLine; price: number; tone: OverlayLine['tone'] }>;
 type KeyMove = { id: string; price: number } | null;
+/** Half the grab band's height: a press this close to a draggable line takes it (SPEC-CR-1 §5.1). */
+export const BAND_REACH = 22;
+
 /** A press on a handle that does not move a price: a tap, or a pan once it moves (§9.1). */
 type ChipPress = {
   id: string;
@@ -75,6 +80,10 @@ type ChipPress = {
  * so pan, pinch, autoscale and live ticks never cause a React render. React renders only when the
  * lines themselves change. Handles that would overlap are spread with leader lines, and a line
  * off the visible range pins its handle to the edge with an arrow.
+ *
+ * Each draggable line also has an invisible grab band, 44 px tall across the plot, so a press on
+ * or near the line takes it, not just a press on its label (SPEC-CR-1 §5.1). From the press until
+ * the finger lifts, the drag owns the gesture: the chart's crosshair, scroll and scale are off.
  */
 export function ChartOverlay({
   handle,
@@ -92,6 +101,7 @@ export function ChartOverlay({
   const describedBy = useId();
   const elementsRef = useRef<Elements>({
     rows: new Map(),
+    bands: new Map(),
     handles: new Map(),
     leaders: new Map(),
     gutter: null,
@@ -102,9 +112,14 @@ export function ChartOverlay({
   const keyMoveRef = useRef<KeyMove>(null);
   const gutterPressRef = useRef<{ pointerId: number; y: number } | null>(null);
   const chipRef = useRef<ChipPress | null>(null);
-  // How far the dragged line sits from its label (an offset label has a leader line), so the drag
-  // moves the price by the finger's movement instead of jumping to the label's height (§8.4).
+  // How far the dragged line sits from the finger at the press (an offset label has a leader line,
+  // a band press is beside the line), so the drag moves the price by the finger's movement instead
+  // of jumping to where the finger is (§8.4).
   const dragOffsetRef = useRef(0);
+  // A press on a band that never moves is not a tap on the line: the plot has nothing to open.
+  const fromBandRef = useRef(false);
+  // Puts the chart's crosshair, scroll and scale back once the gesture ends (SPEC-CR-1 §5.1).
+  const unlockRef = useRef<(() => void) | null>(null);
   const primitiveRef = useRef<RepaintPrimitive | null>(null);
   // The latest lines and callbacks, for the repaint hook and the event handlers.
   const latestRef = useRef({
@@ -112,14 +127,20 @@ export function ChartOverlay({
     on: { onGutterTap, onDragMove, onDragEnd, onHandleTap, onHandleDelete, onAction },
   });
 
+  const unlock = () => {
+    unlockRef.current?.();
+    unlockRef.current = null;
+  };
+
   const apply = (step: { gesture: HandleGesture; effect: GestureEffect }) => {
     gestureRef.current = step.gesture;
+    if (step.gesture.phase === 'idle') unlock();
     const { effect } = step;
     const { on } = latestRef.current;
     if (effect.kind === 'move') on.onDragMove?.(effect.id, effect.price);
     else if (effect.kind === 'commit') on.onDragEnd?.(effect.id, effect.price);
     else if (effect.kind === 'cancel') on.onDragEnd?.(effect.id, null);
-    else if (effect.kind === 'tap') on.onHandleTap?.(effect.id);
+    else if (effect.kind === 'tap' && !fromBandRef.current) on.onHandleTap?.(effect.id);
   };
 
   // One primitive per chart: its repaint hook is the only per-frame work the overlay does.
@@ -132,6 +153,8 @@ export function ChartOverlay({
     series.attachPrimitive(primitive);
     const drawn = drawnRef.current;
     return () => {
+      unlockRef.current?.();
+      unlockRef.current = null;
       series.detachPrimitive(primitive);
       for (const { line } of drawn.values()) series.removePriceLine(line);
       drawn.clear();
@@ -163,6 +186,8 @@ export function ChartOverlay({
       const active = gestureRef.current;
       if (active.phase !== 'idle' && active.pointerId !== keep) {
         gestureRef.current = IDLE;
+        unlockRef.current?.();
+        unlockRef.current = null;
         if (active.phase === 'dragging') latestRef.current.on.onDragEnd?.(active.id, null);
       }
       if (chipRef.current && chipRef.current.pointerId !== keep) chipRef.current = null;
@@ -201,13 +226,30 @@ export function ChartOverlay({
       chipRef.current = { id, pointerId, startX: x, startY: y, x, panning: false };
       return;
     }
-    if (gestureRef.current.phase === 'idle' && line) {
-      const labelY = Number(elementsRef.current.handles.get(id)?.dataset.y);
+    if (line) pressLine(line, event.pointerId, paneY(event.clientY), false);
+  };
+  // A press on a draggable line, from its handle or its band: the drag owns the gesture from here.
+  const pressLine = (line: OverlayLine, pointerId: number, y: number, fromBand: boolean) => {
+    if (gestureRef.current.phase === 'idle') {
       const lineY = handle.series.priceToCoordinate(line.price);
-      dragOffsetRef.current =
-        lineY !== null && Number.isFinite(labelY) && Number.isFinite(lineY) ? lineY - labelY : 0;
+      dragOffsetRef.current = lineY !== null && Number.isFinite(lineY) ? lineY - y : 0;
+      fromBandRef.current = fromBand;
     }
-    apply(press(gestureRef.current, id, event.pointerId, paneY(event.clientY)));
+    apply(press(gestureRef.current, line.id, pointerId, y));
+    if (gestureRef.current.phase !== 'idle' && !unlockRef.current) {
+      unlockRef.current = lockChart(handle.chart);
+    }
+  };
+  const onBandPointerDown = (event: ReactPointerEvent<HTMLElement>) => {
+    const y = paneY(event.clientY);
+    const line = nearestLine(latestRef.current.lines, y, (price) =>
+      handle.series.priceToCoordinate(price),
+    );
+    if (!line) return;
+    event.stopPropagation();
+    event.preventDefault();
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+    pressLine(line, event.pointerId, y, true);
   };
   const onHandlePointerMove = (event: ReactPointerEvent<HTMLElement>) => {
     const chip = chipRef.current;
@@ -299,7 +341,7 @@ export function ChartOverlay({
   };
 
   const refFor =
-    (kind: 'rows' | 'handles' | 'leaders', id: string) =>
+    (kind: 'rows' | 'bands' | 'handles' | 'leaders', id: string) =>
     (element: HTMLElement | null): void => {
       const map = elementsRef.current[kind];
       if (element) map.set(id, element);
@@ -332,6 +374,26 @@ export function ChartOverlay({
         aria-label={label}
         className="absolute top-0 left-0"
       >
+        {/* The bands sit under every label and button, so those keep their own presses. */}
+        {ordered
+          .filter((line) => line.draggable)
+          .map((line) => (
+            <span
+              key={line.id}
+              ref={refFor('bands', line.id)}
+              aria-hidden="true"
+              hidden
+              data-testid="chart-grab-band"
+              data-line={line.id}
+              className="pointer-events-auto absolute top-0 right-0 left-0 h-11 cursor-ns-resize touch-none select-none [-webkit-touch-callout:none]"
+              onPointerDown={onBandPointerDown}
+              onPointerMove={onHandlePointerMove}
+              onPointerUp={onHandlePointerUp}
+              onPointerCancel={onHandlePointerCancel}
+              onLostPointerCapture={onHandlePointerCancel}
+              onContextMenu={preventDefault}
+            />
+          ))}
         {ordered.map((line) => (
           <div key={line.id}>
             <span id={`${describedBy}-${line.id}`} hidden>
@@ -409,6 +471,30 @@ export function ChartOverlay({
   );
 }
 
+/**
+ * The draggable line within reach of a press at `y`: the nearest, and on a tie the one drawn on
+ * top, which comes later in priority order (SPEC-CR-1 §5.1).
+ */
+export function nearestLine(
+  lines: readonly OverlayLine[],
+  y: number,
+  toY: (price: number) => number | null,
+): OverlayLine | null {
+  let best: OverlayLine | null = null;
+  let bestDistance = BAND_REACH;
+  for (const line of lines) {
+    if (!line.draggable) continue;
+    const lineY = toY(line.price);
+    if (lineY === null || !Number.isFinite(lineY)) continue;
+    const distance = Math.abs(lineY - y);
+    if (distance <= bestDistance) {
+      best = line;
+      bestDistance = distance;
+    }
+  }
+  return best;
+}
+
 /** A long-press on a handle or the gutter opens no menu or callout (Android, iOS Safari). */
 const preventDefault = (event: { preventDefault: () => void }) => event.preventDefault();
 
@@ -416,7 +502,7 @@ const preventDefault = (event: { preventDefault: () => void }) => event.preventD
 function placeHandles(
   { chart, series }: ChartHandle,
   lines: readonly OverlayLine[],
-  { rows, handles, leaders, gutter, layer }: Elements,
+  { rows, bands, handles, leaders, gutter, layer }: Elements,
 ): void {
   const height = chart.paneSize(0).height;
   const axisWidth = chart.priceScale('right').width();
@@ -430,6 +516,14 @@ function placeHandles(
   }
   const layout = layoutHandles(lines, (price) => series.priceToCoordinate(price), { height });
   for (const place of layout) {
+    const band = bands.get(place.id);
+    if (band) {
+      // A pinned line is off the plot: only its label, at the edge, takes a press.
+      band.hidden = place.lineY === null;
+      if (place.lineY !== null) {
+        band.style.transform = `translateY(${String(Math.round(place.lineY - BAND_REACH))}px)`;
+      }
+    }
     const row = rows.get(place.id);
     if (row) {
       row.style.transform = `translateY(${String(Math.round(place.labelY))}px) translateY(-50%)`;
