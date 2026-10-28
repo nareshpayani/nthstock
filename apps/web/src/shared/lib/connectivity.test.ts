@@ -12,6 +12,7 @@ function harness(onLine = true) {
   const target = new EventTarget();
   let listener: (status: Status) => void = () => undefined;
   const pending = new Map<number, () => void>();
+  const delays: number[] = [];
   let next = 0;
   let clock = 1_000;
   const stop = startConnectivity({
@@ -24,7 +25,8 @@ function harness(onLine = true) {
       },
     },
     timers: {
-      setTimeout: (callback) => {
+      setTimeout: (callback, ms) => {
+        delays.push(ms);
         next += 1;
         pending.set(next, callback);
         return next;
@@ -42,6 +44,8 @@ function harness(onLine = true) {
         callback();
       }
     },
+    delays,
+    pending: () => pending.size,
     advance: (ms: number) => (clock += ms),
     stop,
   };
@@ -92,6 +96,27 @@ describe('connectivity (CR-T18, SPEC-CR-1 §7)', () => {
     expect(offline()).toBe(false);
     h.stop();
   });
+
+  it('arms the grace timer for exactly SOCKET_GRACE_MS', () => {
+    const h = harness();
+    h.status('reconnecting');
+    expect(h.delays).toEqual([SOCKET_GRACE_MS]);
+    h.stop();
+  });
+
+  it.each<Status>(['closed', 'idle', 'open'])(
+    'a %s status during the grace period cancels it',
+    (status) => {
+      const h = harness();
+      h.status('reconnecting');
+      expect(h.pending()).toBe(1);
+      h.status(status);
+      expect(h.pending()).toBe(0);
+      h.elapse();
+      expect(offline()).toBe(false);
+      h.stop();
+    },
+  );
 
   it('the demo can force offline, and lifting it goes back online', () => {
     useConnectivityStore.getState().setForced('offline');

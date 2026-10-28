@@ -124,4 +124,21 @@ describe('page states (CR-T18, SPEC-CR-1 §7)', () => {
     await user.click(within(states).getByRole('button', { name: 'Live' }));
     expect(screen.queryByTestId('chart-paused')).not.toBeInTheDocument();
   });
+
+  it('leaving the page puts a forced state back to live', async () => {
+    registerSimulator({
+      rally: vi.fn(() => Promise.resolve(true)),
+      pullBack: vi.fn(() => Promise.resolve(true)),
+      gapDown: vi.fn(() => Promise.resolve(true)),
+      setSplitFills: vi.fn(() => Promise.resolve()),
+      splitFills: vi.fn(() => false),
+    });
+    const quotes = createTestQuoteStore();
+    const view = renderApp('/stocks/INFY', { apiClient: api.apiClient, quoteStore: quotes.store });
+    await screen.findByRole('figure');
+    force('offline');
+    expect(useConnectivityStore.getState().forced).toBe('offline');
+    view.unmount();
+    expect(useConnectivityStore.getState().forced).toBe('live');
+  });
 });
