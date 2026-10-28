@@ -6,11 +6,8 @@ import { ScalperPad } from '@/features/scalper';
 import { useOpenTicket } from '@/shared/hooks/useOpenTicket';
 import { useLandscapePhone } from '@/shared/hooks/usePhoneLayout';
 import { landscapeChartHeight, phoneChartHeight } from '@/shared/lib/phoneChart';
-import {
-  DEFAULT_CHART_TYPE,
-  DEFAULT_STOCK_RANGE,
-  type StockDetailSearch,
-} from '../model/stockDetailSearch';
+import { DEFAULT_STOCK_RANGE, type StockDetailSearch } from '../model/stockDetailSearch';
+import { rememberChartType, rememberedChartType } from '../model/chartTypePreference';
 import { strings } from '../strings';
 import { InstrumentOrders } from './InstrumentOrders';
 import { KeyStatsCard } from './KeyStatsCard';
@@ -112,13 +109,16 @@ export function PhoneStockDetail({
           <StockChartCard
             instrument={instrument}
             range={search.range ?? DEFAULT_STOCK_RANGE}
-            chartType={search.chart ?? DEFAULT_CHART_TYPE}
+            chartType={search.chart ?? rememberedChartType()}
             interval={search.interval}
             onRangeChange={(range) =>
               onSearchChange({ range, interval: keepInterval(range, search.interval) })
             }
             onIntervalChange={(interval) => onSearchChange({ interval })}
-            onChartTypeChange={(chart) => onSearchChange({ chart })}
+            onChartTypeChange={(chart) => {
+              rememberChartType(chart);
+              onSearchChange({ chart });
+            }}
             height={chartHeight}
             controls="touch"
             trading

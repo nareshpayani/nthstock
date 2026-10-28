@@ -13,6 +13,9 @@ import {
 import { createSessionApiClient } from '@/shared/lib/sessionClient';
 import { readTrustedDevice } from '../store/trustedDevice';
 
+// The demo tests land on a stock page; jsdom has no canvas, and a real chart throws after teardown.
+vi.mock('lightweight-charts', () => import('@/test/chartsMock'));
+
 // The mock auth backend's clock, moved on by hand past the 30 s OTP resend throttle.
 let now = Date.parse('2026-09-25T04:00:00.000Z');
 const { server, adapter } = createMockServer({ auth: { now: () => now } });
