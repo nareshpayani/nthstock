@@ -147,3 +147,31 @@ TFC-01 to TFC-06 and TFC-08 and approved the recommended option for every other 
 | TFC-18 | Demo access for stakeholders? | Production URL with a one-tap Try demo | As recommended. | Default accepted |
 | TFC-19 | Who builds? | The project agent workflow (`docs/agent-workflow.md`), automated review on every pull request | As recommended. | Default accepted |
 | TFC-20 | Default chart view? | 1D, last 60 minutes | As recommended. | Default accepted |
+
+## Round 10: Craft round for mobile Trade from Charts (answered 2026-10-28)
+
+Context: Paytm Money's follow-up exercise (received 2026-10-28): lift the mobile flow, instrument
+page → order ticket → on-chart position and trailing stop, to a distinctive, production-grade
+standard of design and interaction. No new trading functionality. Specification:
+`docs/specs/craft-round.md`. The product owner chose direction B (Instrument) and accepted every
+other recommended default on 2026-10-28, and added CR-17.
+
+| ID | Question | Recommended default | Answer | Status |
+|---|---|---|---|---|
+| CR-01 | Which visual direction? | B, Instrument: price rail and drag loupe as signature elements | As recommended. | Answered |
+| CR-02 | How far does the new identity reach? | Tokens app-wide; layout and interaction polish only on this flow | As recommended. | Default accepted |
+| CR-03 | Mock-ups before code? | Yes, static mock-ups of the key screens for approval | As recommended. | Default accepted |
+| CR-04 | Which tokens may change? | Keep brand blue, up, down and marigold; retune ink, canvas, line and the type scale | As recommended. | Default accepted |
+| CR-05 | What colour is Buy? | Brand blue for Buy, down red outline for Sell, everywhere; green and red stay for price direction | As recommended. | Default accepted |
+| CR-06 | Order sheet structure? | Compact and expanded detents; essentials first, "More options" for product, trailing stop and depth; primary button pinned | As recommended. | Default accepted |
+| CR-07 | Price, chart and action above the fold? | Compact app bar, one-row price block, full-bleed chart at about 40% of the height, range row under the chart | As recommended. | Default accepted |
+| CR-08 | Index ticker at narrow widths? | Both indices fit as name, level and %; status becomes a dot; below 360 px a scroll strip with edge fades, no marquee | As recommended. | Default accepted |
+| CR-09 | Haptics on iPhone? | Android vibration; iPhone native-switch haptic behind a flag; a setting to turn haptics off | As recommended. | Default accepted |
+| CR-10 | Offline state scope? | Banner, stale prices, order buttons disabled with a reason; no offline cold load | As recommended. | Default accepted |
+| CR-11 | Show states on demand? | A "States" row in the demo Simulator | As recommended. | Default accepted |
+| CR-12 | Motion library? | No new dependency: CSS plus a small hand-written spring | As recommended. | Default accepted |
+| CR-13 | Which phones do we tune on? | Owner's iPhone, Android Chrome, and the device matrix in the spec | As recommended; see CR-17. | Default accepted |
+| CR-14 | Deadline? | 2026-10-30, end of day IST | As recommended. | Default accepted |
+| CR-15 | Who records the video? | The owner, from a shot list and script | As recommended. | Default accepted |
+| CR-16 | Process and naming? | Spec, NSTOCK epics and stories, small PRs into develop, DESIGN.md at the root | As recommended; development starts only after the owner approves the plan, epics and stories. | Answered |
+| CR-17 | Which screen sizes must work? | (Raised by the owner) | Every common size, not only iPhone: small Android, large phones, foldables, tablets and landscape. Nothing may break on any of them, because the reviewer may not use an iPhone. A device and viewport test matrix is part of the plan. | Answered |
