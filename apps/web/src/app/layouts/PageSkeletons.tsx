@@ -12,7 +12,7 @@ import { strings } from '../strings';
  */
 export function ShellSkeleton({ children }: { children: ReactNode }) {
   return (
-    <div className="min-h-dvh bg-canvas [--header-h:97px] min-[1360px]:[--header-h:57px]">
+    <div className="min-h-dvh bg-canvas">
       <div
         aria-hidden="true"
         data-testid="shell-skeleton"

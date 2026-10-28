@@ -19,6 +19,20 @@
 }
 
 @layer base {
+  /* The app bar's height (with the index strip under 1360 px), and the width of a trading panel
+     docked beside the page from 600 to 1023 px (SPEC-CR-1 §6.2). */
+  :root {
+    --header-h: 97px;
+    --nth-dock-w: clamp(320px, 44vw, 420px);
+    --nth-dock-top: calc(var(--header-h) + env(safe-area-inset-top));
+  }
+
+  @media (min-width: 1360px) {
+    :root {
+      --header-h: 57px;
+    }
+  }
+
   html {
     @apply bg-canvas text-ink font-sans text-body antialiased;
   }

@@ -1,9 +1,9 @@
 import { Sheet } from '@nthstock/ui';
 import { Suspense, lazy, useLayoutEffect, useRef } from 'react';
-import { usePhoneLayout } from '@/shared/hooks/usePhoneLayout';
 import { useSession } from '@/shared/hooks/useSession';
 import { useTrailingSheetStore } from '@/shared/lib/trailingSheetStore';
 import { strings } from '../strings';
+import { usePanelPlacement } from './panelPlacement';
 import { TicketSkeleton } from './TicketSkeleton';
 
 // Its own chunk, fetched on first open, like the order ticket (CLAUDE.md §3).
@@ -21,7 +21,7 @@ export function TrailingStopSheetHost() {
   const target = useTrailingSheetStore((s) => s.target);
   const closeSheet = useTrailingSheetStore((s) => s.closeSheet);
   const { status } = useSession();
-  const phone = usePhoneLayout();
+  const placement = usePanelPlacement('w-[min(400px,calc(100vw-24px))]');
   const open = target !== null && status === 'authenticated';
   const returnFocus = useRef<HTMLElement | null>(null);
   const wasOpen = useRef(false);
@@ -48,8 +48,7 @@ export function TrailingStopSheetHost() {
       description={strings.sheet.description}
       overlay="light"
       returnFocus={returnFocus}
-      side={phone ? 'bottom' : 'right'}
-      {...(phone ? {} : { className: 'w-[min(400px,calc(100vw-24px))]' })}
+      {...placement}
     >
       {open ? (
         <Suspense fallback={<TicketSkeleton />}>

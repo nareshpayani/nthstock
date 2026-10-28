@@ -106,7 +106,7 @@ describe('stock detail header (T-106)', () => {
 
   it('packs into the phone price block (CR-T13): no card, trade bar below, BSE says why', async () => {
     vi.stubGlobal('matchMedia', (query: string) => ({
-      matches: query === '(max-width: 767.98px)',
+      matches: query.startsWith('(max-width: 767.98px)'),
       media: query,
       addEventListener: () => undefined,
       removeEventListener: () => undefined,

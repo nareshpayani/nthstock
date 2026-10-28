@@ -114,6 +114,14 @@ export type SheetProps = DialogProps & {
    * stays readable next to a slide-over such as the order ticket.
    */
   overlay?: 'dim' | 'light';
+  /**
+   * Docked beside the page instead of over it (tablets, SPEC-CR-1 §6.2): non-modal, no overlay,
+   * below the app bar (`--nth-dock-top`) and `--nth-dock-w` wide. The page stays usable, so a tap
+   * on the chart does not close it; Esc and Close still do. Its controls take the touch size.
+   */
+  docked?: boolean;
+  /** Controls take their touch size in any form, e.g. a slide-over on a large tablet. */
+  touchSize?: boolean;
 };
 
 function focusReturn(returnFocus: SheetProps['returnFocus']) {
@@ -133,6 +141,11 @@ const SHEET_SIDE: Record<NonNullable<SheetProps['side']>, string> = {
     'inset-x-0 bottom-0 max-h-[90dvh] rounded-t-[20px] pb-[env(safe-area-inset-bottom)] data-[state=open]:animate-sheet-up data-[state=closed]:animate-sheet-down',
 };
 
+const DOCKED =
+  'top-[var(--nth-dock-top,0px)] bottom-0 right-0 w-[var(--nth-dock-w,360px)] border-l border-line pb-[env(safe-area-inset-bottom)] shadow-none data-[state=open]:animate-sheet-in';
+
+const keepOpen = (event: Event) => event.preventDefault();
+
 /**
  * Slide-over panel (order ticket, mobile drawer) with the same focus and Esc behaviour. From the
  * bottom it is the phone form: every control in it is at least 44 × 44 px.
@@ -148,10 +161,12 @@ export function Sheet({
   initialFocus,
   returnFocus,
   overlay = 'dim',
+  docked = false,
+  touchSize = false,
   ...root
 }: SheetProps) {
   // A bottom sheet is the phone form, so its controls take their touch size (SPEC-TFC-1 §9.4).
-  const touch = side === 'bottom';
+  const touch = side === 'bottom' && !docked;
   const keyboardInset = useKeyboardInset(touch);
   // Drag to dismiss (CR-T10) closes through the sheet's own Close, so focus return and
   // onOpenChange behave exactly as for a tap on it.
@@ -166,23 +181,27 @@ export function Sheet({
   );
   const grab = touch ? grabProps : {};
   return (
-    <DialogPrimitive.Root {...root}>
+    <DialogPrimitive.Root modal={!docked} {...root}>
       {trigger ? <DialogPrimitive.Trigger asChild>{trigger}</DialogPrimitive.Trigger> : null}
       <DialogPrimitive.Portal>
-        <DialogPrimitive.Overlay
-          className={cn(overlayClass, overlay === 'light' && 'bg-ink/10')}
-          data-overlay={overlay}
-        />
+        {docked ? null : (
+          <DialogPrimitive.Overlay
+            className={cn(overlayClass, overlay === 'light' && 'bg-ink/10')}
+            data-overlay={overlay}
+          />
+        )}
         <DialogPrimitive.Content
           ref={contentRef}
           {...(description ? {} : { 'aria-describedby': undefined })}
           onOpenAutoFocus={focusInitial(initialFocus)}
           onCloseAutoFocus={focusReturn(returnFocus)}
           onEscapeKeyDown={keepEscapeForOpenPopup}
+          {...(docked ? { onInteractOutside: keepOpen } : {})}
           data-side={side}
+          data-docked={docked || undefined}
           className={cn(
             'fixed z-(--nth-z-overlay) flex flex-col bg-surface shadow-overlay outline-none',
-            SHEET_SIDE[side],
+            docked ? DOCKED : SHEET_SIDE[side],
             className,
           )}
         >
@@ -216,14 +235,15 @@ export function Sheet({
             </div>
             <DialogPrimitive.Close
               ref={closeRef}
-              className={cn(closeButtonClass, touch && 'size-11 shrink-0')}
+              className={cn(closeButtonClass, (touch || docked || touchSize) && 'size-11 shrink-0')}
               aria-label="Close"
             >
               <IconClose />
             </DialogPrimitive.Close>
           </div>
-          <TouchTargets enabled={touch}>
-            <div className="min-h-0 flex-1 overflow-y-auto">{children}</div>
+          <TouchTargets enabled={touch || docked || touchSize}>
+            {/* A container: what is inside lays out by the panel's width, not the screen's. */}
+            <div className="@container min-h-0 flex-1 overflow-y-auto">{children}</div>
             {footer ? <div className="flex gap-2 border-t border-line p-4">{footer}</div> : null}
           </TouchTargets>
         </DialogPrimitive.Content>

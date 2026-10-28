@@ -12,7 +12,7 @@ import {
 import { formatInr } from '@nthstock/utils';
 import { useEffect, useId, useRef, useState, type FormEventHandler, type ReactNode } from 'react';
 import { Controller, useWatch, type Control, type UseFormReturn } from 'react-hook-form';
-import { usePhoneLayout } from '@/shared/hooks/usePhoneLayout';
+import { useDockedPanels, usePhoneLayout } from '@/shared/hooks/usePhoneLayout';
 import { useQuote } from '@/shared/hooks/useQuote';
 import type { TicketError } from '../model/orderError';
 import { fillsImmediately, type TicketFormValues } from '../model/ticketForm';
@@ -181,8 +181,10 @@ export function TicketForm({
   const { control, formState, setValue, trigger } = form;
   const [side, type, product] = useWatch({ control, name: ['side', 'type', 'product'] });
   // On a phone the ticket shows the essentials and keeps the rest behind "More options", so the
-  // primary button sits in reach (SPEC-CR-1 §5.5, CR-T11). A product error opens it.
-  const phone = usePhoneLayout();
+  // primary button sits in reach (SPEC-CR-1 §5.5, CR-T11). A product error opens it. A panel
+  // docked on a tablet is phone-narrow, so it takes the same short form (§6.2).
+  const docked = useDockedPanels();
+  const phone = usePhoneLayout() || docked;
   const [moreOpen, setMoreOpen] = useState(false);
   const moreId = useId();
   // An error in a hidden control holds the section open, so Place never fails silently.
@@ -313,13 +315,13 @@ export function TicketForm({
       {phone ? (
         typeBlock
       ) : (
-        <div className="grid gap-3 sm:grid-cols-2 [&>*]:min-w-0">
+        <div className="grid gap-3 @min-[440px]:grid-cols-2 [&>*]:min-w-0">
           {productBlock}
           {typeBlock}
         </div>
       )}
 
-      <div className="grid gap-3 sm:grid-cols-2 [&>*]:min-w-0">
+      <div className="grid gap-3 @min-[440px]:grid-cols-2 [&>*]:min-w-0">
         <Controller
           control={control}
           name="qty"
