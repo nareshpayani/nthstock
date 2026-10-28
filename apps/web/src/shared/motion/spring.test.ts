@@ -1,11 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { animateSpring, stepSpring, type SpringState } from './spring';
 
-function settle(from: number, to: number, velocity = 0) {
+function settle(from: number, to: number, velocity = 0, dt = 1 / 60) {
   let state: SpringState = { value: from, velocity };
   const values: number[] = [];
-  for (let frame = 0; frame < 120; frame += 1) {
-    state = stepSpring(state, to, 1 / 60);
+  for (let frame = 0; frame < 2 / dt; frame += 1) {
+    state = stepSpring(state, to, dt);
     values.push(state.value);
   }
   return { state, values };
@@ -22,6 +22,24 @@ describe('stepSpring', () => {
     expect(Math.max(...values)).toBeLessThanOrEqual(100);
     const down = settle(100, 0).values;
     expect(Math.min(...down)).toBeGreaterThanOrEqual(0);
+  });
+
+  it('never overshoots at 30 fps or 120 fps either (exact solution, not a numeric step)', () => {
+    for (const dt of [1 / 30, 1 / 120]) {
+      const { values, state } = settle(0, 100, 0, dt);
+      expect(Math.max(...values)).toBeLessThanOrEqual(100);
+      expect(state.value).toBe(100);
+    }
+  });
+
+  it('carries a flick: velocity towards the target arrives sooner', () => {
+    const still = stepSpring({ value: 0, velocity: 0 }, 100, 0.05).value;
+    const flicked = stepSpring({ value: 0, velocity: 2_000 }, 100, 0.05).value;
+    expect(flicked).toBeGreaterThan(still);
+  });
+
+  it('treats a negative step as no time', () => {
+    expect(stepSpring({ value: 10, velocity: 0 }, 100, -1)).toEqual({ value: 10, velocity: 0 });
   });
 
   it('survives a long dropped frame without blowing up', () => {

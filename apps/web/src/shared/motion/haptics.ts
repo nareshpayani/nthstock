@@ -29,11 +29,16 @@ export const IPHONE_SWITCH_HAPTICS = true;
 
 const STORAGE_KEY = 'nthstock.haptics';
 
+/** The user's setting, read from storage once and kept here, so a drag never reads storage. */
+let enabledSetting: boolean | undefined;
+
 export function hapticsEnabled(): boolean {
-  return safeStorage.get(STORAGE_KEY) !== 'off';
+  enabledSetting ??= safeStorage.get(STORAGE_KEY) !== 'off';
+  return enabledSetting;
 }
 
 export function setHapticsEnabled(enabled: boolean): void {
+  enabledSetting = enabled;
   if (enabled) safeStorage.remove(STORAGE_KEY);
   else safeStorage.set(STORAGE_KEY, 'off');
 }
@@ -76,18 +81,21 @@ function isAppleTouch(): boolean {
  * the user turned haptics off, or (for `tick`) inside the throttle window. Returns whether it fired.
  */
 export function haptic(event: HapticEvent, now: number = performance.now()): boolean {
+  if (event === 'tick' && now - lastTickAt < TICK_THROTTLE_MS) return false;
   if (!hapticsEnabled()) return false;
-  if (event === 'tick') {
-    if (now - lastTickAt < TICK_THROTTLE_MS) return false;
-    lastTickAt = now;
-  }
-  if (canVibrate()) {
-    const pattern = HAPTIC_PATTERNS[event];
-    return navigator.vibrate(typeof pattern === 'number' ? pattern : [...pattern]);
-  }
-  if (IPHONE_SWITCH_HAPTICS && isAppleTouch()) {
-    switchLabel().click();
-    return true;
+  if (event === 'tick') lastTickAt = now;
+  // Haptics are a garnish: a failure here must never break the drag or tap that asked for one.
+  try {
+    if (canVibrate()) {
+      const pattern = HAPTIC_PATTERNS[event];
+      return navigator.vibrate(typeof pattern === 'number' ? pattern : [...pattern]);
+    }
+    if (IPHONE_SWITCH_HAPTICS && isAppleTouch()) {
+      switchLabel().click();
+      return true;
+    }
+  } catch {
+    return false;
   }
   return false;
 }
@@ -95,6 +103,7 @@ export function haptic(event: HapticEvent, now: number = performance.now()): boo
 /** Test seam: forget the throttle and the hidden switch. */
 export function resetHapticsForTests(): void {
   lastTickAt = Number.NEGATIVE_INFINITY;
+  enabledSetting = undefined;
   iphoneSwitch?.remove();
   iphoneSwitch = undefined;
 }

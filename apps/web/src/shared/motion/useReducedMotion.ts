@@ -12,5 +12,9 @@ export function useReducedMotion(): boolean {
 
 /** The same question outside React, read at the moment of use. */
 export function prefersReducedMotion(): boolean {
-  return typeof window.matchMedia === 'function' && window.matchMedia(REDUCED_MOTION_QUERY).matches;
+  return (
+    typeof window !== 'undefined' &&
+    typeof window.matchMedia === 'function' &&
+    window.matchMedia(REDUCED_MOTION_QUERY).matches
+  );
 }

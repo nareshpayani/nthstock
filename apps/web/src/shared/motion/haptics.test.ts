@@ -56,6 +56,23 @@ describe('haptics (SPEC-CR-1 §5.4)', () => {
     document.removeEventListener('click', clicks);
   });
 
+  it('reuses one hidden switch and swallows a failing one', () => {
+    vi.stubGlobal('navigator', { userAgent: 'iPhone', maxTouchPoints: 5 });
+    haptic('grab', 0);
+    haptic('commit', 10);
+    expect(document.querySelectorAll('input[switch]')).toHaveLength(1);
+    vi.spyOn(HTMLElement.prototype, 'click').mockImplementationOnce(() => {
+      throw new Error('no click');
+    });
+    expect(haptic('reject', 20)).toBe(false);
+  });
+
+  it('keeps the throttle for ticks only', () => {
+    haptic('tick', 0);
+    expect(haptic('grab', 1)).toBe(true);
+    expect(haptic('tick', 2)).toBe(false);
+  });
+
   it('does nothing on a desktop browser with neither', () => {
     vi.stubGlobal('navigator', { userAgent: 'Windows', maxTouchPoints: 0 });
     expect(haptic('grab', 0)).toBe(false);

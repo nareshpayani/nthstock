@@ -9,20 +9,21 @@ export type SpringState = { value: number; velocity: number };
 /** Below these the spring counts as settled and snaps to the target. */
 const REST_DISTANCE = 0.01;
 const REST_VELOCITY = 0.01;
-/** Longest step integrated at once, so a dropped frame cannot make the spring explode. */
-const MAX_STEP_S = 1 / 30;
+/** Natural frequency, rad/s. The tokens' damping is 2·√(stiffness·mass): critical. */
+const OMEGA = Math.sqrt(SPRING.stiffness / SPRING.mass);
 
-/** One step of `dtSeconds` towards `target` (semi-implicit Euler, in sub-steps of at most 1/30 s). */
+/**
+ * The state `dtSeconds` later, from the exact solution of the critically damped spring,
+ * x(t) = target + (a + b·t)·e^(−ωt) with a = x₀ − target and b = v₀ + ω·a. Exact for any step, so
+ * a 30 fps device or a dropped frame can't make it overshoot (a numeric step could).
+ */
 export function stepSpring(state: SpringState, target: number, dtSeconds: number): SpringState {
-  let { value, velocity } = state;
-  let remaining = Math.max(0, dtSeconds);
-  while (remaining > 0) {
-    const dt = Math.min(remaining, MAX_STEP_S);
-    const force = -SPRING.stiffness * (value - target) - SPRING.damping * velocity;
-    velocity += (force / SPRING.mass) * dt;
-    value += velocity * dt;
-    remaining -= dt;
-  }
+  const t = Math.max(0, dtSeconds);
+  const a = state.value - target;
+  const b = state.velocity + OMEGA * a;
+  const decay = Math.exp(-OMEGA * t);
+  const value = target + (a + b * t) * decay;
+  const velocity = (b - OMEGA * (a + b * t)) * decay;
   if (Math.abs(value - target) < REST_DISTANCE && Math.abs(velocity) < REST_VELOCITY) {
     return { value: target, velocity: 0 };
   }
@@ -38,6 +39,7 @@ export type SpringOptions = {
   velocity?: number;
   /** Jump straight to the target (reduced motion). */
   instant?: boolean;
+  /** Called once the spring rests on the target; not called when it is stopped early. */
   onDone?: () => void;
 };
 
