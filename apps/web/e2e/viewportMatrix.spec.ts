@@ -24,7 +24,8 @@ import { isTouchViewport, VIEWPORT_MATRIX, type MatrixViewport } from './support
 const MONDAY_10_IST = new Date('2026-09-28T04:30:00.000Z');
 const MIN_TARGET = 44;
 
-type Check = 'sideScroll' | 'clippedText' | 'touchTargets' | 'primaryAction' | 'tickerFits';
+type Check =
+  'ticketOpens' | 'sideScroll' | 'clippedText' | 'touchTargets' | 'primaryAction' | 'tickerFits';
 type Frame = 'page' | 'ticket';
 
 /**
@@ -183,7 +184,8 @@ async function onScreen(page: Page, target: Locator): Promise<Problem[]> {
 /** The header's index strip scrolls instead of fitting. */
 async function tickerOverflow(page: Page): Promise<Problem[]> {
   const strip = page.getByRole('region', { name: 'Market status and indices' });
-  if (!(await strip.isVisible())) return [];
+  // A missing strip must fail the check, not pass it by measuring nothing.
+  await expect(strip).toBeVisible({ timeout: 10_000 });
   const { scroll, width } = await strip.evaluate((element) => ({
     scroll: element.scrollWidth,
     width: element.clientWidth,
@@ -254,6 +256,8 @@ for (const viewport of VIEWPORT_MATRIX) {
 
       const main = page.locator('#main');
       const tradeBar = page.getByRole('group', { name: 'Trade INFY' });
+      // Wait for a Buy button to render before choosing which one this layout uses.
+      await expect(page.getByRole('button', { name: 'Buy INFY' }).first()).toBeVisible();
       const phoneBar = await tradeBar.isVisible();
       const buy = phoneBar
         ? tradeBar.getByRole('button', { name: 'Buy INFY' })
@@ -271,21 +275,27 @@ for (const viewport of VIEWPORT_MATRIX) {
       await run('page', 'primaryAction', onScreen(page, buy));
       if (viewport.width >= 360) await run('page', 'tickerFits', tickerOverflow(page));
 
-      await buy.click({ timeout: 10_000 }).catch(() => undefined);
+      let openFailure: string | undefined;
+      try {
+        await buy.click({ timeout: 10_000 });
+        await expect(page.getByRole('dialog', { name: 'Trade INFY' })).toBeVisible({
+          timeout: 10_000,
+        });
+      } catch (error) {
+        openFailure = error instanceof Error ? error.message : String(error);
+      }
       const ticket = page.getByRole('dialog', { name: 'Trade INFY' });
-      if (!(await ticket.isVisible())) {
-        // Buy could not be reached: the ticket's checks can't run, and its primary action counts
-        // as failed.
+      if (openFailure !== undefined) {
+        // The ticket's checks can't run. 'ticketOpens' is never a known gap, so this always fails.
         results.push({
           frame: 'ticket',
-          check: 'primaryAction',
-          problems: [{ element: 'Buy INFY', detail: 'the ticket did not open' }],
+          check: 'ticketOpens',
+          problems: [{ element: 'Buy INFY', detail: `the ticket did not open: ${openFailure}` }],
         });
         judge(viewport, results);
         return;
       }
       await expect(ticket.getByRole('form', { name: 'Order details' })).toBeVisible();
-      await page.waitForTimeout(400); // the sheet's entry motion
       const submit = ticket.getByRole('button', { name: 'Buy INFY' });
       await run('ticket', 'sideScroll', sideScroll(page));
       await run('ticket', 'clippedText', clippedText(page, ticket));
