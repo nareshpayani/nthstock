@@ -1,5 +1,5 @@
 import type { LoginOtpPurpose, Session } from '@nthstock/contracts';
-import { Button, buttonVariants, IconHelp } from '@nthstock/ui';
+import { Button, buttonVariants, cn, IconHelp } from '@nthstock/ui';
 import { formatIstDate } from '@nthstock/utils';
 import { Link, useNavigate } from '@tanstack/react-router';
 import { useState } from 'react';
@@ -18,6 +18,9 @@ import { PinEntryStep, PinLocked } from './PinEntryStep';
 import { PinSetupStep } from './PinSetupStep';
 import { TotpStep } from './TotpStep';
 import { TryDemo } from './TryDemo';
+
+/** Long link labels wrap on a 320 px phone instead of widening the card (NSTOCK-0435). */
+const WRAP = 'h-auto min-h-10 py-2 text-center whitespace-normal';
 
 type Step =
   | { kind: 'mobile'; purpose: LoginOtpPurpose; notice?: string; mobile?: string }
@@ -138,17 +141,23 @@ export function LoginPage({ redirect, devOtp = devOtpHint, deletedPurgeAfter }: 
   }
 
   return (
-    <main className="grid min-h-dvh place-items-center bg-canvas p-4">
-      <div className="grid w-full max-w-sm gap-6 rounded-lg border border-line bg-surface p-6">
+    <main className="grid min-h-dvh grid-cols-[minmax(0,1fr)] place-items-center bg-canvas p-4">
+      <div className="grid w-full max-w-sm grid-cols-[minmax(0,1fr)] gap-6 rounded-lg border border-line bg-surface p-6 max-[359px]:p-4">
         {content}
         {devOtp ? <TryDemo devOtp={devOtp} /> : null}
         <p className="text-label text-ink-muted">{strings.paperNote}</p>
         <div className="grid gap-3">
           {/* Before logging in: what the app does and how to trade, then back here (NSTOCK-0280). */}
-          <Link to="/guide" className={buttonVariants({ variant: 'secondary', block: true })}>
+          <Link
+            to="/guide"
+            className={cn(buttonVariants({ variant: 'secondary', block: true }), WRAP)}
+          >
             <IconHelp size={16} /> {strings.guide}
           </Link>
-          <Link to="/dashboard" className={buttonVariants({ variant: 'secondary', block: true })}>
+          <Link
+            to="/dashboard"
+            className={cn(buttonVariants({ variant: 'secondary', block: true }), WRAP)}
+          >
             {strings.explore}
           </Link>
         </div>

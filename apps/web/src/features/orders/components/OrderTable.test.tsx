@@ -132,3 +132,36 @@ describe('Edit stop on an order with a trailing stop (NSTOCK-0395)', () => {
     }
   });
 });
+
+describe('the order book on a phone (NSTOCK-0435)', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('lists each order as a row that fits the screen instead of a wide table', async () => {
+    vi.stubGlobal('matchMedia', (query: string) => ({
+      matches: query.includes('max-width: 767.98px'),
+      media: query,
+      addEventListener: () => undefined,
+      removeEventListener: () => undefined,
+    }));
+    const onCancel = vi.fn();
+    renderWithProviders(
+      <OrderTable
+        orders={[order]}
+        label="Open orders"
+        now={new Date(AT)}
+        onDetails={vi.fn()}
+        onModify={vi.fn()}
+        onCancel={onCancel}
+      />,
+    );
+    const list = await screen.findByRole('list', { name: 'Open orders' });
+    expect(screen.queryByRole('table')).not.toBeInTheDocument();
+    const row = within(list).getByRole('listitem');
+    expect(row).toHaveTextContent('INFY');
+    expect(row).toHaveTextContent('₹1,500.00');
+    fireEvent.click(within(row).getByRole('button', { name: /cancel/i }));
+    expect(onCancel).toHaveBeenCalledWith(order, expect.any(HTMLElement));
+  });
+});
