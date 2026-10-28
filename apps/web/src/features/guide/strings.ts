@@ -57,7 +57,7 @@ export const strings = {
         { kind: 'heading', text: 'The name and logo' },
         {
           kind: 'text',
-          text: 'The wordmark follows the Paytm Money pattern of a bold, rounded brand word and a lighter second word. “nth” is drawn for nthstock as one heavy stroke with round ends, a navy n and a blue th, and the crossbar of the t is a small rising price line. “stock” is set in IBM Plex Sans, the app’s typeface. The app icon and favicon reuse the same letters on a blue tile, with the rising line in marigold. No Paytm mark or glyph is used.',
+          text: 'The wordmark pairs a bold, rounded brand word with a lighter second word. “nth” is drawn for nthstock as one heavy stroke with round ends, a navy n and a blue th, and the crossbar of the t is a small rising price line. “stock” is set in IBM Plex Sans, the app’s typeface. The app icon reuses the same letters on a blue tile, with the rising line in marigold; the favicon keeps the n and the rising line.',
         },
         { kind: 'heading', text: 'How to read this documentation' },
         {

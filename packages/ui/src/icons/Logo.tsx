@@ -7,15 +7,18 @@ export type LogoProps = {
 };
 
 /**
- * The brand word "nth", drawn as one 13-unit stroke with round ends on a 64-unit body (x-height 48).
- * The stroke ends sit on the baseline at y = 64, so the SVG's bottom edge is the text baseline, and
- * the crossbar of the "t" is a rising price line.
- * The same paths make the favicon and the PWA icons (apps/web/public).
+ * The brand word "nth" is drawn on a 64-unit body (x-height 48) with round-ended strokes. Stroke ends
+ * sit on the baseline at y = 64, so the SVG's bottom edge is the text baseline. The PWA icons in
+ * apps/web/public use these paths; the favicon keeps only the "n" and a shorter rising line.
  */
 const STROKE = 13;
+/** The crossbar is a lighter stroke so the rising line reads as a line, not a letter part. */
+const RISE_STROKE = 10;
+/** The navy "n". */
 const N_PATH = 'M7.5 57.5V36a13.5 13.5 0 0 1 27 0v21.5';
+/** The blue "th": the stem and foot of the "t", then the "h". */
 const TH_PATH = 'M58 12V48a9.5 9.5 0 0 0 9.5 9.5H71M88 6.5V57.5M88 36a13.5 13.5 0 0 1 27 0v21.5';
-/** The crossbar of the "t", drawn as a small rising price line in a lighter 10-unit stroke. */
+/** The crossbar of the "t", drawn as a small rising price line. */
 const RISE_PATH = 'M48 35L55 29L60.5 32.5L72 20';
 
 function Stroke({
@@ -54,7 +57,7 @@ export function Logo({ withWordmark = true, className }: LogoProps) {
           <g transform="translate(19.74 38.22) scale(.66)">
             <Stroke d={N_PATH} className="stroke-surface" />
             <Stroke d={TH_PATH} className="stroke-brand-soft" />
-            <Stroke d={RISE_PATH} width={10} className="stroke-marigold" />
+            <Stroke d={RISE_PATH} width={RISE_STROKE} className="stroke-marigold" />
           </g>
         </svg>
       </span>
@@ -77,7 +80,7 @@ export function Logo({ withWordmark = true, className }: LogoProps) {
       >
         <Stroke d={N_PATH} className="stroke-ink" />
         <Stroke d={TH_PATH} className="stroke-brand" />
-        <Stroke d={RISE_PATH} width={10} className="stroke-brand" />
+        <Stroke d={RISE_PATH} width={RISE_STROKE} className="stroke-brand" />
       </svg>
       <span aria-hidden="true">stock</span>
     </span>
