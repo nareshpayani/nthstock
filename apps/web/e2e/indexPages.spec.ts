@@ -3,7 +3,9 @@ import { expect, test } from '@playwright/test';
 // NSTOCK-0437: every index opens its own chart page, from the dashboard cards, the header tickers
 // and the NIFTY 50 chart (a tap opens it, a drag pans), and every chart opens on 1D.
 
-test('index cards, header tickers and the dashboard chart open the index pages', async ({ page }) => {
+test('index cards, header tickers and the dashboard chart open the index pages', async ({
+  page,
+}) => {
   await page.goto('/dashboard');
   await expect(page.getByRole('radio', { name: '1D', exact: true })).toBeChecked();
 
@@ -13,7 +15,10 @@ test('index cards, header tickers and the dashboard chart open the index pages',
   await expect(page.getByRole('heading', { level: 1, name: 'NIFTY BANK' })).toBeVisible();
   await expect(page.getByRole('radio', { name: '1D', exact: true })).toBeChecked();
 
-  await page.getByRole('banner').getByRole('link', { name: /^SENSEX/ }).click();
+  await page
+    .getByRole('banner')
+    .getByRole('link', { name: /^SENSEX/ })
+    .click();
   await expect(page).toHaveURL(/\/stocks\/SENSEX\?exchange=BSE$/);
   await expect(page.getByRole('heading', { level: 1, name: 'SENSEX' })).toBeVisible();
 
