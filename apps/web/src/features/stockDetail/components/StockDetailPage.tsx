@@ -74,7 +74,7 @@ export function StockDetailPage({
   }
 
   return (
-    <div className="mx-auto grid w-full max-w-[1200px] grid-cols-[minmax(0,1fr)] gap-4 lg:gap-6">
+    <div className="mx-auto grid w-full max-w-[1200px] animate-content-in grid-cols-[minmax(0,1fr)] gap-4 lg:gap-6">
       <StockHeader
         instrument={instrument}
         snapshot={snapshot.data}

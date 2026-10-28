@@ -4,6 +4,7 @@ import { useId, useState, useSyncExternalStore, type ReactNode } from 'react';
 import { keepInterval } from '@/features/charts';
 import { ScalperPad } from '@/features/scalper';
 import { useOpenTicket } from '@/shared/hooks/useOpenTicket';
+import { phoneChartHeight } from '@/shared/lib/phoneChart';
 import { DEFAULT_STOCK_RANGE, type StockDetailSearch } from '../model/stockDetailSearch';
 import { rememberChartType, rememberedChartType } from '../model/chartTypePreference';
 import { strings } from '../strings';
@@ -18,11 +19,6 @@ import { StockHeader } from './StockHeader';
 
 const PHONE_TABS = ['overview', 'depth', 'orders'] as const;
 type PhoneTab = (typeof PHONE_TABS)[number];
-
-/** The chart's share of the screen height on a phone, clamp(220 px, 40% of the height, 480 px) (SPEC-CR-1 §6.1). */
-export function phoneChartHeight(viewportHeight: number): number {
-  return Math.min(480, Math.max(220, Math.round(viewportHeight * 0.4)));
-}
 
 const subscribeResize = (onChange: () => void) => {
   window.addEventListener('resize', onChange);
@@ -88,7 +84,10 @@ export function PhoneStockDetail({
 
   return (
     <TouchTargets>
-      <div className="mx-auto grid w-full grid-cols-[minmax(0,1fr)] gap-3" data-layout="phone">
+      <div
+        className="mx-auto grid w-full animate-content-in grid-cols-[minmax(0,1fr)] gap-3"
+        data-layout="phone"
+      >
         <StockHeader
           instrument={instrument}
           snapshot={snapshot}

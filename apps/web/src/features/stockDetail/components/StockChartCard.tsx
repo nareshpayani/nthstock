@@ -6,7 +6,7 @@ import {
   type CandleRange,
   type Instrument,
 } from '@nthstock/contracts';
-import { ErrorState, SegmentedControl, Skeleton } from '@nthstock/ui';
+import { ErrorState, SegmentedControl } from '@nthstock/ui';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { useId, useState } from 'react';
 import { ChartTrading } from '@/features/chartTrading';
@@ -24,8 +24,10 @@ import {
   useLiveCandles,
 } from '@/features/charts';
 import { Card } from '@/shared/components/Card';
+import { ChartSkeleton } from '@/shared/components/ChartSkeleton';
 import { useMarketOpen } from '@/shared/hooks/useMarketOpen';
 import { useApiClient } from '@/shared/lib/apiClientContext';
+import { DESKTOP_CHART_HEIGHT } from '@/shared/lib/phoneChart';
 import type { ChartType } from '../model/stockDetailSearch';
 import { ChartTypeMenu } from './ChartTypeMenu';
 import { strings } from '../strings';
@@ -50,7 +52,7 @@ export type StockChartCardProps = {
   trading?: boolean;
 };
 
-export const CHART_HEIGHT = 320;
+export const CHART_HEIGHT = DESKTOP_CHART_HEIGHT;
 const NO_CANDLES: readonly Candle[] = [];
 
 /**
@@ -153,9 +155,7 @@ export function StockChartCard({
           className={candles.isPlaceholderData ? 'opacity-60' : undefined}
         />
       ) : (
-        <div role="status" aria-label={strings.chart.loading} style={{ height }}>
-          <Skeleton className="h-full w-full" />
-        </div>
+        <ChartSkeleton height={height} label={strings.chart.loading} />
       )}
     </div>
   );

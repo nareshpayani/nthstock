@@ -7,6 +7,7 @@ import {
 import { fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { RouteError, RoutePending } from './RouteStates';
+import { InShellContext } from './shellContext';
 
 describe('RouteError', () => {
   it('Try again resets the boundary and reloads the route', async () => {
@@ -74,8 +75,38 @@ describe('RouteError', () => {
 });
 
 describe('RoutePending', () => {
-  it('announces loading', () => {
-    render(<RoutePending />);
+  function renderAt(path: string, inShell = false) {
+    const root = createRootRoute({
+      component: () => (
+        <InShellContext.Provider value={inShell}>
+          <RoutePending />
+        </InShellContext.Provider>
+      ),
+    });
+    const router = createRouter({
+      routeTree: root,
+      history: createMemoryHistory({ initialEntries: [path] }),
+    });
+    render(<RouterProvider router={router} />);
+  }
+
+  it('announces loading', async () => {
+    renderAt('/portfolio');
+    expect(await screen.findByRole('status', { name: 'Loading page' })).toBeInTheDocument();
+    expect(screen.queryByTestId('instrument-skeleton')).not.toBeInTheDocument();
+  });
+
+  it('draws the instrument page in its own shape, with the shell on a cold load (CR-T17)', async () => {
+    renderAt('/stocks/INFY');
+    expect(await screen.findByTestId('instrument-skeleton')).toBeInTheDocument();
     expect(screen.getByRole('status', { name: 'Loading page' })).toBeInTheDocument();
+    expect(screen.getByTestId('shell-skeleton')).toBeInTheDocument();
+    expect(screen.getAllByTestId('chart-skeleton')).toHaveLength(1);
+  });
+
+  it('leaves the shell out once the shell is there', async () => {
+    renderAt('/stocks/INFY', true);
+    expect(await screen.findByTestId('instrument-skeleton')).toBeInTheDocument();
+    expect(screen.queryByTestId('shell-skeleton')).not.toBeInTheDocument();
   });
 });

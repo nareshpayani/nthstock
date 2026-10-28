@@ -8,10 +8,15 @@
   --animate-overlay-in: nth-fade-in var(--nth-duration-panel) var(--nth-ease-standard);
   --animate-sheet-in: nth-slide-in-right var(--nth-duration-panel) var(--nth-ease-standard);
   --animate-drawer-in: nth-slide-in-left var(--nth-duration-panel) var(--nth-ease-standard);
-  --animate-sheet-up: nth-slide-in-up var(--nth-duration-panel) var(--nth-ease-standard);
+  /* The phone sheet rises in 280 ms, decelerating, and leaves in 200 ms (SPEC-CR-1 §5.5). */
+  --animate-sheet-up: nth-slide-in-up var(--nth-duration-slow) var(--nth-ease-out);
+  --animate-sheet-down: nth-slide-out-down var(--nth-duration-panel) var(--nth-ease-in) forwards;
+  --animate-overlay-out: nth-fade-out var(--nth-duration-panel) var(--nth-ease-in) forwards;
   --animate-pop-in: nth-pop-in var(--nth-duration-panel) var(--nth-ease-standard);
   --animate-shimmer: nth-shimmer 1.4s ease-in-out infinite;
   --animate-spin: nth-spin 0.8s linear infinite;
+  /* Content replacing its skeleton fades in over 160 ms, in the same box (SPEC-CR-1 §5.6). */
+  --animate-content-in: nth-fade-in 160ms var(--nth-ease-out);
 }
 
 @keyframes nth-fade-in {
@@ -35,6 +40,19 @@
 @keyframes nth-slide-in-up {
   from {
     transform: translateY(100%);
+  }
+}
+
+/* No `from`: a sheet let go mid-drag leaves from where the finger left it. */
+@keyframes nth-slide-out-down {
+  to {
+    transform: translateY(100%);
+  }
+}
+
+@keyframes nth-fade-out {
+  to {
+    opacity: 0;
   }
 }
 
@@ -104,7 +122,8 @@
 
 @media (prefers-reduced-motion: reduce) {
   .nth-digit-up,
-  .nth-digit-down {
+  .nth-digit-down,
+  .animate-content-in {
     animation: none;
   }
 }
