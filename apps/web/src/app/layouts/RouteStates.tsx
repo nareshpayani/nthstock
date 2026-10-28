@@ -1,8 +1,10 @@
 import { ErrorState, Skeleton, buttonVariants } from '@nthstock/ui';
-import { Link, useRouter, type ErrorComponentProps } from '@tanstack/react-router';
-import { useEffect } from 'react';
+import { Link, useRouter, useRouterState, type ErrorComponentProps } from '@tanstack/react-router';
+import { useContext, useEffect } from 'react';
 import { isChunkLoadError, reloadForNewBuild, reloadWhenOnline } from '../staleBuild';
 import { strings } from '../strings';
+import { InstrumentSkeleton, ShellSkeleton } from './PageSkeletons';
+import { InShellContext } from './shellContext';
 
 /** Centres a route-level state card in the content area, both ways, on every screen size. */
 const CENTERED = 'grid min-h-[calc(100dvh-10rem)] w-full place-items-center';
@@ -39,9 +41,19 @@ export function RouteError({ error, reset }: ErrorComponentProps) {
   );
 }
 
-/** Skeleton shown while a lazy route chunk or loader is pending. */
+/**
+ * Skeleton shown while a lazy route chunk or loader is pending. The instrument page gets one in its
+ * own shape (SPEC-CR-1 §5.6); other pages a generic one. Before the shell has rendered (a cold
+ * load) the skeleton draws the shell too.
+ */
 export function RoutePending() {
-  return (
+  const inShell = useContext(InShellContext);
+  const instrument = useRouterState({
+    select: (state) => state.location.pathname.startsWith('/stocks/'),
+  });
+  const page = instrument ? (
+    <InstrumentSkeleton />
+  ) : (
     <div
       role="status"
       aria-label={strings.loading}
@@ -52,6 +64,7 @@ export function RoutePending() {
       <Skeleton className="h-24 w-full" />
     </div>
   );
+  return inShell || !instrument ? page : <ShellSkeleton>{page}</ShellSkeleton>;
 }
 
 export function NotFound() {

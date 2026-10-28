@@ -14,6 +14,7 @@ import { Header } from './Header';
 import { LeftRail } from './LeftRail';
 import { navItems } from './navItems';
 import { ShortcutHelpDialog } from './ShortcutHelpDialog';
+import { InShellContext } from './shellContext';
 
 export type AppShellProps = {
   children: ReactNode;
@@ -84,7 +85,7 @@ export function AppShell({ children, rail = true }: AppShellProps) {
           tabIndex={-1}
           className={cn('min-w-0 flex-1 p-4 outline-none', rail ? 'lg:p-6' : 'lg:p-0')}
         >
-          {children}
+          <InShellContext.Provider value={true}>{children}</InShellContext.Provider>
         </main>
       </div>
       <Sheet
