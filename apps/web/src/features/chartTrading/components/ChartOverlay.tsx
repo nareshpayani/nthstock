@@ -519,7 +519,6 @@ export function ChartOverlay({
       event.preventDefault();
       event.stopPropagation();
       keyMoveRef.current = null;
-      announce(strings.drag.cancelled);
       on.onDragEnd?.(line.id, null);
       announce(strings.drag.cancelled);
       return;
@@ -528,7 +527,6 @@ export function ChartOverlay({
       event.preventDefault();
       keyMoveRef.current = null;
       haptic('commit');
-      announce(strings.drag.released(formatInr(current.price)));
       on.onDragEnd?.(line.id, current.price);
       announce(strings.drag.released(formatInr(current.price)));
       return;
@@ -542,7 +540,6 @@ export function ChartOverlay({
     event.preventDefault();
     const steps = (event.shiftKey ? 10 : 1) * (event.key === 'ArrowUp' ? 1 : -1);
     const price = snapToTick((current?.price ?? line.price) + steps * tickSize, tickSize);
-    if (!current) announce(strings.drag.started(line.label, formatInr(price)));
     keyMoveRef.current = { id: line.id, price };
     on.onDragMove?.(line.id, price);
     // The live region speaks the start only; each step is the handle's own value change.
@@ -551,7 +548,6 @@ export function ChartOverlay({
   const onHandleBlur = (line: OverlayLine) => () => {
     if (keyMoveRef.current?.id !== line.id) return;
     keyMoveRef.current = null;
-    announce(strings.drag.cancelled);
     latestRef.current.on.onDragEnd?.(line.id, null);
     announce(strings.drag.cancelled);
   };
