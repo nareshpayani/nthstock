@@ -1,0 +1,8 @@
+{
+  "viewport": "desktop-1440x900",
+  "frames": [
+    "instrument",
+    "ticket",
+    "orderLine"
+  ]
+}
