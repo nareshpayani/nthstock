@@ -1,5 +1,7 @@
 export const strings = {
   drag: {
+    /** The first-run hint beside the first draggable line (SPEC-CR-1 §5.7, CR-T20). */
+    hint: 'Drag the line to change the price',
     started: (label: string, price: string) =>
       `Moving ${label}. Now ${price}. Release to save, a second finger or Escape cancels.`,
     /** Keyboard moves (§13) say their own keys. */
