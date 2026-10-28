@@ -143,6 +143,29 @@ describe('order ticket with the market open', () => {
   );
 
   it(
+    'offline: the review step Confirm is disabled with the reason attached, and works again on reconnect (CR-1 §7)',
+    async () => {
+      await renderTicket(mock.session);
+      await openTicket();
+      fireEvent.change(qtyInput(), { target: { value: '2' } });
+      fireEvent.click(screen.getByRole('button', { name: 'Buy INFY' }));
+      await screen.findByRole('heading', { name: 'Review your order' });
+      expect(screen.getByRole('button', { name: 'Confirm' })).toBeEnabled();
+
+      act(() => useConnectivityStore.getState().setForced('offline'));
+      const message = await screen.findByText("You're offline. Orders resume when you reconnect.");
+      const confirm = screen.getByRole('button', { name: 'Confirm' });
+      expect(confirm).toBeDisabled();
+      expect(confirm).toHaveAccessibleDescription(message.textContent);
+
+      act(() => useConnectivityStore.getState().setForced('live'));
+      await waitFor(() => expect(screen.getByRole('button', { name: 'Confirm' })).toBeEnabled());
+      expect(screen.queryByText(/You're offline/)).not.toBeInTheDocument();
+    },
+    HEAVY,
+  );
+
+  it(
     'a signed-out Buy keeps the intent and does not open until a session is held',
     async () => {
       const { router } = await renderTicket(mock.session, { signedIn: false });
