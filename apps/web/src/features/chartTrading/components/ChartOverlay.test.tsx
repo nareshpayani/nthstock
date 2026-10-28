@@ -483,4 +483,78 @@ describe('chart overlay (T15, SPEC-TFC-1 §10.5)', () => {
       expect(nearestLine(lines, 290, toY)?.id).toBe('ghost');
     });
   });
+  describe('lift and settle (CR-T06, SPEC-CR-1 §5.2, AC-04)', () => {
+    it('a held line lifts: its tab and band are marked, its line thickens and the rest dim', () => {
+      render(
+        <ChartOverlay
+          handle={makeHandle()}
+          tickSize={5}
+          label="Chart orders"
+          lines={[line({ id: 'o1', price: 150_000 }), line({ id: 'o2', price: 145_000 })]}
+        />,
+      );
+      const group = screen.getByRole('group', { name: 'Chart orders' });
+      expect(group).toHaveAttribute('data-holding', 'false');
+      expect(screen.getAllByTestId('chart-tab-grip')).toHaveLength(2);
+      pointer(band('o1'), 'pointerdown', 210);
+      expect(group).toHaveAttribute('data-holding', 'true');
+      expect(band('o1')).toHaveAttribute('data-held', 'true');
+      expect(band('o2')).toHaveAttribute('data-held', 'false');
+      const [held, other] = series()?.priceLines ?? [];
+      expect(held?.options).toMatchObject({ lineWidth: 2 });
+      expect(String(other?.options.color)).toMatch(/^#[0-9A-Fa-f]{6}73$/);
+
+      pointer(band('o1'), 'pointerup', 210);
+      expect(group).toHaveAttribute('data-holding', 'false');
+      expect(held?.options).toMatchObject({ lineWidth: 1 });
+      expect(String(other?.options.color)).toMatch(/^#[0-9A-Fa-f]{6}$/);
+    });
+
+    it('a cancelled drag springs the line back from where the finger left it', () => {
+      const frames: FrameRequestCallback[] = [];
+      vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
+        frames.push(callback);
+        return frames.length;
+      });
+      vi.stubGlobal('cancelAnimationFrame', () => undefined);
+      const handle = makeHandle();
+      function Harness() {
+        const [price, setPrice] = useState(150_000);
+        return (
+          <ChartOverlay
+            handle={handle}
+            tickSize={5}
+            label="Chart orders"
+            lines={[line({ id: 'o1', price })]}
+            onDragMove={(_id, next) => setPrice(next)}
+            onDragEnd={(_id, saved) => setPrice(saved ?? 150_000)}
+          />
+        );
+      }
+      try {
+        render(<Harness />);
+        pointer(band('o1'), 'pointerdown', 200);
+        pointer(band('o1'), 'pointermove', 160);
+        expect(series()?.priceLines[0]?.options.price).toBe(152_000);
+        act(() => {
+          fireEvent.keyDown(document, { key: 'Escape' });
+        });
+        // Still where the finger left it; the spring takes it home over the next frames.
+        expect(series()?.priceLines[0]?.options.price).toBe(152_000);
+        let now = 0;
+        const seen: number[] = [];
+        for (let i = 0; i < 60 && frames.length > 0; i += 1) {
+          now += 1000 / 60;
+          frames.shift()?.(now);
+          seen.push(Number(series()?.priceLines[0]?.options.price));
+        }
+        expect(seen.at(-1)).toBe(150_000);
+        // Never past home: a critically damped spring does not overshoot.
+        expect(Math.min(...seen)).toBeGreaterThanOrEqual(150_000);
+        expect(seen.some((price) => price > 150_000 && price < 152_000)).toBe(true);
+      } finally {
+        vi.unstubAllGlobals();
+      }
+    });
+  });
 });
