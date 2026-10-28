@@ -27,6 +27,19 @@ describe('DigitRoll', () => {
     expect(container.querySelector('[data-rolled]')?.className).toBe('nth-digit-down');
   });
 
+  it('treats a Unicode minus as negative when picking the direction', () => {
+    const { container, rerender } = render(<DigitRoll value="−1.50" />);
+    rerender(<DigitRoll value="−2.50" />);
+    expect(container.querySelector('[data-rolled]')?.className).toBe('nth-digit-down');
+  });
+
+  it('swaps without a direction when a side has no number', () => {
+    const { container, rerender } = render(<DigitRoll value="—" />);
+    rerender(<DigitRoll value="₹10.00" />);
+    expect(container.textContent).toBe('₹10.00');
+    expect(container.querySelector('.nth-digit-up, .nth-digit-down')).toBeNull();
+  });
+
   it('compares from the right when the value gains a digit', () => {
     const { container, rerender } = render(<DigitRoll value="₹999.50" />);
     rerender(<DigitRoll value="₹1,000.50" />);
