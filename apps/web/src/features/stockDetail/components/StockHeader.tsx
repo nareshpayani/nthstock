@@ -99,6 +99,7 @@ export function StockHeader({
           exchange={exchange}
           format={format}
           size="lg"
+          roll
           initial={snapshot?.ltp}
         />
         <span className="sr-only">{strings.header.changeLabel}</span>

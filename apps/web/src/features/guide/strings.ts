@@ -186,7 +186,7 @@ export const strings = {
             },
             {
               name: 'Stock detail',
-              body: 'Area and candle charts from 1 day to 5 years, with 1, 5, 15, 30 and 60-minute bars on intraday ranges, key stats, live market depth and a company overview.',
+              body: 'Line, area, candle, OHLC bar and Heikin-Ashi charts from 1 day to 5 years, with 1, 5, 15, 30 and 60-minute bars on intraday ranges, key stats, live market depth and a company overview.',
             },
             {
               name: 'Order ticket',
@@ -323,7 +323,7 @@ export const strings = {
               title: 'Stock page and charts',
               device: 'Desktop',
               length: '0:48',
-              body: 'Every range (1D, 1W, 1M, 1Y, 5Y) and every bar size (1, 5, 15, 30 and 60 minutes), area and candles, the crosshair, key stats, live market depth and the company overview.',
+              body: 'Every range (1D, 1W, 1M, 1Y, 5Y) and every bar size (1, 5, 15, 30 and 60 minutes), the five chart types (line, area, hollow candles, OHLC bars and Heikin-Ashi, whose tooltip shows the traded prices), the crosshair, key stats, live market depth and the company overview.',
             },
             {
               id: 'orderTicket',

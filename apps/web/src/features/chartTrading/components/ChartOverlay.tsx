@@ -90,6 +90,9 @@ const SETTLE_WINDOW_MS = 10_000;
 /** The rail's width in px, from the axis's left edge. */
 const RAIL_WIDTH = 10;
 
+/** How long a new order's line takes to arrive from the rail (SPEC-CR-1 §5.7). */
+const LINE_ARRIVAL_MS = 280;
+
 /** Set once the first-run drag hint has been dismissed; it is never shown again (§5.7). */
 export const DRAG_HINT_KEY = 'nthstock.dragHintSeen';
 
@@ -182,6 +185,9 @@ export function ChartOverlay({
   const settlingRef = useRef<Settling>(new Map());
   // Faint lines left where a trailing stop ratcheted from, fading out (SPEC-CR-1 §5.3).
   const tracesRef = useRef(new Set<{ line: IPriceLine; stop: () => void }>());
+  // Every line id this overlay has drawn, so only an order that is new to it arrives with the
+  // "flies to the chart" moment (SPEC-CR-1 §5.7), not lines redrawn after a range or type switch.
+  const knownRef = useRef<Set<string> | null>(null);
   const primitiveRef = useRef<RepaintPrimitive | null>(null);
   // The latest lines and callbacks, for the repaint hook and the event handlers.
   const tickSizeRef = useRef(tickSize);
@@ -304,6 +310,30 @@ export function ChartOverlay({
           }
         },
       },
+    );
+  };
+
+  // A new order arrives from the rail (SPEC-CR-1 §5.7, X1): its tab slides in from the price
+  // axis and its line fades up. Reduced motion draws it at once.
+  const arrive = (id: string) => {
+    if (prefersReducedMotion()) return;
+    const { handles } = elementsRef.current;
+    const tab = handles.get(id)?.querySelector<HTMLElement>('[data-testid="chart-tab"]');
+    if (tab) {
+      tab.dataset.arrived = 'true';
+      tab.addEventListener('animationend', () => delete tab.dataset.arrived, { once: true });
+    }
+    const drawn = drawnRef.current.get(id);
+    if (!drawn) return;
+    const { color } = LINE_STYLES[drawn.tone];
+    // Hidden from the first paint, so it never shows at full strength before the fade starts.
+    drawn.line.applyOptions({ color: withAlpha(color, 0) });
+    animateTween(
+      0,
+      1,
+      LINE_ARRIVAL_MS,
+      (alpha) => drawnRef.current.get(id)?.line.applyOptions({ color: withAlpha(color, alpha) }),
+      { onDone: () => drawnRef.current.get(id)?.line.applyOptions({ color }) },
     );
   };
 
@@ -449,6 +479,13 @@ export function ChartOverlay({
       settle(line.id, drawnFrom, line.price, 'glide');
       leaveTrace(drawnFrom);
     }
+    const known = knownRef.current;
+    for (const line of ordered) {
+      if (known && !known.has(line.id) && (line.tone === 'buy' || line.tone === 'sell')) {
+        arrive(line.id);
+      }
+    }
+    knownRef.current = new Set([...(known ?? []), ...ordered.map((line) => line.id)]);
     for (const [id, entry] of settlingRef.current) {
       const drawn = drawnRef.current.get(id);
       if (drawn) drawn.line.applyOptions({ price: entry.price });
@@ -820,6 +857,7 @@ export function ChartOverlay({
                     "before:absolute before:top-1/2 before:-left-1 before:size-2 before:-translate-y-1/2 before:rotate-45 before:border-b before:border-l before:[border-color:inherit] before:[border-style:inherit] before:[background:inherit] before:content-['']",
                     'origin-left transition-[transform,box-shadow] duration-[var(--nth-duration-fast)] ease-out motion-reduce:transition-none',
                     'group-data-[held=true]/row:scale-[1.04] group-data-[held=true]/row:shadow-lifted',
+                    'data-[arrived=true]:animate-line-in',
                     'group-data-[pressed=true]:scale-[0.96] group-data-[pressed=true]:shadow-none',
                     TONE_CLASSES[line.tone],
                     line.id === hintFor && 'animate-drag-hint motion-reduce:animate-none',

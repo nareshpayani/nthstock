@@ -1,5 +1,7 @@
 import { vi } from 'vitest';
 
+type MockSeriesType = 'Area' | 'Candlestick' | 'Line' | 'Bar';
+
 /**
  * A stand-in for `lightweight-charts` in jsdom (no canvas). Use it with
  * `vi.mock('lightweight-charts', () => import('@/test/chartsMock'))` and inspect `chartsMock`.
@@ -11,11 +13,11 @@ type FakePriceLine = {
 };
 type FakePrimitive = { attached?: (param: unknown) => void; updateAllViews?: () => void };
 type FakeSeries = {
-  type: 'Area' | 'Candlestick';
+  type: MockSeriesType;
   setData: ReturnType<typeof vi.fn>;
   update: ReturnType<typeof vi.fn>;
   applyOptions: ReturnType<typeof vi.fn>;
-  seriesType: () => 'Area' | 'Candlestick';
+  seriesType: () => MockSeriesType;
   /** Price lines currently drawn. */
   priceLines: FakePriceLine[];
   primitives: FakePrimitive[];
@@ -81,6 +83,8 @@ export const chartsMock = {
 
 export const AreaSeries = { type: 'Area' as const };
 export const CandlestickSeries = { type: 'Candlestick' as const };
+export const LineSeries = { type: 'Line' as const };
+export const BarSeries = { type: 'Bar' as const };
 export const ColorType = { Solid: 'solid' };
 export const CrosshairMode = { Normal: 0, Magnet: 1, Hidden: 2 };
 export const TickMarkType = { Year: 0, Month: 1, DayOfMonth: 2, Time: 3, TimeWithSeconds: 4 };
@@ -106,7 +110,7 @@ export function createChart(_host: HTMLElement, options: unknown) {
   };
   chartsMock.charts.push(chart);
   return {
-    addSeries(definition: { type: 'Area' | 'Candlestick' }) {
+    addSeries(definition: { type: MockSeriesType }) {
       const series: FakeSeries = {
         type: definition.type,
         setData: vi.fn(),
