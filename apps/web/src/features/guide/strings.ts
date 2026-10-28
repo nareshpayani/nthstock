@@ -784,7 +784,7 @@ export const strings = {
             'Applies each accountDelta frame in one commit, in the same animation frame as its quotes.',
             'Drops stale sequence numbers and re-reads the account after a gap or a reconnect.',
             'Writes through to the TanStack Query caches, so the orders and positions pages agree with the chart.',
-            'Tracks pending intents (place, modify, cancel, close) until a response or a frame covers them, which is how a dragged line shows “Updating…” at its new price.',
+            'Tracks pending intents (place, modify, cancel, close) until a response or a frame covers them, which is how a dragged line shows “Saving…” at its new price.',
           ],
         },
         { kind: 'heading', text: 'Price alerts and notifications' },

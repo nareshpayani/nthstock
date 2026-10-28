@@ -64,6 +64,8 @@ for (const viewport of VIEWPORTS) {
     const line = figure.locator('[data-testid="chart-handle"][data-tone="buy"]');
     await expect(line).toContainText(`Buy 3 @ ₹`);
     expect(rupees(await line.innerText())).toBe(placed);
+    // Let the new line finish arriving from the rail (SPEC-CR-1 §5.7) before pressing on it.
+    await expect(line.getByTestId('chart-tab')).not.toHaveAttribute('data-arrived', 'true');
 
     // Drag up: the label follows; one modify on release raises the price.
     const from = await box(line);
