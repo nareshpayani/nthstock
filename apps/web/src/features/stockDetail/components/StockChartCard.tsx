@@ -149,7 +149,7 @@ export function StockChartCard({
           intraday={isIntraday(range)}
           height={height}
           tooltip
-          interactive={trading}
+          interactive
           onReady={trading ? setChart : undefined}
           overlay={
             trading && chart ? (

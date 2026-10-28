@@ -28,6 +28,17 @@ const candleRanges = () =>
   api.requestsTo('/INFY/candles').map((url) => url.searchParams.get('range'));
 
 describe('stock price chart (T-107)', () => {
+  it('an index chart, which has no trading, still pans and zooms (NSTOCK-0437)', async () => {
+    renderApp('/stocks/NIFTY50', { apiClient: api.apiClient });
+    await screen.findByTestId('chart-host');
+    await waitFor(() => expect(chartsMock.active()[0]?.series[0]).toBeDefined());
+    expect(chartsMock.active()[0]?.options).toMatchObject({
+      handleScroll: { horzTouchDrag: true, vertTouchDrag: false },
+      handleScale: { mouseWheel: true, pinch: true },
+    });
+    expect(screen.queryByTestId('chart-overlay')).not.toBeInTheDocument();
+  });
+
   it('opens on the 1D area chart when the URL names no range', async () => {
     renderApp('/stocks/INFY', { apiClient: api.apiClient });
     expect(

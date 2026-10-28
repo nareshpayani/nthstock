@@ -37,10 +37,10 @@ const candleRanges = () =>
   api.requestsTo('/NIFTY50/candles').map((url) => url.searchParams.get('range'));
 
 describe('dashboard URL state', () => {
-  it('drops an invalid range from the URL and falls back to 1 year', async () => {
+  it('drops an invalid range from the URL and falls back to 1 day', async () => {
     const { router } = renderApp('/dashboard?range=2Y', { apiClient: api.apiClient });
     expect(
-      await screen.findByRole('figure', { name: 'NIFTY 50 area chart over 1 year' }),
+      await screen.findByRole('figure', { name: 'NIFTY 50 area chart over 1 day' }),
     ).toBeInTheDocument();
     expect(router.state.location.search).toEqual({});
   });
@@ -95,7 +95,7 @@ describe('dashboard on MSW data (T-100)', () => {
   it('renders every section from the mock API with no errors', async () => {
     renderApp('/dashboard', { apiClient: api.apiClient, marketSession: at(16) });
     expect(
-      await screen.findByRole('figure', { name: 'NIFTY 50 area chart over 1 year' }),
+      await screen.findByRole('figure', { name: 'NIFTY 50 area chart over 1 day' }),
     ).toBeInTheDocument();
     const indices = await screen.findByRole('region', { name: 'Market indices' });
     await waitFor(() =>
@@ -158,7 +158,7 @@ describe('section error isolation (T-099)', () => {
     // Every other section still loads its data.
     await waitFor(() => expect(linksIn('Stocks lists')).toHaveLength(5));
     expect(
-      await screen.findByRole('figure', { name: 'NIFTY 50 area chart over 1 year' }),
+      await screen.findByRole('figure', { name: 'NIFTY 50 area chart over 1 day' }),
     ).toBeInTheDocument();
     await waitFor(() =>
       expect(within(section('Market indices')).getAllByRole('listitem').length).toBeGreaterThan(0),

@@ -179,7 +179,7 @@ export const strings = {
           items: [
             {
               name: 'Dashboard',
-              body: 'NIFTY 50 chart from 1 day to 5 years, market indices, curated stock lists, and top gainers and losers by index.',
+              body: 'NIFTY 50 chart that opens on today (1D) and goes to 5 years: drag to pan, wheel, pinch or the − + buttons to zoom, tap to open its full page. Market index cards and the header tickers open each index’s own chart page. Curated stock lists, and top gainers and losers by index.',
             },
             {
               name: 'Live prices',

@@ -8,7 +8,7 @@ export const CHART_RANGES = [
   '1Y',
   '5Y',
 ] as const satisfies readonly CandleRange[];
-export const DEFAULT_CHART_RANGE: CandleRange = '1Y';
+export const DEFAULT_CHART_RANGE: CandleRange = '1D';
 
 /** Ranges whose bars are shorter than a day, so the axis shows times. */
 export const isIntraday = (range: CandleRange) => range === '1D' || range === '1W';
