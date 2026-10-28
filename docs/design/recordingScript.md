@@ -32,8 +32,8 @@ Demo login if asked: mobile `9000000001`, OTP `123456`. The demo opens signed in
 | 9 | 1:32–1:42 | Landscape | Turn the phone sideways: one-line price, the chart fills the height, the dock stays. Turn back | "Every screen size, from 320 px to a tablet" |
 | 10 | 1:42–1:48 | Out | Stop on the instrument page with the line in view; stop recording | "nthstock · paper trading, virtual cash" |
 
-Beat 3 needs the market open in the demo clock; the demo account runs on a simulated session, so it
-fills at any time of day. If a beat goes wrong, carry on: a single take reads as honest, and beats 5
+Record on a weekday between 9:15 AM and 3:30 PM IST: the demo follows NSE hours, and outside them
+the order in beat 3 becomes an after-market order with no line to drag. If a beat goes wrong, carry on: a single take reads as honest, and beats 5
 and 7 matter most.
 
 ## After
