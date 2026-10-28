@@ -78,12 +78,18 @@ export const chartsMock = {
 export const AreaSeries = { type: 'Area' as const };
 export const CandlestickSeries = { type: 'Candlestick' as const };
 export const ColorType = { Solid: 'solid' };
-export const CrosshairMode = { Normal: 0, Magnet: 1 };
+export const CrosshairMode = { Normal: 0, Magnet: 1, Hidden: 2 };
 export const TickMarkType = { Year: 0, Month: 1, DayOfMonth: 2, Time: 3, TimeWithSeconds: 4 };
 
 export function createChart(_host: HTMLElement, options: unknown) {
   const chart: FakeChart = {
-    options,
+    // The library's defaults under what the caller passed, as `chart.options()` returns them.
+    options: {
+      crosshair: { mode: CrosshairMode.Normal },
+      handleScroll: true,
+      handleScale: true,
+      ...(options as Record<string, unknown>),
+    },
     series: [],
     resize: vi.fn(),
     remove: vi.fn(() => {
@@ -131,6 +137,11 @@ export function createChart(_host: HTMLElement, options: unknown) {
     },
     resize: chart.resize,
     remove: chart.remove,
+    options: () => chart.options,
+    applyOptions: (next: Record<string, unknown>) => {
+      chart.options = { ...(chart.options as Record<string, unknown>), ...next };
+    },
+    clearCrosshairPosition: vi.fn(),
     subscribeCrosshairMove: (handler: (param: unknown) => void) => chart.crosshair.add(handler),
     unsubscribeCrosshairMove: (handler: (param: unknown) => void) =>
       chart.crosshair.delete(handler),
