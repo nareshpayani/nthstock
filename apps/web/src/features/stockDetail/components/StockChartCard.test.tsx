@@ -21,6 +21,7 @@ beforeEach(() => {
 afterEach(() => {
   vi.unstubAllGlobals();
   resetSession();
+  window.localStorage.clear();
 });
 
 const candleRanges = () =>
@@ -86,7 +87,41 @@ describe('stock price chart (T-107)', () => {
     await waitFor(() => expect(chartsMock.active()[0]?.series[0]?.type).toBe('Candlestick'));
     // Remembered for the next visit that names no type.
     expect(window.localStorage.getItem('nthstock.chartType')).toBe('heikin');
-    window.localStorage.removeItem('nthstock.chartType');
+  });
+
+  it('opens on the remembered type when the URL names none, and the URL wins over it (NSTOCK-0430)', async () => {
+    window.localStorage.setItem('nthstock.chartType', 'bar');
+    const first = renderApp('/stocks/INFY', { apiClient: api.apiClient });
+    await waitFor(() => expect(chartsMock.active()[0]?.series[0]?.type).toBe('Bar'));
+    first.unmount();
+
+    renderApp('/stocks/INFY?chart=line', { apiClient: api.apiClient });
+    await waitFor(() => expect(chartsMock.active().at(-1)?.series[0]?.type).toBe('Line'));
+  });
+
+  it('ignores an invalid remembered type and opens on area (NSTOCK-0430)', async () => {
+    window.localStorage.setItem('nthstock.chartType', 'renko');
+    renderApp('/stocks/INFY', { apiClient: api.apiClient });
+    await waitFor(() => expect(chartsMock.active()[0]?.series[0]?.type).toBe('Area'));
+  });
+
+  it('the Heikin-Ashi tooltip shows the traded prices, not the smoothed ones (NSTOCK-0430)', async () => {
+    renderApp('/stocks/INFY?range=1Y&chart=heikin', { apiClient: api.apiClient });
+    await screen.findByTestId('chart-host');
+    const series = await waitFor(() => {
+      const found = chartsMock.active()[0]?.series[0];
+      expect(found?.setData).toHaveBeenCalled();
+      return found;
+    });
+    const drawn = series?.setData.mock.lastCall?.[0] as { time: number }[];
+    const time = drawn[3]?.time as number;
+    // A smoothed bar that no traded candle matches.
+    act(() =>
+      chartsMock.moveCrosshair({ time, open: 999900, high: 999900, low: 999900, close: 999900 }),
+    );
+    const tooltip = screen.getByTestId('chart-tooltip');
+    expect(tooltip).toHaveTextContent('High');
+    expect(tooltip).not.toHaveTextContent('9,999.00');
   });
 
   it('offers 1m to 1h bars on 1D, keeps the choice in the URL and fetches those bars (NSTOCK-0343)', async () => {

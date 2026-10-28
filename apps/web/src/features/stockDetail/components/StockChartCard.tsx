@@ -55,7 +55,7 @@ const NO_CANDLES: readonly Candle[] = [];
 
 /**
  * Stock price chart (T-107): 1D to 5Y range tabs, a bar size picker (1, 5, 15, 30 or 60-minute
- * bars on 1D; NSTOCK-0343) and an area/candle toggle, all kept in the URL by the page, and a crosshair tooltip with the hovered bar's IST time and ₹ values. The previous
+ * bars on 1D; NSTOCK-0343) and a chart type menu, all kept in the URL by the page, and a crosshair tooltip with the hovered bar's IST time and ₹ values. The previous
  * range stays on screen, dimmed, while the next one loads. On 1D while the market is open, the
  * last bar moves with every live quote and a new bar starts each minute (T-108).
  */

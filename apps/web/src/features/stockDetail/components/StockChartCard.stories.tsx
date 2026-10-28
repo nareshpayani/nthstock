@@ -47,6 +47,6 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-/** INFY from the mock market: range tabs, area/candle toggle and the crosshair tooltip. */
+/** INFY from the mock market: range tabs, chart type menu and the crosshair tooltip. */
 export const Area: Story = {};
 export const Candles: Story = { args: { initialType: 'candle' } };
