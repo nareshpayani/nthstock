@@ -196,6 +196,8 @@ export function PriceChartCanvas({
     }
     target.setData(points as (BarData & LineData)[]);
     chartRef.current?.timeScale().fitContent();
+    // A new range or chart type fits its prices again, undoing a price-axis zoom (NSTOCK-0436).
+    chartRef.current?.priceScale('right').setAutoScale(true);
   }, [candles, type, format, intraday, height, tooltip, interactive]);
 
   useEffect(() => {

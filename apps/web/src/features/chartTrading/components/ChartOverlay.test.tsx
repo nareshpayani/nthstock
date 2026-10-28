@@ -159,6 +159,61 @@ describe('chart overlay (T15, SPEC-TFC-1 §10.5)', () => {
     expect(onGutterTap).toHaveBeenCalledTimes(1);
   });
 
+  it('a drag on the price axis zooms prices; Auto fits them again (NSTOCK-0436)', () => {
+    const onGutterTap = vi.fn();
+    render(
+      <ChartOverlay
+        handle={makeHandle()}
+        tickSize={5}
+        label="Chart orders"
+        lines={[]}
+        onGutterTap={onGutterTap}
+      />,
+    );
+    const gutter = screen.getByTestId('chart-gutter');
+    const auto = screen.getByTestId('chart-auto-fit');
+    expect(auto).not.toBeVisible();
+    // ₹1,450 to ₹1,600 is on screen; dragging down widens it around the middle, ₹1,525.
+    pointer(gutter, 'pointerdown', 100);
+    pointer(gutter, 'pointermove', 260);
+    pointer(gutter, 'pointerup', 260);
+    expect(onGutterTap).not.toHaveBeenCalled();
+    const { top, paisePerPx, height, autoScale } = chartsMock.scale;
+    const middle = top - (height * paisePerPx) / 2;
+    expect(middle).toBeCloseTo(152_500);
+    expect(height * paisePerPx).toBeCloseTo(15_000 * Math.E);
+    expect(autoScale).toBe(false);
+    act(() => chartsMock.repaint());
+    expect(auto).toBeVisible();
+    fireEvent.click(screen.getByRole('button', { name: 'Auto: fit prices to the chart' }));
+    expect(chartsMock.scale.autoScale).toBe(true);
+    act(() => chartsMock.repaint());
+    expect(auto).not.toBeVisible();
+    // Focus moves to the chart's group, not the page, and the change is said.
+    expect(screen.getByRole('group', { name: 'Chart orders' })).toHaveFocus();
+    expect(screen.getByText('Prices fit to the chart.')).toBeInTheDocument();
+  });
+
+  it('a tap where a zoom out shows zero or less starts no order (NSTOCK-0436)', () => {
+    const onGutterTap = vi.fn();
+    render(
+      <ChartOverlay
+        handle={makeHandle()}
+        tickSize={5}
+        label="Chart orders"
+        lines={[]}
+        onGutterTap={onGutterTap}
+      />,
+    );
+    // ₹1,600 at the top, 50 paise per px: y = 3,300 px is ₹-50.
+    const gutter = screen.getByTestId('chart-gutter');
+    pointer(gutter, 'pointerdown', 3_300);
+    pointer(gutter, 'pointerup', 3_300);
+    pointer(gutter, 'pointerdown', 3_200);
+    pointer(gutter, 'pointerup', 3_200);
+    expect(onGutterTap).not.toHaveBeenCalled();
+  });
+
   it('a handle drag reports each price and saves once on release; a tap does not drag', () => {
     const onDragMove = vi.fn();
     const onDragEnd = vi.fn();

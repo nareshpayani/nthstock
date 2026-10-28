@@ -122,9 +122,9 @@ export function chartOptions({ format, intraday }: ChartThemeOptions): DeepParti
 
 /**
  * Gestures for a chart you trade from (SPEC-TFC-1 §10.5): horizontal touch drag pans and pinch
- * zooms, but vertical touch drag stays with the page so it still scrolls. The price axis belongs
- * to the trading gutter, so dragging or double-clicking it does nothing, and it is at least 64 px
- * wide to hold a thumb.
+ * zooms, but vertical touch drag stays with the page so it still scrolls. Dragging the price axis
+ * zooms prices (NSTOCK-0436); on a trading chart the gutter over the axis does that itself, since
+ * a tap there starts an order. The axis is at least 64 px wide to hold a thumb.
  */
 export const TRADING_INTERACTION = {
   handleScroll: {
@@ -136,7 +136,7 @@ export const TRADING_INTERACTION = {
   handleScale: {
     mouseWheel: true,
     pinch: true,
-    axisPressedMouseMove: { time: true, price: false },
+    axisPressedMouseMove: { time: true, price: true },
     axisDoubleClickReset: false,
   },
   // Major tick marks on the price axis; the overlay draws the minor ones (SPEC-CR-1 §4.2).
@@ -204,9 +204,10 @@ const priceFormat = (format: ChartValueFormat) =>
   }) as const;
 
 /**
- * Candles (and Heikin-Ashi): an up bar is hollow, only a faint tint inside its outline, and a down
- * bar filled, so the direction reads from the shape as well as the colour (WCAG 1.4.1,
- * NSTOCK-0430). Heikin-Ashi hides the last-value label: its close is smoothed, not a traded price.
+ * Candles (and Heikin-Ashi): up bars solid green, down bars solid red (owner's call, NSTOCK-0436;
+ * they were hollow up, filled down). Colour is not the only signal: a rising bar closes at its
+ * top and the tooltip shows ▲ or ▼ with the change (WCAG 1.4.1). Heikin-Ashi hides the
+ * last-value label: its close is smoothed, not a traded price.
  */
 export function candleSeriesOptions(
   format: ChartValueFormat,
@@ -214,7 +215,7 @@ export function candleSeriesOptions(
 ): CandlestickSeriesPartialOptions {
   return {
     lastValueVisible: !smoothed,
-    upColor: withAlpha(colors.up, 0.12),
+    upColor: colors.up,
     downColor: colors.down,
     borderUpColor: colors.up,
     borderDownColor: colors.down,

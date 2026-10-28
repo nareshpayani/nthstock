@@ -36,6 +36,7 @@ import { byPriority, type LineAction, type OverlayLine } from '../model/overlayL
 import { loupeText, placeLoupe } from '../model/loupe';
 import { layoutHandles, snapToTick } from '../model/overlayLayout';
 import { railStep, railTicks } from '../model/priceRail';
+import { zoomedPriceRange, type PriceRange } from '../model/priceZoom';
 import { strings } from '../strings';
 
 export type ChartOverlayProps = {
@@ -78,7 +79,11 @@ type Elements = {
     detail: HTMLElement;
   } | null;
   layer: HTMLElement | null;
+  /** "Auto", shown once a price-axis zoom has turned the chart's autoscale off (NSTOCK-0436). */
+  autoFit: HTMLElement | null;
 };
+/** The "Auto" button's height in px (h-8), to sit it just above the time axis. */
+const AUTO_FIT_HEIGHT = 32;
 /** Prices a line is drawn at while it springs to its real one, by line id. */
 type Settling = Map<string, { price: number; stop: () => void }>;
 type Drawn = Map<string, { line: IPriceLine; price: number; tone: OverlayLine['tone'] }>;
@@ -163,11 +168,18 @@ export function ChartOverlay({
     live: null,
     loupe: null,
     layer: null,
+    autoFit: null,
   });
   const drawnRef = useRef<Drawn>(new Map());
   const gestureRef = useRef<HandleGesture>(IDLE);
   const keyMoveRef = useRef<KeyMove>(null);
-  const gutterPressRef = useRef<{ pointerId: number; y: number } | null>(null);
+  // A press on the gutter: a tap starts an order there, a vertical drag zooms prices (NSTOCK-0436).
+  const gutterPressRef = useRef<{
+    pointerId: number;
+    y: number;
+    range: PriceRange | null;
+    zooming: boolean;
+  } | null>(null);
   const chipRef = useRef<ChipPress | null>(null);
   // How far the dragged line sits from the finger at the press (an offset label has a leader line,
   // a band press is beside the line), so the drag moves the price by the finger's movement instead
@@ -556,9 +568,11 @@ export function ChartOverlay({
   }, []);
 
   const paneY = (clientY: number) => clientY - handle.host.getBoundingClientRect().top;
+  // Below half a tick (a zoom out can show zero and less) there is no price to start an order at;
+  // snapToTick would lift it to one tick.
   const priceAt = (y: number) => {
     const price = handle.series.coordinateToPrice(y);
-    return price === null ? null : snapToTick(price, tickSize);
+    return price === null || price < tickSize / 2 ? null : snapToTick(price, tickSize);
   };
 
   const onHandlePointerDown = (id: string) => (event: ReactPointerEvent<HTMLElement>) => {
@@ -723,12 +737,33 @@ export function ChartOverlay({
 
   const onGutterPointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
     event.currentTarget.setPointerCapture?.(event.pointerId);
-    gutterPressRef.current = { pointerId: event.pointerId, y: paneY(event.clientY) };
+    gutterPressRef.current = {
+      pointerId: event.pointerId,
+      y: paneY(event.clientY),
+      range: handle.chart.priceScale('right').getVisibleRange(),
+      zooming: false,
+    };
+  };
+  // Past the slop a press on the axis is a zoom, not a tap: the range stretches around its middle.
+  const onGutterPointerMove = (event: ReactPointerEvent<HTMLDivElement>) => {
+    const start = gutterPressRef.current;
+    if (!start || start.pointerId !== event.pointerId || !start.range) return;
+    const dy = paneY(event.clientY) - start.y;
+    if (!start.zooming && Math.abs(dy) <= DRAG_SLOP) return;
+    start.zooming = true;
+    handle.chart.priceScale('right').setVisibleRange(zoomedPriceRange(start.range, dy, tickSize));
+  };
+  // The button hides once prices fit, so focus moves to the chart's group first (WCAG 2.4.3).
+  const onAutoFit = () => {
+    elementsRef.current.layer?.focus();
+    handle.chart.priceScale('right').setAutoScale(true);
+    primitiveRef.current?.requestUpdate();
+    announce(strings.priceZoom.fitted);
   };
   const onGutterPointerUp = (event: ReactPointerEvent<HTMLDivElement>) => {
     const start = gutterPressRef.current;
     gutterPressRef.current = null;
-    if (!start || start.pointerId !== event.pointerId) return;
+    if (!start || start.pointerId !== event.pointerId || start.zooming) return;
     const y = paneY(event.clientY);
     if (Math.abs(y - start.y) > DRAG_SLOP) return;
     const price = priceAt(y);
@@ -751,7 +786,7 @@ export function ChartOverlay({
       className="pointer-events-none absolute inset-0 overflow-hidden"
       data-testid="chart-overlay"
     >
-      {/* The price axis is the gutter: tap to start an order there (§8.2). */}
+      {/* The price axis is the gutter: tap to start an order there (§8.2), drag to zoom prices. */}
       <div
         ref={(element) => {
           elementsRef.current.gutter = element;
@@ -760,6 +795,7 @@ export function ChartOverlay({
         data-testid="chart-gutter"
         className="pointer-events-auto absolute top-0 right-0 cursor-crosshair touch-none select-none [-webkit-touch-callout:none]"
         onPointerDown={onGutterPointerDown}
+        onPointerMove={onGutterPointerMove}
         onPointerUp={onGutterPointerUp}
         onPointerCancel={() => (gutterPressRef.current = null)}
         onContextMenu={preventDefault}
@@ -773,12 +809,27 @@ export function ChartOverlay({
           className="pointer-events-none absolute top-0 left-0"
         />
       </div>
+      {/* Back to fitting the prices to the chart after a zoom (NSTOCK-0436). */}
+      <button
+        ref={(element) => {
+          elementsRef.current.autoFit = element;
+        }}
+        type="button"
+        hidden
+        aria-label={strings.priceZoom.autoLabel}
+        data-testid="chart-auto-fit"
+        className="pointer-events-auto absolute top-0 right-1 h-8 rounded-sm border border-line bg-surface px-2 text-label font-semibold text-ink shadow-sm focus-visible:ring-2 focus-visible:ring-brand focus-visible:outline-none"
+        onClick={onAutoFit}
+      >
+        {strings.priceZoom.auto}
+      </button>
       <div
         ref={(element) => {
           elementsRef.current.layer = element;
         }}
         role="group"
         aria-label={label}
+        tabIndex={-1}
         data-holding="false"
         className="group/layer absolute top-0 left-0"
       >
@@ -994,7 +1045,7 @@ const preventDefault = (event: { preventDefault: () => void }) => event.preventD
 function placeHandles(
   { chart, series }: ChartHandle,
   lines: readonly OverlayLine[],
-  { rows, bands, handles, leaders, gutter, rail, layer }: Elements,
+  { rows, bands, handles, leaders, gutter, rail, layer, autoFit }: Elements,
   settling: Settling,
   tickSize: number,
 ): void {
@@ -1009,6 +1060,11 @@ function placeHandles(
     layer.style.height = `${String(height)}px`;
   }
   if (rail) drawRail(rail, series, height, tickSize);
+  if (autoFit) {
+    autoFit.hidden = chart.priceScale('right').options().autoScale;
+    // Just above the time axis, under the price axis.
+    autoFit.style.top = `${String(height - AUTO_FIT_HEIGHT - 4)}px`;
+  }
   // A line springing to its price is placed where it is drawn, not where it is going.
   const placed =
     settling.size === 0
