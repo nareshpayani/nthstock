@@ -1,5 +1,6 @@
 import type { Exchange, Order, OrderSide, ProductType } from '@nthstock/contracts';
 import { create } from 'zustand';
+import { claimPanelSlot, registerPanel } from './panelSlot';
 
 /** What the order ticket should open with: the instrument and the side. */
 export type TicketIntent = {
@@ -45,6 +46,11 @@ export const initialTicketIntentState = { intent: null };
 
 export const useTicketIntentStore = create<TicketIntentState>()((set) => ({
   ...initialTicketIntentState,
-  openTicket: (intent) => set({ intent: { ...intent } }),
+  openTicket: (intent) => {
+    claimPanelSlot('ticket');
+    set({ intent: { ...intent } });
+  },
   closeTicket: () => set({ intent: null }),
 }));
+
+registerPanel('ticket', () => useTicketIntentStore.getState().closeTicket());

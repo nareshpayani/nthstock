@@ -1,5 +1,6 @@
 import type { Exchange, ProductType } from '@nthstock/contracts';
 import { create } from 'zustand';
+import { claimPanelSlot, registerPanel } from './panelSlot';
 
 /** The position the trailing-stop sheet is about. */
 export type TrailingSheetTarget = {
@@ -26,6 +27,11 @@ export const initialTrailingSheetState = { target: null };
 
 export const useTrailingSheetStore = create<TrailingSheetState>()((set) => ({
   ...initialTrailingSheetState,
-  openSheet: (target) => set({ target: { ...target } }),
+  openSheet: (target) => {
+    claimPanelSlot('trailing');
+    set({ target: { ...target } });
+  },
   closeSheet: () => set({ target: null }),
 }));
+
+registerPanel('trailing', () => useTrailingSheetStore.getState().closeSheet());
