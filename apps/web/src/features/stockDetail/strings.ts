@@ -150,6 +150,8 @@ export const strings = {
       label: (symbol: string) => `Today's ${symbol} orders`,
       empty: (symbol: string) => `No ${symbol} orders today.`,
       unavailable: 'Your orders are on the Orders page.',
+      loading: 'Loading orders',
+      failed: "Couldn't load your orders. Check the Orders page.",
       all: 'All orders',
       row: (side: string, filled: number, qty: number, type: string) =>
         `${side} ${String(filled)} / ${String(qty)} · ${type}`,
