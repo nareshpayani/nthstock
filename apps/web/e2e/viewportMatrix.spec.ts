@@ -108,7 +108,8 @@ function clippedText(page: Page, root: Locator): Promise<Problem[]> {
       if (rect.width === 0 || rect.height === 0) continue;
       // Inside a horizontal scroller, text may run past the screen: it scrolls into view.
       let scroller = false;
-      for (let parent = element.parentElement; parent; parent = parent.parentElement) {
+      // Start at the element itself: a `truncate` element cuts its own text.
+      for (let parent: Element | null = element; parent; parent = parent.parentElement) {
         const overflow = getComputedStyle(parent).overflowX;
         if (overflow === 'auto' || overflow === 'scroll') {
           scroller = true;
