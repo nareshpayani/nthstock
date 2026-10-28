@@ -1,5 +1,5 @@
 import type { Exchange, Instrument, OrderSide, Quote } from '@nthstock/contracts';
-import { Button, SegmentedControl } from '@nthstock/ui';
+import { Button, SegmentedControl, cn } from '@nthstock/ui';
 import { PriceAlertButton } from '@/features/notifications';
 import { WatchlistStar } from '@/features/watchlist';
 import { LiveChange } from '@/shared/components/LiveChange';
@@ -53,7 +53,13 @@ export function StockHeader({
     />
   );
   const price = (
-    <div className="flex min-w-0 flex-wrap items-baseline gap-x-3 gap-y-1">
+    // On a phone the change sits under the price, loading or not, so the block never reflows.
+    <div
+      className={cn(
+        'min-w-0',
+        phone ? 'grid justify-items-start gap-1' : 'flex flex-wrap items-baseline gap-x-3 gap-y-1',
+      )}
+    >
       <span className="sr-only">{strings.header.priceLabel}</span>
       <PriceCell
         symbol={symbol}
