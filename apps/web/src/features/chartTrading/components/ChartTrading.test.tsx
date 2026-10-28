@@ -11,6 +11,9 @@ import { createTestQuoteStore, testQuote } from '@/test/quotes';
 import { renderWithProviders } from '@/test/renderWithProviders';
 import { CANCEL_ARM_MS, ChartTrading } from './ChartTrading';
 
+const haptics = vi.hoisted(() => ({ haptic: vi.fn(() => true) }));
+vi.mock('@/shared/motion/haptics', () => haptics);
+
 // The fake scale: ₹1,600.00 at y = 0, 50 paise per px, a 300 px pane.
 const AT = '2026-09-28T04:30:00.000Z';
 const INFY = { symbol: 'INFY', exchange: 'NSE' as const, tickSize: 5, token: 408065 };
@@ -179,6 +182,8 @@ describe('order lines (T16, SPEC-TFC-1 §8.1, §8.3)', () => {
     await act(async () => calls[0]?.answer.reject(new Error('refused')));
     await waitFor(() => expect(handleFor('ord_1')).toHaveTextContent('Buy 10 @ ₹1,500.00'));
     expect(await screen.findByText('Order not modified')).toBeInTheDocument();
+    // The error haptic says it too, where the phone has one (SPEC-CR-1 §5.4).
+    expect(haptics.haptic).toHaveBeenLastCalledWith('reject');
   });
 
   it('a fill during the drag ends it, puts nothing on the wire and says it filled first', async () => {
@@ -399,6 +404,7 @@ describe('trailing-stop line (T19, SPEC-TFC-1 §6.5, §6.6, §8.1)', () => {
     expect(await screen.findByText('That stop would trigger immediately.')).toBeInTheDocument();
     expect(calls.filter((call) => call.route === 'trailingStopModify')).toEqual([]);
     expect(handleFor('stop:ts_1')).toHaveTextContent('Trailing SL ₹1,485.00');
+    expect(haptics.haptic).toHaveBeenLastCalledWith('reject');
   });
 
   it('an armed stop with an activation price draws it as a dotted line that opens the sheet', async () => {
