@@ -26,6 +26,7 @@ export const strings = {
     title: 'Price chart',
     rangeLabel: 'Chart range',
     typeLabel: 'Chart type',
+    typeButton: (type: string) => `Chart type: ${type}`,
     intervalLabel: 'Bar size',
     intervalOption: (bars: string) => `${bars} bars`,
     types: { line: 'Line', area: 'Area', candle: 'Candles', bar: 'OHLC', heikin: 'Heikin-Ashi' },

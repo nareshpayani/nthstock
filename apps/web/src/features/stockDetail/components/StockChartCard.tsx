@@ -26,7 +26,8 @@ import {
 import { Card } from '@/shared/components/Card';
 import { useMarketOpen } from '@/shared/hooks/useMarketOpen';
 import { useApiClient } from '@/shared/lib/apiClientContext';
-import { CHART_TYPES, type ChartType } from '../model/stockDetailSearch';
+import type { ChartType } from '../model/stockDetailSearch';
+import { ChartTypeMenu } from './ChartTypeMenu';
 import { strings } from '../strings';
 
 export type StockChartCardProps = {
@@ -111,13 +112,7 @@ export function StockChartCard({
     />
   );
   const typeControl = (
-    <SegmentedControl
-      label={strings.chart.typeLabel}
-      size={controls}
-      value={chartType}
-      onValueChange={onChartTypeChange}
-      options={CHART_TYPES.map((value) => ({ value, label: strings.chart.types[value] }))}
-    />
+    <ChartTypeMenu value={chartType} onValueChange={onChartTypeChange} touch={touch} />
   );
   const showIntervals = intervals.length > 1 && onIntervalChange !== undefined;
   const plot = (

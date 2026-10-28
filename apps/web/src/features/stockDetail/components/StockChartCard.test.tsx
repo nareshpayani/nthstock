@@ -51,15 +51,42 @@ describe('stock price chart (T-107)', () => {
     ).toBeInTheDocument();
   });
 
-  it('the area/candle toggle is kept in the URL and swaps the series', async () => {
+  it('the chart type menu offers five types, keeps the choice in the URL and swaps the series (NSTOCK-0430)', async () => {
     const { router } = renderApp('/stocks/INFY', { apiClient: api.apiClient });
     await screen.findByTestId('chart-host');
-    fireEvent.click(screen.getByRole('radio', { name: 'Candles' }));
+    const pick = async (name: RegExp) => {
+      fireEvent.keyDown(screen.getByRole('button', { name: /^Chart type: / }), { key: 'Enter' });
+      fireEvent.click(await screen.findByRole('menuitemradio', { name }));
+    };
+    fireEvent.keyDown(screen.getByRole('button', { name: 'Chart type: Area' }), { key: 'Enter' });
+    expect((await screen.findAllByRole('menuitemradio')).map((item) => item.textContent)).toEqual([
+      expect.stringMatching(/^Line/),
+      expect.stringMatching(/^Area/),
+      expect.stringMatching(/^Candles/),
+      expect.stringMatching(/^OHLC/),
+      expect.stringMatching(/^Heikin-Ashi.*Not traded prices/),
+    ]);
+    fireEvent.click(screen.getByRole('menuitemradio', { name: /^Candles/ }));
     await waitFor(() => expect(router.state.location.search).toEqual({ chart: 'candle' }));
     expect(
       await screen.findByRole('figure', { name: 'INFY candlestick chart over 1 day' }),
     ).toBeInTheDocument();
     await waitFor(() => expect(chartsMock.active()[0]?.series[0]?.type).toBe('Candlestick'));
+
+    await pick(/^OHLC/);
+    await waitFor(() => expect(chartsMock.active()[0]?.series[0]?.type).toBe('Bar'));
+    await pick(/^Line/);
+    await waitFor(() => expect(chartsMock.active()[0]?.series[0]?.type).toBe('Line'));
+    await pick(/^Heikin-Ashi/);
+    expect(
+      await screen.findByRole('figure', {
+        name: 'INFY Heikin-Ashi (smoothed) chart over 1 day',
+      }),
+    ).toBeInTheDocument();
+    await waitFor(() => expect(chartsMock.active()[0]?.series[0]?.type).toBe('Candlestick'));
+    // Remembered for the next visit that names no type.
+    expect(window.localStorage.getItem('nthstock.chartType')).toBe('heikin');
+    window.localStorage.removeItem('nthstock.chartType');
   });
 
   it('offers 1m to 1h bars on 1D, keeps the choice in the URL and fetches those bars (NSTOCK-0343)', async () => {
