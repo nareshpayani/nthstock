@@ -109,6 +109,7 @@ describe('IndexChartCard (T-095)', () => {
     const now = vi.spyOn(performance, 'now').mockReturnValue(down.at ?? 0);
     fireEvent.pointerDown(plot, {
       pointerId: down.id ?? 1,
+      isPrimary: true,
       button: down.button ?? 0,
       clientX: down.x ?? 100,
       clientY: 50,
@@ -194,11 +195,26 @@ describe('IndexChartCard (T-095)', () => {
     await stillOnDashboard(router);
   });
 
+  it('a press that ended off the plot does not block the next tap (NSTOCK-0437)', async () => {
+    renderCard();
+    await screen.findByTestId('chart-host');
+    const plot = plotOf();
+    fireEvent.pointerDown(plot, { pointerId: 1, isPrimary: true, button: 0, clientX: 100 });
+    press(plot, { id: 2, x: 100 });
+    expect(await screen.findByRole('heading', { name: 'Stock NIFTY50' })).toBeInTheDocument();
+  });
+
   it('a pinch (a second finger down) does not open it (NSTOCK-0437)', async () => {
     const { router } = renderCard();
     await screen.findByTestId('chart-host');
     const plot = plotOf();
-    fireEvent.pointerDown(plot, { pointerId: 1, button: 0, clientX: 100, clientY: 50 });
+    fireEvent.pointerDown(plot, {
+      pointerId: 1,
+      isPrimary: true,
+      button: 0,
+      clientX: 100,
+      clientY: 50,
+    });
     fireEvent.pointerDown(plot, { pointerId: 2, button: 0, clientX: 200, clientY: 50 });
     fireEvent.pointerUp(plot, { pointerId: 2, button: 0, clientX: 200, clientY: 50 });
     fireEvent.pointerUp(plot, { pointerId: 1, button: 0, clientX: 100, clientY: 50 });

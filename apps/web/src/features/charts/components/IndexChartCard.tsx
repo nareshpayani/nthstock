@@ -63,6 +63,9 @@ export function IndexChartCard({ range, onRangeChange }: IndexChartCardProps) {
     return event.clientX >= event.currentTarget.getBoundingClientRect().right - axis;
   };
   const onPointerDown = (event: PointerEvent<HTMLDivElement>) => {
+    // A primary pointer is the first one down, so any id still held is stale (a press that ended
+    // off the plot).
+    if (event.isPrimary) pointersRef.current.clear();
     pointersRef.current.add(event.pointerId);
     pressRef.current =
       event.button === 0 && pointersRef.current.size === 1 && !onPriceAxis(event)
