@@ -227,6 +227,51 @@ describe('live 1D chart (T-108)', () => {
     expect(series?.setData.mock.calls.length).toBe(setDataCalls);
   });
 
+  it('on Heikin-Ashi a tick updates only the last smoothed bar, and the tooltip keeps traded prices (NSTOCK-0430)', async () => {
+    const { quotes, series } = await renderLive('/stocks/INFY?chart=heikin');
+    const drawn = series?.setData.mock.lastCall?.[0] as {
+      time: number;
+      open: number;
+      close: number;
+    }[];
+    const last = drawn[drawn.length - 1] as { time: number; open: number; close: number };
+    const setDataCalls = series?.setData.mock.calls.length;
+
+    // Same minute: one update of the last bar, drawn smoothed (its open is unchanged, its close is
+    // the mean of O, H, L, C rather than the traded 151235).
+    const inMinute = new Date(last.time * 1000 + 30_000).toISOString();
+    act(() => quotes.push(testQuote('INFY', 151235, { ts: inMinute })));
+    expect(series?.update).toHaveBeenCalledTimes(1);
+    const updated = series?.update.mock.lastCall?.[0] as typeof last;
+    expect(updated.time).toBe(last.time);
+    expect(updated.open).toBe(last.open);
+    expect(updated.close).not.toBe(151235);
+
+    // Next minute: one more update, a new bar after the last.
+    const nextMinute = new Date(last.time * 1000 + 65_000).toISOString();
+    act(() => quotes.push(testQuote('INFY', 151300, { ts: nextMinute })));
+    expect(series?.update).toHaveBeenCalledTimes(2);
+    expect((series?.update.mock.lastCall?.[0] as typeof last).time).toBe(last.time + 60);
+    // Updated in place: no full redraw.
+    expect(series?.setData.mock.calls.length).toBe(setDataCalls);
+
+    // The new bar is hoverable and shows what traded (O = H = L = C = ₹1,513.00), not the smoothed
+    // values the chart drew, so the real-price map was refreshed.
+    act(() =>
+      chartsMock.moveCrosshair({
+        time: last.time + 60,
+        open: 999900,
+        high: 999900,
+        low: 999900,
+        close: 999900,
+      }),
+    );
+    const tooltip = screen.getByTestId('chart-tooltip');
+    expect(tooltip).toHaveTextContent('Open₹1,513.00');
+    expect(tooltip).toHaveTextContent('Close₹1,513.00');
+    expect(tooltip).not.toHaveTextContent('9,999.00');
+  });
+
   it('stays still on other ranges and while the market is closed', async () => {
     const { quotes, series, last } = await renderLive('/stocks/INFY?range=1W');
     act(() =>
