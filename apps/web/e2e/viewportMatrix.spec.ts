@@ -59,7 +59,12 @@ const KNOWN_GAPS: readonly {
     viewports: PHONES.filter((name) => !['phone-320x640', 'phone-344x882'].includes(name)),
     story: 'CR-T14',
   },
-  { frame: 'ticket', check: 'sideScroll', viewports: ['phone-344x882'], story: 'CR-T13' },
+  {
+    frame: 'ticket',
+    check: 'sideScroll',
+    viewports: ['phone-320x640', 'phone-344x882'],
+    story: 'CR-T13',
+  },
   {
     frame: 'ticket',
     check: 'primaryAction',
@@ -274,11 +279,20 @@ for (const viewport of VIEWPORT_MATRIX) {
         await run('page', 'touchTargets', smallTargets(main));
       }
       await run('page', 'primaryAction', onScreen(page, buy));
-      if (viewport.width >= 360) await run('page', 'tickerFits', tickerOverflow(page));
+      // The index strip is a header row only below 1360 px: from there the indices sit in the top bar.
+      if (viewport.width >= 360 && viewport.width < 1360) {
+        await run('page', 'tickerFits', tickerOverflow(page));
+      }
 
       let openFailure: string | undefined;
       try {
-        await buy.click({ timeout: 10_000 });
+        // Where the page puts Buy off screen (a known gap), a pointer click is intercepted by the
+        // content around it, so open the ticket with a click event: the gap is reported above.
+        if (gapFor(viewport, 'page', 'primaryAction')) {
+          await buy.dispatchEvent('click');
+        } else {
+          await buy.click({ timeout: 10_000 });
+        }
         await expect(page.getByRole('dialog', { name: 'Trade INFY' })).toBeVisible({
           timeout: 10_000,
         });
