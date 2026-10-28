@@ -12,6 +12,8 @@ export type MarketStatusView = {
   tone: 'open' | 'preOpen' | 'closed' | 'holiday';
   /** Short label shown in the pill: "Market open", "Pre-open", "Market closed", "Holiday: …". */
   label: string;
+  /** One word for the phone header's status dot: "Open", "Pre-open", "Closed", "Holiday". */
+  short: string;
   /** Detail: "closes 3:30 pm IST" or "opens Mon 9:15 am IST". */
   detail: string;
 };
@@ -38,13 +40,36 @@ function describeNextOpen(clock: Clock): string {
  * market forced open (msw mode), which matches the LIVE badges at any hour.
  */
 export function marketStatusView(clock: Clock, alwaysOpen = false): MarketStatusView {
-  if (alwaysOpen) return { tone: 'open', label: strings.open, detail: strings.mockOpen };
+  if (alwaysOpen)
+    return {
+      tone: 'open',
+      label: strings.open,
+      short: strings.short.open,
+      detail: strings.mockOpen,
+    };
   const status = getMarketStatus(clock);
-  if (status.state === 'open') return { tone: 'open', label: strings.open, detail: strings.closes };
+  if (status.state === 'open')
+    return {
+      tone: 'open',
+      label: strings.open,
+      short: strings.short.open,
+      detail: strings.closes,
+    };
   const opens = strings.opens(describeNextOpen(clock));
-  if (status.state !== 'closed') return { tone: 'preOpen', label: strings.preOpen, detail: opens };
+  if (status.state !== 'closed')
+    return {
+      tone: 'preOpen',
+      label: strings.preOpen,
+      short: strings.preOpen,
+      detail: opens,
+    };
   if (status.reason === 'holiday') {
-    return { tone: 'holiday', label: strings.holiday(status.holidayName ?? ''), detail: opens };
+    return {
+      tone: 'holiday',
+      label: strings.holiday(status.holidayName ?? ''),
+      short: strings.short.holiday,
+      detail: opens,
+    };
   }
-  return { tone: 'closed', label: strings.closed, detail: opens };
+  return { tone: 'closed', label: strings.closed, short: strings.short.closed, detail: opens };
 }
