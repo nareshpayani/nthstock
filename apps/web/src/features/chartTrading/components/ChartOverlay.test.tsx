@@ -559,6 +559,9 @@ describe('chart overlay (T15, SPEC-TFC-1 §10.5)', () => {
 
     describe('a save rolled back after a reject (AC-04)', () => {
       // Drag o1 to ₹1,520.00 and release, then re-render the line at `backTo` after `afterMs`.
+      let movedAgain: (price: number) => void = () => undefined;
+      let removeLine: () => void = () => undefined;
+      let unmount: () => void = () => undefined;
       function dragReleaseAndRollBack(afterMs: number, reducedMotion: boolean) {
         const frames: FrameRequestCallback[] = [];
         vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
@@ -588,6 +591,12 @@ describe('chart overlay (T15, SPEC-TFC-1 §10.5)', () => {
         pointer(band('o1'), 'pointerup', 160);
         clock += afterMs;
         view.rerender(element(150_000));
+        movedAgain = (price) => view.rerender(element(price));
+        removeLine = () =>
+          view.rerender(
+            <ChartOverlay handle={handle} tickSize={5} label="Chart orders" lines={[]} />,
+          );
+        unmount = view.unmount;
         return frames;
       }
       const drawnPrice = () => series()?.priceLines[0]?.options.price;
@@ -618,6 +627,30 @@ describe('chart overlay (T15, SPEC-TFC-1 §10.5)', () => {
         const frames = dragReleaseAndRollBack(10_001, false);
         expect(drawnPrice()).toBe(150_000);
         expect(frames).toHaveLength(0);
+      });
+
+      it('ends at the newest price when the line moves again mid-spring', () => {
+        const frames = dragReleaseAndRollBack(500, false);
+        runFrames(frames.splice(0, 3));
+        expect(drawnPrice()).not.toBe(150_000);
+        movedAgain(148_000);
+        runFrames(frames);
+        expect(drawnPrice()).toBe(148_000);
+      });
+
+      it('survives its line being removed or the chart unmounting mid-spring', () => {
+        const frames = dragReleaseAndRollBack(500, false);
+        runFrames(frames.splice(0, 2));
+        const pending = frames.splice(0);
+        removeLine();
+        expect(() => runFrames(pending)).not.toThrow();
+        expect(series()?.priceLines).toHaveLength(0);
+
+        const second = dragReleaseAndRollBack(500, false);
+        runFrames(second.splice(0, 2));
+        const queued = second.splice(0);
+        unmount();
+        expect(() => runFrames(queued)).not.toThrow();
       });
 
       it('settles at once under reduced motion', () => {

@@ -177,8 +177,7 @@ export function ChartOverlay({
   };
 
   const settle = (id: string, from: number, to: number) => {
-    const drawn = drawnRef.current.get(id);
-    if (!drawn) return;
+    if (!drawnRef.current.has(id)) return;
     settlingRef.current.get(id)?.stop();
     const entry: { price: number; stop: () => void } = { price: from, stop: () => undefined };
     settlingRef.current.set(id, entry);
@@ -186,6 +185,12 @@ export function ChartOverlay({
       from,
       to,
       (price) => {
+        // Look the line up on every frame: it may have been removed (filled, cancelled) mid-spring.
+        const drawn = drawnRef.current.get(id);
+        if (!drawn) {
+          stopSettling(id);
+          return;
+        }
         entry.price = price;
         drawn.line.applyOptions({ price });
         primitiveRef.current?.requestUpdate();
@@ -193,7 +198,12 @@ export function ChartOverlay({
       {
         instant: prefersReducedMotion(),
         onDone: () => {
-          if (settlingRef.current.get(id) === entry) settlingRef.current.delete(id);
+          if (settlingRef.current.get(id) !== entry) return;
+          settlingRef.current.delete(id);
+          // The spring aimed at the price it started with; the line may have moved since.
+          const drawn = drawnRef.current.get(id);
+          drawn?.line.applyOptions({ price: drawn.price });
+          primitiveRef.current?.requestUpdate();
         },
       },
     );
