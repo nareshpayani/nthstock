@@ -29,7 +29,7 @@ describe('icons', () => {
 describe('Logo', () => {
   it('has one accessible name with or without the wordmark', () => {
     const { rerender } = render(<Logo />);
-    expect(screen.getByRole('img', { name: 'nthstock' })).toHaveTextContent('nthstock');
+    expect(screen.getByRole('img', { name: 'nthstock' })).toHaveTextContent('stock');
     rerender(<Logo withWordmark={false} />);
     expect(screen.getByRole('img', { name: 'nthstock' })).not.toHaveTextContent('stock');
   });
