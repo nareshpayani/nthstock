@@ -1,4 +1,4 @@
-import { cn } from '@nthstock/ui';
+import { DigitRoll, cn } from '@nthstock/ui';
 import { formatChange, formatInr, formatPct } from '@nthstock/utils';
 
 export type PnlAmountProps = {
@@ -7,6 +7,8 @@ export type PnlAmountProps = {
   /** The same as a percentage, in integer basis points; shown after the amount when given. */
   basisPoints?: number | undefined;
   size?: 'sm' | 'md' | 'lg';
+  /** Roll the changed digits (SPEC-CR-1 §5.6), for a live figure the eye rests on. */
+  roll?: boolean;
   className?: string;
 };
 
@@ -23,7 +25,13 @@ export function signedInr(paise: number): string {
  * percentage, and the up/down colour, with a spoken label ("profit ₹1,234.50, up 1.25 percent"),
  * so the direction never relies on colour alone (CLAUDE.md §6).
  */
-export function PnlAmount({ value, basisPoints, size = 'md', className }: PnlAmountProps) {
+export function PnlAmount({
+  value,
+  basisPoints,
+  size = 'md',
+  roll = false,
+  className,
+}: PnlAmountProps) {
   const direction = value > 0 ? 'up' : value < 0 ? 'down' : 'flat';
   const arrow = direction === 'up' ? '▲' : direction === 'down' ? '▼' : '●';
   const percent = basisPoints === undefined ? '' : ` (${formatPct(basisPoints)})`;
@@ -43,7 +51,17 @@ export function PnlAmount({ value, basisPoints, size = 'md', className }: PnlAmo
       )}
       data-direction={direction}
     >
-      <span aria-hidden="true">{`${arrow} ${signedInr(value)}${percent}`}</span>
+      <span aria-hidden="true">
+        {roll ? (
+          <>
+            {`${arrow} `}
+            <DigitRoll value={signedInr(value)} />
+            {percent}
+          </>
+        ) : (
+          `${arrow} ${signedInr(value)}${percent}`
+        )}
+      </span>
       <span className="sr-only">{`${word}${spokenAmount}${spokenPercent}`}</span>
     </span>
   );

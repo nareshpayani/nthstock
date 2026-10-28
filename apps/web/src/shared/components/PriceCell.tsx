@@ -9,6 +9,8 @@ export type PriceCellProps = {
   /** `index` for index levels (hundredths of a point), `inr` for prices in paise. */
   format?: 'inr' | 'index';
   size?: 'sm' | 'md' | 'lg';
+  /** Roll the changed digits on each tick (SPEC-CR-1 §5.6). */
+  roll?: boolean;
   /** Price from a REST snapshot, shown until the first live quote arrives. */
   initial?: number | undefined;
   className?: string;
@@ -28,13 +30,21 @@ export const PriceCell = memo(function PriceCell({
   exchange = 'NSE',
   format = 'inr',
   size = 'md',
+  roll = false,
   initial,
   className,
 }: PriceCellProps) {
   const live = useQuote(symbol, exchange);
   if (!live && initial !== undefined) {
     return (
-      <LivePrice value={initial} tick="flat" format={format} size={size} className={className} />
+      <LivePrice
+        value={initial}
+        tick="flat"
+        format={format}
+        size={size}
+        roll={roll}
+        className={className}
+      />
     );
   }
   if (!live) {
@@ -55,6 +65,7 @@ export const PriceCell = memo(function PriceCell({
       tick={live.tick}
       format={format}
       size={size}
+      roll={roll}
       className={className}
     />
   );
