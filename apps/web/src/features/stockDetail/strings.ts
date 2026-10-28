@@ -103,6 +103,8 @@ export const strings = {
   header: {
     exchangeLabel: 'Exchange',
     notListed: (symbol: string, exchange: string) => `${symbol} is not listed on ${exchange}.`,
+    /** A disabled exchange segment's name on a phone, where the note has no room. */
+    notListedOption: (exchange: string) => `${exchange}, not listed`,
     priceLabel: 'Last traded price',
     changeLabel: 'Day change',
     tradeLabel: (symbol: string) => `Trade ${symbol}`,

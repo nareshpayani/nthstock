@@ -62,11 +62,13 @@ export function Header({ onOpenMenu, onOpenHelp }: HeaderProps) {
         </nav>
         <div className="ml-auto flex shrink-0 items-center gap-1">
           <MarketStatusPill compact className="mr-2 hidden min-[1360px]:inline-flex" />
+          {/* Under 360 px the bar has no room for it; More holds the same help. */}
           <Tooltip content={strings.header.support}>
             <IconButton
               label={strings.header.support}
               icon={<IconSupport />}
               onClick={onOpenHelp}
+              className="max-[359px]:hidden"
             />
           </Tooltip>
           <NotificationBell />

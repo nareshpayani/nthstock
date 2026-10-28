@@ -103,4 +103,33 @@ describe('stock detail header (T-106)', () => {
     expect(screen.queryByRole('button', { name: /Buy/ })).not.toBeInTheDocument();
     expect(screen.getByRole('radio', { name: 'BSE' })).toHaveAttribute('aria-checked', 'true');
   });
+
+  it('packs into the phone price block (CR-T13): no card, trade bar below, BSE says why', async () => {
+    vi.stubGlobal('matchMedia', (query: string) => ({
+      matches: query === '(max-width: 767.98px)',
+      media: query,
+      addEventListener: () => undefined,
+      removeEventListener: () => undefined,
+    }));
+    await openStock('/stocks/INFY');
+    const block = screen
+      .getByRole('heading', { level: 1, name: 'Infosys Ltd' })
+      .closest('[data-part="price-block"]');
+    expect(block).not.toBeNull();
+    expect(block).not.toHaveClass('border');
+    const exchange = screen.getByRole('radiogroup', { name: 'Exchange' });
+    await waitFor(() =>
+      expect(within(exchange).getByRole('radio', { name: 'BSE, not listed' })).toBeDisabled(),
+    );
+    // Buy and Sell live in the bottom bar only, not in the price block.
+    expect(within(block as HTMLElement).queryByRole('button', { name: 'Buy INFY' })).toBeNull();
+    expect(
+      within(screen.getByRole('group', { name: 'Trade INFY' })).getByRole('button', {
+        name: 'Buy INFY',
+      }),
+    ).toBeInTheDocument();
+    // The chart keeps its section name, with the ranges below the plot.
+    const chart = screen.getByRole('region', { name: 'Price chart' });
+    expect(within(chart).getByRole('radiogroup', { name: 'Chart range' })).toBeInTheDocument();
+  });
 });

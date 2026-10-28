@@ -38,6 +38,72 @@ export function StockHeader({
     void openTicket({ symbol, exchange, side });
   };
 
+  const exchangeControl = (
+    <SegmentedControl
+      label={strings.header.exchangeLabel}
+      size={phone ? 'touch' : 'sm'}
+      value={exchange}
+      onValueChange={onExchangeChange}
+      options={EXCHANGES.map((value) => ({
+        value,
+        label: value,
+        disabled: !listed[value],
+        ...(phone && !listed[value] ? { ariaLabel: strings.header.notListedOption(value) } : {}),
+      }))}
+    />
+  );
+  const price = (
+    <div className="flex min-w-0 flex-wrap items-baseline gap-x-3 gap-y-1">
+      <span className="sr-only">{strings.header.priceLabel}</span>
+      <PriceCell
+        symbol={symbol}
+        exchange={exchange}
+        format={format}
+        size="lg"
+        initial={snapshot?.ltp}
+      />
+      <span className="sr-only">{strings.header.changeLabel}</span>
+      <LiveChange
+        symbol={symbol}
+        exchange={exchange}
+        format={format}
+        soft
+        size="md"
+        initial={snapshot ? { change: snapshot.change, changeBp: snapshot.changeBp } : undefined}
+      />
+    </div>
+  );
+
+  if (phone) {
+    // The phone price block (SPEC-CR-1 §6.1, 72 to 110 px): no card chrome, the name and symbol
+    // beside alert and watchlist, then the price and change beside the exchange. An exchange the
+    // stock is not listed on is a disabled segment that says so when focused.
+    return (
+      <div className="grid gap-2" data-part="price-block">
+        <div className="flex items-center gap-2">
+          <div className="grid min-w-0 flex-1">
+            <h1 className="truncate text-lg font-semibold text-ink">{instrument.name}</h1>
+            <p className="truncate text-label text-ink-muted">
+              <span className="font-mono font-medium text-ink">{symbol}</span>
+              {` · ${strings.instrumentType[type]}`}
+              {instrument.sector ? ` · ${instrument.sector}` : null}
+            </p>
+          </div>
+          {type === 'EQUITY' ? (
+            <div className="flex shrink-0">
+              <PriceAlertButton symbol={symbol} exchange={exchange} />
+              <WatchlistStar instrument={instrument} />
+            </div>
+          ) : null}
+        </div>
+        <div className="flex items-center justify-between gap-3">
+          {price}
+          <div className="shrink-0">{exchangeControl}</div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="grid gap-4 rounded-lg border border-line bg-surface p-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end lg:p-5">
       <div className="grid min-w-0 gap-3">
@@ -64,46 +130,16 @@ export function StockHeader({
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-3">
-          <SegmentedControl
-            label={strings.header.exchangeLabel}
-            size={phone ? 'touch' : 'sm'}
-            value={exchange}
-            onValueChange={onExchangeChange}
-            options={EXCHANGES.map((value) => ({
-              value,
-              label: value,
-              disabled: !listed[value],
-            }))}
-          />
+          {exchangeControl}
           {unlisted.map((option) => (
             <span key={option} className="text-label text-ink-muted">
               {strings.header.notListed(symbol, option)}
             </span>
           ))}
         </div>
-        <div className="flex flex-wrap items-baseline gap-3">
-          <span className="sr-only">{strings.header.priceLabel}</span>
-          <PriceCell
-            symbol={symbol}
-            exchange={exchange}
-            format={format}
-            size="lg"
-            initial={snapshot?.ltp}
-          />
-          <span className="sr-only">{strings.header.changeLabel}</span>
-          <LiveChange
-            symbol={symbol}
-            exchange={exchange}
-            format={format}
-            soft
-            size="md"
-            initial={
-              snapshot ? { change: snapshot.change, changeBp: snapshot.changeBp } : undefined
-            }
-          />
-        </div>
+        {price}
       </div>
-      {type === 'EQUITY' && !phone ? (
+      {type === 'EQUITY' ? (
         <div className="grid gap-2">
           <div
             role="group"

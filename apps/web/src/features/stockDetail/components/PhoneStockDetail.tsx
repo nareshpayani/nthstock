@@ -1,5 +1,5 @@
 import type { Instrument, OrderSide, Quote } from '@nthstock/contracts';
-import { Button, Tabs, TabsContent, TabsList, TabsTrigger, cn } from '@nthstock/ui';
+import { Button, Tabs, TabsContent, TabsList, TabsTrigger, TouchTargets, cn } from '@nthstock/ui';
 import { useId, useState, useSyncExternalStore, type ReactNode } from 'react';
 import { keepInterval } from '@/features/charts';
 import { ScalperPad } from '@/features/scalper';
@@ -22,9 +22,9 @@ import { StockHeader } from './StockHeader';
 const PHONE_TABS = ['overview', 'depth', 'orders'] as const;
 type PhoneTab = (typeof PHONE_TABS)[number];
 
-/** The chart's share of the screen height on a phone, with header and controls about 55% (§9.4). */
+/** The chart's share of the screen height on a phone, clamp(220 px, 40% of the height, 480 px) (SPEC-CR-1 §6.1). */
 export function phoneChartHeight(viewportHeight: number): number {
-  return Math.min(480, Math.max(220, Math.round(viewportHeight * 0.38)));
+  return Math.min(480, Math.max(220, Math.round(viewportHeight * 0.4)));
 }
 
 const subscribeResize = (onChange: () => void) => {
@@ -90,94 +90,96 @@ export function PhoneStockDetail({
   );
 
   return (
-    <div className="mx-auto grid w-full grid-cols-[minmax(0,1fr)] gap-3" data-layout="phone">
-      <StockHeader
-        instrument={instrument}
-        snapshot={snapshot}
-        onExchangeChange={(next) => onSearchChange({ exchange: next })}
-        phone
-      />
-      {section(
-        strings.chart.title,
-        <StockChartCard
+    <TouchTargets>
+      <div className="mx-auto grid w-full grid-cols-[minmax(0,1fr)] gap-3" data-layout="phone">
+        <StockHeader
           instrument={instrument}
-          range={search.range ?? DEFAULT_STOCK_RANGE}
-          chartType={search.chart ?? DEFAULT_CHART_TYPE}
-          interval={search.interval}
-          onRangeChange={(range) =>
-            onSearchChange({ range, interval: keepInterval(range, search.interval) })
-          }
-          onIntervalChange={(interval) => onSearchChange({ interval })}
-          onChartTypeChange={(chart) => onSearchChange({ chart })}
-          height={height > 0 ? phoneChartHeight(height) : CHART_HEIGHT}
-          controls="touch"
-          trading
-        />,
-      )}
-      {/* Demo mode only (TFC-12): under the chart, so a phone demo can ratchet and trigger a stop. */}
-      {section(strings.simulator.label, <SimulatorPanel symbol={symbol} />)}
-      <Tabs value={tab} onValueChange={(next) => setTab(next as PhoneTab)} className="grid gap-0">
-        <TabsList aria-label={strings.phone.tabsLabel} className="gap-0">
-          {PHONE_TABS.map((key) => (
-            <TabsTrigger key={key} value={key} className="min-h-11 flex-1 px-3">
-              {strings.phone.tabs[key]}
-            </TabsTrigger>
-          ))}
-        </TabsList>
-        <TabsContent value="overview" className="grid gap-3 pt-3">
-          {section(
-            strings.stats.title,
-            <KeyStatsCard instrument={instrument} snapshot={snapshot} />,
-          )}
-          {section(strings.overview.title, <OverviewCard instrument={instrument} />)}
-        </TabsContent>
-        <TabsContent value="depth" className="pt-3">
-          {section(strings.depth.title, <MarketDepthCard instrument={instrument} />)}
-        </TabsContent>
-        <TabsContent value="orders" className="pt-3">
-          <InstrumentOrders instrument={instrument} />
-        </TabsContent>
-      </Tabs>
-      {/*
+          snapshot={snapshot}
+          onExchangeChange={(next) => onSearchChange({ exchange: next })}
+          phone
+        />
+        {section(
+          strings.chart.title,
+          <StockChartCard
+            instrument={instrument}
+            range={search.range ?? DEFAULT_STOCK_RANGE}
+            chartType={search.chart ?? DEFAULT_CHART_TYPE}
+            interval={search.interval}
+            onRangeChange={(range) =>
+              onSearchChange({ range, interval: keepInterval(range, search.interval) })
+            }
+            onIntervalChange={(interval) => onSearchChange({ interval })}
+            onChartTypeChange={(chart) => onSearchChange({ chart })}
+            height={height > 0 ? phoneChartHeight(height) : CHART_HEIGHT}
+            controls="touch"
+            trading
+          />,
+        )}
+        {/* Demo mode only (TFC-12): under the chart, so a phone demo can ratchet and trigger a stop. */}
+        {section(strings.simulator.label, <SimulatorPanel symbol={symbol} />)}
+        <Tabs value={tab} onValueChange={(next) => setTab(next as PhoneTab)} className="grid gap-0">
+          <TabsList aria-label={strings.phone.tabsLabel} className="gap-0">
+            {PHONE_TABS.map((key) => (
+              <TabsTrigger key={key} value={key} className="min-h-11 flex-1 px-3">
+                {strings.phone.tabs[key]}
+              </TabsTrigger>
+            ))}
+          </TabsList>
+          <TabsContent value="overview" className="grid gap-3 pt-3">
+            {section(
+              strings.stats.title,
+              <KeyStatsCard instrument={instrument} snapshot={snapshot} />,
+            )}
+            {section(strings.overview.title, <OverviewCard instrument={instrument} />)}
+          </TabsContent>
+          <TabsContent value="depth" className="pt-3">
+            {section(strings.depth.title, <MarketDepthCard instrument={instrument} />)}
+          </TabsContent>
+          <TabsContent value="orders" className="pt-3">
+            <InstrumentOrders instrument={instrument} />
+          </TabsContent>
+        </Tabs>
+        {/*
         Sticky to the bottom of the screen, edge to edge (it cancels main's padding), clear of the
         iPhone home indicator: the primary actions stay in the lower part of the screen (§9.4).
       */}
-      <div
-        data-testid="phone-trade-bar"
-        className="sticky bottom-0 z-(--nth-z-header) -mx-4 -mb-4 border-t border-line bg-surface pb-[env(safe-area-inset-bottom)]"
-      >
-        <PositionStrip instrument={instrument} />
-        {scalp ? (
-          <>
-            <ScalperPad instrument={instrument} />
-            <div className="flex justify-end px-4 pb-3">{scalpSwitch}</div>
-          </>
-        ) : (
-          <div
-            role="group"
-            aria-label={strings.phone.tradeBar(symbol)}
-            className="grid grid-cols-[1fr_1fr_auto] gap-2 px-4 py-3"
-          >
-            <Button
-              variant="sell"
-              size="lg"
-              aria-label={strings.header.sellLabel(symbol)}
-              onClick={() => trade('SELL')}
+        <div
+          data-testid="phone-trade-bar"
+          className="sticky bottom-0 z-(--nth-z-header) -mx-4 -mb-4 border-t border-line bg-surface pb-[env(safe-area-inset-bottom)]"
+        >
+          <PositionStrip instrument={instrument} />
+          {scalp ? (
+            <>
+              <ScalperPad instrument={instrument} />
+              <div className="flex justify-end px-4 pb-3">{scalpSwitch}</div>
+            </>
+          ) : (
+            <div
+              role="group"
+              aria-label={strings.phone.tradeBar(symbol)}
+              className="grid grid-cols-[1fr_1fr_auto] gap-2 px-4 py-3"
             >
-              {strings.header.sell}
-            </Button>
-            <Button
-              variant="buy"
-              size="lg"
-              aria-label={strings.header.buyLabel(symbol)}
-              onClick={() => trade('BUY')}
-            >
-              {strings.header.buy}
-            </Button>
-            {scalpSwitch}
-          </div>
-        )}
+              <Button
+                variant="sell"
+                size="lg"
+                aria-label={strings.header.sellLabel(symbol)}
+                onClick={() => trade('SELL')}
+              >
+                {strings.header.sell}
+              </Button>
+              <Button
+                variant="buy"
+                size="lg"
+                aria-label={strings.header.buyLabel(symbol)}
+                onClick={() => trade('BUY')}
+              >
+                {strings.header.buy}
+              </Button>
+              {scalpSwitch}
+            </div>
+          )}
+        </div>
       </div>
-    </div>
+    </TouchTargets>
   );
 }

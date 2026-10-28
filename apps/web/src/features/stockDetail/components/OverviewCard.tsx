@@ -1,5 +1,5 @@
 import type { Instrument, InstrumentProfile } from '@nthstock/contracts';
-import { ErrorState, Skeleton } from '@nthstock/ui';
+import { ErrorState, Skeleton, cn, useTouchTargets } from '@nthstock/ui';
 import { useQuery } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 import { useId, useState, type ReactNode } from 'react';
@@ -34,6 +34,7 @@ function About({ name, text }: { name: string; text: string }) {
   const [expanded, setExpanded] = useState(false);
   const textId = useId();
   const preview = aboutPreview(text);
+  const touch = useTouchTargets();
   return (
     <div className="grid justify-items-start gap-1">
       <h3 className="text-body font-semibold text-ink">{strings.overview.about(name)}</h3>
@@ -46,7 +47,11 @@ function About({ name, text }: { name: string; text: string }) {
           aria-expanded={expanded}
           aria-controls={textId}
           onClick={() => setExpanded((open) => !open)}
-          className="rounded-sm text-body font-semibold text-brand underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
+          className={cn(
+            'rounded-sm text-body font-semibold text-brand underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand',
+            // On a phone the tap target is 44 px tall; the negative margin keeps the text in place.
+            touch && '-my-3 min-h-11',
+          )}
         >
           {expanded ? strings.overview.readLess : strings.overview.readMore}
         </button>
@@ -56,6 +61,7 @@ function About({ name, text }: { name: string; text: string }) {
 }
 
 function OverviewBody({ profile }: { profile: InstrumentProfile }) {
+  const touch = useTouchTargets();
   return (
     <div className="grid gap-5">
       <dl className="m-0 grid gap-4 sm:grid-cols-[auto_auto_minmax(0,1fr)] sm:gap-x-8">
@@ -76,7 +82,11 @@ function OverviewBody({ profile }: { profile: InstrumentProfile }) {
                     to="/stocks/$symbol"
                     params={{ symbol: index.symbol }}
                     aria-label={strings.overview.indexLink(index.name)}
-                    className={`${chip} hover:border-brand hover:text-brand focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand`}
+                    className={cn(
+                      chip,
+                      'hover:border-brand hover:text-brand focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand',
+                      touch && 'min-h-11 px-4',
+                    )}
                   >
                     {index.name}
                   </Link>
