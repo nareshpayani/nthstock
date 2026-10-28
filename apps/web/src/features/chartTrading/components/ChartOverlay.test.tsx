@@ -483,4 +483,188 @@ describe('chart overlay (T15, SPEC-TFC-1 §10.5)', () => {
       expect(nearestLine(lines, 290, toY)?.id).toBe('ghost');
     });
   });
+  describe('lift and settle (CR-T06, SPEC-CR-1 §5.2, AC-04)', () => {
+    it('a held line lifts: its tab and band are marked, its line thickens and the rest dim', () => {
+      render(
+        <ChartOverlay
+          handle={makeHandle()}
+          tickSize={5}
+          label="Chart orders"
+          lines={[line({ id: 'o1', price: 150_000 }), line({ id: 'o2', price: 145_000 })]}
+        />,
+      );
+      const group = screen.getByRole('group', { name: 'Chart orders' });
+      expect(group).toHaveAttribute('data-holding', 'false');
+      expect(screen.getAllByTestId('chart-tab-grip')).toHaveLength(2);
+      pointer(band('o1'), 'pointerdown', 210);
+      expect(group).toHaveAttribute('data-holding', 'true');
+      expect(band('o1')).toHaveAttribute('data-held', 'true');
+      expect(band('o2')).toHaveAttribute('data-held', 'false');
+      const [held, other] = series()?.priceLines ?? [];
+      expect(held?.options).toMatchObject({ lineWidth: 2 });
+      expect(String(other?.options.color)).toMatch(/^rgba\(\d+, \d+, \d+, 0\.45\)$/);
+
+      pointer(band('o1'), 'pointerup', 210);
+      expect(group).toHaveAttribute('data-holding', 'false');
+      expect(held?.options).toMatchObject({ lineWidth: 1 });
+      expect(String(other?.options.color)).toMatch(/^#[0-9A-Fa-f]{6}$/);
+    });
+
+    it('a cancelled drag springs the line back from where the finger left it', () => {
+      const frames: FrameRequestCallback[] = [];
+      vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
+        frames.push(callback);
+        return frames.length;
+      });
+      vi.stubGlobal('cancelAnimationFrame', () => undefined);
+      const handle = makeHandle();
+      function Harness() {
+        const [price, setPrice] = useState(150_000);
+        return (
+          <ChartOverlay
+            handle={handle}
+            tickSize={5}
+            label="Chart orders"
+            lines={[line({ id: 'o1', price })]}
+            onDragMove={(_id, next) => setPrice(next)}
+            onDragEnd={(_id, saved) => setPrice(saved ?? 150_000)}
+          />
+        );
+      }
+      try {
+        render(<Harness />);
+        pointer(band('o1'), 'pointerdown', 200);
+        pointer(band('o1'), 'pointermove', 160);
+        expect(series()?.priceLines[0]?.options.price).toBe(152_000);
+        act(() => {
+          fireEvent.keyDown(document, { key: 'Escape' });
+        });
+        // Still where the finger left it; the spring takes it home over the next frames.
+        expect(series()?.priceLines[0]?.options.price).toBe(152_000);
+        let now = 0;
+        const seen: number[] = [];
+        for (let i = 0; i < 60 && frames.length > 0; i += 1) {
+          now += 1000 / 60;
+          frames.shift()?.(now);
+          seen.push(Number(series()?.priceLines[0]?.options.price));
+        }
+        expect(seen.at(-1)).toBe(150_000);
+        // Never past home: a critically damped spring does not overshoot.
+        expect(Math.min(...seen)).toBeGreaterThanOrEqual(150_000);
+        expect(seen.some((price) => price > 150_000 && price < 152_000)).toBe(true);
+      } finally {
+        vi.unstubAllGlobals();
+      }
+    });
+
+    describe('a save rolled back after a reject (AC-04)', () => {
+      // Drag o1 to ₹1,520.00 and release, then re-render the line at `backTo` after `afterMs`.
+      let movedAgain: (price: number) => void = () => undefined;
+      let removeLine: () => void = () => undefined;
+      let unmount: () => void = () => undefined;
+      const cancelFrame = vi.fn();
+      function dragReleaseAndRollBack(afterMs: number, reducedMotion: boolean) {
+        const frames: FrameRequestCallback[] = [];
+        vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
+          frames.push(callback);
+          return frames.length;
+        });
+        vi.stubGlobal('cancelAnimationFrame', cancelFrame);
+        vi.stubGlobal(
+          'matchMedia',
+          (query: string) => ({ matches: reducedMotion, media: query }) as MediaQueryList,
+        );
+        let clock = 1_000;
+        vi.spyOn(performance, 'now').mockImplementation(() => clock);
+        const handle = makeHandle();
+        const element = (price: number) => (
+          <ChartOverlay
+            handle={handle}
+            tickSize={5}
+            label="Chart orders"
+            lines={[line({ id: 'o1', price })]}
+          />
+        );
+        const view = render(element(150_000));
+        pointer(band('o1'), 'pointerdown', 200);
+        pointer(band('o1'), 'pointermove', 160);
+        view.rerender(element(152_000));
+        pointer(band('o1'), 'pointerup', 160);
+        clock += afterMs;
+        view.rerender(element(150_000));
+        movedAgain = (price) => view.rerender(element(price));
+        removeLine = () =>
+          view.rerender(
+            <ChartOverlay handle={handle} tickSize={5} label="Chart orders" lines={[]} />,
+          );
+        unmount = view.unmount;
+        return frames;
+      }
+      const drawnPrice = () => series()?.priceLines[0]?.options.price;
+      const runFrames = (frames: FrameRequestCallback[]) => {
+        let now = 0;
+        const seen: number[] = [];
+        for (let i = 0; i < 90 && frames.length > 0; i += 1) {
+          now += 1000 / 60;
+          frames.shift()?.(now);
+          seen.push(Number(drawnPrice()));
+        }
+        return seen;
+      };
+      afterEach(() => {
+        vi.unstubAllGlobals();
+        vi.restoreAllMocks();
+      });
+
+      it('springs home from the dropped price when the answer comes within 10 s', () => {
+        const frames = dragReleaseAndRollBack(9_999, false);
+        expect(drawnPrice()).toBe(152_000);
+        const seen = runFrames(frames);
+        expect(seen.some((price) => price > 150_000 && price < 152_000)).toBe(true);
+        expect(seen.at(-1)).toBe(150_000);
+      });
+
+      it('jumps home when the answer comes after 10 s', () => {
+        const frames = dragReleaseAndRollBack(10_001, false);
+        expect(drawnPrice()).toBe(150_000);
+        expect(frames).toHaveLength(0);
+      });
+
+      it('ends at the newest price when the line moves again mid-spring', () => {
+        const frames = dragReleaseAndRollBack(500, false);
+        runFrames(frames.splice(0, 3));
+        expect(drawnPrice()).not.toBe(150_000);
+        movedAgain(148_000);
+        runFrames(frames);
+        expect(drawnPrice()).toBe(148_000);
+      });
+
+      it('survives its line being removed or the chart unmounting mid-spring', () => {
+        const frames = dragReleaseAndRollBack(500, false);
+        runFrames(frames.splice(0, 2));
+        const pending = frames.splice(0);
+        const removed = series()?.priceLines[0];
+        const priceAtRemoval = removed?.options.price;
+        cancelFrame.mockClear();
+        removeLine();
+        expect(removed?.removed).toBe(true);
+        expect(cancelFrame).toHaveBeenCalled();
+        expect(() => runFrames(pending)).not.toThrow();
+        expect(removed?.options.price).toBe(priceAtRemoval);
+        expect(series()?.priceLines).toHaveLength(0);
+
+        const second = dragReleaseAndRollBack(500, false);
+        runFrames(second.splice(0, 2));
+        const queued = second.splice(0);
+        unmount();
+        expect(() => runFrames(queued)).not.toThrow();
+      });
+
+      it('settles at once under reduced motion', () => {
+        const frames = dragReleaseAndRollBack(500, true);
+        expect(drawnPrice()).toBe(150_000);
+        expect(frames).toHaveLength(0);
+      });
+    });
+  });
 });

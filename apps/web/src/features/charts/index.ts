@@ -14,3 +14,4 @@ export {
   resolveInterval,
 } from './model/ranges';
 export { useLiveCandles } from './hooks/useLiveCandles';
+export { withAlpha } from './model/chartTheme';
