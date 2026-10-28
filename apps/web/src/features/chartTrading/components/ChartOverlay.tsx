@@ -7,12 +7,15 @@ import {
   useId,
   useLayoutEffect,
   useRef,
+  useState,
   type KeyboardEvent,
   type PointerEvent as ReactPointerEvent,
 } from 'react';
 import { withAlpha, type ChartHandle } from '@/features/charts';
+import { safeStorage } from '@/shared/lib/safeStorage';
 import { haptic } from '@/shared/motion/haptics';
 import { animateSpring } from '@/shared/motion/spring';
+import { RATCHET_GLIDE_MS, RATCHET_TRACE_MS, animateTween } from '@/shared/motion/tween';
 import { prefersReducedMotion } from '@/shared/motion/useReducedMotion';
 import { lockChart } from '../lib/chartLock';
 import { panBy } from '../lib/panChart';
@@ -87,6 +90,12 @@ const SETTLE_WINDOW_MS = 10_000;
 /** The rail's width in px, from the axis's left edge. */
 const RAIL_WIDTH = 10;
 
+/** Set once the first-run drag hint has been dismissed; it is never shown again (§5.7). */
+export const DRAG_HINT_KEY = 'nthstock.dragHintSeen';
+
+/** How strongly the trace left by a ratchet starts, before it fades (SPEC-CR-1 §5.3). */
+const TRACE_ALPHA = 0.5;
+
 /** Half the grab band's height: a press this close to a draggable line takes it (SPEC-CR-1 §5.1). */
 export const BAND_REACH = 22;
 
@@ -129,6 +138,17 @@ export function ChartOverlay({
 }: ChartOverlayProps) {
   const ordered = byPriority(lines);
   const describedBy = useId();
+  // The first-run hint (SPEC-CR-1 §5.7, CR-T20): beside the first draggable line until any press
+  // on the chart or a key on a line, then never again.
+  const [hintSeen, setHintSeen] = useState(() => safeStorage.get(DRAG_HINT_KEY) !== null);
+  const hintFor = hintSeen
+    ? undefined
+    : ordered.find((line) => line.draggable && line.tone !== 'pending')?.id;
+  const dismissHint = () => {
+    if (hintSeen) return;
+    safeStorage.set(DRAG_HINT_KEY, '1');
+    setHintSeen(true);
+  };
   const elementsRef = useRef<Elements>({
     rows: new Map(),
     bands: new Map(),
@@ -160,6 +180,8 @@ export function ChartOverlay({
   const lastMoveRef = useRef<{ id: string; price: number } | null>(null);
   const settleFromRef = useRef<{ id: string; price: number; until: number } | null>(null);
   const settlingRef = useRef<Settling>(new Map());
+  // Faint lines left where a trailing stop ratcheted from, fading out (SPEC-CR-1 §5.3).
+  const tracesRef = useRef(new Set<{ line: IPriceLine; stop: () => void }>());
   const primitiveRef = useRef<RepaintPrimitive | null>(null);
   // The latest lines and callbacks, for the repaint hook and the event handlers.
   const tickSizeRef = useRef(tickSize);
@@ -196,14 +218,29 @@ export function ChartOverlay({
     }
   };
 
-  const settle = (id: string, from: number, to: number) => {
+  // The position chip gives under the finger (SPEC-CR-1 §5.3) until it lifts or starts a pan.
+  const pressChip = (id: string | null) => {
+    const { handles } = elementsRef.current;
+    for (const [handleId, element] of handles) {
+      element.dataset.pressed = String(handleId === id);
+    }
+  };
+
+  // Moves a drawn line from `from` to its real price: a spring after the finger lets go (AC-04), a
+  // 240 ms glide when the engine ratchets a trailing stop (§5.3). The handle follows it.
+  const settle = (id: string, from: number, to: number, how: 'spring' | 'glide' = 'spring') => {
     if (!drawnRef.current.has(id)) return;
     settlingRef.current.get(id)?.stop();
     const entry: { price: number; stop: () => void } = { price: from, stop: () => undefined };
     settlingRef.current.set(id, entry);
-    entry.stop = animateSpring(
-      from,
-      to,
+    const animate = (
+      onFrame: (value: number) => void,
+      options: { instant: boolean; onDone: () => void },
+    ) =>
+      how === 'glide'
+        ? animateTween(from, to, RATCHET_GLIDE_MS, onFrame, options)
+        : animateSpring(from, to, onFrame, options);
+    entry.stop = animate(
       (price) => {
         // Look the line up on every frame: it may have been removed (filled, cancelled) mid-spring.
         const drawn = drawnRef.current.get(id);
@@ -235,6 +272,39 @@ export function ChartOverlay({
     settlingRef.current.delete(id);
     const drawn = drawnRef.current.get(id);
     drawn?.line.applyOptions({ price: drawn.price });
+  };
+
+  // A ratchet leaves a short trace at the old stop that fades (§5.3); reduced motion leaves none.
+  const leaveTrace = (price: number) => {
+    if (prefersReducedMotion()) return;
+    const { series } = handle;
+    const { color, lineStyle } = LINE_STYLES.trailing;
+    const line = series.createPriceLine({
+      price,
+      color: withAlpha(color, TRACE_ALPHA),
+      lineStyle,
+      lineWidth: 1,
+      lineVisible: true,
+      axisLabelVisible: false,
+      title: '',
+    });
+    const trace: { line: IPriceLine; stop: () => void } = { line, stop: () => undefined };
+    tracesRef.current.add(trace);
+    trace.stop = animateTween(
+      TRACE_ALPHA,
+      0,
+      RATCHET_TRACE_MS,
+      (alpha) => line.applyOptions({ color: withAlpha(color, alpha) }),
+      {
+        onDone: () => {
+          try {
+            series.removePriceLine(line);
+          } finally {
+            tracesRef.current.delete(trace);
+          }
+        },
+      },
+    );
   };
 
   // Says what a drag did, for screen readers (CR-T08); written to the live region, no render.
@@ -313,15 +383,24 @@ export function ChartOverlay({
     series.attachPrimitive(primitive);
     const drawn = drawnRef.current;
     const settling = settlingRef.current;
+    const traces = tracesRef.current;
     return () => {
-      unlockRef.current?.();
-      unlockRef.current = null;
-      for (const entry of settling.values()) entry.stop();
-      settling.clear();
-      series.detachPrimitive(primitive);
-      for (const { line } of drawn.values()) series.removePriceLine(line);
-      drawn.clear();
-      primitiveRef.current = null;
+      try {
+        for (const trace of traces) {
+          trace.stop();
+          series.removePriceLine(trace.line);
+        }
+      } finally {
+        traces.clear();
+        unlockRef.current?.();
+        unlockRef.current = null;
+        for (const entry of settling.values()) entry.stop();
+        settling.clear();
+        series.detachPrimitive(primitive);
+        for (const { line } of drawn.values()) series.removePriceLine(line);
+        drawn.clear();
+        primitiveRef.current = null;
+      }
     };
   }, [handle]);
 
@@ -334,10 +413,15 @@ export function ChartOverlay({
     };
     applyRef.current = apply;
     tickSizeRef.current = tickSize;
+    const before = new Map(
+      [...drawnRef.current].map(([id, drawn]) => [id, { price: drawn.price, tone: drawn.tone }]),
+    );
     syncPriceLines(handle.series, drawnRef.current, ordered);
     // A line that just left the finger and now has a new price (restored by a cancel, or rolled
     // back after a rejected save) springs there from where the finger left it (AC-04).
     const from = settleFromRef.current;
+    // The line sprung back in this pass: the ratchet loop below must not turn it into a glide.
+    let springing: string | null = null;
     if (from && (performance.now() > from.until || gestureRef.current.phase !== 'idle')) {
       settleFromRef.current = null;
     } else if (from) {
@@ -345,8 +429,25 @@ export function ChartOverlay({
       if (!line) settleFromRef.current = null;
       else if (line.price !== from.price) {
         settleFromRef.current = null;
+        springing = line.id;
         settle(line.id, from.price, line.price);
       }
+    }
+    // The engine ratcheted a trailing stop: the line glides up to it and leaves a fading trace
+    // (§5.3). Not a move the user is making (drag or keys), nor one springing back after it.
+    const active = gestureRef.current;
+    for (const line of ordered) {
+      const was = before.get(line.id);
+      if (line.tone !== 'trailing' || was?.tone !== 'trailing' || was.price === line.price)
+        continue;
+      if (active.phase !== 'idle' && active.id === line.id) continue;
+      if (keyMoveRef.current?.id === line.id || settleFromRef.current?.id === line.id) continue;
+      if (springing === line.id) continue;
+      // A glide or spring already under way carries on from where the line is drawn now.
+      if (!drawnRef.current.has(line.id)) continue;
+      const drawnFrom = settlingRef.current.get(line.id)?.price ?? was.price;
+      settle(line.id, drawnFrom, line.price, 'glide');
+      leaveTrace(drawnFrom);
     }
     for (const [id, entry] of settlingRef.current) {
       const drawn = drawnRef.current.get(id);
@@ -361,12 +462,30 @@ export function ChartOverlay({
     }
     placeHandles(handle, ordered, elementsRef.current, settlingRef.current, tickSize);
     primitiveRef.current?.requestUpdate();
+    // A position line removed mid-press ends the press, so a later pointerup taps nothing.
+    if (chipRef.current && !ordered.some((line) => line.id === chipRef.current?.id)) {
+      chipRef.current = null;
+      pressChip(null);
+    }
     // A line that went away mid-drag (filled or cancelled) ends the drag; the caller restores it.
-    const active = gestureRef.current;
     if (active.phase !== 'idle' && !ordered.some((line) => line.id === active.id)) {
       apply(cancel(active));
     }
   });
+
+  // Any press on the chart, line or not, dismisses the hint.
+  const hintShown = hintFor !== undefined;
+  const dismissHintRef = useRef(dismissHint);
+  useLayoutEffect(() => {
+    dismissHintRef.current = dismissHint;
+  });
+  useEffect(() => {
+    const area = elementsRef.current.root?.parentElement;
+    if (!hintShown || !area) return;
+    const onPress = () => dismissHintRef.current();
+    area.addEventListener('pointerdown', onPress, true);
+    return () => area.removeEventListener('pointerdown', onPress, true);
+  }, [hintShown]);
 
   // A second finger anywhere, or Escape, cancels what the first finger started (§9.1, T20): a
   // drag restores its line, a press on the chip neither opens it nor keeps panning, and a press
@@ -377,7 +496,10 @@ export function ChartOverlay({
       if (active.phase !== 'idle' && active.pointerId !== keep) {
         applyRef.current(cancel(active));
       }
-      if (chipRef.current && chipRef.current.pointerId !== keep) chipRef.current = null;
+      if (chipRef.current && chipRef.current.pointerId !== keep) {
+        chipRef.current = null;
+        pressChip(null);
+      }
       if (gutterPressRef.current && gutterPressRef.current.pointerId !== keep) {
         gutterPressRef.current = null;
       }
@@ -411,6 +533,7 @@ export function ChartOverlay({
       if (gestureRef.current.phase !== 'idle' || chipRef.current) return;
       const { pointerId, clientX: x, clientY: y } = event;
       chipRef.current = { id, pointerId, startX: x, startY: y, x, panning: false };
+      pressChip(id);
       return;
     }
     if (line) pressLine(line, event.pointerId, paneY(event.clientY), false);
@@ -449,6 +572,7 @@ export function ChartOverlay({
           DRAG_SLOP
       ) {
         chip.panning = true;
+        pressChip(null);
       }
       if (chip.panning) panBy(handle.chart, event.clientX - chip.x);
       chip.x = event.clientX;
@@ -496,18 +620,23 @@ export function ChartOverlay({
     if (chip) {
       if (chip.pointerId !== event.pointerId) return;
       chipRef.current = null;
+      pressChip(null);
       if (!chip.panning) latestRef.current.on.onHandleTap?.(chip.id);
       return;
     }
     apply(release(gestureRef.current, event.pointerId, paneY(event.clientY)));
   };
-  const onHandlePointerCancel = () => {
-    chipRef.current = null;
+  const onHandlePointerCancel = (event: ReactPointerEvent<HTMLElement>) => {
+    if (chipRef.current?.pointerId === event.pointerId) {
+      pressChip(null);
+      chipRef.current = null;
+    }
     apply(cancel(gestureRef.current));
   };
 
   // Keyboard (§13): arrows move one tick, Shift ten; Enter saves; Escape restores.
   const onHandleKeyDown = (line: OverlayLine) => (event: KeyboardEvent<HTMLElement>) => {
+    if (event.key !== 'Tab' && event.key !== 'Shift') dismissHint();
     const { on } = latestRef.current;
     if (event.key === 'Delete' || event.key === 'Backspace') {
       event.preventDefault();
@@ -519,6 +648,7 @@ export function ChartOverlay({
       event.preventDefault();
       event.stopPropagation();
       keyMoveRef.current = null;
+      settleFromRef.current = { ...current, until: performance.now() + SETTLE_WINDOW_MS };
       on.onDragEnd?.(line.id, null);
       announce(strings.drag.cancelled);
       return;
@@ -546,8 +676,10 @@ export function ChartOverlay({
     if (!current) announce(strings.drag.keyStarted(line.label, formatInr(price)));
   };
   const onHandleBlur = (line: OverlayLine) => () => {
-    if (keyMoveRef.current?.id !== line.id) return;
+    const current = keyMoveRef.current;
+    if (current?.id !== line.id) return;
     keyMoveRef.current = null;
+    settleFromRef.current = { ...current, until: performance.now() + SETTLE_WINDOW_MS };
     latestRef.current.on.onDragEnd?.(line.id, null);
     announce(strings.drag.cancelled);
   };
@@ -657,7 +789,11 @@ export function ChartOverlay({
                 type="button"
                 // The name is the visible label (WCAG 2.5.3); what the keys do is the description.
                 aria-label={line.label}
-                aria-describedby={`${describedBy}-${line.id}`}
+                aria-describedby={
+                  line.id === hintFor
+                    ? `${describedBy}-${line.id} ${describedBy}-hint`
+                    : `${describedBy}-${line.id}`
+                }
                 data-testid="chart-handle"
                 data-line={line.id}
                 data-tone={line.tone}
@@ -684,7 +820,9 @@ export function ChartOverlay({
                     "before:absolute before:top-1/2 before:-left-1 before:size-2 before:-translate-y-1/2 before:rotate-45 before:border-b before:border-l before:[border-color:inherit] before:[border-style:inherit] before:[background:inherit] before:content-['']",
                     'origin-left transition-[transform,box-shadow] duration-[var(--nth-duration-fast)] ease-out motion-reduce:transition-none',
                     'group-data-[held=true]/row:scale-[1.04] group-data-[held=true]/row:shadow-lifted',
+                    'group-data-[pressed=true]:scale-[0.96] group-data-[pressed=true]:shadow-none',
                     TONE_CLASSES[line.tone],
+                    line.id === hintFor && 'animate-drag-hint motion-reduce:animate-none',
                   )}
                 >
                   {line.locked ? (
@@ -738,6 +876,19 @@ export function ChartOverlay({
                   {action.label}
                 </button>
               ))}
+              {line.id === hintFor ? (
+                <span
+                  id={`${describedBy}-hint`}
+                  data-testid="chart-drag-hint"
+                  className={cn(
+                    'pointer-events-none absolute right-0 rounded-sm bg-ink px-2 py-1 text-label whitespace-nowrap text-surface shadow-sm',
+                    // Under a line in the top half of the plot, over one in the bottom half.
+                    'top-full mt-1 group-data-[low=true]/row:top-auto group-data-[low=true]/row:bottom-full group-data-[low=true]/row:mt-0 group-data-[low=true]/row:mb-1',
+                  )}
+                >
+                  {strings.drag.hint}
+                </span>
+              ) : null}
             </div>
           </div>
         ))}
@@ -841,6 +992,7 @@ function placeHandles(
     const row = rows.get(place.id);
     if (row) {
       row.style.transform = `translateY(${String(Math.round(place.labelY))}px) translateY(-50%)`;
+      row.dataset.low = String(place.labelY > height / 2);
     }
     const element = handles.get(place.id);
     if (element) {
@@ -912,8 +1064,8 @@ const TONE_CLASSES: Record<OverlayLine['tone'], string> = {
   buy: 'border-brand bg-brand text-surface',
   sell: 'border-down bg-down text-surface',
   ghost: 'border-dashed border-ink-muted bg-surface text-ink',
-  position: 'border-ink bg-surface text-ink',
-  trailing: 'border-dashed border-ink bg-marigold text-ink',
+  position: 'border-ink bg-ink text-surface',
+  trailing: 'border-dashed border-marigold-ink bg-marigold text-ink',
   activation: 'border-dotted border-ink-muted bg-surface text-ink',
   pending: 'border-dotted border-ink-muted bg-surface text-ink-muted',
 };
