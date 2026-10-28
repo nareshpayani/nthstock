@@ -38,7 +38,12 @@ describe('contrast', () => {
     expect(contrastRatio(colors['ink-muted'], colors['brand-soft'])).toBeGreaterThanOrEqual(4.5);
   });
 
-  it('white text reaches 4.5:1 on ink (tooltips)', () => {
+  it('the trailing-stop stroke (marigold-ink) reaches 3:1 on surface and canvas (non-text)', () => {
+    expect(contrastRatio(colors['marigold-ink'], colors.surface)).toBeGreaterThanOrEqual(3);
+    expect(contrastRatio(colors['marigold-ink'], colors.canvas)).toBeGreaterThanOrEqual(3);
+  });
+
+  it('white text reaches 4.5:1 on ink (tooltips, the drag loupe, the position tab)', () => {
     expect(contrastRatio(colors.surface, colors.ink)).toBeGreaterThanOrEqual(4.5);
   });
 

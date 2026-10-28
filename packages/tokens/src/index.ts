@@ -6,6 +6,7 @@ export {
   shadows,
   spacing,
   spacingUnit,
+  spring,
   textColors,
   typeScale,
   zIndex,

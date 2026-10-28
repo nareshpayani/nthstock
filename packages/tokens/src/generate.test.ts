@@ -26,6 +26,18 @@ describe('toCssVariables', () => {
     expect(css).toContain('--nth-duration-flash: 120ms;');
   });
 
+  it('carries the v2 identity: ink, marigold-ink, price step, sheet radius, motion (SPEC-CR-1 §4.1)', () => {
+    expect(css).toContain('--nth-color-ink: #0B1526;');
+    expect(css).toContain('--nth-color-marigold-ink: #A86B00;');
+    expect(css).toContain('--nth-text-price: 40px;');
+    expect(css).toContain('--nth-text-headline: 24px;');
+    expect(css).toContain('--nth-radius-xl: 20px;');
+    expect(css).toContain('--nth-shadow-lifted:');
+    expect(css).toContain('--nth-duration-base: 180ms;');
+    expect(css).toContain('--nth-duration-slow: 280ms;');
+    expect(css).toContain('--nth-ease-in: cubic-bezier(0.4, 0, 1, 1);');
+  });
+
   it('has no dark theme', () => {
     expect(css).not.toContain('prefers-color-scheme');
     expect(css).not.toContain('dark');
