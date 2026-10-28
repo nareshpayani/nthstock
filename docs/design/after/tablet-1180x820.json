@@ -1,8 +1,4 @@
 {
   "viewport": "tablet-1180x820",
-  "frames": [
-    "instrument",
-    "ticket",
-    "orderLine"
-  ]
+  "frames": ["instrument", "ticket", "orderLine"]
 }
