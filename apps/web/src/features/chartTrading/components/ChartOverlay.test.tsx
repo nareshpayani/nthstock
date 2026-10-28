@@ -6,6 +6,9 @@ import { AreaSeries, chartsMock, createChart } from '@/test/chartsMock';
 import type { OverlayLine } from '../model/overlayLine';
 import { ChartOverlay, nearestLine } from './ChartOverlay';
 
+const haptics = vi.hoisted(() => ({ haptic: vi.fn(() => true) }));
+vi.mock('@/shared/motion/haptics', () => haptics);
+
 // The fake scale: ₹1,600.00 at y = 0, 50 paise per px, a 300 px pane and a 64 px price axis.
 function makeHandle(): ChartHandle {
   const host = document.createElement('div');
@@ -43,7 +46,10 @@ const handleY = (id: string) =>
       ?.getAttribute('data-y'),
   );
 
-afterEach(() => chartsMock.reset());
+afterEach(() => {
+  chartsMock.reset();
+  haptics.haptic.mockClear();
+});
 
 describe('chart overlay (T15, SPEC-TFC-1 §10.5)', () => {
   it('draws a price line and a labelled handle for each line, and removes them with it', () => {
@@ -507,6 +513,89 @@ describe('chart overlay (T15, SPEC-TFC-1 §10.5)', () => {
     expect(loupe).toHaveAttribute('data-side', 'right');
     pointer(band('o1'), 'pointerup', 180);
     expect(loupe).toHaveAttribute('data-shown', 'false');
+  });
+
+  it('a drag buzzes on pickup, per price step, harder across the LTP, and on release, and says so (CR-T08, AC-05)', () => {
+    render(
+      <ChartOverlay
+        handle={makeHandle()}
+        tickSize={5}
+        label="Chart orders"
+        ltp={149_000}
+        lines={[line({ id: 'o1', price: 150_000, label: 'Buy 4 @ ₹1,500.00' })]}
+      />,
+    );
+    const status = screen.getByRole('status');
+    pointer(band('o1'), 'pointerdown', 200);
+    // A press alone: nothing yet, so a tap never buzzes.
+    expect(haptics.haptic).not.toHaveBeenCalled();
+    pointer(band('o1'), 'pointermove', 210);
+    expect(haptics.haptic).toHaveBeenLastCalledWith('grab');
+    expect(status).toHaveTextContent(
+      'Moving Buy 4 @ ₹1,500.00. Now ₹1,495.00. Release to save, a second finger or Escape cancels.',
+    );
+    pointer(band('o1'), 'pointermove', 212);
+    expect(haptics.haptic).toHaveBeenLastCalledWith('tick');
+    // The same price again is no step.
+    haptics.haptic.mockClear();
+    pointer(band('o1'), 'pointermove', 212);
+    expect(haptics.haptic).not.toHaveBeenCalled();
+    // ₹1,494.00 → ₹1,489.00 crosses the LTP at ₹1,490.00.
+    pointer(band('o1'), 'pointermove', 222);
+    expect(haptics.haptic).toHaveBeenLastCalledWith('crossLtp');
+    pointer(band('o1'), 'pointerup', 222);
+    expect(haptics.haptic).toHaveBeenLastCalledWith('commit');
+    expect(status).toHaveTextContent('Moved to ₹1,489.00.');
+  });
+
+  it('a keyboard move says its start, its save and its cancel (CR-T08, §5.2)', () => {
+    const onDragEnd = vi.fn();
+    render(
+      <ChartOverlay
+        handle={makeHandle()}
+        tickSize={5}
+        label="Chart orders"
+        onDragEnd={onDragEnd}
+        lines={[line({ id: 'o1', price: 150_000, label: 'Buy 4 @ ₹1,500.00' })]}
+      />,
+    );
+    const status = screen.getByRole('status');
+    const target = screen.getByTestId('chart-handle');
+    fireEvent.keyDown(target, { key: 'ArrowUp' });
+    expect(status).toHaveTextContent(
+      'Moving Buy 4 @ ₹1,500.00. Now ₹1,500.05. Enter saves, Escape cancels.',
+    );
+    fireEvent.keyDown(target, { key: 'ArrowUp' });
+    fireEvent.keyDown(target, { key: 'Enter' });
+    expect(onDragEnd).toHaveBeenLastCalledWith('o1', 150_010);
+    expect(status).toHaveTextContent('Moved to ₹1,500.10.');
+    expect(haptics.haptic).toHaveBeenCalledWith('commit');
+    fireEvent.keyDown(target, { key: 'ArrowDown' });
+    fireEvent.keyDown(target, { key: 'Escape' });
+    expect(status).toHaveTextContent('Move cancelled. The line is back where it was.');
+    fireEvent.keyDown(target, { key: 'ArrowDown' });
+    status.textContent = '';
+    fireEvent.blur(target);
+    expect(onDragEnd).toHaveBeenLastCalledWith('o1', null);
+    expect(status).toHaveTextContent('Move cancelled. The line is back where it was.');
+  });
+
+  it('a cancelled drag says the line went back, with no success haptic (CR-T08)', () => {
+    render(
+      <ChartOverlay
+        handle={makeHandle()}
+        tickSize={5}
+        label="Chart orders"
+        lines={[line({ id: 'o1', price: 150_000 })]}
+      />,
+    );
+    pointer(band('o1'), 'pointerdown', 200);
+    pointer(band('o1'), 'pointermove', 230);
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(screen.getByRole('status')).toHaveTextContent(
+      'Move cancelled. The line is back where it was.',
+    );
+    expect(haptics.haptic).not.toHaveBeenCalledWith('commit');
   });
 
   describe('lift and settle (CR-T06, SPEC-CR-1 §5.2, AC-04)', () => {
