@@ -38,8 +38,8 @@ export const textColors = [
 ] as const satisfies readonly ColorName[];
 
 export const fonts = {
-  sans: "'IBM Plex Sans', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif",
-  mono: "'IBM Plex Mono', ui-monospace, 'SF Mono', Menlo, Consolas, monospace",
+  sans: "'IBM Plex Sans', 'IBM Plex Sans Fallback', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif",
+  mono: "'IBM Plex Mono', 'IBM Plex Mono Fallback', ui-monospace, 'SF Mono', Menlo, Consolas, monospace",
 } as const;
 
 export type TypeStep = { size: number; lineHeight: number; weight: number };

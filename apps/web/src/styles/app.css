@@ -9,6 +9,13 @@
     @apply bg-canvas text-ink font-sans text-body antialiased;
   }
 
+  /* viewport-fit=cover (CR-T19): keep content clear of the notch in landscape. The header pads
+     itself for the status bar when launched from the home screen. */
+  body {
+    padding-left: env(safe-area-inset-left);
+    padding-right: env(safe-area-inset-right);
+  }
+
   :focus-visible {
     outline: 3px solid var(--nth-color-brand);
     outline-offset: 2px;

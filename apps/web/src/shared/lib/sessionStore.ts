@@ -32,6 +32,16 @@ export const SESSION_HINT_KEY = 'nthstock.sessionHint';
 
 export const knownSignedOut = () => safeStorage.get(SESSION_HINT_KEY) === 'none';
 
+/**
+ * msw mode (CR-T19): the mock backend lives in this browser, so a mock session exists only after
+ * this browser signed in, which sets the hint. A browser with no hint at all (a first visit) is
+ * marked signed out, and the login page paints without waiting for the mock chunk only to hear
+ * 401. Not for `?demo=1`, which signs in through that refresh.
+ */
+export function assumeSignedOutWithoutHint() {
+  if (safeStorage.get(SESSION_HINT_KEY) === null) safeStorage.set(SESSION_HINT_KEY, 'none');
+}
+
 export const useSessionStore = create<SessionState>()((set) => ({
   ...initialSessionState,
   setSession: (session) => {

@@ -15,7 +15,7 @@ import { restSnapshot, startVisibilitySync } from './app/live/visibilitySync';
 import { installStaleBuildReload } from './app/staleBuild';
 import { wantsDemo, withoutDemoParam } from './mocks/demoParam';
 import { createSessionApiClient } from './shared/lib/sessionClient';
-import { useSessionStore } from './shared/lib/sessionStore';
+import { assumeSignedOutWithoutHint, useSessionStore } from './shared/lib/sessionStore';
 
 // Zod would otherwise probe `new Function` once, which the CSP (script-src 'self') reports as a
 // violation; its interpreter is plenty fast for this app's payloads.
@@ -76,6 +76,7 @@ function boot() {
   let mocksReady: Promise<unknown> | undefined;
   let beforeRequest: (() => Promise<unknown>) | undefined;
   if (import.meta.env.VITE_API_MODE === 'msw') {
+    if (!wantsDemo(window.location.search)) assumeSignedOutWithoutHint();
     const started = startMocks();
     mocksReady = started;
     beforeRequest = () => started.then((ensureActive) => ensureActive());

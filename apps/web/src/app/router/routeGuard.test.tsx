@@ -5,7 +5,11 @@ import { createMockServer, TEST_API_ORIGIN } from '@/mocks/node';
 import { renderApp } from '@/test/renderApp';
 import { resetSession, signIn } from '@/test/session';
 import { createSessionApiClient, ensureSession } from '@/shared/lib/sessionClient';
-import { SESSION_HINT_KEY, useSessionStore } from '@/shared/lib/sessionStore';
+import {
+  assumeSignedOutWithoutHint,
+  SESSION_HINT_KEY,
+  useSessionStore,
+} from '@/shared/lib/sessionStore';
 
 // A controllable clock for the mock auth backend, so the 15-minute access token can expire.
 let now = Date.parse('2026-09-25T04:00:00.000Z');
@@ -101,6 +105,20 @@ describe('silent refresh on 401 (T-089)', () => {
     expect(await ensureSession(apiClient)).toBeNull();
     expect(paths).toEqual([]);
     expect(useSessionStore.getState().status).toBe('anonymous');
+  });
+
+  it('a first msw-mode visit (no hint) is marked signed out, so login paints without the mock (CR-T19)', async () => {
+    const apiClient = createSessionApiClient({ baseUrl: TEST_API_ORIGIN });
+    assumeSignedOutWithoutHint();
+
+    expect(await ensureSession(apiClient)).toBeNull();
+    expect(paths).toEqual([]);
+  });
+
+  it('a browser that held a session keeps its hint, so the refresh still runs', () => {
+    window.localStorage.setItem(SESSION_HINT_KEY, 'held');
+    assumeSignedOutWithoutHint();
+    expect(window.localStorage.getItem(SESSION_HINT_KEY)).toBe('held');
   });
 
   it('logging in clears the signed-out hint, so the next page load restores the session', async () => {
