@@ -31,7 +31,7 @@ export type HeaderProps = {
  */
 export function Header({ onOpenMenu, onOpenHelp }: HeaderProps) {
   return (
-    <header className="sticky top-0 z-(--nth-z-header) border-b border-line bg-surface">
+    <header className="sticky top-0 z-(--nth-z-header) border-b border-line bg-surface pt-[env(safe-area-inset-top)]">
       <div className="flex h-14 items-center gap-2 px-3 sm:gap-3 lg:gap-5 lg:px-6">
         <IconButton
           label={strings.header.openMenu}
