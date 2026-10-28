@@ -10,7 +10,8 @@ export type DigitRollProps = {
 type Seen = { value: string; previous: string; version: number };
 
 /** The number a formatted value stands for, for the roll direction. NaN when there is none. */
-const numeric = (text: string) => Number(text.replace(/[^\d.-]/g, ''));
+const numeric = (text: string) =>
+  /\d/.test(text) ? Number(text.replace(/−/g, '-').replace(/[^\d.-]/g, '')) : Number.NaN;
 
 /**
  * A formatted number whose changed digits roll (SPEC-CR-1 §5.6): unchanged characters stay still;
@@ -25,7 +26,10 @@ export function DigitRoll({ value, className }: DigitRollProps) {
   }
   const { previous, version } = seen.value === value ? seen : { previous: value, version: 0 };
   const shift = value.length - previous.length;
-  const up = numeric(value) >= numeric(previous);
+  const now = numeric(value);
+  const was = numeric(previous);
+  // No direction when either side has no number ("—"): a neutral swap, not a false "down".
+  const direction = Number.isNaN(now) || Number.isNaN(was) ? undefined : now >= was ? 'up' : 'down';
   return (
     <span className={cn('tabular-nums', className)}>
       {[...value].map((char, index) => {
@@ -36,7 +40,7 @@ export function DigitRoll({ value, className }: DigitRollProps) {
             // A new key per change restarts the roll on the same position.
             key={rolled ? `${String(index)}-${String(version)}` : String(index)}
             data-rolled={rolled || undefined}
-            className={rolled ? (up ? 'nth-digit-up' : 'nth-digit-down') : undefined}
+            className={rolled && direction ? `nth-digit-${direction}` : undefined}
           >
             {char}
           </span>

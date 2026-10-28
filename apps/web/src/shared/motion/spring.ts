@@ -9,10 +9,13 @@ export type SpringState = { value: number; velocity: number };
 /** Below these the spring counts as settled and snaps to the target. */
 const REST_DISTANCE = 0.01;
 const REST_VELOCITY = 0.01;
-/** Longest step integrated at once, so a dropped frame cannot make the spring explode. */
-const MAX_STEP_S = 1 / 30;
+/**
+ * Longest step integrated at once. At stiffness 520 anything coarser than about 1/120 s makes
+ * semi-implicit Euler ring around the target, so a 30 fps device would overshoot.
+ */
+const MAX_STEP_S = 1 / 240;
 
-/** One step of `dtSeconds` towards `target` (semi-implicit Euler, in sub-steps of at most 1/30 s). */
+/** One step of `dtSeconds` towards `target` (semi-implicit Euler, in sub-steps of at most 1/240 s). */
 export function stepSpring(state: SpringState, target: number, dtSeconds: number): SpringState {
   let { value, velocity } = state;
   let remaining = Math.max(0, dtSeconds);

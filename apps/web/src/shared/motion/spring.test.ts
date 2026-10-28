@@ -30,6 +30,17 @@ describe('stepSpring', () => {
   });
 });
 
+describe('stepSpring at coarse frame rates', () => {
+  it.each([1 / 30, 1 / 20, 1 / 10])('never crosses the target at dt = %f', (dt) => {
+    let state: SpringState = { value: 0, velocity: 0 };
+    for (let frame = 0; frame < 200; frame += 1) {
+      state = stepSpring(state, 100, dt);
+      expect(state.value).toBeLessThanOrEqual(100);
+    }
+    expect(state.value).toBe(100);
+  });
+});
+
 describe('animateSpring', () => {
   beforeEach(() => {
     vi.useFakeTimers({ toFake: ['requestAnimationFrame', 'cancelAnimationFrame', 'performance'] });
