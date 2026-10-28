@@ -12,7 +12,7 @@ function SideControl({ onChange }: { onChange?: (side: Side) => void }) {
     <SegmentedControl
       label="Order side"
       options={[
-        { value: 'BUY', label: 'Buy', tone: 'up' },
+        { value: 'BUY', label: 'Buy', tone: 'solid' },
         { value: 'SELL', label: 'Sell', tone: 'down' },
       ]}
       value={side}
@@ -25,6 +25,30 @@ function SideControl({ onChange }: { onChange?: (side: Side) => void }) {
 }
 
 describe('SegmentedControl', () => {
+  it('fills the selected Buy with brand blue and Sell with red; neutral choices stay a chip', () => {
+    render(<SideControl />);
+    const buy = screen.getByRole('radio', { name: 'Buy' });
+    expect(buy.className).toContain('data-[state=checked]:bg-brand');
+    expect(buy.className).toContain('data-[state=checked]:text-surface');
+    expect(screen.getByRole('radio', { name: 'Sell' }).className).toContain(
+      'data-[state=checked]:bg-down',
+    );
+    render(
+      <SegmentedControl
+        label="Order type"
+        value="MARKET"
+        onValueChange={() => undefined}
+        options={[
+          { value: 'MARKET', label: 'Market' },
+          { value: 'LIMIT', label: 'Limit' },
+        ]}
+      />,
+    );
+    expect(screen.getByRole('radio', { name: 'Market' }).className).toContain(
+      'data-[state=checked]:bg-surface',
+    );
+  });
+
   it('is a radiogroup of radios', () => {
     render(<SideControl />);
     expect(screen.getByRole('radiogroup', { name: 'Order side' })).toBeInTheDocument();
