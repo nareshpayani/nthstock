@@ -1,8 +1,9 @@
 import { Dialog as DialogPrimitive } from 'radix-ui';
-import type { ReactNode, RefObject } from 'react';
+import { useCallback, useRef, type ReactNode, type RefObject } from 'react';
 import { IconClose } from '../icons/icons.js';
 import { cn } from '../lib/cn.js';
 import { useKeyboardInset } from '../lib/keyboardInset.js';
+import { useSheetDrag } from '../lib/sheetDrag.js';
 import { TouchTargets } from '../lib/touchTargets.js';
 
 export type DialogProps = {
@@ -42,7 +43,7 @@ function keepEscapeForOpenPopup(event: KeyboardEvent) {
 }
 
 const overlayClass =
-  'fixed inset-0 z-(--nth-z-overlay) bg-ink/40 data-[state=open]:animate-overlay-in';
+  'fixed inset-0 z-(--nth-z-overlay) bg-ink/40 data-[state=open]:animate-overlay-in data-[state=closed]:animate-overlay-out';
 
 const closeButtonClass =
   'inline-flex size-8 items-center justify-center rounded-md text-ink-muted hover:bg-canvas hover:text-ink';
@@ -129,7 +130,7 @@ const SHEET_SIDE: Record<NonNullable<SheetProps['side']>, string> = {
   right: 'inset-y-0 right-0 w-[min(420px,calc(100vw-48px))] data-[state=open]:animate-sheet-in',
   left: 'inset-y-0 left-0 w-[min(420px,calc(100vw-48px))] data-[state=open]:animate-drawer-in',
   bottom:
-    'inset-x-0 bottom-0 max-h-[90dvh] rounded-t-lg pb-[env(safe-area-inset-bottom)] data-[state=open]:animate-sheet-up',
+    'inset-x-0 bottom-0 max-h-[90dvh] rounded-t-[20px] pb-[env(safe-area-inset-bottom)] data-[state=open]:animate-sheet-up data-[state=closed]:animate-sheet-down',
 };
 
 /**
@@ -152,6 +153,18 @@ export function Sheet({
   // A bottom sheet is the phone form, so its controls take their touch size (SPEC-TFC-1 §9.4).
   const touch = side === 'bottom';
   const keyboardInset = useKeyboardInset(touch);
+  // Drag to dismiss (CR-T10) closes through the sheet's own Close, so focus return and
+  // onOpenChange behave exactly as for a tap on it.
+  const closeRef = useRef<HTMLButtonElement>(null);
+  const { panelRef, grabProps } = useSheetDrag(touch, () => closeRef.current?.click());
+  const contentRef = useCallback(
+    (element: HTMLDivElement | null) => {
+      keyboardInset(element);
+      panelRef(element);
+    },
+    [keyboardInset, panelRef],
+  );
+  const grab = touch ? grabProps : {};
   return (
     <DialogPrimitive.Root {...root}>
       {trigger ? <DialogPrimitive.Trigger asChild>{trigger}</DialogPrimitive.Trigger> : null}
@@ -161,7 +174,7 @@ export function Sheet({
           data-overlay={overlay}
         />
         <DialogPrimitive.Content
-          ref={keyboardInset}
+          ref={contentRef}
           {...(description ? {} : { 'aria-describedby': undefined })}
           onOpenAutoFocus={focusInitial(initialFocus)}
           onCloseAutoFocus={focusReturn(returnFocus)}
@@ -173,13 +186,24 @@ export function Sheet({
             className,
           )}
         >
-          {side === 'bottom' ? (
+          {touch ? (
+            // The grabber: a full-width strip, so the thumb finds it without aiming at the bar.
             <div
               aria-hidden="true"
-              className="mx-auto mt-2 h-1 w-10 shrink-0 rounded-full bg-line"
-            />
+              data-part="sheet-grabber"
+              className="flex h-5 shrink-0 cursor-grab touch-none items-end justify-center"
+              {...grab}
+            >
+              <span className="h-1 w-10 rounded-full bg-line" />
+            </div>
           ) : null}
-          <div className="flex items-start justify-between gap-4 border-b border-line p-4">
+          <div
+            className={cn(
+              'flex items-start justify-between gap-4 border-b border-line p-4',
+              touch && 'touch-none pt-2',
+            )}
+            {...grab}
+          >
             <div className="grid gap-1">
               <DialogPrimitive.Title className="text-lg font-semibold text-ink">
                 {title}
@@ -191,6 +215,7 @@ export function Sheet({
               ) : null}
             </div>
             <DialogPrimitive.Close
+              ref={closeRef}
               className={cn(closeButtonClass, touch && 'size-11 shrink-0')}
               aria-label="Close"
             >
