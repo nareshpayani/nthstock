@@ -33,6 +33,8 @@ export type PriceChartProps = {
   onReady?: ((handle: ChartHandle | null) => void) | undefined;
   /** Drawn over the canvas, e.g. the trading overlay (T15). */
   overlay?: ReactNode;
+  /** What an empty range says, in place of the generic line. */
+  emptyText?: string | undefined;
   className?: string | undefined;
 };
 
@@ -52,6 +54,7 @@ export function PriceChart({
   interactive = false,
   onReady,
   overlay,
+  emptyText,
   className,
 }: PriceChartProps) {
   const first = candles[0];
@@ -91,7 +94,7 @@ export function PriceChart({
         </>
       ) : (
         <figcaption className="grid h-full place-items-center text-body text-ink-muted">
-          {strings.noData}
+          {emptyText ?? strings.noData}
         </figcaption>
       )}
     </figure>

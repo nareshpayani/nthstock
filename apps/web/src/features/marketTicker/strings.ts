@@ -1,6 +1,8 @@
 export const strings = {
   tickersLabel: 'Market indices',
   loading: 'loading',
+  /** Offline (SPEC-CR-1 §7): the last levels, no longer live. */
+  stale: 'Stale',
   open: 'Market open',
   preOpen: 'Pre-open',
   closed: 'Market closed',

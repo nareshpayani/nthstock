@@ -26,6 +26,8 @@ export type OverlayLine = {
   draggable: boolean;
   /** Buttons beside the handle, in order. */
   actions?: readonly LineAction[] | undefined;
+  /** Offline (SPEC-CR-1 §7): not draggable, and the tab shows a lock. */
+  locked?: boolean | undefined;
   /** What the loupe works out while the line is dragged; price and distance only without it. */
   loupe?: LoupeSpec | undefined;
 };

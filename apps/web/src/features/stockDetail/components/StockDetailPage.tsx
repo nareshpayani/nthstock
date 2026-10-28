@@ -69,6 +69,8 @@ export function StockDetailPage({
       <PhoneStockDetail
         instrument={instrument}
         snapshot={snapshot.data}
+        snapshotFailed={snapshot.isError}
+        onRetrySnapshot={() => void snapshot.refetch()}
         search={search}
         onSearchChange={onSearchChange}
         section={section}
@@ -81,6 +83,8 @@ export function StockDetailPage({
       <StockHeader
         instrument={instrument}
         snapshot={snapshot.data}
+        snapshotFailed={snapshot.isError}
+        onRetry={() => void snapshot.refetch()}
         onExchangeChange={(exchange) => onSearchChange({ exchange })}
       />
       {/*

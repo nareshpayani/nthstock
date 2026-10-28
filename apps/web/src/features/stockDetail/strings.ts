@@ -21,6 +21,16 @@ export const strings = {
     pullBack: 'Pull back −1%',
     gap: 'Gap −3%',
     split: 'Split large fills',
+    /** The "States" row (SPEC-CR-1 §7, CR-11): shows each state of the page on demand. */
+    states: 'States',
+    statesLabel: 'Show the page in a state',
+    stateNames: {
+      live: 'Live',
+      loading: 'Loading',
+      empty: 'Empty',
+      error: 'Error',
+      offline: 'Offline',
+    },
   },
   chart: {
     title: 'Price chart',
@@ -34,6 +44,10 @@ export const strings = {
       `${symbol} ${type} chart over ${range}${bars ? `, ${bars} bars` : ''}`,
     typeNames: { area: 'area', candle: 'candlestick' },
     loading: 'Loading chart',
+    /** An empty day (SPEC-CR-1 §7). */
+    emptyToday: 'No trades yet today',
+    /** Over the last candles while offline (SPEC-CR-1 §7). */
+    paused: 'Paused: offline',
     errorTitle: 'Chart unavailable',
     errorBody: 'The price chart could not load.',
     retry: 'Retry',
@@ -101,6 +115,10 @@ export const strings = {
     retry: 'Retry',
   },
   header: {
+    /** Price block states (SPEC-CR-1 §7). */
+    unavailable: 'Price unavailable',
+    retry: 'Retry',
+    stale: (time: string) => `Stale · as of ${time}`,
     exchangeLabel: 'Exchange',
     notListed: (symbol: string, exchange: string) => `${symbol} is not listed on ${exchange}.`,
     /** A disabled exchange segment's name on a phone, where the note has no room. */

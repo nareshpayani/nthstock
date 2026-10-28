@@ -687,7 +687,23 @@ export function ChartOverlay({
                     TONE_CLASSES[line.tone],
                   )}
                 >
-                  {line.draggable ? (
+                  {line.locked ? (
+                    <svg
+                      data-testid="chart-tab-lock"
+                      width="9"
+                      height="10"
+                      viewBox="0 0 9 10"
+                      className="shrink-0"
+                    >
+                      <rect x="0.5" y="4.5" width="8" height="5" rx="1" fill="currentColor" />
+                      <path
+                        d="M2.25 4.5V3a2.25 2.25 0 0 1 4.5 0v1.5"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="1.2"
+                      />
+                    </svg>
+                  ) : line.draggable ? (
                     <svg
                       data-testid="chart-tab-grip"
                       width="7"

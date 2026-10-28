@@ -1,4 +1,6 @@
 export const strings = {
+  /** Offline (SPEC-CR-1 §7): lines are locked and their names say why. */
+  locked: 'Locked while offline; changes resume when you reconnect.',
   drag: {
     started: (label: string, price: string) =>
       `Moving ${label}. Now ${price}. Release to save, a second finger or Escape cancels.`,

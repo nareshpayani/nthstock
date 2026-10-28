@@ -36,6 +36,9 @@ const viewportHeight = () => window.innerHeight;
 export type PhoneStockDetailProps = {
   instrument: Instrument;
   snapshot: Quote | null | undefined;
+  /** The snapshot request failed (the price block may show "Price unavailable"). */
+  snapshotFailed?: boolean;
+  onRetrySnapshot?: () => void;
   search: StockDetailSearch;
   onSearchChange: (patch: StockDetailSearch) => void;
   /** Wraps each card in its own error boundary, as on desktop. */
@@ -52,6 +55,8 @@ export type PhoneStockDetailProps = {
 export function PhoneStockDetail({
   instrument,
   snapshot,
+  snapshotFailed = false,
+  onRetrySnapshot,
   search,
   onSearchChange,
   section,
@@ -95,6 +100,8 @@ export function PhoneStockDetail({
         <StockHeader
           instrument={instrument}
           snapshot={snapshot}
+          snapshotFailed={snapshotFailed}
+          {...(onRetrySnapshot ? { onRetry: onRetrySnapshot } : {})}
           onExchangeChange={(next) => onSearchChange({ exchange: next })}
           phone
         />
