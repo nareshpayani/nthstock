@@ -545,7 +545,38 @@ describe('chart overlay (T15, SPEC-TFC-1 §10.5)', () => {
     expect(haptics.haptic).toHaveBeenLastCalledWith('crossLtp');
     pointer(band('o1'), 'pointerup', 222);
     expect(haptics.haptic).toHaveBeenLastCalledWith('commit');
-    expect(status).toHaveTextContent('Released at ₹1,489.00. Saving.');
+    expect(status).toHaveTextContent('Moved to ₹1,489.00.');
+  });
+
+  it('a keyboard move says its start, its save and its cancel (CR-T08, §5.2)', () => {
+    const onDragEnd = vi.fn();
+    render(
+      <ChartOverlay
+        handle={makeHandle()}
+        tickSize={5}
+        label="Chart orders"
+        onDragEnd={onDragEnd}
+        lines={[line({ id: 'o1', price: 150_000, label: 'Buy 4 @ ₹1,500.00' })]}
+      />,
+    );
+    const status = screen.getByRole('status');
+    const target = screen.getByTestId('chart-handle');
+    fireEvent.keyDown(target, { key: 'ArrowUp' });
+    expect(status).toHaveTextContent(
+      'Moving Buy 4 @ ₹1,500.00. Now ₹1,500.05. Enter saves, Escape cancels.',
+    );
+    fireEvent.keyDown(target, { key: 'ArrowUp' });
+    fireEvent.keyDown(target, { key: 'Enter' });
+    expect(onDragEnd).toHaveBeenLastCalledWith('o1', 150_010);
+    expect(status).toHaveTextContent('Moved to ₹1,500.10.');
+    fireEvent.keyDown(target, { key: 'ArrowDown' });
+    fireEvent.keyDown(target, { key: 'Escape' });
+    expect(status).toHaveTextContent('Move cancelled. The line is back where it was.');
+    fireEvent.keyDown(target, { key: 'ArrowDown' });
+    status.textContent = '';
+    fireEvent.blur(target);
+    expect(onDragEnd).toHaveBeenLastCalledWith('o1', null);
+    expect(status).toHaveTextContent('Move cancelled. The line is back where it was.');
   });
 
   it('a keyboard move says it started, was released or was cancelled (CR-T08, AC-05)', () => {

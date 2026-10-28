@@ -2,7 +2,11 @@ export const strings = {
   drag: {
     started: (label: string, price: string) =>
       `Moving ${label}. Now ${price}. Release to save, a second finger or Escape cancels.`,
-    released: (price: string) => `Released at ${price}. Saving.`,
+    /** Keyboard moves (§13) say their own keys. */
+    keyStarted: (label: string, price: string) =>
+      `Moving ${label}. Now ${price}. Enter saves, Escape cancels.`,
+    /** The save's outcome is the toast's to say; nothing is sent for an unchanged price. */
+    released: (price: string) => `Moved to ${price}.`,
     cancelled: 'Move cancelled. The line is back where it was.',
   },
   loupe: {
