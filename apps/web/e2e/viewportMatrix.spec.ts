@@ -49,12 +49,6 @@ const KNOWN_GAPS: readonly {
   },
   {
     frame: 'ticket',
-    check: 'primaryAction',
-    viewports: ['phone-320x640'],
-    story: 'CR-T13',
-  },
-  {
-    frame: 'ticket',
     check: 'touchTargets',
     viewports: ['landscape-844x390', 'tablet-820x1180', 'tablet-1180x820'],
     story: 'CR-T15',
