@@ -65,8 +65,9 @@ function apiModeBuild(apiMode: ApiMode): Plugin {
 /**
  * The workspace packages the app imports, mapped to their TypeScript source. Their package.json
  * points at the built `dist`, which goes stale after a pull or while a package is edited, so the
- * dev server reads the source instead (NSTOCK-0361). `@nthstock/tokens` stays on `dist`: its CSS is
- * generated, and `predev` builds it.
+ * dev server reads the source instead (NSTOCK-0361). Only the `@nthstock/tokens` CSS stays on `dist`
+ * because it is generated (`predev` builds it); its TypeScript exports come from source, so a new token
+ * such as `spring` works without a rebuild (NSTOCK-0434).
  */
 const PACKAGE_SOURCES: Record<string, string> = {
   '@nthstock/apiClient': 'apiClient/src/index.ts',
@@ -75,6 +76,7 @@ const PACKAGE_SOURCES: Record<string, string> = {
   '@nthstock/marketData': 'marketData/src/index.ts',
   '@nthstock/marketData/testing': 'marketData/src/testing.ts',
   '@nthstock/paperEngine': 'paperEngine/src/index.ts',
+  '@nthstock/tokens': 'tokens/src/index.ts',
   '@nthstock/ui': 'ui/src/index.ts',
   '@nthstock/ui/allIcons': 'ui/src/icons/allIcons.ts',
   '@nthstock/utils': 'utils/src/index.ts',
