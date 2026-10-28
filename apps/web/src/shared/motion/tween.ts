@@ -42,6 +42,7 @@ export function animateTween(
     const t = (now - start) / durationMs;
     if (t >= 1) {
       onFrame(to);
+      if (stopped) return;
       onDone?.();
       return;
     }

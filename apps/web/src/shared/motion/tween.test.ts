@@ -66,6 +66,24 @@ describe('animateTween', () => {
     expect(frames).toHaveLength(1);
   });
 
+  it('does not report done when stopped from inside the final frame', () => {
+    const done = vi.fn();
+    const stops: (() => void)[] = [];
+    stops.push(
+      animateTween(
+        0,
+        40,
+        RATCHET_GLIDE_MS,
+        (value) => {
+          if (value === 40) stops[0]?.();
+        },
+        { onDone: done },
+      ),
+    );
+    vi.advanceTimersByTime(1_000);
+    expect(done).not.toHaveBeenCalled();
+  });
+
   it.each([
     ['from equals to', 5, 5, 240],
     ['the duration is zero', 0, 5, 0],

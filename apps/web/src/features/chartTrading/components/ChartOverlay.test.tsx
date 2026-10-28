@@ -926,11 +926,27 @@ describe('chart overlay (T15, SPEC-TFC-1 §10.5)', () => {
           cancel(handle);
         });
         expect(stopPrice()).toBe(150_050);
+        // Right after the restore, before any frame: a spring, never a ratchet trace.
+        expect(traces()).toHaveLength(0);
         const seen = springBack(frames);
         expect(seen.some((price) => price > 150_000 && price < 150_050)).toBe(true);
         expect(seen.at(-1)).toBe(150_000);
         expect(traces()).toHaveLength(0);
       });
+    });
+
+    it('a rejected save on a trailing stop springs back without a trace', () => {
+      const { frames, view, element } = ratchet(false);
+      pointer(band('stop'), 'pointerdown', 180);
+      pointer(band('stop'), 'pointermove', 170);
+      view.rerender(element(150_500));
+      pointer(band('stop'), 'pointerup', 170);
+      // The caller rolls the stop back to its saved price.
+      view.rerender(element(150_000));
+      expect(traces()).toHaveLength(0);
+      run(frames, 1_000);
+      expect(stopPrice()).toBe(150_000);
+      expect(traces()).toHaveLength(0);
     });
 
     it('a second ratchet mid-glide starts from the drawn price and leaves a second trace', () => {

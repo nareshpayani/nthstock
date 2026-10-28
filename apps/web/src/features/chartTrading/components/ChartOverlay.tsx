@@ -369,19 +369,22 @@ export function ChartOverlay({
     const settling = settlingRef.current;
     const traces = tracesRef.current;
     return () => {
-      for (const trace of traces) {
-        trace.stop();
-        series.removePriceLine(trace.line);
+      try {
+        for (const trace of traces) {
+          trace.stop();
+          series.removePriceLine(trace.line);
+        }
+      } finally {
+        traces.clear();
+        unlockRef.current?.();
+        unlockRef.current = null;
+        for (const entry of settling.values()) entry.stop();
+        settling.clear();
+        series.detachPrimitive(primitive);
+        for (const { line } of drawn.values()) series.removePriceLine(line);
+        drawn.clear();
+        primitiveRef.current = null;
       }
-      traces.clear();
-      unlockRef.current?.();
-      unlockRef.current = null;
-      for (const entry of settling.values()) entry.stop();
-      settling.clear();
-      series.detachPrimitive(primitive);
-      for (const { line } of drawn.values()) series.removePriceLine(line);
-      drawn.clear();
-      primitiveRef.current = null;
     };
   }, [handle]);
 
@@ -401,6 +404,8 @@ export function ChartOverlay({
     // A line that just left the finger and now has a new price (restored by a cancel, or rolled
     // back after a rejected save) springs there from where the finger left it (AC-04).
     const from = settleFromRef.current;
+    // The line sprung back in this pass: the ratchet loop below must not turn it into a glide.
+    let springing: string | null = null;
     if (from && (performance.now() > from.until || gestureRef.current.phase !== 'idle')) {
       settleFromRef.current = null;
     } else if (from) {
@@ -408,6 +413,7 @@ export function ChartOverlay({
       if (!line) settleFromRef.current = null;
       else if (line.price !== from.price) {
         settleFromRef.current = null;
+        springing = line.id;
         settle(line.id, from.price, line.price);
       }
     }
@@ -420,6 +426,7 @@ export function ChartOverlay({
         continue;
       if (active.phase !== 'idle' && active.id === line.id) continue;
       if (keyMoveRef.current?.id === line.id || settleFromRef.current?.id === line.id) continue;
+      if (springing === line.id) continue;
       // A glide or spring already under way carries on from where the line is drawn now.
       if (!drawnRef.current.has(line.id)) continue;
       const drawnFrom = settlingRef.current.get(line.id)?.price ?? was.price;
@@ -439,6 +446,11 @@ export function ChartOverlay({
     }
     placeHandles(handle, ordered, elementsRef.current, settlingRef.current, tickSize);
     primitiveRef.current?.requestUpdate();
+    // A position line removed mid-press ends the press, so a later pointerup taps nothing.
+    if (chipRef.current && !ordered.some((line) => line.id === chipRef.current?.id)) {
+      chipRef.current = null;
+      pressChip(null);
+    }
     // A line that went away mid-drag (filled or cancelled) ends the drag; the caller restores it.
     if (active.phase !== 'idle' && !ordered.some((line) => line.id === active.id)) {
       apply(cancel(active));
