@@ -32,7 +32,6 @@ type Frame = 'page' | 'ticket';
  * What today's flow still gets wrong, measured on 28 Oct 2026 before the craft round, each with the
  * story that fixes it. The story's pull request removes its rows; a row that passes fails the run.
  */
-const PHONES = VIEWPORT_MATRIX.filter((viewport) => viewport.kind === 'phone').map((v) => v.name);
 const TOUCH = VIEWPORT_MATRIX.filter(isTouchViewport).map((viewport) => viewport.name);
 const KNOWN_GAPS: readonly {
   frame: Frame;
@@ -54,17 +53,17 @@ const KNOWN_GAPS: readonly {
   },
   { frame: 'page', check: 'touchTargets', viewports: TOUCH, story: 'CR-T13, CR-T15' },
   {
-    frame: 'page',
-    check: 'tickerFits',
-    viewports: PHONES.filter((name) => !['phone-320x640', 'phone-344x882'].includes(name)),
-    story: 'CR-T14',
+    frame: 'ticket',
+    check: 'sideScroll',
+    viewports: ['phone-320x640', 'phone-344x882'],
+    story: 'CR-T13',
   },
-  { frame: 'ticket', check: 'sideScroll', viewports: ['phone-344x882'], story: 'CR-T13' },
+  // The page scrolls sideways at these widths, which pushes the pinned footer past the edge.
   {
     frame: 'ticket',
     check: 'primaryAction',
-    viewports: VIEWPORT_MATRIX.map((v) => v.name).filter((name) => name !== 'tablet-820x1180'),
-    story: 'CR-T11',
+    viewports: ['phone-320x640'],
+    story: 'CR-T13',
   },
   {
     frame: 'ticket',
@@ -274,11 +273,20 @@ for (const viewport of VIEWPORT_MATRIX) {
         await run('page', 'touchTargets', smallTargets(main));
       }
       await run('page', 'primaryAction', onScreen(page, buy));
-      if (viewport.width >= 360) await run('page', 'tickerFits', tickerOverflow(page));
+      // The index strip is a header row only below 1360 px: from there the indices sit in the top bar.
+      if (viewport.width >= 360 && viewport.width < 1360) {
+        await run('page', 'tickerFits', tickerOverflow(page));
+      }
 
       let openFailure: string | undefined;
       try {
-        await buy.click({ timeout: 10_000 });
+        // Where the page puts Buy off screen (a known gap), a pointer click is intercepted by the
+        // content around it, so open the ticket with a click event: the gap is reported above.
+        if (gapFor(viewport, 'page', 'primaryAction')) {
+          await buy.dispatchEvent('click');
+        } else {
+          await buy.click({ timeout: 10_000 });
+        }
         await expect(page.getByRole('dialog', { name: 'Trade INFY' })).toBeVisible({
           timeout: 10_000,
         });

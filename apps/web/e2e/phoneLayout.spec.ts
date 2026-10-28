@@ -115,6 +115,8 @@ test('on a phone the ticket is a bottom sheet and a fill shows in the position s
     })
     .toEqual([390, 844]);
   // Every control in the sheet is a thumb-sized target: steppers, segments, switch, depth prices.
+  // Depth and the attached stop are behind "More options" on a phone (CR-T11).
+  await ticket.getByRole('button', { name: /^More options/ }).click();
   await expect(ticket.getByRole('button', { name: /use as limit price$/ }).first()).toBeVisible();
   await expectTargets([
     ticket.getByRole('button'),
@@ -165,4 +167,35 @@ test('on a phone the ticket is a bottom sheet and a fill shows in the position s
   await expect(pad).toBeVisible();
   expect((await box(pad.getByTestId('scalp-buy'))).y).toBeGreaterThanOrEqual(844 * 0.6);
   await expectTargets([pad.getByRole('button'), pad.getByRole('radio'), pad.getByRole('switch')]);
+});
+
+// SPEC-CR-1 AC-07: the primary action stays on screen with the keyboard open. Chromium has no
+// on-screen keyboard, so a stand-in visual viewport (400 px tall, the rest covered) is installed
+// before the page loads and told to resize when an input takes focus.
+test('the ticket primary button stays in view with the keyboard open (CR-T11, AC-07)', async ({
+  page,
+}) => {
+  test.setTimeout(90_000);
+  await page.clock.setFixedTime(MONDAY_10_IST);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.addInitScript(() => {
+    const viewport = Object.assign(new EventTarget(), { height: window.innerHeight, offsetTop: 0 });
+    Object.defineProperty(window, 'visualViewport', { value: viewport, configurable: true });
+    document.addEventListener('focusin', (event) => {
+      if (event.target instanceof HTMLInputElement) {
+        viewport.height = 400;
+        viewport.dispatchEvent(new Event('resize'));
+      }
+    });
+  });
+  await page.goto('/login?redirect=%2Fstocks%2FINFY');
+  await logIn(page, uniqueMobile());
+  await tradeBar(page).getByRole('button', { name: 'Buy INFY' }).click();
+  const ticket = page.getByRole('dialog', { name: 'Trade INFY' });
+  await ticket.getByRole('textbox', { name: 'Quantity' }).focus();
+  await expect(ticket).toHaveAttribute('data-keyboard', 'open');
+  const submit = ticket.getByTestId('ticket-primary').getByRole('button', { name: 'Buy INFY' });
+  await expect(submit).toBeInViewport();
+  const rect = await box(submit);
+  expect(rect.y + rect.height).toBeLessThanOrEqual(400);
 });

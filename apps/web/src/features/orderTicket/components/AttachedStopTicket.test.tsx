@@ -1,7 +1,7 @@
 import { createTradingStore, type ApiClient } from '@nthstock/apiClient';
 import { fixedClock, fromIst } from '@nthstock/utils';
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createMockServer } from '@/mocks/node';
 import { useOpenTicket } from '@/shared/hooks/useOpenTicket';
 import type { MarketSession } from '@/shared/lib/marketSessionContext';
@@ -71,6 +71,7 @@ beforeEach(() => {
   installResizeObserver();
 });
 afterEach(() => {
+  vi.unstubAllGlobals();
   resetSession();
   useTicketIntentStore.setState(initialTicketIntentState);
 });
@@ -132,6 +133,33 @@ describe('"Add trailing stop" on an entry (T14, SPEC-TFC-1 §6.4, §7)', () => {
       fireEvent.click(within(dialog).getByRole('button', { name: 'Buy INFY' }));
       expect(await within(dialog).findByText(/Enter a trail/)).toBeInTheDocument();
       expect(within(dialog).queryByTestId('review-attached')).not.toBeInTheDocument();
+    },
+    HEAVY,
+  );
+
+  it(
+    'on a phone, opens More options and says why when the hidden trail is invalid',
+    async () => {
+      vi.stubGlobal('matchMedia', (query: string) => ({
+        matches: query.includes('max-width'),
+        media: query,
+        addEventListener: () => undefined,
+        removeEventListener: () => undefined,
+      }));
+      const { dialog } = await openBuyTicket(true);
+      const more = within(dialog).getByRole('button', { name: /More options/ });
+      fireEvent.click(more);
+      fireEvent.click(within(dialog).getByRole('switch', { name: 'Add trailing stop' }));
+      fireEvent.click(more);
+      expect(more).toHaveAttribute('aria-expanded', 'false');
+
+      fireEvent.click(within(dialog).getByRole('button', { name: 'Buy INFY' }));
+      await waitFor(() => expect(more).toHaveAttribute('aria-expanded', 'true'));
+      expect(more).toBeDisabled();
+      expect(
+        within(dialog).getByText('Order cannot be placed').closest('[role="alert"]'),
+      ).toHaveTextContent(/Enter a trail/);
+      expect(within(dialog).getByTestId('attach-trailing')).toBeVisible();
     },
     HEAVY,
   );

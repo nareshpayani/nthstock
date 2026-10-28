@@ -4,7 +4,11 @@ import { vi } from 'vitest';
  * A stand-in for `lightweight-charts` in jsdom (no canvas). Use it with
  * `vi.mock('lightweight-charts', () => import('@/test/chartsMock'))` and inspect `chartsMock`.
  */
-type FakePriceLine = { options: Record<string, unknown>; applyOptions: (o: object) => void };
+type FakePriceLine = {
+  options: Record<string, unknown>;
+  removed: boolean;
+  applyOptions: (o: object) => void;
+};
 type FakePrimitive = { attached?: (param: unknown) => void; updateAllViews?: () => void };
 type FakeSeries = {
   type: 'Area' | 'Candlestick';
@@ -114,12 +118,18 @@ export function createChart(_host: HTMLElement, options: unknown) {
         createPriceLine: (options) => {
           const line: FakePriceLine = {
             options: { ...options },
-            applyOptions: (next) => Object.assign(line.options, next),
+            removed: false,
+            // The real library throws when a removed line is written to.
+            applyOptions: (next) => {
+              if (line.removed) throw new Error('Value is undefined');
+              Object.assign(line.options, next);
+            },
           };
           series.priceLines.push(line);
           return line;
         },
         removePriceLine: (line) => {
+          line.removed = true;
           series.priceLines = series.priceLines.filter((drawn) => drawn !== line);
         },
         attachPrimitive: (primitive) => {
