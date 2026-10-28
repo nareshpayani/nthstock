@@ -2,7 +2,7 @@
 
 The shot list and script for the phone recording (SPEC-CR-1 §11 item 3, CR-T24). One take on a
 real iPhone, portrait unless a beat says otherwise, from a cold load of the live site. Target
-length 1:45, hard limit 2:00.
+length 1:50, hard limit 2:00.
 
 ## Before you record
 
@@ -10,7 +10,7 @@ length 1:45, hard limit 2:00.
 |---|---|
 | Clear the site's data: Settings → Safari → Advanced → Website Data → remove `nthstock-a13a5.web.app` | The take starts from a true cold load |
 | Do Not Disturb on, battery above 20%, brightness high | No banners; no low-power throttling |
-| Settings → Accessibility → Motion → Reduce Motion **off** | The take shows the motion; beat 9 turns it on |
+| Settings → Accessibility → Motion → Reduce Motion **off** | The take shows the motion. Reduced motion is shown in DESIGN.md and the E2E suite, not in this take |
 | Settings → Sounds & Haptics → System Haptics **on** | The drag ticks are felt (the viewer sees the thumb settle on each tick) |
 | Add Screen Recording to Control Centre; turn the microphone off | Haptics are the feedback; no voice-over in the take (captions are added after) |
 | Open `https://nthstock-a13a5.web.app/dashboard?demo=1` once, then close the tab | Warms DNS only; site data stays clear |
@@ -33,8 +33,9 @@ Demo login if asked: mobile `9000000001`, OTP `123456`. The demo opens signed in
 | 10 | 1:42–1:48 | Out | Stop on the instrument page with the line in view; stop recording | "nthstock · paper trading, virtual cash" |
 
 Record on a weekday between 9:15 AM and 3:30 PM IST: the demo follows NSE hours, and outside them
-the order in beat 3 becomes an after-market order with no line to drag. If a beat goes wrong, carry on: a single take reads as honest, and beats 5
-and 7 matter most.
+the order in beat 3 becomes an after-market order with no line to drag.
+
+If a beat goes wrong, carry on: a single take reads as honest, and beats 5 and 7 matter most.
 
 ## After
 
