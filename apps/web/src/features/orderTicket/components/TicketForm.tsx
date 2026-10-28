@@ -7,10 +7,12 @@ import {
   NumberInput,
   SegmentedControl,
   Switch,
+  cn,
 } from '@nthstock/ui';
 import { formatInr } from '@nthstock/utils';
-import { useEffect, useRef, type FormEventHandler, type ReactNode } from 'react';
+import { useEffect, useId, useRef, useState, type FormEventHandler, type ReactNode } from 'react';
 import { Controller, useWatch, type Control, type UseFormReturn } from 'react-hook-form';
+import { usePhoneLayout } from '@/shared/hooks/usePhoneLayout';
 import { useQuote } from '@/shared/hooks/useQuote';
 import type { TicketError } from '../model/orderError';
 import { fillsImmediately, type TicketFormValues } from '../model/ticketForm';
@@ -46,6 +48,8 @@ export type TicketFormProps = {
    * price, so no order-type switch and no depth panel.
    */
   compact?: boolean | undefined;
+  /** The attached stop was edited or refused: keep its fields in view on a phone. */
+  attachNeedsAttention?: boolean | undefined;
 };
 
 export type AttachProps = {
@@ -172,9 +176,18 @@ export function TicketForm({
   trailing,
   attach,
   compact = false,
+  attachNeedsAttention = false,
 }: TicketFormProps) {
   const { control, formState, setValue, trigger } = form;
-  const [side, type] = useWatch({ control, name: ['side', 'type'] });
+  const [side, type, product] = useWatch({ control, name: ['side', 'type', 'product'] });
+  // On a phone the ticket shows the essentials and keeps the rest behind "More options", so the
+  // primary button sits in reach (SPEC-CR-1 §5.5, CR-T11). A product error opens it.
+  const phone = usePhoneLayout();
+  const [moreOpen, setMoreOpen] = useState(false);
+  const moreId = useId();
+  // An error in a hidden control holds the section open, so Place never fails silently.
+  const forcedOpen = formState.errors.product !== undefined || attachNeedsAttention;
+  const showMore = !phone || moreOpen || forcedOpen;
   const qtyBox = useRef<HTMLDivElement>(null);
   const errorBox = useRef<HTMLDivElement>(null);
 
@@ -200,6 +213,76 @@ export function TicketForm({
     : marketOpen
       ? strings.form.submit(sideLabel, instrument.symbol)
       : strings.form.placeAmo;
+
+  const productBlock = (
+    <div className="grid gap-1">
+      <span className="text-label text-ink-muted" aria-hidden="true">
+        {strings.form.product}
+      </span>
+      <Controller
+        control={control}
+        name="product"
+        render={({ field }) => (
+          <SegmentedControl
+            label={strings.form.product}
+            size="sm"
+            disabled={locked}
+            value={field.value}
+            onValueChange={field.onChange}
+            options={[
+              { value: 'DELIVERY', label: strings.form.delivery },
+              { value: 'INTRADAY', label: strings.form.intraday, disabled: !marketOpen },
+            ]}
+          />
+        )}
+      />
+      {!marketOpen && !locked ? (
+        <p className="text-label text-ink-muted">{strings.form.intradayClosed}</p>
+      ) : null}
+    </div>
+  );
+  const typeBlock = compact ? null : (
+    <div className="grid content-start gap-1">
+      <span className="text-label text-ink-muted" aria-hidden="true">
+        {strings.form.type}
+      </span>
+      <Controller
+        control={control}
+        name="type"
+        render={({ field }) => (
+          <SegmentedControl
+            label={strings.form.type}
+            size="sm"
+            disabled={locked}
+            value={field.value}
+            onValueChange={(next) => {
+              if (next === TRAILING_SL) {
+                trailing?.onSelect();
+                return;
+              }
+              field.onChange(next);
+              void trigger('price');
+            }}
+            options={orderTypeOptions(trailing)}
+          />
+        )}
+      />
+      {trailing && !trailing.available ? (
+        <p className="text-label text-ink-muted">{strings.trailing.notAvailableHint}</p>
+      ) : null}
+    </div>
+  );
+  // Product, depth and the attached trailing stop: beside the essentials on wider screens, behind
+  // "More options" on a phone.
+  const more = (
+    <>
+      {phone ? productBlock : null}
+      {compact || (locked && type === 'MARKET') ? null : (
+        <DepthMiniPanel instrument={instrument} live={marketOpen} onPick={pickPrice} />
+      )}
+      {locked ? null : attach}
+    </>
+  );
 
   return (
     <form noValidate aria-label={strings.form.label} onSubmit={onSubmit} className="grid gap-4 p-4">
@@ -227,64 +310,14 @@ export function TicketForm({
         )}
       />
 
-      <div className="grid gap-3 sm:grid-cols-2 [&>*]:min-w-0">
-        <div className="grid gap-1">
-          <span className="text-label text-ink-muted" aria-hidden="true">
-            {strings.form.product}
-          </span>
-          <Controller
-            control={control}
-            name="product"
-            render={({ field }) => (
-              <SegmentedControl
-                label={strings.form.product}
-                size="sm"
-                disabled={locked}
-                value={field.value}
-                onValueChange={field.onChange}
-                options={[
-                  { value: 'DELIVERY', label: strings.form.delivery },
-                  { value: 'INTRADAY', label: strings.form.intraday, disabled: !marketOpen },
-                ]}
-              />
-            )}
-          />
-          {!marketOpen && !locked ? (
-            <p className="text-label text-ink-muted">{strings.form.intradayClosed}</p>
-          ) : null}
+      {phone ? (
+        typeBlock
+      ) : (
+        <div className="grid gap-3 sm:grid-cols-2 [&>*]:min-w-0">
+          {productBlock}
+          {typeBlock}
         </div>
-        {compact ? null : (
-          <div className="grid content-start gap-1">
-            <span className="text-label text-ink-muted" aria-hidden="true">
-              {strings.form.type}
-            </span>
-            <Controller
-              control={control}
-              name="type"
-              render={({ field }) => (
-                <SegmentedControl
-                  label={strings.form.type}
-                  size="sm"
-                  disabled={locked}
-                  value={field.value}
-                  onValueChange={(next) => {
-                    if (next === TRAILING_SL) {
-                      trailing?.onSelect();
-                      return;
-                    }
-                    field.onChange(next);
-                    void trigger('price');
-                  }}
-                  options={orderTypeOptions(trailing)}
-                />
-              )}
-            />
-            {trailing && !trailing.available ? (
-              <p className="text-label text-ink-muted">{strings.trailing.notAvailableHint}</p>
-            ) : null}
-          </div>
-        )}
-      </div>
+      )}
 
       <div className="grid gap-3 sm:grid-cols-2 [&>*]:min-w-0">
         <Controller
@@ -347,11 +380,7 @@ export function TicketForm({
         snapshotLtp={snapshotLtp}
       />
 
-      {compact || (locked && type === 'MARKET') ? null : (
-        <DepthMiniPanel instrument={instrument} live={marketOpen} onPick={pickPrice} />
-      )}
-
-      {locked ? null : attach}
+      {phone ? null : more}
 
       <OrderEstimate
         symbol={instrument.symbol}
@@ -377,7 +406,52 @@ export function TicketForm({
         </div>
       ) : null}
 
-      <div className="grid gap-2">
+      {phone ? (
+        <div className="grid gap-3">
+          <button
+            type="button"
+            aria-expanded={showMore}
+            aria-controls={moreId}
+            disabled={forcedOpen}
+            onClick={() => setMoreOpen((open) => !open)}
+            className="flex min-h-11 items-center justify-between gap-3 rounded-lg border border-line px-3 text-body text-ink focus-visible:outline-2 focus-visible:outline-brand"
+          >
+            <span className="font-medium">{strings.form.moreOptions}</span>
+            <span className="flex items-center gap-2 text-label text-ink-muted">
+              {strings.products[product]}
+              <svg
+                aria-hidden="true"
+                width="12"
+                height="12"
+                viewBox="0 0 12 12"
+                className={cn(
+                  'transition-transform duration-[var(--nth-duration-fast)] motion-reduce:transition-none',
+                  showMore && 'rotate-180',
+                )}
+              >
+                <path
+                  d="M2.5 4.5 6 8l3.5-3.5"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.5"
+                />
+              </svg>
+            </span>
+          </button>
+          <div id={moreId} hidden={!showMore} className="grid gap-4">
+            {showMore ? more : null}
+          </div>
+        </div>
+      ) : null}
+
+      <p className="text-center text-label text-ink-muted">{strings.form.paperNote}</p>
+
+      {/* Pinned to the sheet's foot, so it never scrolls out of reach while the user edits
+          (SPEC-CR-1 §5.5, AC-07). */}
+      <div
+        data-testid="ticket-primary"
+        className="sticky bottom-0 z-10 -mx-4 -mb-4 border-t border-line bg-surface px-4 pt-3 pb-4"
+      >
         <Button
           type="submit"
           size="lg"
@@ -387,7 +461,6 @@ export function TicketForm({
         >
           {submitLabel}
         </Button>
-        <p className="text-center text-label text-ink-muted">{strings.form.paperNote}</p>
       </div>
     </form>
   );

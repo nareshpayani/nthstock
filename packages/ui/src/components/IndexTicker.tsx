@@ -22,6 +22,11 @@ export type IndexTickerProps = {
   changeBasisPoints: number;
   /** Show only the percent change (tight headers); the full change stays in the spoken text. */
   compact?: boolean;
+  /**
+   * Name on its own line above the level and percent (phone headers, SPEC-CR-1 §6.2): about half
+   * the width of one line, so both indices fit beside the status dot from 320 px.
+   */
+  stacked?: boolean;
   className?: string;
 };
 
@@ -35,6 +40,7 @@ export function IndexTicker({
   change,
   changeBasisPoints,
   compact = false,
+  stacked = false,
   className,
 }: IndexTickerProps) {
   const pct = formatChange(changeBasisPoints);
@@ -43,12 +49,32 @@ export function IndexTicker({
   const tone =
     pct.direction === 'up' ? 'text-up' : pct.direction === 'down' ? 'text-down' : 'text-ink-muted';
   const spokenPoints = pct.direction === 'flat' ? 'unchanged' : `${pct.direction} ${points} points`;
+  const spoken = `${name} ${formatIndexLevel(level)}, ${spokenPoints}, ${pct.srLabel}`;
+  if (stacked) {
+    return (
+      <div
+        className={cn('relative flex flex-col whitespace-nowrap leading-tight', className)}
+        data-direction={pct.direction}
+      >
+        <span className="sr-only">{spoken}</span>
+        <span aria-hidden="true" className="text-label font-semibold text-ink-muted">
+          {name}
+        </span>
+        <span aria-hidden="true" className="flex items-baseline gap-1.5">
+          <span className="font-mono text-label font-medium text-ink tabular-nums">
+            {formatIndexLevel(level)}
+          </span>
+          <span className={cn('font-mono text-label tabular-nums', tone)}>{pct.text}</span>
+        </span>
+      </div>
+    );
+  }
   return (
     <div
       className={cn('relative flex items-baseline gap-2 whitespace-nowrap', className)}
       data-direction={pct.direction}
     >
-      <span className="sr-only">{`${name} ${formatIndexLevel(level)}, ${spokenPoints}, ${pct.srLabel}`}</span>
+      <span className="sr-only">{spoken}</span>
       <span aria-hidden="true" className="text-label font-semibold text-ink-muted">
         {name}
       </span>

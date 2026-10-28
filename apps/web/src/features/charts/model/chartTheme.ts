@@ -137,7 +137,8 @@ export const TRADING_INTERACTION = {
     axisPressedMouseMove: { time: true, price: false },
     axisDoubleClickReset: false,
   },
-  rightPriceScale: { minimumWidth: 64 },
+  // Major tick marks on the price axis; the overlay draws the minor ones (SPEC-CR-1 §4.2).
+  rightPriceScale: { minimumWidth: 64, ticksVisible: true },
 } as const satisfies DeepPartial<ChartOptions>;
 
 const toneColor = (direction: ChartDirection) =>

@@ -37,6 +37,7 @@ export function orderLine(
       : strings.order.label(side, open, formatInr(price)),
     description: strings.order.description(side, open, formatInr(price)),
     draggable: !sending,
+    loupe: { kind: 'value', qty: open },
     actions: sending
       ? undefined
       : [

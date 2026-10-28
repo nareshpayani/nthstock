@@ -32,7 +32,6 @@ type Frame = 'page' | 'ticket';
  * What today's flow still gets wrong, measured on 28 Oct 2026 before the craft round, each with the
  * story that fixes it. The story's pull request removes its rows; a row that passes fails the run.
  */
-const PHONES = VIEWPORT_MATRIX.filter((viewport) => viewport.kind === 'phone').map((v) => v.name);
 const KNOWN_GAPS: readonly {
   frame: Frame;
   check: Check;
@@ -49,16 +48,10 @@ const KNOWN_GAPS: readonly {
     story: 'CR-T15',
   },
   {
-    frame: 'page',
-    check: 'tickerFits',
-    viewports: PHONES.filter((name) => !['phone-320x640', 'phone-344x882'].includes(name)),
-    story: 'CR-T14',
-  },
-  {
     frame: 'ticket',
     check: 'primaryAction',
-    viewports: VIEWPORT_MATRIX.map((v) => v.name).filter((name) => name !== 'tablet-820x1180'),
-    story: 'CR-T11',
+    viewports: ['phone-320x640'],
+    story: 'CR-T13',
   },
   {
     frame: 'ticket',

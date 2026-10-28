@@ -171,7 +171,7 @@ export function WatchlistDialogs({
             {strings.dialogs.cancel}
           </Button>
           <Button
-            variant="sell"
+            variant="danger"
             onClick={() => {
               remove.mutate({ id: list.id });
               announce(strings.announce.deleted(list.name));

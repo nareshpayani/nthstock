@@ -104,6 +104,9 @@ test.describe(`journeys US-01 to US-05 (T26) ${JOURNEY_TAG}`, () => {
       await expect(ticket).toBeVisible({ timeout: 1500 });
     }).toPass({ timeout: 15_000 });
     await expect(ticket.getByRole('textbox', { name: 'Price (₹)' })).toHaveValue(limit.toFixed(2));
+    // On a phone the attached stop is behind "More options" (CR-T11).
+    const more = ticket.getByRole('button', { name: /^More options/ });
+    if (await more.isVisible()) await input.press(more);
     await input.press(ticket.getByRole('switch', { name: 'Add trailing stop' }));
     await ticket.getByRole('textbox', { name: 'Trail (%)' }).fill('1');
     await ticket.getByRole('textbox', { name: 'Quantity' }).fill('4');

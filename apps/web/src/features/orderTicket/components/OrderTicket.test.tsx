@@ -368,6 +368,60 @@ describe('order ticket with the market open', () => {
     },
     HEAVY,
   );
+
+  describe('on a phone (CR-T11)', () => {
+    const stubViewport = (phone: boolean) =>
+      vi.stubGlobal('matchMedia', (query: string) => ({
+        matches: phone && query.includes('max-width'),
+        media: query,
+        addEventListener: () => undefined,
+        removeEventListener: () => undefined,
+      }));
+
+    it(
+      'hides product, depth and the stop behind More options, pinning the primary button',
+      async () => {
+        stubViewport(true);
+        await renderTicket(mock.session);
+        const { dialog } = await openTicket();
+        expect(within(dialog).queryByRole('radiogroup', { name: 'Product' })).toBeNull();
+        expect(within(dialog).queryByTestId('attach-trailing')).toBeNull();
+        expect(within(dialog).getByRole('radiogroup', { name: 'Order type' })).toBeInTheDocument();
+
+        const toggle = within(dialog).getByRole('button', { name: /More options/ });
+        expect(toggle).toHaveAttribute('aria-expanded', 'false');
+        expect(toggle).toHaveTextContent('Delivery');
+        fireEvent.click(toggle);
+        expect(toggle).toHaveAttribute('aria-expanded', 'true');
+        expect(within(dialog).getByRole('radiogroup', { name: 'Product' })).toBeInTheDocument();
+        expect(within(dialog).getByTestId('attach-trailing')).toBeInTheDocument();
+
+        // The submit button lives in the pinned footer, and its variant follows the side.
+        const submit = within(within(dialog).getByTestId('ticket-primary')).getByRole('button', {
+          name: /Buy INFY/,
+        });
+        const buyClass = submit.className;
+        fireEvent.click(within(dialog).getByRole('radio', { name: 'Sell' }));
+        const sell = within(within(dialog).getByTestId('ticket-primary')).getByRole('button', {
+          name: /Sell INFY/,
+        });
+        expect(sell.className).not.toBe(buyClass);
+      },
+      HEAVY,
+    );
+
+    it(
+      'shows product inline and no toggle on wider screens',
+      async () => {
+        stubViewport(false);
+        await renderTicket(mock.session);
+        const { dialog } = await openTicket();
+        expect(within(dialog).queryByRole('button', { name: /More options/ })).toBeNull();
+        expect(within(dialog).getByRole('radiogroup', { name: 'Product' })).toBeInTheDocument();
+      },
+      HEAVY,
+    );
+  });
 });
 
 describe('order ticket with the market closed (T-138)', () => {

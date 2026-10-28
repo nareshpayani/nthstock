@@ -14,6 +14,7 @@ describe('marketStatusView (fixed IST clocks)', () => {
     expect(marketStatusView(at(25, 9, 10 * 60))).toEqual({
       tone: 'open',
       label: 'Market open',
+      short: 'Open',
       detail: 'closes 3:30 pm IST',
     });
   });
@@ -22,6 +23,7 @@ describe('marketStatusView (fixed IST clocks)', () => {
     expect(marketStatusView(at(25, 9, 9 * 60 + 5))).toEqual({
       tone: 'preOpen',
       label: 'Pre-open',
+      short: 'Pre-open',
       detail: 'opens today 9:15 am IST',
     });
   });
@@ -34,6 +36,7 @@ describe('marketStatusView (fixed IST clocks)', () => {
     expect(marketStatusView(at(24, 9, 16 * 60))).toEqual({
       tone: 'closed',
       label: 'Market closed',
+      short: 'Closed',
       detail: 'opens tomorrow 9:15 am IST',
     });
   });
@@ -53,15 +56,16 @@ describe('marketStatusView (fixed IST clocks)', () => {
     expect(marketStatusView(at(2, 10, 11 * 60))).toEqual({
       tone: 'holiday',
       label: 'Holiday: Mahatma Gandhi Jayanti',
+      short: 'Holiday',
       detail: 'opens Mon 9:15 am IST',
     });
   });
 });
 
-function renderPill(clock: Clock, { compact = false, alwaysOpen = false } = {}) {
+function renderPill(clock: Clock, { compact = false, dot = false, alwaysOpen = false } = {}) {
   return render(
     <MarketSessionContext.Provider value={{ clock, alwaysOpen }}>
-      <MarketStatusPill compact={compact} />
+      <MarketStatusPill compact={compact} dot={dot} />
     </MarketSessionContext.Provider>,
   );
 }
@@ -97,5 +101,14 @@ describe('MarketStatusPill', () => {
   it('follows the market session clock from context', () => {
     renderPill(at(26, 9, 11 * 60));
     expect(screen.getByRole('status')).toHaveTextContent('Market closed');
+  });
+
+  it('dot shows one word beside the dot and keeps the full state in the label', () => {
+    renderPill(at(24, 9, 16 * 60), { dot: true });
+    const status = screen.getByRole('status', {
+      name: 'NSE market status: Market closed, opens tomorrow 9:15 am IST',
+    });
+    expect(status).toHaveTextContent(/^Closed$/);
+    expect(status).toHaveAttribute('title', 'Market closed · opens tomorrow 9:15 am IST');
   });
 });

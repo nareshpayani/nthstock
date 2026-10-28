@@ -16,6 +16,7 @@ export const strings = {
     listing: (symbol: string, exchange: string) => `${symbol} · ${exchange}`,
   },
   form: {
+    moreOptions: 'More options',
     fillsImmediately: 'This will fill immediately: the price crosses the market.',
     label: 'Order details',
     side: 'Order side',

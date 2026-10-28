@@ -151,6 +151,8 @@ describe('order lines (T16, SPEC-TFC-1 §8.1, §8.3)', () => {
     expect(useOrderDraftStore.getState().draft).toEqual({ orderId: 'ord_1', price: 152_000 });
     expect(handle).toHaveTextContent('Buy 10 @ ₹1,520.00');
     expect(calls).toEqual([]);
+    // The loupe prices the order's open quantity at the new price (CR-T07).
+    expect(screen.getByTestId('chart-loupe')).toHaveTextContent('10 × ₹1,520.00 = ₹15,200.00');
 
     pointer(handle, 'pointerup', 160);
     expect(useOrderDraftStore.getState().draft).toBeNull();
@@ -362,6 +364,8 @@ describe('trailing-stop line (T19, SPEC-TFC-1 §6.5, §6.6, §8.1)', () => {
     pointer(line, 'pointerdown', 244);
     pointer(line, 'pointermove', 234);
     expect(line).toHaveTextContent('Trailing SL ₹1,490.00');
+    // The loupe says what the stop would lose against the ₹1,500.00 average on 10 shares.
+    expect(screen.getByTestId('chart-loupe')).toHaveTextContent('Est. P&L −₹100.00');
     pointer(line, 'pointerup', 234);
     expect(handleFor('stop:ts_1')).toHaveTextContent('Updating… ₹1,490.00');
     const sent = calls.filter((call) => call.route === 'trailingStopModify');

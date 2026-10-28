@@ -1,4 +1,10 @@
 export const strings = {
+  loupe: {
+    atLtp: 'At LTP',
+    fromLtp: (percent: string) => `${percent} from LTP`,
+    value: (qty: string, price: string, total: string) => `${qty} × ${price} = ${total}`,
+    pnl: (pnl: string) => `Est. P&L ${pnl}`,
+  },
   group: (symbol: string) => `Chart orders for ${symbol}`,
   ghost: {
     label: (price: string) => `New order @ ${price}`,

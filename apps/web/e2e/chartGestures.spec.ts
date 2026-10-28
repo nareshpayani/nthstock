@@ -276,6 +276,22 @@ test.describe(`chart gestures by touch (T20, SPEC-TFC-1 §9.1) ${TOUCH_TAG}`, ()
     await page.waitForTimeout(400);
     await finger.move({ x: from.x + 40, y: from.y - 40 }, 8);
     expect(rupees(await line.innerText())).toBeGreaterThan(placed);
+    // The loupe shows the price being set, whole on screen and clear of the finger (CR-T07, AC-03).
+    const loupe = chart.figure.getByTestId('chart-loupe');
+    await expect(loupe).toHaveAttribute('data-shown', 'true');
+    expect(rupees(await loupe.innerText())).toBe(rupees(await line.innerText()));
+    const card = await loupe.boundingBox();
+    const screen = page.viewportSize();
+    if (!card || !screen) throw new Error('no loupe');
+    expect(card.x).toBeGreaterThanOrEqual(0);
+    expect(card.x + card.width).toBeLessThanOrEqual(screen.width);
+    const thumb = { x: from.x + 40, y: from.y - 40 };
+    const covers =
+      thumb.x >= card.x &&
+      thumb.x <= card.x + card.width &&
+      thumb.y >= card.y &&
+      thumb.y <= card.y + card.height;
+    expect(covers).toBe(false);
     // No crosshair date label, no pan and no page scroll while the line is held.
     expect((await chart.timeAxis()).equals(axis)).toBe(true);
     expect(await page.evaluate(() => window.scrollY)).toBe(scrolled);
