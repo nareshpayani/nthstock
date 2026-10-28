@@ -1,32 +1,38 @@
 import type { Candle } from '@nthstock/contracts';
 import {
   AreaSeries,
+  BarSeries,
   CandlestickSeries,
+  LineSeries,
   createChart,
-  type CandlestickData,
+  type BarData,
   type IChartApi,
   type LineData,
   type ISeriesApi,
   type MouseEventParams,
   type Time,
+  type UTCTimestamp,
 } from 'lightweight-charts';
 import { cn } from '@nthstock/ui';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { toAreaData, toCandleData } from '../model/chartData';
+import { toAreaData, toCandleData, toChartTime, toHeikinAshi } from '../model/chartData';
 import { trailingChanges } from '../model/liveCandles';
 import type { ChartDirection, ChartValueFormat } from '../model/chartFormat';
 import {
   TRADING_INTERACTION,
   areaSeriesOptions,
+  barSeriesOptions,
   candleSeriesOptions,
   chartOptions,
+  lineSeriesOptions,
 } from '../model/chartTheme';
+import { isBarType, type PriceChartType } from '../model/chartTypes';
 import { tooltipContent, type HoveredItem } from '../model/chartTooltip';
 import { ChartTooltip, type ChartTooltipState } from './ChartTooltip';
 
 export type PriceChartCanvasProps = {
   candles: readonly Candle[];
-  type: 'area' | 'candle';
+  type: PriceChartType;
   format: ChartValueFormat;
   direction: ChartDirection;
   intraday: boolean;
@@ -42,7 +48,38 @@ export type PriceChartCanvasProps = {
   onReady?: ((handle: ChartHandle | null) => void) | undefined;
 };
 
-type AnySeries = ISeriesApi<'Area'> | ISeriesApi<'Candlestick'>;
+type AnySeries =
+  ISeriesApi<'Area'> | ISeriesApi<'Line'> | ISeriesApi<'Candlestick'> | ISeriesApi<'Bar'>;
+
+function addSeries(chart: IChartApi, type: PriceChartType, format: ChartValueFormat): AnySeries {
+  switch (type) {
+    case 'line':
+      return chart.addSeries(LineSeries, lineSeriesOptions('flat', format));
+    case 'candle':
+    case 'heikin':
+      return chart.addSeries(CandlestickSeries, candleSeriesOptions(format));
+    case 'bar':
+      return chart.addSeries(BarSeries, barSeriesOptions(format));
+    default:
+      return chart.addSeries(AreaSeries, areaSeriesOptions('flat', format));
+  }
+}
+
+/** The series' points for a type: closes for line and area, bars (or Heikin-Ashi) otherwise. */
+function seriesData(
+  type: PriceChartType,
+  candles: readonly Candle[],
+): (LineData<UTCTimestamp> | BarData<UTCTimestamp>)[] {
+  if (type === 'heikin') return toCandleData(toHeikinAshi(candles));
+  return isBarType(type) ? toCandleData(candles) : toAreaData(candles);
+}
+
+function reducedMotion(): boolean {
+  return (
+    typeof window.matchMedia === 'function' &&
+    window.matchMedia('(prefers-reduced-motion: reduce)').matches
+  );
+}
 
 /** What an overlay needs to draw on the chart: the chart, its one series, and the host element. */
 export type ChartHandle = { chart: IChartApi; series: AnySeries; host: HTMLElement };
@@ -67,6 +104,10 @@ export function PriceChartCanvas({
   const chartRef = useRef<IChartApi | null>(null);
   const seriesRef = useRef<AnySeries | null>(null);
   const drawnRef = useRef<{ series: AnySeries; candles: readonly Candle[] } | null>(null);
+  // The real bars by time, so the Heikin-Ashi tooltip shows traded prices, not smoothed ones.
+  const realRef = useRef<ReadonlyMap<number, Candle>>(new Map());
+  // The type last drawn, so a switch (not the first draw) cross-fades in.
+  const builtTypeRef = useRef<PriceChartType | null>(null);
   const [hover, setHover] = useState<ChartTooltipState | null>(null);
   // Kept in a ref so a new callback identity never rebuilds the chart.
   const onReadyRef = useRef(onReady);
@@ -90,10 +131,13 @@ export function PriceChartCanvas({
       height,
     });
     chartRef.current = chart;
-    seriesRef.current =
-      type === 'candle'
-        ? chart.addSeries(CandlestickSeries, candleSeriesOptions(format))
-        : chart.addSeries(AreaSeries, areaSeriesOptions('flat', format));
+    seriesRef.current = addSeries(chart, type, format);
+    // A new chart type fades in over 160 ms (NSTOCK-0430); the overlay above it does not move.
+    const switched = builtTypeRef.current !== null && builtTypeRef.current !== type;
+    builtTypeRef.current = type;
+    if (switched && !reducedMotion() && typeof host.animate === 'function') {
+      host.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 160, easing: 'ease-out' });
+    }
 
     const observer = new ResizeObserver((entries) => {
       const width = entries[0]?.contentRect.width;
@@ -103,9 +147,12 @@ export function PriceChartCanvas({
 
     const series = seriesRef.current;
     const onCrosshairMove = (param: MouseEventParams<Time>) => {
-      const item = param.point && param.time ? param.seriesData.get(series) : undefined;
-      const content =
-        item && param.point ? tooltipContent(item as HoveredItem, { format, intraday }) : null;
+      const drawn = param.point && param.time ? param.seriesData.get(series) : undefined;
+      const real = type === 'heikin' && drawn ? realRef.current.get(Number(drawn.time)) : undefined;
+      const item: HoveredItem | undefined = real
+        ? { time: drawn?.time as Time, open: real.o, high: real.h, low: real.l, close: real.c }
+        : (drawn as HoveredItem | undefined);
+      const content = item && param.point ? tooltipContent(item, { format, intraday }) : null;
       setHover(
         content && param.point ? { ...content, x: param.point.x, width: host.clientWidth } : null,
       );
@@ -132,27 +179,28 @@ export function PriceChartCanvas({
     // A live tick (T-108) changes or appends only the last bar: update it in place, so the chart
     // keeps its scroll and zoom and does not redraw every bar four times a second.
     const changes = drawn?.series === series ? trailingChanges(drawn.candles, candles) : null;
+    if (type === 'heikin') {
+      realRef.current = new Map(candles.map((candle) => [toChartTime(candle.t), candle]));
+    }
+    const points = seriesData(type, candles);
+    // The library's setData and update take the series' own point type; the switch above made
+    // `points` match this series, which TypeScript cannot follow through the union.
+    const target = series as ISeriesApi<'Bar'> & ISeriesApi<'Line'>;
     if (changes) {
-      for (const bar of changes) {
-        if (series.seriesType() === 'Candlestick') {
-          (series as ISeriesApi<'Candlestick'>).update(toCandleData([bar])[0] as CandlestickData);
-        } else {
-          (series as ISeriesApi<'Area'>).update(toAreaData([bar])[0] as LineData);
-        }
+      // Heikin-Ashi bar i depends only on bars 0..i, so the changed tail is the HA tail too.
+      for (const point of points.slice(points.length - changes.length)) {
+        target.update(point as BarData & LineData);
       }
       return;
     }
-    if (series.seriesType() === 'Candlestick') {
-      (series as ISeriesApi<'Candlestick'>).setData(toCandleData(candles));
-    } else {
-      (series as ISeriesApi<'Area'>).setData(toAreaData(candles));
-    }
+    target.setData(points as (BarData & LineData)[]);
     chartRef.current?.timeScale().fitContent();
   }, [candles, type, format, intraday, height, tooltip, interactive]);
 
   useEffect(() => {
     const series = seriesRef.current;
     if (series?.seriesType() === 'Area') series.applyOptions(areaSeriesOptions(direction, format));
+    if (series?.seriesType() === 'Line') series.applyOptions(lineSeriesOptions(direction, format));
   }, [direction, format, type, intraday, height]);
 
   // `isolate` keeps the library's z-indexed canvases below an overlay drawn after the chart.

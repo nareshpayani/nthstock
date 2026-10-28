@@ -28,11 +28,26 @@ export const strings = {
     typeLabel: 'Chart type',
     intervalLabel: 'Bar size',
     intervalOption: (bars: string) => `${bars} bars`,
-    types: { area: 'Area', candle: 'Candles' },
+    types: { line: 'Line', area: 'Area', candle: 'Candles', bar: 'OHLC', heikin: 'Heikin-Ashi' },
+    /** Each type's tooltip and the menu's description line (NSTOCK-0430). */
+    typeHints: {
+      line: 'Closing prices joined by a line',
+      area: 'Closing prices with the area below shaded',
+      candle: 'Open, high, low and close; rising bars hollow, falling bars filled',
+      bar: 'Open tick left, close tick right, high to low',
+      heikin:
+        'Smoothed candles that show the trend. Not traded prices; the tooltip shows the real ones',
+    },
     /** `bars` only when the reader picked a bar size other than the range's own. */
     label: (symbol: string, type: string, range: string, bars?: string) =>
       `${symbol} ${type} chart over ${range}${bars ? `, ${bars} bars` : ''}`,
-    typeNames: { area: 'area', candle: 'candlestick' },
+    typeNames: {
+      line: 'line',
+      area: 'area',
+      candle: 'candlestick',
+      bar: 'OHLC bar',
+      heikin: 'Heikin-Ashi (smoothed)',
+    },
     loading: 'Loading chart',
     errorTitle: 'Chart unavailable',
     errorBody: 'The price chart could not load.',
