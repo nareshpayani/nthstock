@@ -1,10 +1,10 @@
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import { Profiler, useState } from 'react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ChartHandle } from '@/features/charts';
 import { AreaSeries, chartsMock, createChart } from '@/test/chartsMock';
 import type { OverlayLine } from '../model/overlayLine';
-import { ChartOverlay, nearestLine } from './ChartOverlay';
+import { ChartOverlay, DRAG_HINT_KEY, nearestLine } from './ChartOverlay';
 
 const haptics = vi.hoisted(() => ({ haptic: vi.fn(() => true) }));
 vi.mock('@/shared/motion/haptics', () => haptics);
@@ -46,7 +46,12 @@ const handleY = (id: string) =>
       ?.getAttribute('data-y'),
   );
 
+// The first-run hint has its own tests; elsewhere it has been seen.
+beforeEach(() => {
+  window.localStorage.setItem(DRAG_HINT_KEY, '1');
+});
 afterEach(() => {
+  window.localStorage.removeItem(DRAG_HINT_KEY);
   chartsMock.reset();
   haptics.haptic.mockClear();
 });
@@ -780,6 +785,59 @@ describe('chart overlay (T15, SPEC-TFC-1 §10.5)', () => {
         expect(drawnPrice()).toBe(150_000);
         expect(frames).toHaveLength(0);
       });
+    });
+  });
+  describe('the first-run drag hint (CR-T20, SPEC-CR-1 §5.7)', () => {
+    beforeEach(() => {
+      window.localStorage.removeItem(DRAG_HINT_KEY);
+    });
+    const renderLines = (lines: OverlayLine[]) =>
+      render(
+        <ChartOverlay handle={makeHandle()} tickSize={5} label="Chart orders" lines={lines} />,
+      );
+    const hint = () => screen.queryByTestId('chart-drag-hint');
+
+    it('shows once beside the first draggable line, nudging its tab, and is part of its description', () => {
+      renderLines([
+        line({ id: 'pos', price: 152_000, tone: 'position', draggable: false }),
+        line({ id: 'o1', price: 150_000 }),
+      ]);
+      expect(hint()).toHaveTextContent('Drag the line to change the price');
+      const handle = screen.getByRole('button', { name: 'Buy @ 150000' });
+      expect(handle).toHaveAccessibleDescription(
+        'Buy limit at 150000 Drag the line to change the price',
+      );
+      const tab = handle.querySelector('[data-testid="chart-tab"]');
+      expect(tab?.className).toContain('animate-drag-hint');
+      expect(tab?.className).toContain('motion-reduce:animate-none');
+    });
+
+    it('is not shown without a draggable line', () => {
+      renderLines([line({ id: 'pos', price: 150_000, tone: 'position', draggable: false })]);
+      expect(hint()).not.toBeInTheDocument();
+    });
+
+    it('goes away for good on any press on the chart', () => {
+      const { unmount } = renderLines([line({ id: 'o1', price: 150_000 })]);
+      const area = screen.getByTestId('chart-overlay').parentElement;
+      if (!area) throw new Error('no chart area');
+      act(() => {
+        pointer(area, 'pointerdown', 50);
+      });
+      expect(hint()).not.toBeInTheDocument();
+      expect(window.localStorage.getItem(DRAG_HINT_KEY)).toBe('1');
+      unmount();
+      renderLines([line({ id: 'o1', price: 150_000 })]);
+      expect(hint()).not.toBeInTheDocument();
+    });
+
+    it('goes away on an arrow key on a line, not on Tab', () => {
+      renderLines([line({ id: 'o1', price: 150_000 })]);
+      const handle = screen.getByRole('button', { name: 'Buy @ 150000' });
+      fireEvent.keyDown(handle, { key: 'Tab' });
+      expect(hint()).toBeInTheDocument();
+      fireEvent.keyDown(handle, { key: 'ArrowUp' });
+      expect(hint()).not.toBeInTheDocument();
     });
   });
 });
