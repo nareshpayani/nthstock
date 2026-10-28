@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | Document | PLAN-CR-1 |
-| Version | 1.0 (draft for owner approval) |
+| Version | 1.1 (issues created) |
 | Date | 2026-10-28 |
 | Product owner and approver | Naresh Payani |
 | Specification | [SPEC-CR-1](craft-round.md) |
@@ -17,8 +17,17 @@ request into `develop` with several focused commits (one per step, so the histor
 work progressed), reviewed automatically and squash-merged. Production is promoted after each epic,
 so the live URL improves in steps and is never broken.
 
-Story IDs (CR-T01 to CR-T24) become NSTOCK keys when the issues are created after approval; the
-mapping is recorded here then.
+Story IDs map to GitHub issues as below (created 2026-10-28; the spec issue is NSTOCK-0397, #603).
+Each story is a sub-issue of its epic. CR-T*nn* is NSTOCK-0(403 + *nn*), issue #(610 + *nn*).
+
+| Epic | Issue | Stories |
+|---|---|---|
+| CR-A | NSTOCK-0398 #605 | CR-T01 NSTOCK-0404 #611, CR-T02 NSTOCK-0405 #612, CR-T03 NSTOCK-0406 #613, CR-T04 NSTOCK-0407 #614 |
+| CR-B | NSTOCK-0399 #606 | CR-T05 NSTOCK-0408 #615, CR-T06 NSTOCK-0409 #616, CR-T07 NSTOCK-0410 #617, CR-T08 NSTOCK-0411 #618, CR-T09 NSTOCK-0412 #619 |
+| CR-C | NSTOCK-0400 #607 | CR-T10 NSTOCK-0413 #620, CR-T11 NSTOCK-0414 #621, CR-T12 NSTOCK-0415 #622 |
+| CR-D | NSTOCK-0401 #608 | CR-T13 NSTOCK-0416 #623, CR-T14 NSTOCK-0417 #624, CR-T15 NSTOCK-0418 #625, CR-T16 NSTOCK-0419 #626 |
+| CR-E | NSTOCK-0402 #609 | CR-T17 NSTOCK-0420 #627, CR-T18 NSTOCK-0421 #628, CR-T19 NSTOCK-0422 #629, CR-T20 NSTOCK-0423 #630 |
+| CR-F | NSTOCK-0403 #610 | CR-T21 NSTOCK-0424 #631, CR-T22 NSTOCK-0425 #632, CR-T23 NSTOCK-0426 #633, CR-T24 NSTOCK-0427 #634 |
 
 ## 2. Milestones
 
