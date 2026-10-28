@@ -9,7 +9,12 @@ import { devProxy } from './src/app/config/devProxy.ts';
 import { parseRuntimeConfig, type ApiMode } from './src/app/config/runtimeConfig.ts';
 import { webSecurityHeaders } from './src/app/config/securityHeaders.ts';
 
-/** Adds <link rel="preload"> for every self-hosted woff2 font in the production bundle (T-010). */
+/**
+ * Adds <link rel="preload"> for the body face, IBM Plex Sans 400, in the production bundle (T-010).
+ * The other weights and Plex Mono load on use: their metric-matched fallbacks (CR-T19) keep the
+ * swap from shifting text, and on a slow phone network they would otherwise compete with the
+ * entry script for the first second.
+ */
 function preloadFonts(): Plugin {
   return {
     name: 'nthstock:preload-fonts',
@@ -17,7 +22,9 @@ function preloadFonts(): Plugin {
     transformIndexHtml: {
       order: 'post',
       handler(_html, ctx) {
-        const fonts = Object.keys(ctx.bundle ?? {}).filter((file) => file.endsWith('.woff2'));
+        const fonts = Object.keys(ctx.bundle ?? {}).filter((file) =>
+          /ibm-plex-sans-latin-400-normal.*\.woff2$/.test(file),
+        );
         return fonts.map((file) => ({
           tag: 'link',
           attrs: {
