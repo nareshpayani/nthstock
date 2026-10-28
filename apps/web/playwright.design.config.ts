@@ -5,8 +5,8 @@ import { defineConfig, devices } from '@playwright/test';
 // and a phone recording of the flow. Runs against DESIGN_BASE_URL, a local `vite preview` of an
 // msw-mode build with the mock market open:
 //
-//   VITE_API_MODE=msw VITE_MOCK_MARKET_OPEN=true npx vite build --outDir dist-design
-//   npx vite preview --outDir dist-design --port 4190 &
+//   VITE_API_MODE=msw VITE_MOCK_MARKET_OPEN=true npx vite build --outDir dist-e2e-design
+//   npx vite preview --outDir dist-e2e-design --port 4190 &
 //   DESIGN_OUT=../../docs/design/before npx playwright test -c playwright.design.config.ts
 //
 // Not part of CI: it records, it does not gate.
