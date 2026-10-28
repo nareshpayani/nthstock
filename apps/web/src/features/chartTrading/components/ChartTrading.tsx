@@ -11,6 +11,7 @@ import { formatInr } from '@nthstock/utils';
 import { useEffect, useRef, useState } from 'react';
 import type { ChartHandle } from '@/features/charts';
 import { livePosition } from '@/features/positions';
+import { haptic } from '@/shared/motion/haptics';
 import { useOpenTicket } from '@/shared/hooks/useOpenTicket';
 import { useQuote } from '@/shared/hooks/useQuote';
 import { usePendingOrderPrices } from '@/shared/hooks/usePendingOrderPrices';
@@ -170,12 +171,14 @@ export function ChartTrading({ handle, instrument }: ChartTradingProps) {
           description: strings.order.modifiedBody(...describe(modified, modified.price ?? price)),
           tone: 'success',
         }),
-      (error: unknown) =>
+      (error: unknown) => {
+        haptic('reject');
         toast.show({
           title: strings.order.modifyFailed,
           description: actionErrorText(error),
           tone: 'error',
-        }),
+        });
+      },
     );
   };
 
@@ -220,6 +223,7 @@ export function ChartTrading({ handle, instrument }: ChartTradingProps) {
     }
     if (stopTriggersNow(stop.direction, ltp, price)) {
       setStopMove(null);
+      haptic('reject');
       toast.show({
         title: strings.stop.moveFailed,
         description: TRAILING_STOP_MESSAGES.stopWouldTrigger,
@@ -240,12 +244,14 @@ export function ChartTrading({ handle, instrument }: ChartTradingProps) {
             ),
             tone: 'success',
           }),
-        (error: unknown) =>
+        (error: unknown) => {
+          haptic('reject');
           toast.show({
             title: strings.stop.moveFailed,
             description: actionErrorText(error),
             tone: 'error',
-          }),
+          });
+        },
       )
       .finally(() => setStopMove((current) => (current?.id === stop.id ? null : current)));
   };

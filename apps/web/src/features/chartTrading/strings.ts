@@ -1,4 +1,10 @@
 export const strings = {
+  drag: {
+    started: (label: string, price: string) =>
+      `Moving ${label}. Now ${price}. Release to save, a second finger or Escape cancels.`,
+    released: (price: string) => `Released at ${price}. Saving.`,
+    cancelled: 'Move cancelled. The line is back where it was.',
+  },
   loupe: {
     atLtp: 'At LTP',
     fromLtp: (percent: string) => `${percent} from LTP`,

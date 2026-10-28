@@ -1,5 +1,6 @@
 import { colors } from '@nthstock/tokens';
 import { cn } from '@nthstock/ui';
+import { formatInr } from '@nthstock/utils';
 import type { IPriceLine } from 'lightweight-charts';
 import {
   useEffect,
@@ -10,6 +11,7 @@ import {
   type PointerEvent as ReactPointerEvent,
 } from 'react';
 import { withAlpha, type ChartHandle } from '@/features/charts';
+import { haptic } from '@/shared/motion/haptics';
 import { animateSpring } from '@/shared/motion/spring';
 import { prefersReducedMotion } from '@/shared/motion/useReducedMotion';
 import { lockChart } from '../lib/chartLock';
@@ -31,6 +33,7 @@ import { byPriority, type LineAction, type OverlayLine } from '../model/overlayL
 import { loupeText, placeLoupe } from '../model/loupe';
 import { layoutHandles, snapToTick } from '../model/overlayLayout';
 import { railStep, railTicks } from '../model/priceRail';
+import { strings } from '../strings';
 
 export type ChartOverlayProps = {
   handle: ChartHandle;
@@ -64,6 +67,7 @@ type Elements = {
   gutter: HTMLElement | null;
   rail: HTMLCanvasElement | null;
   root: HTMLElement | null;
+  live: HTMLElement | null;
   loupe: {
     card: HTMLElement;
     price: HTMLElement;
@@ -133,6 +137,7 @@ export function ChartOverlay({
     gutter: null,
     rail: null,
     root: null,
+    live: null,
     loupe: null,
     layer: null,
   });
@@ -222,7 +227,43 @@ export function ChartOverlay({
     drawn?.line.applyOptions({ price: drawn.price });
   };
 
+  // Says what a drag did, for screen readers (CR-T08); written to the live region, no render.
+  const announce = (message: string) => {
+    const region = elementsRef.current.live;
+    if (region) region.textContent = message;
+  };
+
+  // Haptics and words for each step of a drag (SPEC-CR-1 §5.4, CR-T08): a light impact when the
+  // line is picked up, a selection tick per price step, a stronger one crossing the LTP, success
+  // on release. A rejected save is the caller's to signal.
+  const feedback = (
+    before: HandleGesture,
+    step: { gesture: HandleGesture; effect: GestureEffect },
+  ) => {
+    const { effect } = step;
+    const line = (id: string) => latestRef.current.lines.find((candidate) => candidate.id === id);
+    if (effect.kind === 'move') {
+      const last = lastMoveRef.current?.id === effect.id ? lastMoveRef.current.price : null;
+      if (before.phase === 'pressed') {
+        haptic('grab');
+        const held = line(effect.id);
+        if (held) announce(strings.drag.started(held.label, formatInr(effect.price)));
+        return;
+      }
+      if (last === null || last === effect.price) return;
+      const { ltp: mark } = latestRef.current;
+      const crossed = mark !== undefined && last < mark !== effect.price < mark;
+      haptic(crossed ? 'crossLtp' : 'tick');
+    } else if (effect.kind === 'commit') {
+      haptic('commit');
+      announce(strings.drag.released(formatInr(effect.price)));
+    } else if (effect.kind === 'cancel') {
+      announce(strings.drag.cancelled);
+    }
+  };
+
   const apply = (step: { gesture: HandleGesture; effect: GestureEffect }) => {
+    feedback(gestureRef.current, step);
     gestureRef.current = step.gesture;
     if (step.gesture.phase === 'idle') unlock();
     hold(step.gesture.phase === 'idle' ? null : step.gesture.id);
@@ -668,6 +709,14 @@ export function ChartOverlay({
           </div>
         ))}
       </div>
+      <div
+        ref={(element) => {
+          elementsRef.current.live = element;
+        }}
+        role="status"
+        data-testid="chart-drag-status"
+        className="sr-only"
+      />
       {/* Shown only while a line is dragged; the live region says the same in words (CR-T08). */}
       <div
         ref={(card) => {
