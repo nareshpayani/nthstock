@@ -33,6 +33,8 @@ export type IndexChartCardProps = {
 const CHART_HEIGHT = 260;
 /** A press that moves less than this, in px, is a tap that opens the chart page, not a pan. */
 const TAP_SLOP = 6;
+/** A press held longer than this, in ms, is a look at the crosshair, not a tap. */
+const TAP_MAX_MS = 300;
 
 /**
  * NIFTY 50 chart card (T-095): the live level and day change, an area chart of the chosen range
@@ -44,23 +46,40 @@ export function IndexChartCard({ range, onRangeChange }: IndexChartCardProps) {
   const api = useApiClient();
   const navigate = useNavigate();
   const [chart, setChart] = useState<ChartHandle | null>(null);
-  const pressRef = useRef<{ id: number; x: number; y: number } | null>(null);
+  const pressRef = useRef<{ id: number; x: number; y: number; at: number } | null>(null);
+  // Fingers down on the plot: a second one makes it a pinch, never a tap.
+  const pointersRef = useRef(new Set<number>());
   const openChart = () =>
-    void navigate({
+    navigate({
       to: '/stocks/$symbol',
       params: { symbol: NIFTY.symbol },
       search: { exchange: NIFTY.exchange, range },
+    }).catch((error: unknown) => {
+      console.error('Opening the NIFTY 50 page failed', error);
     });
+  // On the price axis a press is the chart's own (it scales prices), never a tap.
+  const onPriceAxis = (event: PointerEvent<HTMLDivElement>) => {
+    const axis = chart?.chart.priceScale('right').width() ?? 0;
+    return event.clientX >= event.currentTarget.getBoundingClientRect().right - axis;
+  };
   const onPointerDown = (event: PointerEvent<HTMLDivElement>) => {
-    if (event.button !== 0) return;
-    pressRef.current = { id: event.pointerId, x: event.clientX, y: event.clientY };
+    pointersRef.current.add(event.pointerId);
+    pressRef.current =
+      event.button === 0 && pointersRef.current.size === 1 && !onPriceAxis(event)
+        ? { id: event.pointerId, x: event.clientX, y: event.clientY, at: performance.now() }
+        : null;
   };
   const onPointerUp = (event: PointerEvent<HTMLDivElement>) => {
+    pointersRef.current.delete(event.pointerId);
     const press = pressRef.current;
     pressRef.current = null;
     if (!press || press.id !== event.pointerId) return;
     const moved = Math.hypot(event.clientX - press.x, event.clientY - press.y);
-    if (moved <= TAP_SLOP) openChart();
+    if (moved <= TAP_SLOP && performance.now() - press.at <= TAP_MAX_MS) void openChart();
+  };
+  const onPointerCancel = (event: PointerEvent<HTMLDivElement>) => {
+    pointersRef.current.delete(event.pointerId);
+    pressRef.current = null;
   };
   const zoom = (steps: number) => {
     const timeScale = chart?.chart.timeScale();
@@ -78,6 +97,7 @@ export function IndexChartCard({ range, onRangeChange }: IndexChartCardProps) {
   return (
     <Card
       // The LIVE badge sits beside the heading, not in it, so the section is named "NIFTY 50".
+      // The title is the keyboard path to the NIFTY 50 page; the plot's tap is for pointers.
       title={
         <Link
           to="/stocks/$symbol"
@@ -149,7 +169,7 @@ export function IndexChartCard({ range, onRangeChange }: IndexChartCardProps) {
             className="cursor-pointer"
             onPointerDown={onPointerDown}
             onPointerUp={onPointerUp}
-            onPointerCancel={() => (pressRef.current = null)}
+            onPointerCancel={onPointerCancel}
           >
             <PriceChart
               candles={candles.data.candles}

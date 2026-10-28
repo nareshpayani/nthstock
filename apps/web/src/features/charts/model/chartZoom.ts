@@ -5,6 +5,8 @@ export type LogicalRange = { from: number; to: number };
 export const ZOOM_STEP = 1.5;
 /** Zooming in stops at this many bars on screen. */
 const MIN_BARS = 10;
+/** Zooming out stops at this many bars on screen. */
+const MAX_BARS = 2_000;
 
 /**
  * The visible range after `steps` zoom steps (positive zooms in), keeping the right edge, the latest
@@ -12,6 +14,10 @@ const MIN_BARS = 10;
  */
 export function zoomedLogicalRange(range: LogicalRange, steps: number): LogicalRange {
   const span = range.to - range.from;
-  const next = Math.max(MIN_BARS, span / ZOOM_STEP ** steps);
+  // Never past the limits, and never the wrong way: zoom in on fewer than ten bars stays put.
+  const next = Math.min(
+    Math.max(span, MAX_BARS),
+    Math.max(Math.min(span, MIN_BARS), span / ZOOM_STEP ** steps),
+  );
   return { from: range.to - next, to: range.to };
 }

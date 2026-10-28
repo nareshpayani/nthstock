@@ -39,7 +39,7 @@ export type PriceChartCanvasProps = {
   height: number;
   /** Show the crosshair tooltip (IST time and ₹ values of the hovered bar). */
   tooltip?: boolean;
-  /** Pan and pinch for a chart you trade from (SPEC-TFC-1 §10.5); the default chart is static. */
+  /** Pan and zoom (SPEC-TFC-1 §10.5); a chart is static without it. */
   interactive?: boolean;
   /**
    * The chart and its series once created, for an overlay that draws on it (T15); null when they
