@@ -22,6 +22,8 @@ export type StockHeaderProps = {
   onExchangeChange: (exchange: Exchange) => void;
   /** The phone layout (T12): Buy and Sell move to the bottom bar, controls grow to 44 px. */
   phone?: boolean;
+  /** A phone in landscape (SPEC-CR-1 §6.2): name, price, change and exchange on one line. */
+  oneLine?: boolean;
 };
 
 /**
@@ -36,6 +38,7 @@ export function StockHeader({
   onRetry,
   onExchangeChange,
   phone = false,
+  oneLine = false,
 }: StockHeaderProps) {
   const { symbol, exchange, type } = instrument;
   const format = type === 'INDEX' ? 'index' : 'inr';
@@ -88,7 +91,7 @@ export function StockHeader({
       <div
         className={cn(
           'min-w-0',
-          phone
+          phone && !oneLine
             ? 'grid justify-items-start gap-1'
             : 'flex flex-wrap items-baseline gap-x-3 gap-y-1',
         )}
@@ -121,6 +124,25 @@ export function StockHeader({
         ) : null}
       </div>
     );
+
+  if (phone && oneLine) {
+    return (
+      <div className="flex min-w-0 items-center gap-3" data-part="price-block">
+        <div className="grid min-w-0 shrink">
+          <h1 className="truncate text-lg font-semibold text-ink">{instrument.name}</h1>
+          <p className="truncate font-mono text-label font-medium text-ink">{symbol}</p>
+        </div>
+        <div className="min-w-0 flex-1">{price}</div>
+        <div className="shrink-0">{exchangeControl}</div>
+        {type === 'EQUITY' ? (
+          <div className="flex shrink-0">
+            <PriceAlertButton symbol={symbol} exchange={exchange} />
+            <WatchlistStar instrument={instrument} />
+          </div>
+        ) : null}
+      </div>
+    );
+  }
 
   if (phone) {
     // The phone price block (SPEC-CR-1 §6.1, 72 to 110 px): no card chrome, the name and symbol

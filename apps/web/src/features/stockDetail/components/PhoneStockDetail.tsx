@@ -4,7 +4,8 @@ import { useId, useState, useSyncExternalStore, type ReactNode } from 'react';
 import { keepInterval } from '@/features/charts';
 import { ScalperPad } from '@/features/scalper';
 import { useOpenTicket } from '@/shared/hooks/useOpenTicket';
-import { phoneChartHeight } from '@/shared/lib/phoneChart';
+import { useLandscapePhone } from '@/shared/hooks/usePhoneLayout';
+import { landscapeChartHeight, phoneChartHeight } from '@/shared/lib/phoneChart';
 import { DEFAULT_STOCK_RANGE, type StockDetailSearch } from '../model/stockDetailSearch';
 import { rememberChartType, rememberedChartType } from '../model/chartTypePreference';
 import { strings } from '../strings';
@@ -43,7 +44,8 @@ export type PhoneStockDetailProps = {
  * desktop: the header, the chart at about half the screen with its range row, then Overview,
  * Depth and Orders tabs (the Demo simulator above them in demo mode), and at the bottom the position strip and a sticky Sell and Buy bar in
  * thumb reach, above the safe area. Every control is at least 44 px. Equities only; indices keep
- * the header and chart.
+ * the header and chart. Turned sideways the price block is one line and the chart fills the height
+ * between the app bar and the dock (SPEC-CR-1 §6.2).
  */
 export function PhoneStockDetail({
   instrument,
@@ -56,6 +58,13 @@ export function PhoneStockDetail({
 }: PhoneStockDetailProps) {
   const [tab, setTab] = useState<PhoneTab>('overview');
   const height = useSyncExternalStore(subscribeResize, viewportHeight, () => 800);
+  const landscape = useLandscapePhone();
+  const chartHeight =
+    height > 0
+      ? landscape
+        ? landscapeChartHeight(height)
+        : phoneChartHeight(height)
+      : CHART_HEIGHT;
   const openTicket = useOpenTicket();
   const { symbol, exchange } = instrument;
   const trade = (side: OrderSide) => {
@@ -91,7 +100,7 @@ export function PhoneStockDetail({
     <TouchTargets>
       <div
         className="mx-auto grid w-full animate-content-in grid-cols-[minmax(0,1fr)] gap-3"
-        data-layout="phone"
+        data-layout={landscape ? 'landscape' : 'phone'}
       >
         <StockHeader
           instrument={instrument}
@@ -100,6 +109,7 @@ export function PhoneStockDetail({
           {...(onRetrySnapshot ? { onRetry: onRetrySnapshot } : {})}
           onExchangeChange={(next) => onSearchChange({ exchange: next })}
           phone
+          oneLine={landscape}
         />
         {section(
           strings.chart.title,
@@ -116,7 +126,7 @@ export function PhoneStockDetail({
               rememberChartType(chart);
               onSearchChange({ chart });
             }}
-            height={height > 0 ? phoneChartHeight(height) : CHART_HEIGHT}
+            height={chartHeight}
             controls="touch"
             trading
           />,

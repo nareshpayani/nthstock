@@ -27,7 +27,7 @@ export function TrailingParamsFields({
 }: TrailingParamsFieldsProps) {
   return (
     <>
-      <div className="grid gap-3 sm:grid-cols-2 [&>*]:min-w-0">
+      <div className="grid gap-3 @min-[440px]:grid-cols-2 [&>*]:min-w-0">
         <div className="grid content-start gap-1">
           <span className="text-label text-ink-muted" aria-hidden="true">
             {strings.trailing.unit}
@@ -85,7 +85,7 @@ export function TrailingParamsFields({
             />
           </Field>
 
-          <div className="grid gap-3 sm:grid-cols-2 [&>*]:min-w-0">
+          <div className="grid gap-3 @min-[440px]:grid-cols-2 [&>*]:min-w-0">
             <div className="grid content-start gap-1">
               <span className="text-label text-ink-muted" aria-hidden="true">
                 {strings.trailing.exitType}

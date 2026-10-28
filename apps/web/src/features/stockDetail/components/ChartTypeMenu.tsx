@@ -6,6 +6,7 @@ import {
   DropdownMenuTrigger,
   IconChevronDown,
   cn,
+  useTouchTargets,
 } from '@nthstock/ui';
 import { CHART_TYPES, type ChartType } from '../model/stockDetailSearch';
 import { strings } from '../strings';
@@ -79,7 +80,13 @@ export type ChartTypeMenuProps = {
  * opening a menu of all five with a line on what each shows. A menu, not five segments, so it fits
  * beside the bar size on a 320 px phone and beside the ranges on desktop.
  */
-export function ChartTypeMenu({ value, onValueChange, touch = false }: ChartTypeMenuProps) {
+export function ChartTypeMenu({
+  value,
+  onValueChange,
+  touch: touchProp = false,
+}: ChartTypeMenuProps) {
+  // A tablet's desktop layout asks for touch sizes through the context (SPEC-CR-1 §6.3).
+  const touch = useTouchTargets() || touchProp;
   return (
     <DropdownMenu>
       <DropdownMenuTrigger

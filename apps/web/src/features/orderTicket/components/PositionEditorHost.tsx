@@ -1,9 +1,9 @@
 import { Sheet } from '@nthstock/ui';
 import { Suspense, lazy, useEffect, useLayoutEffect, useRef } from 'react';
-import { usePhoneLayout } from '@/shared/hooks/usePhoneLayout';
 import { useSession } from '@/shared/hooks/useSession';
 import { usePositionEditorStore } from '@/shared/lib/positionEditorStore';
 import { strings } from '../strings';
+import { usePanelPlacement } from './panelPlacement';
 import { TicketSkeleton } from './TicketSkeleton';
 
 // Its own chunk, fetched on first open, like the order ticket (CLAUDE.md §3).
@@ -24,7 +24,7 @@ export function PositionEditorHost() {
   useEffect(() => {
     if (status === 'anonymous') closeEditor();
   }, [status, closeEditor]);
-  const phone = usePhoneLayout();
+  const placement = usePanelPlacement('w-[min(440px,calc(100vw-24px))]');
   const open = target !== null && status === 'authenticated';
   const returnFocus = useRef<HTMLElement | null>(null);
   const wasOpen = useRef(false);
@@ -54,8 +54,7 @@ export function PositionEditorHost() {
       description={strings.editor.description}
       overlay="light"
       returnFocus={returnFocus}
-      side={phone ? 'bottom' : 'right'}
-      {...(phone ? {} : { className: 'w-[min(440px,calc(100vw-24px))]' })}
+      {...placement}
     >
       {open ? (
         <Suspense fallback={<TicketSkeleton />}>
