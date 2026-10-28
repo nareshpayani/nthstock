@@ -177,5 +177,5 @@ the tablet landscape polish all shipped.
 
 ## 7. AI note
 
-Built with Claude Code as the engineering agent: planning, code, tests, reviews and captures. Naresh
-Payani set the direction, chose the design and accepted each change.
+Built with AI coding agents for planning, code, tests, reviews and captures (the tools are named in
+[WRITEUP.md](WRITEUP.md)). Naresh Payani set the direction, chose the design and accepted each change.
