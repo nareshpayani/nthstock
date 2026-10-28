@@ -109,7 +109,7 @@ describe('phone position strip (T12, SPEC-TFC-1 §9.4)', () => {
   });
 
   it('sizes the chart to the phone: about 40% of the height, within 220 to 480 px', () => {
-    expect(phoneChartHeight(844)).toBe(321);
+    expect(phoneChartHeight(844)).toBe(338);
     expect(phoneChartHeight(500)).toBe(220);
     expect(phoneChartHeight(1400)).toBe(480);
   });
