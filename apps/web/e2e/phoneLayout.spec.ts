@@ -61,14 +61,16 @@ for (const viewport of PHONES) {
       tabs.getByRole('tab'),
       tradeBar(page).getByRole('button'),
       page.getByRole('radiogroup', { name: 'Chart range' }).getByRole('radio'),
-      page.getByRole('radiogroup', { name: 'Chart type' }).getByRole('radio'),
+      page.getByRole('button', { name: /^Chart type: / }),
       page.getByRole('radiogroup', { name: 'Exchange' }).getByRole('radio'),
     ]);
 
-    // The chart controls wrap rather than squeeze: in each group no segment overlaps the next,
-    // so "Candles" is never cut off (NSTOCK-0337). Each group ends within the chart's width.
+    // The chart controls wrap rather than squeeze: in each group no segment overlaps the next
+    // (NSTOCK-0337), and the type menu's button sits within the chart's width (NSTOCK-0430).
     const chart = await box(page.getByRole('figure', { name: 'INFY area chart over 1 day' }));
-    for (const name of ['Chart range', 'Chart type']) {
+    const typeButton = await box(page.getByRole('button', { name: /^Chart type: / }));
+    expect(typeButton.x + typeButton.width).toBeLessThanOrEqual(chart.x + chart.width);
+    for (const name of ['Chart range']) {
       let previousEnd = -Infinity;
       for (const segment of await page.getByRole('radiogroup', { name }).getByRole('radio').all()) {
         const rect = await box(segment);

@@ -79,3 +79,27 @@ for (const viewport of VIEWPORTS) {
     expect(overflow).toBeLessThanOrEqual(0);
   });
 }
+
+// NSTOCK-0430: the overlay works the same on every chart type, Heikin-Ashi included, because
+// lines are placed by price on the series' scale whatever the series draws.
+for (const type of ['line', 'candle', 'bar', 'heikin'] as const) {
+  test(`gutter tap and drag on the ${type} chart (NSTOCK-0430)`, async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto(`/stocks/INFY?chart=${type}`);
+    const figure = page.getByRole('figure', { name: /^INFY .* chart over/ });
+    await expect(figure.locator('canvas').first()).toBeVisible();
+    const gutter = figure.getByTestId('chart-gutter');
+    const lane = await box(gutter);
+    const tapY = lane.y + lane.height * 0.4;
+    await page.mouse.click(lane.x + lane.width / 2, tapY);
+    const ghost = figure.getByRole('button', { name: /^New order @ ₹/ });
+    const placed = await box(ghost);
+    expect(Math.abs(placed.y + placed.height / 2 - tapY)).toBeLessThanOrEqual(3);
+    const tapped = await priceOf(ghost);
+    await page.mouse.move(placed.x + placed.width / 2, tapY);
+    await page.mouse.down();
+    await page.mouse.move(placed.x + placed.width / 2, tapY + 40, { steps: 8 });
+    await page.mouse.up();
+    await expect.poll(() => priceOf(ghost)).toBeLessThan(tapped);
+  });
+}
