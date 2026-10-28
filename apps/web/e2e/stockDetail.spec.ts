@@ -18,7 +18,8 @@ test('stock detail: title, live header, URL chart range and type, key stats, Buy
   await expect(page).toHaveURL(/\/stocks\/INFY\?range=1M$/);
   await expect(page.getByRole('figure', { name: 'INFY area chart over 1 month' })).toBeVisible();
 
-  await page.getByRole('radio', { name: 'Candles' }).click();
+  await page.getByRole('button', { name: 'Chart type: Area' }).click();
+  await page.getByRole('menuitemradio', { name: /^Candles/ }).click();
   await expect(page).toHaveURL(/range=1M&chart=candle$/);
   const candles = page.getByRole('figure', { name: 'INFY candlestick chart over 1 month' });
   await expect(candles.locator('canvas').first()).toBeVisible();

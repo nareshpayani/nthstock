@@ -5,7 +5,9 @@ import {
   CrosshairMode,
   TickMarkType,
   type AreaSeriesPartialOptions,
+  type BarSeriesPartialOptions,
   type CandlestickSeriesPartialOptions,
+  type LineSeriesPartialOptions,
   type ChartOptions,
   type DeepPartial,
   type Time,
@@ -166,9 +168,53 @@ export function areaSeriesOptions(
   };
 }
 
-export function candleSeriesOptions(format: ChartValueFormat): CandlestickSeriesPartialOptions {
+/** A plain close line, coloured like the area series (NSTOCK-0430). */
+export function lineSeriesOptions(
+  direction: ChartDirection,
+  format: ChartValueFormat,
+): LineSeriesPartialOptions {
+  const line = toneColor(direction);
+  return {
+    color: line,
+    lineWidth: 2,
+    priceLineVisible: false,
+    crosshairMarkerBorderColor: colors.surface,
+    crosshairMarkerBackgroundColor: line,
+    priceFormat: priceFormat(format),
+  };
+}
+
+/** OHLC bars: open tick left, close tick right (NSTOCK-0430). */
+export function barSeriesOptions(format: ChartValueFormat): BarSeriesPartialOptions {
   return {
     upColor: colors.up,
+    downColor: colors.down,
+    openVisible: true,
+    thinBars: false,
+    priceLineVisible: false,
+    priceFormat: priceFormat(format),
+  };
+}
+
+const priceFormat = (format: ChartValueFormat) =>
+  ({
+    type: 'custom',
+    minMove: 1,
+    formatter: (value: number) => formatChartValue(value, format),
+  }) as const;
+
+/**
+ * Candles (and Heikin-Ashi): an up bar is hollow, only a faint tint inside its outline, and a down
+ * bar filled, so the direction reads from the shape as well as the colour (WCAG 1.4.1,
+ * NSTOCK-0430). Heikin-Ashi hides the last-value label: its close is smoothed, not a traded price.
+ */
+export function candleSeriesOptions(
+  format: ChartValueFormat,
+  { smoothed = false }: { smoothed?: boolean } = {},
+): CandlestickSeriesPartialOptions {
+  return {
+    lastValueVisible: !smoothed,
+    upColor: withAlpha(colors.up, 0.12),
     downColor: colors.down,
     borderUpColor: colors.up,
     borderDownColor: colors.down,

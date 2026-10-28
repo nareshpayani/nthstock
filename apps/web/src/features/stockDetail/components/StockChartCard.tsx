@@ -28,7 +28,8 @@ import { ChartSkeleton } from '@/shared/components/ChartSkeleton';
 import { useMarketOpen } from '@/shared/hooks/useMarketOpen';
 import { useApiClient } from '@/shared/lib/apiClientContext';
 import { DESKTOP_CHART_HEIGHT } from '@/shared/lib/phoneChart';
-import { CHART_TYPES, type ChartType } from '../model/stockDetailSearch';
+import type { ChartType } from '../model/stockDetailSearch';
+import { ChartTypeMenu } from './ChartTypeMenu';
 import { strings } from '../strings';
 
 export type StockChartCardProps = {
@@ -56,7 +57,7 @@ const NO_CANDLES: readonly Candle[] = [];
 
 /**
  * Stock price chart (T-107): 1D to 5Y range tabs, a bar size picker (1, 5, 15, 30 or 60-minute
- * bars on 1D; NSTOCK-0343) and an area/candle toggle, all kept in the URL by the page, and a crosshair tooltip with the hovered bar's IST time and ₹ values. The previous
+ * bars on 1D; NSTOCK-0343) and a chart type menu, all kept in the URL by the page, and a crosshair tooltip with the hovered bar's IST time and ₹ values. The previous
  * range stays on screen, dimmed, while the next one loads. On 1D while the market is open, the
  * last bar moves with every live quote and a new bar starts each minute (T-108).
  */
@@ -113,13 +114,7 @@ export function StockChartCard({
     />
   );
   const typeControl = (
-    <SegmentedControl
-      label={strings.chart.typeLabel}
-      size={controls}
-      value={chartType}
-      onValueChange={onChartTypeChange}
-      options={CHART_TYPES.map((value) => ({ value, label: strings.chart.types[value] }))}
-    />
+    <ChartTypeMenu value={chartType} onValueChange={onChartTypeChange} touch={touch} />
   );
   const showIntervals = intervals.length > 1 && onIntervalChange !== undefined;
   const plot = (
