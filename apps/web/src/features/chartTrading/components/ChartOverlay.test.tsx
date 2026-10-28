@@ -1031,4 +1031,61 @@ describe('chart overlay (T15, SPEC-TFC-1 §10.5)', () => {
       expect(series()?.priceLines).toEqual([]);
     });
   });
+  it('a new order arrives from the rail; lines already there, or redrawn, do not (CR-T12, §5.7)', () => {
+    const handle = makeHandle();
+    const tab = (id: string) =>
+      screen
+        .getAllByTestId('chart-handle')
+        .find((el) => el.dataset.line === id)
+        ?.querySelector<HTMLElement>('[data-testid="chart-tab"]');
+    const element = (lines: OverlayLine[]) => (
+      <ChartOverlay handle={handle} tickSize={5} label="Chart orders" lines={lines} />
+    );
+    const view = render(element([line({ id: 'o1', price: 150_000 })]));
+    expect(tab('o1')?.dataset.arrived).toBeUndefined();
+
+    view.rerender(
+      element([
+        line({ id: 'o1', price: 150_000 }),
+        line({ id: 'o2', price: 148_000, tone: 'sell' }),
+      ]),
+    );
+    expect(tab('o2')?.dataset.arrived).toBe('true');
+    expect(tab('o2')?.className).toContain('data-[arrived=true]:animate-line-in');
+    const drawn = series()?.priceLines.find((l) => l.options.price === 148_000);
+    expect(String(drawn?.options.color)).toMatch(/^rgba\(\d+, \d+, \d+, 0\)$/);
+    // The animation ending clears the flag.
+    act(() => {
+      tab('o2')?.dispatchEvent(new Event('animationend'));
+    });
+    expect(tab('o2')?.dataset.arrived).toBeUndefined();
+    // A position or stop line is not an order arriving.
+    view.rerender(
+      element([
+        line({ id: 'o1', price: 150_000 }),
+        line({ id: 'pos', price: 149_000, tone: 'position', draggable: false }),
+      ]),
+    );
+    expect(tab('pos')?.dataset.arrived).toBeUndefined();
+  });
+
+  it('under reduced motion a new order is drawn at once', () => {
+    vi.stubGlobal(
+      'matchMedia',
+      (query: string) => ({ matches: true, media: query }) as MediaQueryList,
+    );
+    try {
+      const handle = makeHandle();
+      const element = (lines: OverlayLine[]) => (
+        <ChartOverlay handle={handle} tickSize={5} label="Chart orders" lines={lines} />
+      );
+      const view = render(element([]));
+      view.rerender(element([line({ id: 'o1', price: 150_000 })]));
+      const tab = screen.getByTestId('chart-tab');
+      expect(tab.dataset.arrived).toBeUndefined();
+      expect(String(series()?.priceLines[0]?.options.color)).toMatch(/^#[0-9A-Fa-f]{6}$/);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
 });
