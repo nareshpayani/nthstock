@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { Sheet } from '../components/Dialog.js';
 
@@ -38,7 +38,7 @@ describe('bottom sheet drag to dismiss (SPEC-CR-1 §5.5, CR-T10)', () => {
     expect(onOpenChange).toHaveBeenCalledWith(false);
   });
 
-  it('springs back when let go slowly above the threshold', () => {
+  it('springs back when let go slowly below the threshold', () => {
     const { panel, grabber, onOpenChange } = renderSheet();
     pointer(grabber, 'pointerdown', 100, 0);
     pointer(grabber, 'pointermove', 160, 600);
@@ -93,5 +93,90 @@ describe('bottom sheet drag to dismiss (SPEC-CR-1 §5.5, CR-T10)', () => {
     pointer(grabber, 'pointerup', 150, 1200);
     expect(panel.style.transform).toBe('');
     expect(panel.style.transition).toBe('');
+  });
+
+  it('springs back when the parent ignores the close', async () => {
+    const { panel, grabber, onOpenChange } = renderSheet();
+    pointer(grabber, 'pointerdown', 100, 0);
+    pointer(grabber, 'pointermove', 300, 400);
+    pointer(grabber, 'pointerup', 300, 800);
+    expect(onOpenChange).toHaveBeenCalledWith(false);
+    await waitFor(() => {
+      expect(panel.style.transform).toBe('');
+    });
+  });
+
+  it('closes just past 30% and not just under it', () => {
+    const under = renderSheet();
+    pointer(under.grabber, 'pointerdown', 100, 0);
+    pointer(under.grabber, 'pointermove', 219, 1000);
+    pointer(under.grabber, 'pointerup', 219, 2000);
+    expect(under.onOpenChange).not.toHaveBeenCalled();
+    cleanup();
+    const over = renderSheet();
+    pointer(over.grabber, 'pointerdown', 100, 0);
+    pointer(over.grabber, 'pointermove', 221, 1000);
+    pointer(over.grabber, 'pointerup', 221, 2000);
+    expect(over.onOpenChange).toHaveBeenCalledWith(false);
+  });
+
+  it('ignores a flick when the finger rested before lifting', () => {
+    const { grabber, onOpenChange } = renderSheet();
+    pointer(grabber, 'pointerdown', 100, 0);
+    pointer(grabber, 'pointermove', 110, 10);
+    pointer(grabber, 'pointermove', 160, 60);
+    pointer(grabber, 'pointerup', 160, 500);
+    expect(onOpenChange).not.toHaveBeenCalled();
+  });
+
+  it('a drag after the sheet closed mid-drag works again', () => {
+    const ui = (open: boolean) => (
+      <Sheet open={open} onOpenChange={vi.fn()} side="bottom" title="Buy INFY">
+        <p>Ticket</p>
+      </Sheet>
+    );
+    const { rerender } = render(ui(true));
+    const grab = () => {
+      const element = screen.getByRole('dialog').querySelector('[data-part="sheet-grabber"]');
+      if (!element) throw new Error('no grabber');
+      return element;
+    };
+    pointer(grab(), 'pointerdown', 100, 0);
+    pointer(grab(), 'pointermove', 150, 100);
+    rerender(ui(false));
+    rerender(ui(true));
+    pointer(grab(), 'pointerdown', 100, 0);
+    pointer(grab(), 'pointermove', 150, 100);
+    expect(screen.getByRole('dialog').style.transform).toBe('translateY(50px)');
+  });
+
+  it('returns focus to the trigger after a drag close, and Escape still closes', async () => {
+    render(
+      <Sheet trigger={<button>Open</button>} side="bottom" title="Buy INFY">
+        <button>Inside</button>
+      </Sheet>,
+    );
+    const trigger = screen.getByRole('button', { name: 'Open' });
+    trigger.focus();
+    fireEvent.click(trigger);
+    const panel = screen.getByRole('dialog');
+    vi.spyOn(panel, 'getBoundingClientRect').mockReturnValue({ height: 400 } as DOMRect);
+    const grabber = panel.querySelector('[data-part="sheet-grabber"]');
+    if (!grabber) throw new Error('no grabber');
+    pointer(grabber, 'pointerdown', 100, 0);
+    pointer(grabber, 'pointermove', 300, 400);
+    pointer(grabber, 'pointerup', 300, 800);
+    await waitFor(() => {
+      expect(screen.queryByRole('dialog')).toBeNull();
+    });
+    await waitFor(() => {
+      expect(document.activeElement).toBe(trigger);
+    });
+
+    fireEvent.click(trigger);
+    fireEvent.keyDown(screen.getByRole('dialog'), { key: 'Escape' });
+    await waitFor(() => {
+      expect(screen.queryByRole('dialog')).toBeNull();
+    });
   });
 });

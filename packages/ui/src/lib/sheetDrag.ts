@@ -6,6 +6,8 @@ export const DISMISS_FRACTION = 0.3;
 export const FLICK_SPEED = 0.5;
 /** Upward pulls past the open position move a quarter as far, so the sheet feels anchored. */
 const OVERPULL = 0.25;
+/** A finger still for longer than this (ms) before lifting has no flick left in it. */
+const STALE_MS = 100;
 /** Below this many px a press is a tap, not a drag. */
 const SLOP = 4;
 
@@ -20,6 +22,7 @@ export type SheetDrag = {
     onPointerMove: (event: ReactPointerEvent<HTMLElement>) => void;
     onPointerUp: (event: ReactPointerEvent<HTMLElement>) => void;
     onPointerCancel: (event: ReactPointerEvent<HTMLElement>) => void;
+    onLostPointerCapture: (event: ReactPointerEvent<HTMLElement>) => void;
   };
 };
 
@@ -45,27 +48,44 @@ export function useSheetDrag(enabled: boolean, onDismiss: () => void): SheetDrag
 
   const panelRef = useCallback((element: HTMLElement | null) => {
     panel.current = element;
+    if (!element) {
+      // Closed mid-drag (Escape, a store, the parent): no pointerup will arrive to clear this.
+      drag.current = null;
+      moved.current = false;
+    }
   }, []);
 
-  const settle = (dismiss: boolean) => {
-    const element = panel.current;
-    if (!element) return;
-    if (dismiss) {
-      // The close animation starts from where the finger left the sheet.
-      element.style.transition = '';
-      onDismiss();
-      return;
-    }
+  const springBack = (element: HTMLElement) => {
     element.style.transition = reducedMotion()
       ? ''
       : 'transform var(--nth-duration-slow) var(--nth-ease-out)';
     element.style.transform = '';
   };
 
+  const settle = (dismiss: boolean) => {
+    const element = panel.current;
+    if (!element) return;
+    if (!dismiss) {
+      springBack(element);
+      return;
+    }
+    // The close animation starts from where the finger left the sheet.
+    element.style.transition = '';
+    onDismiss();
+    // A vetoed or ignored close leaves the panel open and offset: bring it back.
+    requestAnimationFrame(() => {
+      if (element.isConnected && element.dataset.state === 'open') springBack(element);
+    });
+  };
+
   const onPointerDown = (event: ReactPointerEvent<HTMLElement>) => {
     if (!enabled || event.button > 0 || drag.current) return;
     if ((event.target as Element).closest('button, a, input, select, textarea')) return;
-    event.currentTarget.setPointerCapture?.(event.pointerId);
+    try {
+      event.currentTarget.setPointerCapture?.(event.pointerId);
+    } catch {
+      // The pointer is already gone (InvalidStateError); move events still reach the grab zone.
+    }
     drag.current = {
       pointerId: event.pointerId,
       startY: event.clientY,
@@ -98,8 +118,8 @@ export function useSheetDrag(enabled: boolean, onDismiss: () => void): SheetDrag
     if (!moved.current) return;
     const dy = event.clientY - active.startY;
     const height = panel.current?.getBoundingClientRect().height ?? 0;
-    const dismiss =
-      !cancelled && dy > 0 && (dy > height * DISMISS_FRACTION || active.speed >= FLICK_SPEED);
+    const flick = event.timeStamp - active.lastT <= STALE_MS && active.speed >= FLICK_SPEED;
+    const dismiss = !cancelled && dy > 0 && (dy > height * DISMISS_FRACTION || flick);
     settle(dismiss);
   };
 
@@ -110,6 +130,7 @@ export function useSheetDrag(enabled: boolean, onDismiss: () => void): SheetDrag
       onPointerMove,
       onPointerUp: (event) => end(event, false),
       onPointerCancel: (event) => end(event, true),
+      onLostPointerCapture: (event) => end(event, true),
     },
   };
 }
