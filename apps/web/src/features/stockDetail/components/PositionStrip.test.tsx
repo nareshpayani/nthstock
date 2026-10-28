@@ -5,7 +5,7 @@ import { act, fireEvent, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import { useTrailingSheetStore } from '@/shared/lib/trailingSheetStore';
 import { renderWithProviders } from '@/test/renderWithProviders';
-import { phoneChartHeight } from './PhoneStockDetail';
+import { phoneChartHeight } from '@/shared/lib/phoneChart';
 import { PositionStrip } from './PositionStrip';
 
 const AT = '2026-09-28T04:30:00.000Z';
