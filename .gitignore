@@ -14,6 +14,7 @@ dist-api/
 dist-e2e*/
 dist-lhci/
 dist-screens/
+dist-design/
 screens-out/
 lighthouse-report/
 .lighthouseci/
