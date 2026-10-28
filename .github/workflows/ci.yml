@@ -174,10 +174,11 @@ jobs:
       # NSTOCK-0361: localhost after a fresh pull. `npm run dev` must not depend on the packages'
       # prebuilt dist, so delete the dist the dev server reads from source and load every screen
       # on the Vite dev server with the console watched. (apiClient, contracts and utils stay: the
-      # Vite config itself imports them.)
+      # Vite config itself imports them. tokens keeps only its generated CSS and fonts, NSTOCK-0434.)
       - name: Dev server without the packages' dist
         run: |
           rm -rf packages/paperEngine/dist packages/marketData/dist packages/ui/dist
+          rm -f packages/tokens/dist/*.js packages/tokens/dist/*.d.ts
           npm run e2e:dev
       # T-100: the frozen 1440 px dashboard screenshot, for the PR (the test also attaches it to
       # the HTML report). Uploaded whether or not the run passed.
