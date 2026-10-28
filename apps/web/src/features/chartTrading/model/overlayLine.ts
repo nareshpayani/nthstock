@@ -1,3 +1,5 @@
+import type { LoupeSpec } from './loupe';
+
 /** The kinds of line the trading overlay draws (SPEC-TFC-1 §8.1). */
 export type OverlayTone =
   'buy' | 'sell' | 'ghost' | 'position' | 'trailing' | 'activation' | 'pending';
@@ -24,6 +26,8 @@ export type OverlayLine = {
   draggable: boolean;
   /** Buttons beside the handle, in order. */
   actions?: readonly LineAction[] | undefined;
+  /** What the loupe works out while the line is dragged; price and distance only without it. */
+  loupe?: LoupeSpec | undefined;
 };
 
 /**

@@ -483,6 +483,32 @@ describe('chart overlay (T15, SPEC-TFC-1 §10.5)', () => {
       expect(nearestLine(lines, 290, toY)?.id).toBe('ghost');
     });
   });
+  it('a drag shows the loupe beside the finger with the price, distance and value; release hides it (CR-T07)', () => {
+    render(
+      <ChartOverlay
+        handle={makeHandle()}
+        tickSize={5}
+        label="Chart orders"
+        ltp={152_000}
+        lines={[line({ id: 'o1', price: 150_000, loupe: { kind: 'value', qty: 4 } })]}
+      />,
+    );
+    const loupe = screen.getByTestId('chart-loupe');
+    expect(loupe).toHaveAttribute('data-shown', 'false');
+    pointer(band('o1'), 'pointerdown', 200);
+    // A press alone is not a drag: no loupe for a tap.
+    expect(loupe).toHaveAttribute('data-shown', 'false');
+    pointer(band('o1'), 'pointermove', 180);
+    expect(loupe).toHaveAttribute('data-shown', 'true');
+    expect(loupe).toHaveTextContent('₹1,510.00');
+    expect(loupe).toHaveTextContent('\u22120.66% from LTP');
+    expect(loupe).toHaveTextContent('4 × ₹1,510.00 = ₹6,040.00');
+    // Below the LTP the card sits right of the finger.
+    expect(loupe).toHaveAttribute('data-side', 'right');
+    pointer(band('o1'), 'pointerup', 180);
+    expect(loupe).toHaveAttribute('data-shown', 'false');
+  });
+
   describe('lift and settle (CR-T06, SPEC-CR-1 §5.2, AC-04)', () => {
     it('a held line lifts: its tab and band are marked, its line thickens and the rest dim', () => {
       render(
