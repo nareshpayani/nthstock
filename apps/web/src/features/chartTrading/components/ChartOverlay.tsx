@@ -568,9 +568,11 @@ export function ChartOverlay({
   }, []);
 
   const paneY = (clientY: number) => clientY - handle.host.getBoundingClientRect().top;
+  // Below half a tick (a zoom out can show zero and less) there is no price to start an order at;
+  // snapToTick would lift it to one tick.
   const priceAt = (y: number) => {
     const price = handle.series.coordinateToPrice(y);
-    return price === null ? null : snapToTick(price, tickSize);
+    return price === null || price < tickSize / 2 ? null : snapToTick(price, tickSize);
   };
 
   const onHandlePointerDown = (id: string) => (event: ReactPointerEvent<HTMLElement>) => {
@@ -749,11 +751,14 @@ export function ChartOverlay({
     const dy = paneY(event.clientY) - start.y;
     if (!start.zooming && Math.abs(dy) <= DRAG_SLOP) return;
     start.zooming = true;
-    handle.chart.priceScale('right').setVisibleRange(zoomedPriceRange(start.range, dy));
+    handle.chart.priceScale('right').setVisibleRange(zoomedPriceRange(start.range, dy, tickSize));
   };
+  // The button hides once prices fit, so focus moves to the chart's group first (WCAG 2.4.3).
   const onAutoFit = () => {
+    elementsRef.current.layer?.focus();
     handle.chart.priceScale('right').setAutoScale(true);
     primitiveRef.current?.requestUpdate();
+    announce(strings.priceZoom.fitted);
   };
   const onGutterPointerUp = (event: ReactPointerEvent<HTMLDivElement>) => {
     const start = gutterPressRef.current;
@@ -824,6 +829,7 @@ export function ChartOverlay({
         }}
         role="group"
         aria-label={label}
+        tabIndex={-1}
         data-holding="false"
         className="group/layer absolute top-0 left-0"
       >

@@ -90,6 +90,21 @@ describe('PriceChart (T-094)', () => {
     );
   });
 
+  it('fits prices again for new candles but keeps a price zoom on a live tick (NSTOCK-0436)', async () => {
+    const first = makeCandles({ count: 3 });
+    const view = render(<PriceChart candles={first} label="c" />);
+    await chartMounted();
+    chartsMock.scale.autoScale = false;
+    const last = first.at(-1);
+    if (!last) throw new Error('no candles');
+    view.rerender(
+      <PriceChart candles={[...first.slice(0, -1), { ...last, c: last.c + 5 }]} label="c" />,
+    );
+    expect(chartsMock.scale.autoScale).toBe(false);
+    view.rerender(<PriceChart candles={makeCandles({ count: 5, step: -100 })} label="c" />);
+    expect(chartsMock.scale.autoScale).toBe(true);
+  });
+
   it('removes the chart and disconnects the observer on unmount', async () => {
     const view = render(<PriceChart candles={makeCandles({ count: 2 })} label="c" />);
     await chartMounted();

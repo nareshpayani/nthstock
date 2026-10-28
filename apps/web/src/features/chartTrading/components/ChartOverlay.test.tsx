@@ -185,10 +185,33 @@ describe('chart overlay (T15, SPEC-TFC-1 §10.5)', () => {
     expect(autoScale).toBe(false);
     act(() => chartsMock.repaint());
     expect(auto).toBeVisible();
-    fireEvent.click(screen.getByRole('button', { name: 'Fit prices to the chart' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Auto: fit prices to the chart' }));
     expect(chartsMock.scale.autoScale).toBe(true);
     act(() => chartsMock.repaint());
     expect(auto).not.toBeVisible();
+    // Focus moves to the chart's group, not the page, and the change is said.
+    expect(screen.getByRole('group', { name: 'Chart orders' })).toHaveFocus();
+    expect(screen.getByText('Prices fit to the chart.')).toBeInTheDocument();
+  });
+
+  it('a tap where a zoom out shows zero or less starts no order (NSTOCK-0436)', () => {
+    const onGutterTap = vi.fn();
+    render(
+      <ChartOverlay
+        handle={makeHandle()}
+        tickSize={5}
+        label="Chart orders"
+        lines={[]}
+        onGutterTap={onGutterTap}
+      />,
+    );
+    // ₹1,600 at the top, 50 paise per px: y = 3,300 px is ₹-50.
+    const gutter = screen.getByTestId('chart-gutter');
+    pointer(gutter, 'pointerdown', 3_300);
+    pointer(gutter, 'pointerup', 3_300);
+    pointer(gutter, 'pointerdown', 3_200);
+    pointer(gutter, 'pointerup', 3_200);
+    expect(onGutterTap).not.toHaveBeenCalled();
   });
 
   it('a handle drag reports each price and saves once on release; a tap does not drag', () => {

@@ -23,7 +23,8 @@ export const strings = {
   /** Price-axis zoom (NSTOCK-0436): drag the axis, then "Auto" fits the prices again. */
   priceZoom: {
     auto: 'Auto',
-    autoLabel: 'Fit prices to the chart',
+    autoLabel: 'Auto: fit prices to the chart',
+    fitted: 'Prices fit to the chart.',
   },
   ghost: {
     label: (price: string) => `New order @ ${price}`,
