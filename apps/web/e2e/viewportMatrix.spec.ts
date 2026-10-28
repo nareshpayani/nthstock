@@ -69,7 +69,7 @@ const KNOWN_GAPS: readonly {
   {
     frame: 'ticket',
     check: 'primaryAction',
-    viewports: ['phone-320x640', 'phone-344x882'],
+    viewports: ['phone-320x640'],
     story: 'CR-T13',
   },
   {
