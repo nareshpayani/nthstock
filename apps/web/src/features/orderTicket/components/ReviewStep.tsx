@@ -96,7 +96,8 @@ export function ReviewStep({
         </p>
       ) : null}
       <p className="text-label text-ink-muted">{strings.form.paperNote}</p>
-      <div className="grid grid-cols-2 gap-2">
+      {/* Pinned to the sheet's foot like the form's button (SPEC-CR-1 §5.5). */}
+      <div className="sticky bottom-0 z-10 -mx-4 -mb-4 grid grid-cols-2 gap-2 border-t border-line bg-surface px-4 pt-3 pb-4">
         <Button variant="secondary" size="lg" onClick={onEdit} disabled={placing}>
           {strings.review.edit}
         </Button>

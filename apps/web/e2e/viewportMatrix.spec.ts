@@ -65,11 +65,12 @@ const KNOWN_GAPS: readonly {
     viewports: ['phone-320x640', 'phone-344x882'],
     story: 'CR-T13',
   },
+  // The page scrolls sideways at these widths, which pushes the pinned footer past the edge.
   {
     frame: 'ticket',
     check: 'primaryAction',
-    viewports: VIEWPORT_MATRIX.map((v) => v.name).filter((name) => name !== 'tablet-820x1180'),
-    story: 'CR-T11',
+    viewports: ['phone-320x640'],
+    story: 'CR-T13',
   },
   {
     frame: 'ticket',

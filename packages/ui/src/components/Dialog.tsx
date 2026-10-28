@@ -2,6 +2,7 @@ import { Dialog as DialogPrimitive } from 'radix-ui';
 import type { ReactNode, RefObject } from 'react';
 import { IconClose } from '../icons/icons.js';
 import { cn } from '../lib/cn.js';
+import { useKeyboardInset } from '../lib/keyboardInset.js';
 import { TouchTargets } from '../lib/touchTargets.js';
 
 export type DialogProps = {
@@ -150,6 +151,7 @@ export function Sheet({
 }: SheetProps) {
   // A bottom sheet is the phone form, so its controls take their touch size (SPEC-TFC-1 §9.4).
   const touch = side === 'bottom';
+  const keyboardInset = useKeyboardInset(touch);
   return (
     <DialogPrimitive.Root {...root}>
       {trigger ? <DialogPrimitive.Trigger asChild>{trigger}</DialogPrimitive.Trigger> : null}
@@ -159,6 +161,7 @@ export function Sheet({
           data-overlay={overlay}
         />
         <DialogPrimitive.Content
+          ref={keyboardInset}
           {...(description ? {} : { 'aria-describedby': undefined })}
           onOpenAutoFocus={focusInitial(initialFocus)}
           onCloseAutoFocus={focusReturn(returnFocus)}
