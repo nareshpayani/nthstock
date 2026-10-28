@@ -39,6 +39,17 @@ describe('stock price chart (T-107)', () => {
     expect(candleRanges()).toEqual(['1D']);
   });
 
+  it('pans and zooms without trading mode: the chart is always interactive (NSTOCK-0437)', async () => {
+    renderApp('/stocks/INFY', { apiClient: api.apiClient });
+    await screen.findByTestId('chart-host');
+    await waitFor(() =>
+      expect(chartsMock.active()[0]?.options).toMatchObject({
+        handleScroll: { horzTouchDrag: true, vertTouchDrag: false },
+        handleScale: { mouseWheel: true },
+      }),
+    );
+  });
+
   it('changing range updates the URL and refetches the candles for that range', async () => {
     const { router } = renderApp('/stocks/INFY?range=1Y', { apiClient: api.apiClient });
     await screen.findByRole('figure', { name: 'INFY area chart over 1 year' });

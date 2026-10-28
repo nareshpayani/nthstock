@@ -12,6 +12,8 @@ const MIN_BARS = 10;
  */
 export function zoomedLogicalRange(range: LogicalRange, steps: number): LogicalRange {
   const span = range.to - range.from;
-  const next = Math.max(MIN_BARS, span / ZOOM_STEP ** steps);
+  const scaled = span / ZOOM_STEP ** steps;
+  // Zooming in never widens: with fewer than MIN_BARS visible the floor is the current span.
+  const next = steps > 0 ? Math.max(Math.min(MIN_BARS, span), scaled) : scaled;
   return { from: range.to - next, to: range.to };
 }

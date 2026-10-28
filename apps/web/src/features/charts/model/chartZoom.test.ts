@@ -12,6 +12,10 @@ describe('dashboard chart zoom (NSTOCK-0437)', () => {
     expect(zoomedLogicalRange(range, -1)).toEqual({ from: 300 - 300 * ZOOM_STEP, to: 300 });
   });
 
+  it('never widens the chart when zooming in on fewer than ten bars', () => {
+    expect(zoomedLogicalRange({ from: 0, to: 6 }, 1)).toEqual({ from: 0, to: 6 });
+  });
+
   it('stops zooming in at ten bars', () => {
     expect(zoomedLogicalRange(range, 50)).toEqual({ from: 290, to: 300 });
   });
