@@ -78,7 +78,7 @@ export function LedgerList() {
 
   return (
     <div className="grid gap-2">
-      <div className="overflow-x-auto">
+      <div className="relative overflow-x-auto">
         <VirtualList
           items={entries}
           label={strings.ledger.label}

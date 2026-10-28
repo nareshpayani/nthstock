@@ -24,14 +24,23 @@ export function PortfolioSummaryCard({ totals }: { totals: LiveHoldingsTotals })
       aria-label={strings.summary.label}
       className="rounded-lg border border-line bg-surface p-4 lg:p-5"
     >
-      <dl className="grid grid-cols-2 gap-4 md:grid-cols-4">
+      {/* minmax(0, 1fr): a long P&L wraps inside its column instead of widening the card (NSTOCK-0435). */}
+      <dl className="grid grid-cols-[repeat(2,minmax(0,1fr))] gap-4 md:grid-cols-[repeat(4,minmax(0,1fr))]">
         <Figure label={strings.summary.invested}>{formatInr(totals.investedValue)}</Figure>
         <Figure label={strings.summary.current}>{formatInr(totals.currentValue)}</Figure>
         <Figure label={strings.summary.total}>
-          <PnlAmount value={totals.totalPnl} basisPoints={totals.totalPnlBp} />
+          <PnlAmount
+            value={totals.totalPnl}
+            basisPoints={totals.totalPnlBp}
+            className="flex-wrap whitespace-normal"
+          />
         </Figure>
         <Figure label={strings.summary.day}>
-          <PnlAmount value={totals.dayPnl} basisPoints={totals.dayPnlBp} />
+          <PnlAmount
+            value={totals.dayPnl}
+            basisPoints={totals.dayPnlBp}
+            className="flex-wrap whitespace-normal"
+          />
         </Figure>
       </dl>
     </section>

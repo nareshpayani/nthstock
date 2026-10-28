@@ -121,7 +121,8 @@ export function OrdersPage({ search, onSearchChange }: OrdersPageProps) {
       <Tabs
         value={tab}
         onValueChange={(next) => onSearchChange({ tab: next as OrderTab })}
-        className="grid gap-0"
+        // One shrinkable track, so a wide table scrolls inside the card instead of widening it.
+        className="grid grid-cols-[minmax(0,1fr)] gap-0"
       >
         <TabsList aria-label={strings.tabsLabel} className="px-4">
           {ORDER_TABS.map((key) => (

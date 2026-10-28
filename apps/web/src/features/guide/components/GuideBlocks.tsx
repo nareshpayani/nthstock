@@ -14,7 +14,7 @@ function GuideTable({ block }: { block: Extract<GuideBlock, { kind: 'table' }> }
       role="region"
       aria-label={block.caption}
       tabIndex={0}
-      className="overflow-x-auto rounded-md border border-line outline-none focus-visible:ring-2 focus-visible:ring-brand"
+      className="relative overflow-x-auto rounded-md border border-line outline-none focus-visible:ring-2 focus-visible:ring-brand"
     >
       <table
         className={cn(
@@ -89,7 +89,7 @@ function Block({ block }: { block: GuideBlock }) {
             role="region"
             aria-label={block.label}
             tabIndex={0}
-            className="overflow-x-auto rounded-md bg-canvas outline-none focus-visible:ring-2 focus-visible:ring-brand"
+            className="relative overflow-x-auto rounded-md bg-canvas outline-none focus-visible:ring-2 focus-visible:ring-brand"
           >
             <pre className="px-3 py-2 font-mono text-label leading-5 text-ink">
               <code>{block.text}</code>
