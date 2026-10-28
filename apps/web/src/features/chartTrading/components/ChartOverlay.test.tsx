@@ -562,13 +562,14 @@ describe('chart overlay (T15, SPEC-TFC-1 §10.5)', () => {
       let movedAgain: (price: number) => void = () => undefined;
       let removeLine: () => void = () => undefined;
       let unmount: () => void = () => undefined;
+      const cancelFrame = vi.fn();
       function dragReleaseAndRollBack(afterMs: number, reducedMotion: boolean) {
         const frames: FrameRequestCallback[] = [];
         vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
           frames.push(callback);
           return frames.length;
         });
-        vi.stubGlobal('cancelAnimationFrame', () => undefined);
+        vi.stubGlobal('cancelAnimationFrame', cancelFrame);
         vi.stubGlobal(
           'matchMedia',
           (query: string) => ({ matches: reducedMotion, media: query }) as MediaQueryList,
@@ -642,8 +643,14 @@ describe('chart overlay (T15, SPEC-TFC-1 §10.5)', () => {
         const frames = dragReleaseAndRollBack(500, false);
         runFrames(frames.splice(0, 2));
         const pending = frames.splice(0);
+        const removed = series()?.priceLines[0];
+        const priceAtRemoval = removed?.options.price;
+        cancelFrame.mockClear();
         removeLine();
+        expect(removed?.removed).toBe(true);
+        expect(cancelFrame).toHaveBeenCalled();
         expect(() => runFrames(pending)).not.toThrow();
+        expect(removed?.options.price).toBe(priceAtRemoval);
         expect(series()?.priceLines).toHaveLength(0);
 
         const second = dragReleaseAndRollBack(500, false);
