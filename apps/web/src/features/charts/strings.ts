@@ -2,6 +2,13 @@ export const strings = {
   loadingChart: 'Loading chart',
   noData: 'No chart data for this range yet.',
   niftyTitle: 'NIFTY 50',
+  /** Zoom buttons on the dashboard chart (NSTOCK-0437). */
+  zoom: {
+    label: 'Chart zoom',
+    in: 'Zoom in',
+    out: 'Zoom out',
+    reset: 'Reset zoom',
+  },
   rangeLabel: 'Chart range',
   live: 'Live',
   liveLabel: 'Live: the market is open and the price updates as it trades',

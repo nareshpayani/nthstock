@@ -100,4 +100,39 @@ describe('IndexChartCard (T-095)', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
     await screen.findByTestId('chart-host');
   });
+
+  it('pans and zooms: a drag stays put, the zoom buttons narrow, widen and reset (NSTOCK-0437)', async () => {
+    renderCard();
+    await screen.findByTestId('chart-host');
+    expect(chartsMock.charts[0]?.options).toMatchObject({ handleScale: { mouseWheel: true } });
+    const plot = screen.getByTestId('dashboard-chart');
+    fireEvent.pointerDown(plot, { pointerId: 1, button: 0, clientX: 100, clientY: 50 });
+    fireEvent.pointerUp(plot, { pointerId: 1, button: 0, clientX: 160, clientY: 50 });
+    expect(screen.queryByRole('heading', { name: 'Stock NIFTY50' })).not.toBeInTheDocument();
+    const chart = chartsMock.charts[0];
+    fireEvent.click(await screen.findByRole('button', { name: 'Zoom in' }));
+    expect(chart?.logicalRange).toEqual({ from: 20, to: 60 });
+    fireEvent.click(screen.getByRole('button', { name: 'Zoom out' }));
+    expect(chart?.logicalRange).toEqual({ from: 0, to: 60 });
+    fireEvent.click(screen.getByRole('button', { name: 'Reset zoom' }));
+    expect(chart?.fitContent).toHaveBeenCalled();
+  });
+
+  it('a tap on the chart opens the NIFTY 50 page on the same range (NSTOCK-0437)', async () => {
+    const { router } = renderCard();
+    await screen.findByTestId('chart-host');
+    const plot = screen.getByTestId('dashboard-chart');
+    fireEvent.pointerDown(plot, { pointerId: 1, button: 0, clientX: 100, clientY: 50 });
+    fireEvent.pointerUp(plot, { pointerId: 1, button: 0, clientX: 102, clientY: 51 });
+    expect(await screen.findByRole('heading', { name: 'Stock NIFTY50' })).toBeInTheDocument();
+    expect(router.state.location.search).toEqual({ exchange: 'NSE', range: '1Y' });
+  });
+
+  it('the title links to the NIFTY 50 page', async () => {
+    renderCard();
+    expect(await screen.findByRole('link', { name: 'NIFTY 50' })).toHaveAttribute(
+      'href',
+      '/stocks/NIFTY50?exchange=NSE&range=1Y',
+    );
+  });
 });

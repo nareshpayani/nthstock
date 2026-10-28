@@ -1,4 +1,5 @@
 import { IndexTicker, Skeleton, cn } from '@nthstock/ui';
+import { Link } from '@tanstack/react-router';
 import { memo } from 'react';
 import { useQuote } from '@/shared/hooks/useQuote';
 import { useForcedState, useOffline } from '@/shared/lib/connectivity';
@@ -35,15 +36,23 @@ const LiveIndexTicker = memo(function LiveIndexTicker({
     );
   }
   const { ltp, change, changeBp } = live.quote;
+  // The ticker opens the index's chart page (NSTOCK-0437).
   return (
-    <IndexTicker
-      name={name}
-      level={ltp}
-      change={change}
-      changeBasisPoints={changeBp}
-      compact={compact}
-      stacked={stacked}
-    />
+    <Link
+      to="/stocks/$symbol"
+      params={{ symbol }}
+      search={{ exchange }}
+      className="-mx-1 rounded-sm px-1 hover:bg-canvas focus-visible:ring-2 focus-visible:ring-brand focus-visible:outline-none"
+    >
+      <IndexTicker
+        name={name}
+        level={ltp}
+        change={change}
+        changeBasisPoints={changeBp}
+        compact={compact}
+        stacked={stacked}
+      />
+    </Link>
   );
 });
 

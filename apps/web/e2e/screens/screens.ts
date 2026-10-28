@@ -15,6 +15,7 @@ export const SCREENS: readonly Screen[] = [
   { name: 'login', path: '/login', authed: false },
   { name: 'dashboard', path: '/dashboard', authed: false },
   { name: 'stockDetail', path: '/stocks/INFY', authed: false },
+  { name: 'indexDetail', path: '/stocks/NIFTY50?exchange=NSE', authed: false },
   { name: 'guide', path: '/guide', authed: false },
   { name: 'guideWalkthroughs', path: '/guide?tab=walkthroughs', authed: false },
   { name: 'guideArchitecture', path: '/guide?tab=architecture', authed: false },

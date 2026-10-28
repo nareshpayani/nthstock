@@ -17,6 +17,7 @@ import { logIn } from './support/auth';
 const ROUTES = [
   { name: 'dashboard', path: '/dashboard' },
   { name: 'stockDetail', path: '/stocks/INFY' },
+  { name: 'indexDetail', path: '/stocks/NIFTYBANK?exchange=NSE' },
   { name: 'portfolio', path: '/portfolio' },
   { name: 'positions', path: '/positions' },
   { name: 'ordersOpen', path: '/orders?tab=open' },

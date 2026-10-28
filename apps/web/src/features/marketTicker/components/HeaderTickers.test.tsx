@@ -66,3 +66,17 @@ describe('HeaderTickers states (CR-T18, SPEC-CR-1 §7)', () => {
     expect(screen.queryByTestId('tickers-stale')).not.toBeInTheDocument();
   });
 });
+
+describe('HeaderTickers links (NSTOCK-0437)', () => {
+  it('each index opens its chart page', async () => {
+    setup(true);
+    expect(await screen.findByRole('link', { name: /^NIFTY 50/ })).toHaveAttribute(
+      'href',
+      '/stocks/NIFTY50?exchange=NSE',
+    );
+    expect(screen.getByRole('link', { name: /^SENSEX/ })).toHaveAttribute(
+      'href',
+      '/stocks/SENSEX?exchange=BSE',
+    );
+  });
+});
