@@ -8,7 +8,7 @@ import { usePendingOrderPrices } from '@/shared/hooks/usePendingOrderPrices';
 import { useTradingSelector } from '@/shared/hooks/useTradingSelector';
 import { strings } from '../strings';
 
-const isIdle = (state: TradingState) => state.status === 'idle';
+const selectStatus = (state: TradingState) => state.status;
 const sameOrders = (a: readonly Order[], b: readonly Order[]) =>
   a.length === b.length && a.every((order, i) => order.id === b[i]?.id && order.seq === b[i].seq);
 
@@ -18,10 +18,11 @@ const linkClass =
 /**
  * The phone Orders tab (T12, SPEC-TFC-1 §9.4): today's orders in this instrument, newest first,
  * from the trading store, with a link to the full order book. Where the store is idle (api mode)
- * it points to the Orders page instead.
+ * or failed to load, it points to the Orders page instead; while loading it says so. "No orders"
+ * is shown only once the orders are known.
  */
 export function InstrumentOrders({ instrument }: { instrument: Instrument }) {
-  const idle = useTradingSelector(isIdle);
+  const status = useTradingSelector(selectStatus);
   const select = useCallback(
     (state: TradingState) => state.orders.filter((order) => order.token === instrument.token),
     [instrument.token],
@@ -34,10 +35,19 @@ export function InstrumentOrders({ instrument }: { instrument: Instrument }) {
       {text.all}
     </Link>
   );
-  if (idle) {
+  if (status === 'loading') {
+    return (
+      <div role="status" className="grid gap-1 px-1">
+        <p className="text-body text-ink-muted">{text.loading}</p>
+      </div>
+    );
+  }
+  if (status === 'idle' || status === 'error') {
     return (
       <div className="grid gap-1 px-1">
-        <p className="text-body text-ink-muted">{text.unavailable}</p>
+        <p className="text-body text-ink-muted">
+          {status === 'error' ? text.failed : text.unavailable}
+        </p>
         {all}
       </div>
     );
