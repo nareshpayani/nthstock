@@ -100,7 +100,15 @@ export function ChartTrading({ handle, instrument }: ChartTradingProps) {
     if (!active) continue;
     const stopAt = stopLine(active, stopMove?.id === active.id ? stopMove : undefined);
     if (stopAt) {
-      lines.push(stopAt);
+      const live = livePosition(position, ltp);
+      lines.push(
+        live.avgPrice === null
+          ? stopAt
+          : {
+              ...stopAt,
+              loupe: { kind: 'pnl', qty: live.position.netQty, avgPrice: live.avgPrice },
+            },
+      );
       sheetFor.set(stopAt.id, position.product);
       stopFor.set(stopAt.id, active);
     }
@@ -265,6 +273,7 @@ export function ChartTrading({ handle, instrument }: ChartTradingProps) {
       lines={lines}
       tickSize={instrument.tickSize}
       label={strings.group(instrument.symbol)}
+      ltp={ltp}
       onGutterTap={(price) => {
         setGhostDrag(null);
         setGhost(price);

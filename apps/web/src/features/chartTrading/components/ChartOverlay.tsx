@@ -28,6 +28,7 @@ import {
   type HandleGesture,
 } from '../model/handleGesture';
 import { byPriority, type LineAction, type OverlayLine } from '../model/overlayLine';
+import { loupeText, placeLoupe } from '../model/loupe';
 import { layoutHandles, snapToTick } from '../model/overlayLayout';
 import { railStep, railTicks } from '../model/priceRail';
 
@@ -39,6 +40,8 @@ export type ChartOverlayProps = {
   tickSize: number;
   /** Accessible name of the group of handles, e.g. "Chart orders for INFY". */
   label: string;
+  /** The last traded price, for the loupe's distance and its side (SPEC-CR-1 §4.2). */
+  ltp?: number | undefined;
   /** A tap on an empty part of the price gutter, at that (snapped) price. */
   onGutterTap?: ((price: number) => void) | undefined;
   /** A handle is being moved to `price` (pointer or arrow keys). */
@@ -60,6 +63,13 @@ type Elements = {
   leaders: Map<string, HTMLElement>;
   gutter: HTMLElement | null;
   rail: HTMLCanvasElement | null;
+  root: HTMLElement | null;
+  loupe: {
+    card: HTMLElement;
+    price: HTMLElement;
+    distance: HTMLElement;
+    detail: HTMLElement;
+  } | null;
   layer: HTMLElement | null;
 };
 /** Prices a line is drawn at while it springs to its real one, by line id. */
@@ -105,6 +115,7 @@ export function ChartOverlay({
   lines,
   tickSize,
   label,
+  ltp,
   onGutterTap,
   onDragMove,
   onDragEnd,
@@ -121,6 +132,8 @@ export function ChartOverlay({
     leaders: new Map(),
     gutter: null,
     rail: null,
+    root: null,
+    loupe: null,
     layer: null,
   });
   const drawnRef = useRef<Drawn>(new Map());
@@ -147,6 +160,7 @@ export function ChartOverlay({
   const tickSizeRef = useRef(tickSize);
   const latestRef = useRef({
     lines: ordered,
+    ltp,
     on: { onGutterTap, onDragMove, onDragEnd, onHandleTap, onHandleDelete, onAction },
   });
 
@@ -160,8 +174,9 @@ export function ChartOverlay({
   const hold = (id: string | null) => {
     if (heldRef.current === id) return;
     heldRef.current = id;
-    const { layer, rows, bands } = elementsRef.current;
+    const { layer, rows, bands, loupe } = elementsRef.current;
     if (layer) layer.dataset.holding = id ? 'true' : 'false';
+    if (loupe && id === null) loupe.card.dataset.shown = 'false';
     for (const [rowId, row] of rows) row.dataset.held = String(rowId === id);
     for (const [bandId, band] of bands) band.dataset.held = String(bandId === id);
     for (const [lineId, drawn] of drawnRef.current) {
@@ -272,6 +287,7 @@ export function ChartOverlay({
   useLayoutEffect(() => {
     latestRef.current = {
       lines: ordered,
+      ltp,
       on: { onGutterTap, onDragMove, onDragEnd, onHandleTap, onHandleDelete, onAction },
     };
     applyRef.current = apply;
@@ -400,6 +416,38 @@ export function ChartOverlay({
     apply(
       move(gestureRef.current, event.pointerId, paneY(event.clientY), (y) => priceAt(y + offset)),
     );
+    const active = gestureRef.current;
+    if (active.phase === 'dragging' && active.pointerId === event.pointerId) {
+      showLoupe(active.id, active.price, event.clientX, event.clientY);
+    }
+  };
+
+  // The loupe (SPEC-CR-1 §4.2, CR-T07): a card beside the finger with the price being set, its
+  // distance from the LTP and what it is worth. Written straight to the DOM on each move.
+  const showLoupe = (id: string, price: number, clientX: number, clientY: number) => {
+    const { loupe, root } = elementsRef.current;
+    const line = latestRef.current.lines.find((candidate) => candidate.id === id);
+    if (!loupe || !root || !line) return;
+    const { ltp: last } = latestRef.current;
+    const text = loupeText(price, last, line.loupe);
+    loupe.price.textContent = text.price;
+    loupe.distance.textContent = text.distance ?? '';
+    loupe.distance.hidden = text.distance === null;
+    loupe.detail.textContent = text.detail ?? '';
+    loupe.detail.hidden = text.detail === null;
+    const box = root.getBoundingClientRect();
+    const place = placeLoupe({
+      x: clientX - box.left,
+      y: clientY - box.top,
+      width: box.width,
+      height: handle.chart.paneSize(0).height,
+      cardWidth: loupe.card.offsetWidth,
+      cardHeight: loupe.card.offsetHeight,
+      aboveLtp: last === undefined || price >= last,
+    });
+    loupe.card.style.transform = `translate(${String(Math.round(place.left))}px, ${String(Math.round(place.top))}px)`;
+    loupe.card.dataset.side = place.side;
+    loupe.card.dataset.shown = 'true';
   };
   const onHandlePointerUp = (event: ReactPointerEvent<HTMLElement>) => {
     const chip = chipRef.current;
@@ -480,6 +528,9 @@ export function ChartOverlay({
 
   return (
     <div
+      ref={(element) => {
+        elementsRef.current.root = element;
+      }}
       className="pointer-events-none absolute inset-0 overflow-hidden"
       data-testid="chart-overlay"
     >
@@ -626,6 +677,26 @@ export function ChartOverlay({
             </div>
           </div>
         ))}
+      </div>
+      {/* Shown only while a line is dragged; the live region says the same in words (CR-T08). */}
+      <div
+        ref={(card) => {
+          const spans = card?.querySelectorAll<HTMLElement>('[data-part]');
+          const [price, distance, detail] = spans ? [...spans] : [];
+          elementsRef.current.loupe =
+            card && price && distance && detail ? { card, price, distance, detail } : null;
+        }}
+        aria-hidden="true"
+        data-testid="chart-loupe"
+        data-shown="false"
+        className={cn(
+          'absolute top-0 left-0 z-10 flex w-44 flex-col gap-0.5 rounded-lg bg-ink px-3 py-2.5 text-surface shadow-lifted',
+          'opacity-0 transition-opacity duration-[var(--nth-duration-fast)] ease-out data-[shown=true]:opacity-100 motion-reduce:transition-none',
+        )}
+      >
+        <span data-part="price" className="font-mono text-headline font-medium tabular-nums" />
+        <span data-part="distance" className="font-mono text-label text-line tabular-nums" />
+        <span data-part="detail" className="text-label text-line" />
       </div>
     </div>
   );
