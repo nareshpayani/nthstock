@@ -190,12 +190,14 @@ export function ChartTrading({ handle, instrument }: ChartTradingProps) {
           description: strings.order.cancelledBody(...describe(order, cancelled.price ?? 0)),
           tone: 'success',
         }),
-      (error: unknown) =>
+      (error: unknown) => {
+        haptic('reject');
         toast.show({
           title: strings.order.cancelFailed,
           description: actionErrorText(error),
           tone: 'error',
-        }),
+        });
+      },
     );
   };
 

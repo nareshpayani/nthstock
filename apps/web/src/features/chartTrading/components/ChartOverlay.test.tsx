@@ -548,6 +548,30 @@ describe('chart overlay (T15, SPEC-TFC-1 §10.5)', () => {
     expect(status).toHaveTextContent('Released at ₹1,489.00. Saving.');
   });
 
+  it('a keyboard move says it started, was released or was cancelled (CR-T08, AC-05)', () => {
+    render(
+      <ChartOverlay
+        handle={makeHandle()}
+        tickSize={5}
+        label="Chart orders"
+        lines={[line({ id: 'o1', price: 150_000 })]}
+      />,
+    );
+    const handle = screen.getByTestId('chart-handle');
+    const status = screen.getByRole('status');
+    fireEvent.keyDown(handle, { key: 'ArrowUp' });
+    expect(status).toHaveTextContent(/^Moving .*Now ₹1,500\.05\./);
+    fireEvent.keyDown(handle, { key: 'Enter' });
+    expect(status).toHaveTextContent('Released at ₹1,500.05. Saving.');
+    expect(haptics.haptic).toHaveBeenCalledWith('commit');
+    fireEvent.keyDown(handle, { key: 'ArrowDown' });
+    fireEvent.keyDown(handle, { key: 'Escape' });
+    expect(status).toHaveTextContent('Move cancelled. The line is back where it was.');
+    fireEvent.keyDown(handle, { key: 'ArrowDown' });
+    fireEvent.blur(handle);
+    expect(status).toHaveTextContent('Move cancelled. The line is back where it was.');
+  });
+
   it('a cancelled drag says the line went back, with no success haptic (CR-T08)', () => {
     render(
       <ChartOverlay
