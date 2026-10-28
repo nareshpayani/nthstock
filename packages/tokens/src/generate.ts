@@ -34,9 +34,11 @@ export function toCssVariables(): string {
     lines.push(`--nth-shadow-${name}: ${value};`);
   for (const [name, value] of Object.entries(zIndex))
     lines.push(`--nth-z-${name}: ${String(value)};`);
-  lines.push(`--nth-duration-flash: ${motion.flash};`);
-  lines.push(`--nth-duration-panel: ${motion.panel};`);
+  for (const step of ['flash', 'panel', 'fast', 'base', 'slow'] as const)
+    lines.push(`--nth-duration-${step}: ${motion[step]};`);
   lines.push(`--nth-ease-standard: ${motion.easing};`);
+  lines.push(`--nth-ease-out: ${motion.easing};`);
+  lines.push(`--nth-ease-in: ${motion.easeIn};`);
   return HEADER + block(':root', lines);
 }
 
@@ -64,5 +66,7 @@ export function toTailwindTheme(): string {
   for (const name of Object.keys(shadows))
     lines.push(`--shadow-${name}: var(--nth-shadow-${name});`);
   lines.push('--ease-standard: var(--nth-ease-standard);');
+  lines.push('--ease-out: var(--nth-ease-out);');
+  lines.push('--ease-in: var(--nth-ease-in);');
   return HEADER + block('@theme inline', lines);
 }
