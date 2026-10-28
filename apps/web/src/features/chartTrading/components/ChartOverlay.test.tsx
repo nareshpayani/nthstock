@@ -265,7 +265,10 @@ describe('chart overlay (T15, SPEC-TFC-1 §10.5)', () => {
     const range = () => chartsMock.active().at(-1)?.logicalRange;
 
     pointer(chip, 'pointerdown', 200, 1, 100);
+    // The chip gives under the finger (CR-T09) and comes back when it lifts.
+    expect(chip).toHaveAttribute('data-pressed', 'true');
     pointer(chip, 'pointerup', 200, 1, 102);
+    expect(chip).toHaveAttribute('data-pressed', 'false');
     expect(onHandleTap).toHaveBeenCalledWith('pos');
     expect(range()).toEqual({ from: 0, to: 60 });
 
@@ -273,6 +276,7 @@ describe('chart overlay (T15, SPEC-TFC-1 §10.5)', () => {
     onHandleTap.mockClear();
     pointer(chip, 'pointerdown', 200, 1, 100);
     pointer(chip, 'pointermove', 201, 1, 120);
+    expect(chip).toHaveAttribute('data-pressed', 'false');
     pointer(chip, 'pointermove', 202, 1, 140);
     pointer(chip, 'pointerup', 202, 1, 140);
     expect(range()).toEqual({ from: -4, to: 56 });
@@ -780,6 +784,192 @@ describe('chart overlay (T15, SPEC-TFC-1 §10.5)', () => {
         expect(drawnPrice()).toBe(150_000);
         expect(frames).toHaveLength(0);
       });
+    });
+  });
+  describe('a trailing stop that ratchets (CR-T09, SPEC-CR-1 §5.3)', () => {
+    const stopLine = (price: number, tone: OverlayLine['tone'] = 'trailing') =>
+      line({ id: 'stop', price, tone, label: `Trailing SL ${String(price)}` });
+    function ratchet(reducedMotion: boolean) {
+      const frames: FrameRequestCallback[] = [];
+      vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
+        frames.push(callback);
+        return frames.length;
+      });
+      vi.stubGlobal('cancelAnimationFrame', () => undefined);
+      vi.stubGlobal(
+        'matchMedia',
+        (query: string) => ({ matches: reducedMotion, media: query }) as MediaQueryList,
+      );
+      const handle = makeHandle();
+      const element = (price: number, tone?: OverlayLine['tone']) => (
+        <ChartOverlay
+          handle={handle}
+          tickSize={5}
+          label="Chart orders"
+          lines={[stopLine(price, tone)]}
+        />
+      );
+      const view = render(element(150_000));
+      return { frames, view, element };
+    }
+    const stopPrice = () => series()?.priceLines[0]?.options.price;
+    const traces = () => series()?.priceLines.slice(1) ?? [];
+    const run = (frames: FrameRequestCallback[], ms: number) => {
+      let now = 0;
+      while (frames.length > 0 && now <= ms) {
+        now += 1000 / 60;
+        for (const frame of frames.splice(0)) frame(now);
+      }
+    };
+    afterEach(() => {
+      vi.unstubAllGlobals();
+    });
+
+    it('glides up to the new stop in about 240 ms and leaves a trace that fades away', () => {
+      const { frames, view, element } = ratchet(false);
+      view.rerender(element(151_000));
+      // Drawn where it was; a faint dashed trace marks the old stop, with no axis label.
+      expect(stopPrice()).toBe(150_000);
+      expect(traces()).toHaveLength(1);
+      expect(traces()[0]?.options).toMatchObject({ price: 150_000, axisLabelVisible: false });
+      expect(String(traces()[0]?.options.color)).toMatch(/^rgba\(\d+, \d+, \d+, 0\.5\)$/);
+      run(frames, 120);
+      expect(Number(stopPrice())).toBeGreaterThan(150_000);
+      expect(Number(stopPrice())).toBeLessThan(151_000);
+      // The handle rides with the line.
+      expect(handleY('stop')).toBeLessThan(200);
+      expect(handleY('stop')).toBeGreaterThan(180);
+      run(frames, 1_000);
+      expect(stopPrice()).toBe(151_000);
+      expect(handleY('stop')).toBe(180);
+      expect(traces()).toHaveLength(0);
+    });
+
+    it('jumps without a trace under reduced motion', () => {
+      const { frames, view, element } = ratchet(true);
+      view.rerender(element(151_000));
+      expect(stopPrice()).toBe(151_000);
+      expect(traces()).toHaveLength(0);
+      expect(frames).toHaveLength(0);
+    });
+
+    it('does not glide a move the user makes, or a save coming back from "Updating…"', () => {
+      const { frames, view, element } = ratchet(false);
+      // Saving: the line turns pending, then trailing again at the saved stop.
+      view.rerender(element(151_000, 'pending'));
+      view.rerender(element(151_000));
+      expect(stopPrice()).toBe(151_000);
+      // Dragged by the finger: each move is drawn at once.
+      pointer(band('stop'), 'pointerdown', 180);
+      pointer(band('stop'), 'pointermove', 170);
+      view.rerender(element(151_500));
+      expect(stopPrice()).toBe(151_500);
+      expect(traces()).toHaveLength(0);
+      expect(frames).toHaveLength(0);
+    });
+
+    describe('keys on a trailing stop', () => {
+      function KeyHarness() {
+        const [price, setPrice] = useState(150_000);
+        return (
+          <ChartOverlay
+            handle={keyHandle}
+            tickSize={5}
+            label="Chart orders"
+            lines={[stopLine(price)]}
+            onDragMove={(_id, next) => setPrice(next)}
+            onDragEnd={(_id, saved) => setPrice(saved ?? 150_000)}
+          />
+        );
+      }
+      let keyHandle = makeHandle();
+      const framesFor = () => {
+        const frames: FrameRequestCallback[] = [];
+        vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
+          frames.push(callback);
+          return frames.length;
+        });
+        vi.stubGlobal('cancelAnimationFrame', () => undefined);
+        vi.stubGlobal('matchMedia', (query: string) => ({ matches: false, media: query }));
+        keyHandle = makeHandle();
+        return frames;
+      };
+      const springBack = (frames: FrameRequestCallback[]) => {
+        let now = 0;
+        const seen: number[] = [];
+        for (let i = 0; i < 90 && frames.length > 0; i += 1) {
+          now += 1000 / 60;
+          frames.shift()?.(now);
+          seen.push(Number(stopPrice()));
+        }
+        return seen;
+      };
+
+      it('draws an arrow-key move at once, with no trace and no queued frames', () => {
+        const frames = framesFor();
+        render(<KeyHarness />);
+        fireEvent.keyDown(screen.getByTestId('chart-handle'), { key: 'ArrowUp', shiftKey: true });
+        expect(stopPrice()).toBe(150_050);
+        expect(traces()).toHaveLength(0);
+        expect(frames).toHaveLength(0);
+      });
+
+      it.each([
+        ['Escape', (handle: HTMLElement) => fireEvent.keyDown(handle, { key: 'Escape' })],
+        ['blur', (handle: HTMLElement) => fireEvent.blur(handle)],
+      ])('%s springs the line back from the keyed price, leaving no trace', (_name, cancel) => {
+        const frames = framesFor();
+        render(<KeyHarness />);
+        const handle = screen.getByTestId('chart-handle');
+        fireEvent.keyDown(handle, { key: 'ArrowUp', shiftKey: true });
+        act(() => {
+          cancel(handle);
+        });
+        expect(stopPrice()).toBe(150_050);
+        // Right after the restore, before any frame: a spring, never a ratchet trace.
+        expect(traces()).toHaveLength(0);
+        const seen = springBack(frames);
+        expect(seen.some((price) => price > 150_000 && price < 150_050)).toBe(true);
+        expect(seen.at(-1)).toBe(150_000);
+        expect(traces()).toHaveLength(0);
+      });
+    });
+
+    it('a rejected save on a trailing stop springs back without a trace', () => {
+      const { frames, view, element } = ratchet(false);
+      pointer(band('stop'), 'pointerdown', 180);
+      pointer(band('stop'), 'pointermove', 170);
+      view.rerender(element(150_500));
+      pointer(band('stop'), 'pointerup', 170);
+      // The caller rolls the stop back to its saved price.
+      view.rerender(element(150_000));
+      expect(traces()).toHaveLength(0);
+      run(frames, 1_000);
+      expect(stopPrice()).toBe(150_000);
+      expect(traces()).toHaveLength(0);
+    });
+
+    it('a second ratchet mid-glide starts from the drawn price and leaves a second trace', () => {
+      const { frames, view, element } = ratchet(false);
+      view.rerender(element(151_000));
+      run(frames, 100);
+      const drawn = Number(stopPrice());
+      expect(drawn).toBeGreaterThan(150_000);
+      view.rerender(element(152_000));
+      expect(Number(stopPrice())).toBe(drawn);
+      expect(traces()).toHaveLength(2);
+      expect(traces()[1]?.options).toMatchObject({ price: drawn, lineStyle: 2 });
+      run(frames, 1_500);
+      expect(stopPrice()).toBe(152_000);
+      expect(traces()).toHaveLength(0);
+    });
+
+    it('removes a fading trace with the chart', () => {
+      const { view, element } = ratchet(false);
+      view.rerender(element(151_000));
+      expect(traces()).toHaveLength(1);
+      view.unmount();
+      expect(series()?.priceLines).toEqual([]);
     });
   });
 });
