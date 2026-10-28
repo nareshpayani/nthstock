@@ -159,6 +159,38 @@ describe('chart overlay (T15, SPEC-TFC-1 §10.5)', () => {
     expect(onGutterTap).toHaveBeenCalledTimes(1);
   });
 
+  it('a drag on the price axis zooms prices; Auto fits them again (NSTOCK-0436)', () => {
+    const onGutterTap = vi.fn();
+    render(
+      <ChartOverlay
+        handle={makeHandle()}
+        tickSize={5}
+        label="Chart orders"
+        lines={[]}
+        onGutterTap={onGutterTap}
+      />,
+    );
+    const gutter = screen.getByTestId('chart-gutter');
+    const auto = screen.getByTestId('chart-auto-fit');
+    expect(auto).not.toBeVisible();
+    // ₹1,450 to ₹1,600 is on screen; dragging down widens it around the middle, ₹1,525.
+    pointer(gutter, 'pointerdown', 100);
+    pointer(gutter, 'pointermove', 260);
+    pointer(gutter, 'pointerup', 260);
+    expect(onGutterTap).not.toHaveBeenCalled();
+    const { top, paisePerPx, height, autoScale } = chartsMock.scale;
+    const middle = top - (height * paisePerPx) / 2;
+    expect(middle).toBeCloseTo(152_500);
+    expect(height * paisePerPx).toBeCloseTo(15_000 * Math.E);
+    expect(autoScale).toBe(false);
+    act(() => chartsMock.repaint());
+    expect(auto).toBeVisible();
+    fireEvent.click(screen.getByRole('button', { name: 'Fit prices to the chart' }));
+    expect(chartsMock.scale.autoScale).toBe(true);
+    act(() => chartsMock.repaint());
+    expect(auto).not.toBeVisible();
+  });
+
   it('a handle drag reports each price and saves once on release; a tap does not drag', () => {
     const onDragMove = vi.fn();
     const onDragEnd = vi.fn();

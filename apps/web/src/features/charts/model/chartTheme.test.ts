@@ -59,11 +59,8 @@ describe('chart theme (T-094)', () => {
     expect(areaSeriesOptions('flat', 'inr').lineColor).toBe(colors.brand);
     expect(customFormat(areaSeriesOptions('up', 'index').priceFormat)(2541860)).toBe('25,418.60');
     const candles = candleSeriesOptions('inr');
-    // Rising candles are hollow (surface fill, up outline), falling ones filled (NSTOCK-0430).
-    expect([candles.upColor, candles.borderUpColor]).toEqual([
-      withAlpha(colors.up, 0.12),
-      colors.up,
-    ]);
+    // Rising candles are solid green, falling ones solid red (NSTOCK-0436).
+    expect([candles.upColor, candles.borderUpColor]).toEqual([colors.up, colors.up]);
     expect(candleSeriesOptions('inr', { smoothed: true }).lastValueVisible).toBe(false);
     expect([candles.downColor, candles.borderDownColor]).toEqual([colors.down, colors.down]);
     expect(lineSeriesOptions('down', 'inr').color).toBe(colors.down);

@@ -44,9 +44,9 @@ type FakeChart = {
 /**
  * The fake price scale: `top` paise sits at y = 0 and each px is `paisePerPx` lower, over a pane
  * `height` px tall with a `axisWidth` px price axis. Change it and call `repaint()` to stand in
- * for a pan, pinch or autoscale.
+ * for a pan, pinch or autoscale. `autoScale` turns off when a price-axis zoom sets the range.
  */
-const DEFAULT_SCALE = { top: 160_000, paisePerPx: 50, height: 300, axisWidth: 64 };
+const DEFAULT_SCALE = { top: 160_000, paisePerPx: 50, height: 300, axisWidth: 64, autoScale: true };
 
 export const chartsMock = {
   charts: [] as FakeChart[],
@@ -168,6 +168,21 @@ export function createChart(_host: HTMLElement, options: unknown) {
       },
     }),
     paneSize: () => ({ height: chartsMock.scale.height, width: 600 }),
-    priceScale: () => ({ width: () => chartsMock.scale.axisWidth }),
+    priceScale: () => ({
+      width: () => chartsMock.scale.axisWidth,
+      options: () => ({ autoScale: chartsMock.scale.autoScale }),
+      getVisibleRange: () => {
+        const { top, paisePerPx, height } = chartsMock.scale;
+        return { from: top - height * paisePerPx, to: top };
+      },
+      setVisibleRange: (range: { from: number; to: number }) => {
+        chartsMock.scale.top = range.to;
+        chartsMock.scale.paisePerPx = (range.to - range.from) / chartsMock.scale.height;
+        chartsMock.scale.autoScale = false;
+      },
+      setAutoScale: (on: boolean) => {
+        chartsMock.scale.autoScale = on;
+      },
+    }),
   };
 }

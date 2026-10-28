@@ -196,7 +196,7 @@ describe('PriceChart disposal (T-113)', () => {
       handleScroll: { horzTouchDrag: true, vertTouchDrag: false },
       handleScale: {
         pinch: true,
-        axisPressedMouseMove: { price: false },
+        axisPressedMouseMove: { price: true },
         axisDoubleClickReset: false,
       },
       rightPriceScale: { minimumWidth: 64, borderColor: expect.any(String) as string },

@@ -44,7 +44,7 @@ export const strings = {
     typeHints: {
       line: 'Closing prices joined by a line',
       area: 'Closing prices with the area below shaded',
-      candle: 'Open, high, low and close; rising bars hollow, falling bars filled',
+      candle: 'Open, high, low and close; rising bars green, falling bars red',
       bar: 'Open tick left, close tick right, high to low',
       heikin:
         'Smoothed candles that show the trend. Not traded prices; the tooltip shows the real ones',
