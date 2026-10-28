@@ -115,6 +115,8 @@ test('on a phone the ticket is a bottom sheet and a fill shows in the position s
     })
     .toEqual([390, 844]);
   // Every control in the sheet is a thumb-sized target: steppers, segments, switch, depth prices.
+  // Depth and the attached stop are behind "More options" on a phone (CR-T11).
+  await ticket.getByRole('button', { name: /^More options/ }).click();
   await expect(ticket.getByRole('button', { name: /use as limit price$/ }).first()).toBeVisible();
   await expectTargets([
     ticket.getByRole('button'),

@@ -305,7 +305,8 @@ function TicketFlow({
   return (
     <div className="grid">
       <div className="grid gap-1 border-b border-line px-4 py-3">
-        <p className="truncate text-body text-ink-muted">{instrument.name}</p>
+        {/* The sheet's title already names the stock, so a phone keeps this to one line. */}
+        <p className="truncate text-body text-ink-muted max-md:hidden">{instrument.name}</p>
         <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
           <span className="font-mono text-label font-medium text-ink">
             {strings.header.listing(instrument.symbol, instrument.exchange)}

@@ -66,12 +66,6 @@ const KNOWN_GAPS: readonly {
   { frame: 'ticket', check: 'sideScroll', viewports: ['phone-344x882'], story: 'CR-T13' },
   {
     frame: 'ticket',
-    check: 'primaryAction',
-    viewports: VIEWPORT_MATRIX.map((v) => v.name).filter((name) => name !== 'tablet-820x1180'),
-    story: 'CR-T11',
-  },
-  {
-    frame: 'ticket',
     check: 'touchTargets',
     viewports: ['landscape-844x390', 'tablet-820x1180', 'tablet-1180x820'],
     story: 'CR-T15',

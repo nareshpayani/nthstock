@@ -73,6 +73,9 @@ for (const viewport of VIEWPORTS) {
     await expect(ticket.getByTestId('fills-immediately')).toHaveCount(0);
 
     // Add trailing stop inline, a 1% trail, then Place and confirm.
+    // On a phone the attached stop is behind "More options" (CR-T11).
+    const more = ticket.getByRole('button', { name: /^More options/ });
+    if (await more.isVisible()) await more.click();
     await ticket.getByRole('switch', { name: 'Add trailing stop' }).click();
     await ticket.getByRole('textbox', { name: 'Trail (%)' }).fill('1');
     await ticket.getByRole('textbox', { name: 'Quantity' }).fill('2');

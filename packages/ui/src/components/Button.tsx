@@ -10,8 +10,10 @@ export const buttonVariants = cva(
     variants: {
       variant: {
         primary: 'bg-brand text-surface hover:bg-brand/90 active:bg-brand/80',
-        buy: 'bg-up text-surface hover:bg-up/90 active:bg-up/80',
-        sell: 'bg-down text-surface hover:bg-down/90 active:bg-down/80',
+        // Buy is filled brand blue and Sell outlined in down red, everywhere (SPEC-CR-1, CR-05): the
+        // two read apart by shape as well as colour, and green stays for price direction only.
+        buy: 'bg-brand text-surface hover:bg-brand/90 active:bg-brand/80',
+        sell: 'border-[1.5px] border-down bg-surface text-down hover:bg-down-soft active:bg-down-soft',
         secondary: 'border border-line bg-surface text-ink hover:bg-canvas',
         ghost: 'bg-transparent text-brand hover:bg-brand-soft',
         /** Destructive confirmations (cancel an order, reset the paper balance). */
