@@ -1,5 +1,7 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 28 28">
-  <rect width="28" height="28" rx="7" fill="#1463D8"/>
-  <text x="6" y="19.5" fill="#FFFFFF" font-family="ui-monospace, Menlo, monospace" font-size="15" font-weight="600" letter-spacing="-0.5">n</text>
-  <text x="15" y="12.5" fill="#F2B632" font-family="ui-monospace, Menlo, monospace" font-size="8.5" font-weight="600">th</text>
+<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 120 120">
+  <rect width="120" height="120" rx="27" fill="#1463D8"/>
+  <g transform="translate(27.55 10.08) scale(1.248)" fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M7.5 57.5V36a13.5 13.5 0 0 1 27 0v21.5" stroke="#FFFFFF" stroke-width="13"/>
+    <path d="M30 46L40 40L46 44L56 30" stroke="#F2B632" stroke-width="10"/>
+  </g>
 </svg>

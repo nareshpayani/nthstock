@@ -44,7 +44,7 @@ export function Header({ onOpenMenu, onOpenHelp }: HeaderProps) {
           className="lg:hidden"
         />
         <Link to="/dashboard" className="shrink-0 rounded-md">
-          <Logo />
+          <Logo className="text-[28px] sm:text-[32px]" />
         </Link>
         <HeaderTickers
           compact
