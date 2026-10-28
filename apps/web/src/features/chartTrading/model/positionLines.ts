@@ -55,10 +55,10 @@ export function positionLine(live: LivePosition, stop: TrailingStop | null): Ove
 export type PendingStop = { price: number; phase: 'dragging' | 'sending' };
 
 /**
- * The trailing stop's line (§8.1): dashed amber at the stop, "Trailing SL ₹1,228.40 · 1.5% ·
+ * The trailing stop's line (§8.1): dashed amber at the stop, "Trailing stop ₹1,228.40 · 1.5% ·
  * Trailing". Only while it has a stop price (trailing or triggered); waiting and armed stops show
  * on the position chip instead. It rises as the stop ratchets. While trailing it can be dragged to
- * a new stop, which changes the trail (T19, §6.5): it follows the finger, then reads "Updating…"
+ * a new stop, which changes the trail (T19, §6.5): it follows the finger, then reads "Saving…"
  * until the engine answers. Tapping it opens the sheet.
  */
 export function stopLine(stop: TrailingStop, pending?: PendingStop): OverlayLine | null {

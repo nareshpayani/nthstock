@@ -115,7 +115,7 @@ describe('position editor (NSTOCK-0395)', () => {
       // Set, with a limit exit: every term is offered, not only the trail.
       let editor = await openEditor(token);
       const summary = await within(editor).findByTestId('editor-summary');
-      expect(summary).toHaveTextContent('Executed qty+10');
+      expect(summary).toHaveTextContent('Shares held+10');
       expect(within(summary).getByTestId('editor-stop')).toHaveTextContent('No trailing stop');
       expect(
         await within(editor).findByRole('textbox', { name: /Activation price/ }),
@@ -138,7 +138,7 @@ describe('position editor (NSTOCK-0395)', () => {
       // Update the exit type alone: back to market.
       editor = await openEditor(token);
       expect(await within(editor).findByTestId('editor-stop')).toHaveTextContent(
-        /^Trailing · stop ₹.* · protects 10 qty$/,
+        /^Trailing · stop ₹.* · protects 10 shares$/,
       );
       const update = within(editor).getByRole('button', { name: 'Update trailing stop' });
       expect(update).toBeDisabled();
@@ -327,7 +327,7 @@ describe('position editor (NSTOCK-0395)', () => {
       const { api, token } = await renderEditor(5, { side: 'SELL', product: 'INTRADAY' });
       const editor = await openEditor(token, 'exit', 'INTRADAY');
       expect(await within(editor).findByTestId('editor-summary')).toHaveTextContent(
-        'Executed qty-5',
+        'Shares held-5',
       );
       const qty = await within(editor).findByRole('textbox', { name: 'Quantity' });
       expect(qty).toHaveValue('5');

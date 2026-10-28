@@ -13,7 +13,7 @@ const TONE: Record<TrailingStop['status'], string> = {
 };
 
 /**
- * A position's or order's trailing stop on a row (T11, SPEC-TFC-1 §6.2): "Trailing SL" and its
+ * A position's or order's trailing stop on a row (T11, SPEC-TFC-1 §6.2): "Trailing stop" and its
  * status in words, with the stop price while it trails. The words carry the meaning, not the tint.
  */
 export function TrailingStopBadge({

@@ -60,7 +60,7 @@ for (const viewport of VIEWPORTS) {
     // Exit part: the full ticket, prefilled with what is held, never more.
     await edit.click();
     editor = page.getByRole('dialog', { name: 'Edit INFY · Delivery' });
-    await expect(editor.getByTestId('editor-stop')).toContainText('protects 10 qty');
+    await expect(editor.getByTestId('editor-stop')).toContainText('protects 10 shares');
     await editor.getByRole('tab', { name: 'Exit' }).click();
     const qty = editor.getByRole('textbox', { name: 'Quantity' });
     await expect(qty).toHaveValue('10');

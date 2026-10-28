@@ -136,7 +136,7 @@ clip('walkthrough', 'demo walkthrough on a phone (T30)', async (page) => {
   }
   await expect(chip).toHaveText(/\+4 @ ₹/, { timeout: 15_000 });
   const stop = figure.locator('[data-testid="chart-handle"][data-tone="trailing"]');
-  await expect(stop).toContainText('Trailing SL', { timeout: 15_000 });
+  await expect(stop).toContainText('Trailing stop', { timeout: 15_000 });
   await chip.evaluate((element) => element.scrollIntoView({ block: 'center' }));
   await say(
     page,

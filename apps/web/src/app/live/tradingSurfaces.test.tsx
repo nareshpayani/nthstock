@@ -226,7 +226,7 @@ describe('surfaces on the trading store (T11, REQ-TFC-08)', () => {
       const positions = screen.getByRole('table', { name: /positions/i });
       expect(within(positions).getByText('3')).toBeInTheDocument();
       expect(within(positions).getByTestId('trailing-stop-badge')).toHaveTextContent(
-        `Trailing SLTrailing · stop ${formatInr(150_000)}`,
+        `Trailing stopTrailing · stop ${formatInr(150_000)}`,
       );
       expect(screen.getAllByTestId('depth-bid-row')[0]).toHaveTextContent(
         formatInr(frameDepth.bids[0]?.price ?? 0),

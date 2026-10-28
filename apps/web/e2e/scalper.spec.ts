@@ -192,7 +192,7 @@ test('scalp, set a trailing stop from the position strip, flatten: the stop goes
   await sheet.getByRole('textbox', { name: 'Trail (%)' }).fill('2');
   await sheet.getByRole('button', { name: 'Set trailing stop' }).click();
   await expect(sheet).toBeHidden();
-  await expect(strip).toContainText(/Trailing SL ₹[\d,]+\.\d\d/);
+  await expect(strip).toContainText(/Trailing stop ₹[\d,]+\.\d\d/);
   const figure = page.getByRole('figure', { name: /INFY area chart/ });
   const line = figure.locator('[data-testid="chart-handle"][data-tone="trailing"]');
   await expect(line).toHaveCount(1);

@@ -51,7 +51,7 @@ test('the trailing-stop line ratchets with the Simulator and a drag changes the 
   await sheet.getByRole('button', { name: 'Set trailing stop' }).click();
   await expect(sheet).toBeHidden();
   const line = figure.locator('[data-testid="chart-handle"][data-tone="trailing"]');
-  await expect(line).toHaveText(/Trailing SL ₹[\d,]+\.\d\d · 2% · Trailing$/);
+  await expect(line).toHaveText(/Trailing stop ₹[\d,]+\.\d\d · 2% · Trailing$/);
   const placed = rupees(await line.innerText());
 
   // A rally raises the stop.
@@ -77,7 +77,7 @@ test('the trailing-stop line ratchets with the Simulator and a drag changes the 
   await page.waitForTimeout(1_000);
   await setVisibility('visible');
   await page.waitForTimeout(1_500);
-  await expect(line).toHaveText(/Trailing SL ₹[\d,]+\.\d\d · 2% · Trailing$/);
+  await expect(line).toHaveText(/Trailing stop ₹[\d,]+\.\d\d · 2% · Trailing$/);
   expect(rupees(await line.innerText())).toBeGreaterThanOrEqual(held);
 
   // Drag the stop down: one modify, and the trail is now the distance in rupees.
@@ -94,6 +94,6 @@ test('the trailing-stop line ratchets with the Simulator and a drag changes the 
   await expect(
     page.getByRole('status').filter({ hasText: 'Trailing stop updated' }).first(),
   ).toBeVisible();
-  await expect(line).toHaveText(/Trailing SL ₹[\d,]+\.\d\d · ₹[\d,]+\.\d\d · Trailing$/);
+  await expect(line).toHaveText(/Trailing stop ₹[\d,]+\.\d\d · ₹[\d,]+\.\d\d · Trailing$/);
   expect(rupees(await line.innerText())).toBeGreaterThanOrEqual(dragged);
 });

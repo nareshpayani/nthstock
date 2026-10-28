@@ -143,7 +143,7 @@ export const strings = {
       label: (symbol: string) => `Your ${symbol} position`,
       qty: (netQty: number) => (netQty > 0 ? `+${String(netQty)}` : String(netQty)),
       at: (price: string) => `@ ${price}`,
-      trailing: (stop: string) => `Trailing SL ${stop}`,
+      trailing: (stop: string) => `Trailing stop ${stop}`,
       open: 'Opens the trailing stop for this position.',
     },
     orders: {

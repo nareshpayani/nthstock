@@ -847,7 +847,7 @@ describe('chart overlay (T15, SPEC-TFC-1 §10.5)', () => {
 
   describe('a trailing stop that ratchets (CR-T09, SPEC-CR-1 §5.3)', () => {
     const stopLine = (price: number, tone: OverlayLine['tone'] = 'trailing') =>
-      line({ id: 'stop', price, tone, label: `Trailing SL ${String(price)}` });
+      line({ id: 'stop', price, tone, label: `Trailing stop ${String(price)}` });
     function ratchet(reducedMotion: boolean) {
       const frames: FrameRequestCallback[] = [];
       vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
@@ -912,7 +912,7 @@ describe('chart overlay (T15, SPEC-TFC-1 §10.5)', () => {
       expect(frames).toHaveLength(0);
     });
 
-    it('does not glide a move the user makes, or a save coming back from "Updating…"', () => {
+    it('does not glide a move the user makes, or a save coming back from "Saving…"', () => {
       const { frames, view, element } = ratchet(false);
       // Saving: the line turns pending, then trailing again at the saved stop.
       view.rerender(element(151_000, 'pending'));

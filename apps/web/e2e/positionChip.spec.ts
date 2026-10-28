@@ -95,7 +95,7 @@ for (const viewport of VIEWPORTS) {
     await sheet.getByRole('button', { name: 'Set trailing stop' }).click();
     await expect(sheet).toBeHidden();
     const stop = figure.locator('[data-testid="chart-handle"][data-tone="trailing"]');
-    await expect(stop).toHaveText(/Trailing SL ₹[\d,]+\.\d\d · 1% · Trailing$/);
+    await expect(stop).toHaveText(/Trailing stop ₹[\d,]+\.\d\d · 1% · Trailing$/);
 
     // Update the trail to 2%.
     await chip.click();

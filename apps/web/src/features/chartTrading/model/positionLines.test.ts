@@ -75,9 +75,9 @@ describe('position line (T18, SPEC-TFC-1 §8.1)', () => {
       livePosition(short, 123_450),
       stop({ status: 'ARMED', stopPrice: null }),
     );
-    expect(line?.label).toBe('-5 @ ₹1,234.50 · ₹0.00 · Trailing SL armed');
+    expect(line?.label).toBe('-5 @ ₹1,234.50 · ₹0.00 · Trailing stop armed');
     expect(line?.description).toMatch(
-      /^Short 5 shares .* Trailing SL: Armed\. Open to change it\.$/,
+      /^Short 5 shares .* Trailing stop: Armed\. Open to change it\.$/,
     );
   });
 });
@@ -88,11 +88,11 @@ describe('trailing-stop line (§8.1)', () => {
       id: 'stop:ts_1',
       price: 122_840,
       tone: 'trailing',
-      label: 'Trailing SL ₹1,228.40 · 1.5% · Trailing',
+      label: 'Trailing stop ₹1,228.40 · 1.5% · Trailing',
       draggable: true,
     });
     expect(stopLine(stop({ trail: { unit: 'AMOUNT', amount: 1_250 } }))?.label).toBe(
-      'Trailing SL ₹1,228.40 · ₹12.50 · Trailing',
+      'Trailing stop ₹1,228.40 · ₹12.50 · Trailing',
     );
     expect(stopLine(stop({ status: 'TRIGGERED' }))?.label).toMatch(/· Triggered$/);
   });
@@ -104,18 +104,18 @@ describe('trailing-stop line (§8.1)', () => {
 });
 
 describe('moving the trailing stop (T19, SPEC-TFC-1 §6.5, §6.6)', () => {
-  it('can be dragged only while trailing; it follows the finger, then reads Updating…', () => {
+  it('can be dragged only while trailing; it follows the finger, then reads Saving…', () => {
     expect(stopLine(stop({ status: 'TRIGGERED' }))?.draggable).toBe(false);
     expect(stopLine(stop(), { price: 123_000, phase: 'dragging' })).toMatchObject({
       price: 123_000,
       tone: 'trailing',
-      label: 'Trailing SL ₹1,230.00 · 1.5% · Trailing',
+      label: 'Trailing stop ₹1,230.00 · 1.5% · Trailing',
       draggable: true,
     });
     expect(stopLine(stop(), { price: 123_000, phase: 'sending' })).toMatchObject({
       price: 123_000,
       tone: 'pending',
-      label: 'Updating… ₹1,230.00',
+      label: 'Saving… ₹1,230.00',
       draggable: false,
     });
   });
