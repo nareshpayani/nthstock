@@ -791,6 +791,28 @@ describe('chart overlay (T15, SPEC-TFC-1 §10.5)', () => {
       });
     });
   });
+  it('a locked line (offline) shows a lock instead of the grip and takes no drag (CR-T18)', () => {
+    const onDragMove = vi.fn();
+    render(
+      <ChartOverlay
+        handle={makeHandle()}
+        tickSize={5}
+        label="Chart orders"
+        lines={[line({ id: 'o1', price: 150_000, draggable: false, locked: true })]}
+        onDragMove={onDragMove}
+      />,
+    );
+    expect(screen.getByTestId('chart-tab-lock')).toBeInTheDocument();
+    expect(screen.queryByTestId('chart-tab-grip')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('chart-grab-band')).not.toBeInTheDocument();
+    const handle = screen.getByTestId('chart-handle');
+    pointer(handle, 'pointerdown', 200);
+    pointer(handle, 'pointermove', 150);
+    pointer(handle, 'pointerup', 150);
+    fireEvent.keyDown(handle, { key: 'ArrowUp' });
+    expect(onDragMove).not.toHaveBeenCalled();
+  });
+
   describe('the first-run drag hint (CR-T20, SPEC-CR-1 §5.7)', () => {
     beforeEach(() => {
       window.localStorage.removeItem(DRAG_HINT_KEY);

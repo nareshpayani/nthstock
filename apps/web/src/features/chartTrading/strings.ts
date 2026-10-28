@@ -1,4 +1,6 @@
 export const strings = {
+  /** Offline (SPEC-CR-1 §7): lines are locked and their names say why. */
+  locked: 'Locked while offline; changes resume when you reconnect.',
   drag: {
     /** The first-run hint beside the first draggable line (SPEC-CR-1 §5.7, CR-T20). */
     hint: 'Drag the line to change the price',

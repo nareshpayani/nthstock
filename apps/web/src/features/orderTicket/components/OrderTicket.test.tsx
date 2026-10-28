@@ -5,6 +5,7 @@ import { act, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createMockServer } from '@/mocks/node';
 import { useOpenTicket } from '@/shared/hooks/useOpenTicket';
+import { useConnectivityStore } from '@/shared/lib/connectivity';
 import type { MarketSession } from '@/shared/lib/marketSessionContext';
 import { initialTicketIntentState, useTicketIntentStore } from '@/shared/lib/ticketIntentStore';
 import { createTestQuoteStore, testQuote } from '@/test/quotes';
@@ -87,6 +88,7 @@ beforeEach(() => {
 afterEach(() => {
   vi.unstubAllGlobals();
   resetSession();
+  useConnectivityStore.getState().setForced('live');
   useTicketIntentStore.setState(initialTicketIntentState);
   vi.restoreAllMocks();
 });
@@ -116,6 +118,49 @@ describe('order ticket with the market open', () => {
       await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
       expect(useTicketIntentStore.getState().intent).toBeNull();
       await waitFor(() => expect(button).toHaveFocus());
+    },
+    HEAVY,
+  );
+
+  it(
+    'offline: the order button is disabled with the reason attached, and works again on reconnect (CR-1 §7)',
+    async () => {
+      await renderTicket(mock.session);
+      await openTicket();
+      const submit = () => within(screen.getByTestId('ticket-primary')).getByRole('button');
+      expect(submit()).toBeEnabled();
+
+      act(() => useConnectivityStore.getState().setForced('offline'));
+      const message = await screen.findByText("You're offline. Orders resume when you reconnect.");
+      expect(submit()).toBeDisabled();
+      expect(submit()).toHaveAccessibleDescription(message.textContent);
+
+      act(() => useConnectivityStore.getState().setForced('live'));
+      await waitFor(() => expect(submit()).toBeEnabled());
+      expect(screen.queryByText(/You're offline/)).not.toBeInTheDocument();
+    },
+    HEAVY,
+  );
+
+  it(
+    'offline: the review step Confirm is disabled with the reason attached, and works again on reconnect (CR-1 §7)',
+    async () => {
+      await renderTicket(mock.session);
+      await openTicket();
+      fireEvent.change(qtyInput(), { target: { value: '2' } });
+      fireEvent.click(screen.getByRole('button', { name: 'Buy INFY' }));
+      await screen.findByRole('heading', { name: 'Review your order' });
+      expect(screen.getByRole('button', { name: 'Confirm' })).toBeEnabled();
+
+      act(() => useConnectivityStore.getState().setForced('offline'));
+      const message = await screen.findByText("You're offline. Orders resume when you reconnect.");
+      const confirm = screen.getByRole('button', { name: 'Confirm' });
+      expect(confirm).toBeDisabled();
+      expect(confirm).toHaveAccessibleDescription(message.textContent);
+
+      act(() => useConnectivityStore.getState().setForced('live'));
+      await waitFor(() => expect(screen.getByRole('button', { name: 'Confirm' })).toBeEnabled());
+      expect(screen.queryByText(/You're offline/)).not.toBeInTheDocument();
     },
     HEAVY,
   );

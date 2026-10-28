@@ -16,6 +16,8 @@ export const strings = {
     listing: (symbol: string, exchange: string) => `${symbol} · ${exchange}`,
   },
   form: {
+    /** Offline (SPEC-CR-1 §7): the primary button is disabled and says why. */
+    offline: "You're offline. Orders resume when you reconnect.",
     moreOptions: 'More options',
     fillsImmediately: 'This will fill immediately: the price crosses the market.',
     label: 'Order details',

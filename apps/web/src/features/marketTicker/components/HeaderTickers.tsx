@@ -1,6 +1,7 @@
 import { IndexTicker, Skeleton, cn } from '@nthstock/ui';
 import { memo } from 'react';
 import { useQuote } from '@/shared/hooks/useQuote';
+import { useForcedState, useOffline } from '@/shared/lib/connectivity';
 import { headerIndices, type HeaderIndex } from '../model/headerIndices';
 import { strings } from '../strings';
 
@@ -15,7 +16,10 @@ const LiveIndexTicker = memo(function LiveIndexTicker({
   stacked,
 }: LiveIndexTickerProps) {
   const live = useQuote(symbol, exchange);
-  if (!live) {
+  // States (SPEC-CR-1 §7): an index that failed is hidden; the demo can force loading or error.
+  const forced = useForcedState();
+  if (forced === 'error') return null;
+  if (!live || forced === 'loading') {
     return (
       <div
         className={cn(
@@ -54,12 +58,29 @@ export function HeaderTickers({
   /** Name above the figures, for the phone header (see `IndexTicker`). */
   stacked?: boolean;
 }) {
+  // Offline (SPEC-CR-1 §7): the last levels stay, dimmed and marked stale.
+  const offline = useOffline();
   return (
     <div
       role="group"
       aria-label={strings.tickersLabel}
-      className={cn('flex items-center', stacked ? 'gap-4' : 'gap-5', className)}
+      data-stale={offline ? 'true' : undefined}
+      className={cn(
+        'flex items-center',
+        stacked ? 'gap-4' : 'gap-5',
+        offline && '[&>*:not([data-testid=tickers-stale])]:opacity-60',
+        className,
+      )}
     >
+      {/* First, so a narrow strip that clips its end still says it. */}
+      {offline ? (
+        <span
+          data-testid="tickers-stale"
+          className="shrink-0 rounded-sm border border-line px-1.5 py-0.5 text-label font-medium whitespace-nowrap text-ink-muted"
+        >
+          {strings.stale}
+        </span>
+      ) : null}
       {headerIndices.map((index) => (
         <LiveIndexTicker key={index.symbol} {...index} compact={compact} stacked={stacked} />
       ))}

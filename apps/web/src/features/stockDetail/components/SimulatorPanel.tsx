@@ -1,5 +1,6 @@
 import { Button } from '@nthstock/ui';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { PAGE_STATES, useConnectivityStore } from '@/shared/lib/connectivity';
 import { useSimulator } from '@/shared/lib/demoSimulator';
 import { strings } from '../strings';
 
@@ -14,6 +15,10 @@ export type SimulatorPanelProps = {
 export function SimulatorPanel({ symbol }: SimulatorPanelProps) {
   const simulator = useSimulator();
   const [split, setSplit] = useState<boolean | null>(null);
+  const forced = useConnectivityStore((state) => state.forced);
+  const setForced = useConnectivityStore((state) => state.setForced);
+  // A forced state belongs to this page: leaving it puts the page back to live.
+  useEffect(() => () => useConnectivityStore.getState().setForced('live'), []);
   if (!simulator) return null;
   const splitOn = split ?? simulator.splitFills(symbol);
   const s = strings.simulator;
@@ -47,6 +52,25 @@ export function SimulatorPanel({ symbol }: SimulatorPanelProps) {
       >
         {s.split}
       </Button>
+      {/* Each state of the page on demand (SPEC-CR-1 §7, CR-11). */}
+      <div
+        role="group"
+        aria-label={s.statesLabel}
+        className="flex basis-full flex-wrap items-center gap-2"
+      >
+        <span className="text-label font-medium text-ink-muted">{s.states}</span>
+        {PAGE_STATES.map((state) => (
+          <Button
+            key={state}
+            size="sm"
+            variant={forced === state ? 'primary' : 'secondary'}
+            aria-pressed={forced === state}
+            onClick={() => setForced(state)}
+          >
+            {s.stateNames[state]}
+          </Button>
+        ))}
+      </div>
     </section>
   );
 }

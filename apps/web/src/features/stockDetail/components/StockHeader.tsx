@@ -1,10 +1,13 @@
 import type { Exchange, Instrument, OrderSide, Quote } from '@nthstock/contracts';
-import { Button, SegmentedControl, cn } from '@nthstock/ui';
+import { Button, SegmentedControl, Skeleton, cn } from '@nthstock/ui';
+import { formatIstTime } from '@nthstock/utils';
 import { PriceAlertButton } from '@/features/notifications';
 import { WatchlistStar } from '@/features/watchlist';
 import { LiveChange } from '@/shared/components/LiveChange';
 import { PriceCell } from '@/shared/components/PriceCell';
 import { useOpenTicket } from '@/shared/hooks/useOpenTicket';
+import { useHasQuote } from '@/shared/hooks/useQuote';
+import { useConnectivityStore, useForcedState, useOffline } from '@/shared/lib/connectivity';
 import { EXCHANGES, useExchangeListings } from '../hooks/useExchangeListings';
 import { strings } from '../strings';
 
@@ -12,6 +15,10 @@ export type StockHeaderProps = {
   instrument: Instrument;
   /** REST snapshot shown until the first live quote arrives. */
   snapshot?: Quote | null | undefined;
+  /** The snapshot request failed: with no live quote either, the price is unavailable (§7). */
+  snapshotFailed?: boolean;
+  /** Retry from the "Price unavailable" state. */
+  onRetry?: () => void;
   onExchangeChange: (exchange: Exchange) => void;
   /** The phone layout (T12): Buy and Sell move to the bottom bar, controls grow to 44 px. */
   phone?: boolean;
@@ -27,6 +34,8 @@ export type StockHeaderProps = {
 export function StockHeader({
   instrument,
   snapshot,
+  snapshotFailed = false,
+  onRetry,
   onExchangeChange,
   phone = false,
   oneLine = false,
@@ -55,36 +64,66 @@ export function StockHeader({
       }))}
     />
   );
-  const price = (
-    // On a phone the change sits under the price, loading or not, so the block never reflows.
-    <div
-      className={cn(
-        'min-w-0',
-        phone && !oneLine
-          ? 'grid justify-items-start gap-1'
-          : 'flex flex-wrap items-baseline gap-x-3 gap-y-1',
-      )}
-    >
-      <span className="sr-only">{strings.header.priceLabel}</span>
-      <PriceCell
-        symbol={symbol}
-        exchange={exchange}
-        format={format}
-        size="lg"
-        roll
-        initial={snapshot?.ltp}
-      />
-      <span className="sr-only">{strings.header.changeLabel}</span>
-      <LiveChange
-        symbol={symbol}
-        exchange={exchange}
-        format={format}
-        soft
-        size="md"
-        initial={snapshot ? { change: snapshot.change, changeBp: snapshot.changeBp } : undefined}
-      />
-    </div>
-  );
+  // The price block's states (SPEC-CR-1 §7): loading, unavailable with Retry, or the last price
+  // marked stale with its time while offline. The demo "States" row can force each one.
+  const forced = useForcedState();
+  const offline = useOffline();
+  const since = useConnectivityStore((state) => state.since);
+  const hasLive = useHasQuote(symbol, exchange);
+  const unavailable = forced === 'error' || (snapshotFailed && !snapshot && !hasLive);
+  const price =
+    forced === 'loading' ? (
+      <div className="grid min-w-0 justify-items-start gap-1" data-testid="price-loading">
+        <Skeleton className="h-7 w-36" />
+        <Skeleton className="h-6 w-28" />
+      </div>
+    ) : unavailable ? (
+      <div className="flex min-h-11 items-center gap-2" data-testid="price-unavailable">
+        <span className="text-body font-medium text-ink">{strings.header.unavailable}</span>
+        {onRetry ? (
+          <Button size="sm" variant="secondary" onClick={onRetry}>
+            {strings.header.retry}
+          </Button>
+        ) : null}
+      </div>
+    ) : (
+      // On a phone the change sits under the price, loading or not, so the block never reflows.
+      <div
+        className={cn(
+          'min-w-0',
+          phone && !oneLine
+            ? 'grid justify-items-start gap-1'
+            : 'flex flex-wrap items-baseline gap-x-3 gap-y-1',
+        )}
+      >
+        <span className="sr-only">{strings.header.priceLabel}</span>
+        <PriceCell
+          symbol={symbol}
+          exchange={exchange}
+          format={format}
+          size="lg"
+          roll
+          initial={snapshot?.ltp}
+        />
+        <span className="sr-only">{strings.header.changeLabel}</span>
+        <LiveChange
+          symbol={symbol}
+          exchange={exchange}
+          format={format}
+          soft
+          size="md"
+          initial={snapshot ? { change: snapshot.change, changeBp: snapshot.changeBp } : undefined}
+        />
+        {offline && since !== null ? (
+          <span
+            data-testid="price-stale"
+            className="rounded-sm border border-line px-1.5 py-0.5 text-label font-medium text-ink-muted"
+          >
+            {strings.header.stale(formatIstTime(new Date(since)))}
+          </span>
+        ) : null}
+      </div>
+    );
 
   if (phone && oneLine) {
     return (

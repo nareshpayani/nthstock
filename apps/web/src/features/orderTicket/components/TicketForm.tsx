@@ -14,6 +14,7 @@ import { useEffect, useId, useRef, useState, type FormEventHandler, type ReactNo
 import { Controller, useWatch, type Control, type UseFormReturn } from 'react-hook-form';
 import { useDockedPanels, usePhoneLayout } from '@/shared/hooks/usePhoneLayout';
 import { useQuote } from '@/shared/hooks/useQuote';
+import { useOffline } from '@/shared/lib/connectivity';
 import type { TicketError } from '../model/orderError';
 import { fillsImmediately, type TicketFormValues } from '../model/ticketForm';
 import type { TrailingFormValues } from '../model/trailingStopForm';
@@ -178,6 +179,8 @@ export function TicketForm({
   compact = false,
   attachNeedsAttention = false,
 }: TicketFormProps) {
+  const offline = useOffline();
+  const offlineId = useId();
   const { control, formState, setValue, trigger } = form;
   const [side, type, product] = useWatch({ control, name: ['side', 'type', 'product'] });
   // On a phone the ticket shows the essentials and keeps the rest behind "More options", so the
@@ -452,14 +455,20 @@ export function TicketForm({
           (SPEC-CR-1 §5.5, AC-07). */}
       <div
         data-testid="ticket-primary"
-        className="sticky bottom-0 z-10 -mx-4 -mb-4 border-t border-line bg-surface px-4 pt-3 pb-4"
+        className="sticky bottom-0 z-10 -mx-4 -mb-4 grid gap-2 border-t border-line bg-surface px-4 pt-3 pb-4"
       >
+        {offline ? (
+          <p id={offlineId} role="status" className="text-center text-label text-ink">
+            {strings.form.offline}
+          </p>
+        ) : null}
         <Button
           type="submit"
           size="lg"
           block
           variant={side === 'BUY' ? 'buy' : 'sell'}
-          disabled={formState.isSubmitting}
+          disabled={formState.isSubmitting || offline}
+          aria-describedby={offline ? offlineId : undefined}
         >
           {submitLabel}
         </Button>

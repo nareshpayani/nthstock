@@ -27,6 +27,7 @@ import { Card } from '@/shared/components/Card';
 import { ChartSkeleton } from '@/shared/components/ChartSkeleton';
 import { useMarketOpen } from '@/shared/hooks/useMarketOpen';
 import { useApiClient } from '@/shared/lib/apiClientContext';
+import { useForcedState, useOffline } from '@/shared/lib/connectivity';
 import { DESKTOP_CHART_HEIGHT } from '@/shared/lib/phoneChart';
 import type { ChartType } from '../model/stockDetailSearch';
 import { ChartTypeMenu } from './ChartTypeMenu';
@@ -84,6 +85,11 @@ export function StockChartCard({
     ...candlesQuery(api, { symbol, exchange, range, interval }),
     placeholderData: keepPreviousData,
   });
+  // A state forced from the demo "States" row (SPEC-CR-1 §7) stands in for what the query says.
+  const forced = useForcedState();
+  const offline = useOffline();
+  const failed = forced === 'error' || (candles.isError && !candles.data);
+  const loaded = forced === 'loading' ? false : candles.data !== undefined;
   const format = instrument.type === 'INDEX' ? 'index' : 'inr';
   // T-108: while NSE is open, today's bars follow the quote store, whatever their size.
   const barMinutes = INTRADAY_INTERVAL_MINUTES[interval];
@@ -102,7 +108,7 @@ export function StockChartCard({
   );
 
   const touch = controls === 'touch';
-  const liveBadge = marketOpen && range === '1D' ? <LiveBadge /> : null;
+  const liveBadge = marketOpen && range === '1D' && !offline ? <LiveBadge /> : null;
   const rangeControl = (
     <SegmentedControl
       label={strings.chart.rangeLabel}
@@ -119,7 +125,7 @@ export function StockChartCard({
   const showIntervals = intervals.length > 1 && onIntervalChange !== undefined;
   const plot = (
     <div aria-busy={candles.isFetching} className="relative">
-      {candles.isError && !candles.data ? (
+      {failed ? (
         <div style={{ height }} className="grid place-items-center">
           <ErrorState
             title={strings.chart.errorTitle}
@@ -128,9 +134,10 @@ export function StockChartCard({
             onRetry={() => void candles.refetch()}
           />
         </div>
-      ) : candles.data ? (
+      ) : loaded ? (
         <PriceChart
-          candles={bars}
+          candles={forced === 'empty' ? NO_CANDLES : bars}
+          emptyText={range === '1D' ? strings.chart.emptyToday : undefined}
           label={strings.chart.label(
             symbol,
             strings.chart.typeNames[chartType],
@@ -157,6 +164,15 @@ export function StockChartCard({
       ) : (
         <ChartSkeleton height={height} label={strings.chart.loading} />
       )}
+      {offline && loaded && !failed ? (
+        <span
+          role="status"
+          data-testid="chart-paused"
+          className="pointer-events-none absolute top-2 left-1/2 z-10 -translate-x-1/2 rounded-pill bg-ink px-3 py-1 text-label font-medium whitespace-nowrap text-surface shadow-sm"
+        >
+          {strings.chart.paused}
+        </span>
+      ) : null}
     </div>
   );
 

@@ -15,6 +15,7 @@ import { haptic } from '@/shared/motion/haptics';
 import { useOpenTicket } from '@/shared/hooks/useOpenTicket';
 import { useQuote } from '@/shared/hooks/useQuote';
 import { usePendingOrderPrices } from '@/shared/hooks/usePendingOrderPrices';
+import { useOffline } from '@/shared/lib/connectivity';
 import { useOrderDraftStore } from '@/shared/lib/orderDraftStore';
 import { useTradingStore } from '@/shared/lib/tradingStoreContext';
 import { useTrailingSheetStore } from '@/shared/lib/trailingSheetStore';
@@ -56,6 +57,7 @@ export const CANCEL_ARM_MS = 3_000;
  * opens the trailing-stop sheet (T18, §8.4).
  */
 export function ChartTrading({ handle, instrument }: ChartTradingProps) {
+  const offline = useOffline();
   const toast = useToast();
   const store = useTradingStore();
   const actions = useOrderLineActions();
@@ -259,6 +261,7 @@ export function ChartTrading({ handle, instrument }: ChartTradingProps) {
   };
 
   const onAction = (id: string, action: string) => {
+    if (offline) return;
     if (id === GHOST) {
       if (action === 'BUY' || action === 'SELL') placeFromGhost(action);
       return;
@@ -275,14 +278,28 @@ export function ChartTrading({ handle, instrument }: ChartTradingProps) {
     armTimer.current = setTimeout(() => setArmed(null), CANCEL_ARM_MS);
   };
 
+  // Offline (SPEC-CR-1 §7): every line is locked, says why, and no new order starts on the chart.
+  const shown = offline
+    ? lines
+        .filter((line) => line.id !== GHOST)
+        .map((line) => ({
+          ...line,
+          draggable: false,
+          locked: true,
+          actions: undefined,
+          description: `${line.description} ${strings.locked}`,
+        }))
+    : lines;
+
   return (
     <ChartOverlay
       handle={handle}
-      lines={lines}
+      lines={shown}
       tickSize={instrument.tickSize}
       label={strings.group(instrument.symbol)}
       ltp={ltp}
       onGutterTap={(price) => {
+        if (offline) return;
         setGhostDrag(null);
         setGhost(price);
       }}
@@ -293,6 +310,13 @@ export function ChartTrading({ handle, instrument }: ChartTradingProps) {
         else setDraft({ orderId: id, price });
       }}
       onDragEnd={(id, price) => {
+        // A drag already in flight when the connection drops must not send a modify.
+        if (offline) {
+          setDraft(null);
+          setGhostDrag(null);
+          setStopMove(null);
+          return;
+        }
         if (id === GHOST) {
           setGhostDrag(null);
           if (price !== null) setGhost(price);
@@ -313,6 +337,7 @@ export function ChartTrading({ handle, instrument }: ChartTradingProps) {
         if (price !== null && price !== order.price) modify(order, price);
       }}
       onHandleDelete={(id) => {
+        if (offline) return;
         if (id === GHOST) {
           setGhost(null);
           return;
