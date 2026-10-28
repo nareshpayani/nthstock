@@ -56,8 +56,9 @@ function addSeries(chart: IChartApi, type: PriceChartType, format: ChartValueFor
     case 'line':
       return chart.addSeries(LineSeries, lineSeriesOptions('flat', format));
     case 'candle':
-    case 'heikin':
       return chart.addSeries(CandlestickSeries, candleSeriesOptions(format));
+    case 'heikin':
+      return chart.addSeries(CandlestickSeries, candleSeriesOptions(format, { smoothed: true }));
     case 'bar':
       return chart.addSeries(BarSeries, barSeriesOptions(format));
     default:

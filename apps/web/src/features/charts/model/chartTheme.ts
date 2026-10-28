@@ -204,12 +204,17 @@ const priceFormat = (format: ChartValueFormat) =>
   }) as const;
 
 /**
- * Candles (and Heikin-Ashi): an up bar is hollow and a down bar filled, so the direction reads from
- * the shape as well as the colour (WCAG 1.4.1, NSTOCK-0430).
+ * Candles (and Heikin-Ashi): an up bar is hollow, only a faint tint inside its outline, and a down
+ * bar filled, so the direction reads from the shape as well as the colour (WCAG 1.4.1,
+ * NSTOCK-0430). Heikin-Ashi hides the last-value label: its close is smoothed, not a traded price.
  */
-export function candleSeriesOptions(format: ChartValueFormat): CandlestickSeriesPartialOptions {
+export function candleSeriesOptions(
+  format: ChartValueFormat,
+  { smoothed = false }: { smoothed?: boolean } = {},
+): CandlestickSeriesPartialOptions {
   return {
-    upColor: colors.surface,
+    lastValueVisible: !smoothed,
+    upColor: withAlpha(colors.up, 0.12),
     downColor: colors.down,
     borderUpColor: colors.up,
     borderDownColor: colors.down,
