@@ -212,14 +212,21 @@ describe('the order book on a phone (NSTOCK-0435)', () => {
       createdAt: AT,
       updatedAt: AT,
     };
-    renderBook([order, { ...executed, id: 'ord_2' }], {
+    renderBook([order, { ...executed, id: 'ord_2' }, { ...order, id: 'ord_3' }], {
       pendingPrices: new Map([['ord_1', { price: 152_000, phase: 'dragging' as const }]]),
-      stops: new Map([['ord_2', stop]]),
+      stops: new Map([
+        ['ord_2', stop],
+        ['ord_3', stop],
+      ]),
     });
     const list = await screen.findByRole('list', { name: 'Open orders' });
-    const [open, done] = within(list).getAllByRole('listitem');
-    if (!open || !done) throw new Error('missing rows');
+    const [open, done, openWithStop] = within(list).getAllByRole('listitem');
+    if (!open || !done || !openWithStop) throw new Error('missing rows');
     expect(open).toHaveTextContent('Moving to ₹1,520.00');
+    // An open order with a live stop has four actions: they wrap rather than widen the row.
+    expect(within(openWithStop).getAllByRole('button')).toHaveLength(4);
+    expect(within(openWithStop).getByTestId('order-actions')).toHaveClass('flex-wrap');
+    expect(list).toHaveClass('grid-cols-[minmax(0,1fr)]');
     fireEvent.click(
       within(done).getByRole('button', { name: 'Edit the trailing stop of BUY 10 INFY order' }),
     );

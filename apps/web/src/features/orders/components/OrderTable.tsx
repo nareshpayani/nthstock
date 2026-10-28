@@ -72,12 +72,13 @@ export function OrderTable({
   const openEditor = usePositionEditorStore((s) => s.openEditor);
   const phone = usePhoneLayout();
   // Details on every row, Modify and Cancel on open orders, Edit stop while a trailing stop is active.
-  const actions = (order: Order) => {
+  // On a phone the buttons wrap: an open order with a live stop has four, wider than a 320 px row.
+  const actions = (order: Order, wrap = false) => {
     const name = orderName(order);
     const stop = stops?.get(order.id);
     const editable = stop !== undefined && !TERMINAL.has(stop.status);
     return (
-      <div className="flex gap-1">
+      <div className={wrap ? 'flex flex-wrap gap-1' : 'flex gap-1'} data-testid="order-actions">
         <Button
           size="sm"
           variant="ghost"
@@ -197,11 +198,15 @@ export function OrderTable({
   ];
 
   // On a phone each order is a two-line row with its actions under it, so nothing is cut off or
-  // scrolls sideways. A long book keeps the virtualised grid in a wrapper that scrolls sideways
-  // inside the card (the grid's own root is the vertical scroller, so it can't take the min width).
+  // scrolls sideways. A long book keeps the virtualised grid: its 960 px minimum would widen its
+  // own root, which is the vertical scroller, so a wrapper scrolls it sideways inside the card.
   if (phone && orders.length <= VIRTUAL_ORDER_ROWS) {
     return (
-      <ul aria-label={label} className="grid divide-y divide-line" data-layout="phone">
+      <ul
+        aria-label={label}
+        className="grid grid-cols-[minmax(0,1fr)] divide-y divide-line"
+        data-layout="phone"
+      >
         {orders.map((order) => {
           const stop = stops?.get(order.id);
           return (
@@ -236,7 +241,7 @@ export function OrderTable({
                   <OrderStatusBadge status={order.status} partial={isPartlyFilled(order)} />
                   {stop ? <TrailingStopBadge stop={stop} /> : null}
                 </span>
-                {actions(order)}
+                {actions(order, true)}
               </div>
             </li>
           );
