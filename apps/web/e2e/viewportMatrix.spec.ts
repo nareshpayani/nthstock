@@ -25,6 +25,10 @@ const MONDAY_10_IST = new Date('2026-09-28T04:30:00.000Z');
 const MIN_TARGET = 44;
 /** The header's index strip shows below this width (`min-[1360px]:hidden` in Header.tsx). */
 const TICKER_STRIP_MAX = 1360;
+/** From this width the index strip must fit without scrolling (AC-08). */
+const TICKER_FIT_MIN = 360;
+const PHONES = VIEWPORT_MATRIX.filter((viewport) => viewport.kind === 'phone').map((v) => v.name);
+const TOUCH = VIEWPORT_MATRIX.filter(isTouchViewport).map((viewport) => viewport.name);
 
 type Check =
   'ticketOpens' | 'sideScroll' | 'clippedText' | 'touchTargets' | 'primaryAction' | 'tickerFits';
@@ -34,8 +38,6 @@ type Frame = 'page' | 'ticket';
  * What today's flow still gets wrong, measured on 28 Oct 2026 before the craft round, each with the
  * story that fixes it. The story's pull request removes its rows; a row that passes fails the run.
  */
-const PHONES = VIEWPORT_MATRIX.filter((viewport) => viewport.kind === 'phone').map((v) => v.name);
-const TOUCH = VIEWPORT_MATRIX.filter(isTouchViewport).map((viewport) => viewport.name);
 const KNOWN_GAPS: readonly {
   frame: Frame;
   check: Check;
@@ -263,7 +265,11 @@ for (const viewport of VIEWPORT_MATRIX) {
       const tradeBar = page.getByRole('group', { name: 'Trade INFY' });
       // Wait for a Buy button to render before choosing which one this layout uses.
       await expect(page.getByRole('button', { name: 'Buy INFY' }).first()).toBeVisible();
-      const phoneBar = await tradeBar.isVisible();
+      // The bar renders with the page; give it a moment before settling on the page's own Buy.
+      const phoneBar = await tradeBar
+        .waitFor({ state: 'visible', timeout: 2_000 })
+        .then(() => true)
+        .catch(() => false);
       const buy = phoneBar
         ? tradeBar.getByRole('button', { name: 'Buy INFY' })
         : page.getByRole('button', { name: 'Buy INFY' }).first();
@@ -279,26 +285,37 @@ for (const viewport of VIEWPORT_MATRIX) {
       }
       await run('page', 'primaryAction', onScreen(page, buy));
       // The strip is the header's second row below 1360 px; wider, the indices sit in the header.
-      if (viewport.width >= 360 && viewport.width < TICKER_STRIP_MAX) {
+      if (viewport.width >= TICKER_FIT_MIN && viewport.width < TICKER_STRIP_MAX) {
         await run('page', 'tickerFits', tickerOverflow(page));
       }
 
+      const buyOffScreen = results.some(
+        (result) =>
+          result.frame === 'page' && result.check === 'primaryAction' && result.problems.length > 0,
+      );
+      const ticket = page.getByRole('dialog', { name: 'Trade INFY' });
       let openFailure: string | undefined;
       try {
         await buy.click({ timeout: 10_000 });
-        await expect(page.getByRole('dialog', { name: 'Trade INFY' })).toBeVisible({
-          timeout: 10_000,
-        });
+        await expect(ticket).toBeVisible({ timeout: 10_000 });
       } catch (error) {
         openFailure = error instanceof Error ? error.message : String(error);
       }
-      const ticket = page.getByRole('dialog', { name: 'Trade INFY' });
+      // Only a Buy that is off screen explains a ticket that cannot open; any other failure is real.
+      if (openFailure !== undefined && !buyOffScreen) throw new Error(openFailure);
+      results.push({
+        frame: 'ticket',
+        check: 'ticketOpens',
+        problems:
+          openFailure === undefined
+            ? []
+            : [{ element: 'Buy INFY', detail: 'the ticket did not open (Buy is off screen)' }],
+      });
       if (openFailure !== undefined) {
-        // The ticket's checks can't run: this fails unless it is a known gap.
-        results.push({
-          frame: 'ticket',
-          check: 'ticketOpens',
-          problems: [{ element: 'Buy INFY', detail: `the ticket did not open: ${openFailure}` }],
+        // The ticket's own checks can't run: mark the result partial.
+        test.info().annotations.push({
+          type: 'partial',
+          description: `ticket checks skipped at ${viewport.name}: ${openFailure}`,
         });
         judge(viewport, results);
         return;
