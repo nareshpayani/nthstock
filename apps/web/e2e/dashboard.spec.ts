@@ -97,6 +97,19 @@ const shot = (page: Page, path?: string) =>
     ...(path ? { path } : {}),
   });
 
+/**
+ * The same, with the NIFTY 50 plot masked: it folds the first live quote into its last bar
+ * (NSTOCK-0441), and how far the fake clock ran before that quote decides whether the quote starts
+ * a new minute's bar, so two loads may draw the plot a bar apart.
+ */
+const comparableShot = (page: Page) =>
+  page.screenshot({
+    fullPage: true,
+    animations: 'disabled',
+    caret: 'hide',
+    mask: [page.getByTestId('dashboard-chart')],
+  });
+
 /** Share of differing pixels between two PNGs, decoded in a blank page (no extra dependencies). */
 async function pixelDiffRatio(browser: Browser, a: Buffer, b: Buffer): Promise<number> {
   const page = await browser.newPage();
@@ -180,8 +193,8 @@ test('dashboard screenshot at 1440 px (T-100)', async ({ page, browser }, testIn
   try {
     const second = await context.newPage();
     await loadFrozenDashboard(second);
-    const again = await shot(second);
-    const ratio = await pixelDiffRatio(browser, screenshot, again);
+    const again = await comparableShot(second);
+    const ratio = await pixelDiffRatio(browser, await comparableShot(page), again);
     if (ratio > 0) {
       await testInfo.attach('dashboard-1440-second-load', {
         body: again,
