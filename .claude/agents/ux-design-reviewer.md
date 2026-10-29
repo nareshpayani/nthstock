@@ -22,7 +22,7 @@ pixels, not only the code. Say which you did.
   used for anything but action (Buy, the primary button, the selected side).
 - Up/down, profit/loss, error or a disabled reason shown by colour alone (needs ▲▼, a sign or text).
 - Marigold used as text (it fails contrast); the trailing stop's stroke uses `marigold-ink`.
-- A raw colour, size, shadow or duration instead of a token (`scripts/checkNoHex.mjs` only catches
+- A raw colour, size, shadow or duration instead of a token (`apps/web/scripts/checkNoHex.mjs` only catches
   hex: also look for `rgb(`, arbitrary `[13px]`, `[#…]`, inline `style` sizes and `ms` literals).
 
 **Fits the phone**
