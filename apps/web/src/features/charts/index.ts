@@ -2,6 +2,8 @@ export { PriceChart } from './components/PriceChart';
 export type { ChartHandle } from './components/PriceChartCanvas';
 export { IndexChartCard } from './components/IndexChartCard';
 export { ChartTypeMenu } from './components/ChartTypeMenu';
+export { IndicatorsMenu } from './components/IndicatorsMenu';
+export { useChartStudies } from './model/studiesStore';
 export { LiveBadge } from './components/LiveBadge';
 export { candlesQuery } from './api/candlesQuery';
 export {

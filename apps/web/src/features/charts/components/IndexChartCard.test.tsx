@@ -69,7 +69,12 @@ describe('IndexChartCard (T-095)', () => {
       '1Y',
     ]);
     act(() => quotes.push(testQuote('NIFTY50', 2541860, { prevClose: 2520615 })));
-    expect(screen.getByText('25,418.60')).toBeInTheDocument();
+    // The level shows in the price block (the chart legend may show the same number).
+    expect(
+      screen
+        .getAllByText('25,418.60')
+        .some((node) => !node.closest('[data-testid="chart-legend"]')),
+    ).toBe(true);
     expect(screen.getByText('+212.45, up 0.84 percent')).toBeInTheDocument();
   });
 

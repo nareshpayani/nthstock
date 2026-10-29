@@ -3,6 +3,7 @@ import {
   AreaSeries,
   BarSeries,
   CandlestickSeries,
+  HistogramSeries,
   LastPriceAnimationMode,
   LineSeries,
   createChart,
@@ -15,7 +16,7 @@ import {
   type UTCTimestamp,
 } from 'lightweight-charts';
 import { cn } from '@nthstock/ui';
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { toAreaData, toCandleData, toChartTime, toHeikinAshi } from '../model/chartData';
 import { trailingChanges } from '../model/liveCandles';
 import { GLIDE_MS, closeOf, glidePoint } from '../model/tickGlide';
@@ -31,6 +32,16 @@ import {
 } from '../model/chartTheme';
 import { isBarType, type PriceChartType } from '../model/chartTypes';
 import { tooltipContent, type HoveredItem } from '../model/chartTooltip';
+import { legendContent } from '../model/chartLegend';
+import { hasVolume, studyLines, type StudyId, type StudyLine } from '../model/studies';
+import {
+  VOLUME_HEIGHT,
+  VOLUME_SCALE_ID,
+  studyLineOptions,
+  volumeBarColor,
+  volumeSeriesOptions,
+} from '../model/chartTheme';
+import { ChartLegend } from './ChartLegend';
 import { ChartTooltip, type ChartTooltipState } from './ChartTooltip';
 
 export type PriceChartCanvasProps = {
@@ -49,7 +60,18 @@ export type PriceChartCanvasProps = {
    * are removed. Called again whenever the chart is rebuilt (a new type, range or height).
    */
   onReady?: ((handle: ChartHandle | null) => void) | undefined;
+  /** Volume bars and indicator lines to draw (NSTOCK-0460). */
+  studies?: readonly StudyId[] | undefined;
+  /** The O, H, L, C legend over the top left that follows the crosshair (NSTOCK-0460). */
+  legend?: boolean;
 };
+
+const NO_STUDIES: readonly StudyId[] = [];
+/** The library's default price margins, put back when the volume bars go. */
+const PRICE_MARGINS = { top: 0.2, bottom: 0.1 };
+const PRICE_MARGINS_WITH_VOLUME = { top: 0.15, bottom: VOLUME_HEIGHT + 0.05 };
+
+type StudySeries = ISeriesApi<'Line'> | ISeriesApi<'Histogram'>;
 
 type AnySeries =
   ISeriesApi<'Area'> | ISeriesApi<'Line'> | ISeriesApi<'Candlestick'> | ISeriesApi<'Bar'>;
@@ -103,6 +125,8 @@ export function PriceChartCanvas({
   tooltip = false,
   interactive = false,
   onReady,
+  studies = NO_STUDIES,
+  legend = false,
 }: PriceChartCanvasProps) {
   const hostRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
@@ -115,6 +139,11 @@ export function PriceChartCanvas({
   // The tick labels last drawn and which of them show (NSTOCK-0446), to rebuild only on a change.
   const ticksRef = useRef<{ prices: readonly number[]; show: readonly boolean[] } | null>(null);
   const [hover, setHover] = useState<ChartTooltipState | null>(null);
+  // The bar under the crosshair for the legend, by its chart time; null shows the last bar.
+  const [legendTime, setLegendTime] = useState<number | null>(null);
+  // The chart the study series below belong to, so a rebuilt chart gets new ones.
+  const studyChartRef = useRef<IChartApi | null>(null);
+  const studySeriesRef = useRef(new Map<string, StudySeries>());
   // The running tick glide (A16), so a new tick or a rebuild can stop it.
   const glideRef = useRef<number | null>(null);
   // Where that glide ends, so cancelling it mid-way still draws the bar's final close.
@@ -192,6 +221,11 @@ export function PriceChartCanvas({
       );
     };
     if (tooltip) chart.subscribeCrosshairMove(onCrosshairMove);
+    const owned = studySeriesRef.current;
+    const onLegendMove = (param: MouseEventParams<Time>) => {
+      setLegendTime(param.point && param.time !== undefined ? Number(param.time) : null);
+    };
+    if (legend) chart.subscribeCrosshairMove(onLegendMove);
     onReadyRef.current?.({ chart, series, host });
 
     return () => {
@@ -200,13 +234,91 @@ export function PriceChartCanvas({
       glideTargetRef.current = null;
       onReadyRef.current?.(null);
       if (tooltip) chart.unsubscribeCrosshairMove(onCrosshairMove);
+      if (legend) chart.unsubscribeCrosshairMove(onLegendMove);
       setHover(null);
+      setLegendTime(null);
+      owned.clear();
+      studyChartRef.current = null;
       observer.disconnect();
       chart.remove();
       chartRef.current = null;
       seriesRef.current = null;
     };
-  }, [type, format, intraday, height, tooltip, interactive]);
+  }, [type, format, intraday, height, tooltip, interactive, legend]);
+
+  // The indicator lines for the candles, shared by the chart and the legend.
+  const studyKey = studies.join(',');
+  const lines = useMemo<StudyLine[]>(
+    () => studies.flatMap((study) => studyLines(study, candles)),
+    // `studyKey` stands for `studies`, so a new array with the same studies does not recompute.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [candles, studyKey],
+  );
+  const showVolume = studies.includes('volume') && hasVolume(candles);
+
+  // Volume bars and indicator lines (NSTOCK-0460): one series each, added or removed as the
+  // studies change and given the candles' data on every update (a few hundred points each).
+  useEffect(() => {
+    const chart = chartRef.current;
+    const main = seriesRef.current;
+    if (!chart || !main) return;
+    const owned = studySeriesRef.current;
+    if (studyChartRef.current !== chart) {
+      owned.clear();
+      studyChartRef.current = chart;
+    }
+    const hadVolume = owned.has(VOLUME_SCALE_ID);
+    const wanted = new Set(lines.map((line) => line.key));
+    if (showVolume) wanted.add(VOLUME_SCALE_ID);
+    for (const [key, series] of owned) {
+      if (!wanted.has(key)) {
+        chart.removeSeries(series);
+        owned.delete(key);
+      }
+    }
+    // Make room under the price for the bars, and give it back when they go.
+    if (showVolume !== hadVolume) {
+      main.priceScale().applyOptions({
+        scaleMargins: showVolume ? PRICE_MARGINS_WITH_VOLUME : PRICE_MARGINS,
+      });
+    }
+    const times = candles.map((candle) => toChartTime(candle.t));
+    if (showVolume) {
+      let volume = owned.get(VOLUME_SCALE_ID) as ISeriesApi<'Histogram'> | undefined;
+      if (!volume) {
+        volume = chart.addSeries(HistogramSeries, volumeSeriesOptions());
+        chart.priceScale(VOLUME_SCALE_ID).applyOptions({
+          scaleMargins: { top: 1 - VOLUME_HEIGHT, bottom: 0 },
+          visible: false,
+        });
+        owned.set(VOLUME_SCALE_ID, volume);
+      }
+      volume.setData(
+        candles.map((candle, i) => ({
+          time: times[i] as UTCTimestamp,
+          value: candle.v,
+          color: volumeBarColor(candle.c >= candle.o),
+        })),
+      );
+    }
+    for (const line of lines) {
+      let series = owned.get(line.key) as ISeriesApi<'Line'> | undefined;
+      if (!series) {
+        series = chart.addSeries(
+          LineSeries,
+          studyLineOptions(line.study as Exclude<StudyId, 'volume'>, format),
+        );
+        owned.set(line.key, series);
+      }
+      series.setData(
+        line.values.flatMap((value, i) =>
+          value === null ? [] : [{ time: times[i] as UTCTimestamp, value }],
+        ),
+      );
+    }
+    // The chart's own dependencies too: effects run in order, so a rebuilt chart (above) gets its
+    // study series back in the same commit.
+  }, [lines, showVolume, candles, type, format, intraday, height, tooltip, interactive, legend]);
 
   useEffect(() => {
     const series = seriesRef.current;
@@ -290,6 +402,14 @@ export function PriceChartCanvas({
     if (series?.seriesType() === 'Line') series.applyOptions(lineSeriesOptions(direction, format));
   }, [direction, format, type, intraday, height]);
 
+  const legendIndex =
+    legendTime === null
+      ? candles.length - 1
+      : candles.findIndex((candle) => toChartTime(candle.t) === legendTime);
+  const legendView = legend
+    ? legendContent(candles, legendIndex, lines, { format, volume: showVolume })
+    : null;
+
   // `isolate` keeps the library's z-indexed canvases below an overlay drawn after the chart.
   return (
     <div
@@ -297,6 +417,7 @@ export function PriceChartCanvas({
       style={{ height }}
     >
       <div ref={hostRef} className="w-full" style={{ height }} data-testid="chart-host" />
+      {legendView ? <ChartLegend {...legendView} /> : null}
       {hover ? <ChartTooltip {...hover} /> : null}
     </div>
   );

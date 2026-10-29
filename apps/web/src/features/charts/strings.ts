@@ -44,6 +44,41 @@ export const strings = {
   errorTitle: 'Chart unavailable',
   errorBody: 'The NIFTY 50 chart could not load.',
   retry: 'Retry',
+  /** The legend above the plot (NSTOCK-0460): TradingView-style one-letter labels. */
+  legend: { open: 'O', high: 'H', low: 'L', close: 'C', volume: 'Vol' },
+  /** Indicators menu (NSTOCK-0460). */
+  studies: {
+    button: 'Indicators',
+    buttonLabel: (count: number) =>
+      count === 0 ? 'Indicators: none on' : `Indicators: ${String(count)} on`,
+    heading: 'Show on the chart',
+    names: {
+      volume: 'Volume',
+      sma20: 'Moving average 20',
+      sma50: 'Moving average 50',
+      ema20: 'Exponential average 20',
+      vwap: 'VWAP',
+      bollinger: 'Bollinger bands 20, 2',
+    },
+    hints: {
+      volume: 'Shares traded in each bar, under the price',
+      sma20: 'Average close of the last 20 bars; solid blue line',
+      sma50: 'Average close of the last 50 bars; dashed blue line',
+      ema20: 'Like the 20 average, but recent bars count more; solid dark line',
+      vwap: 'Average price weighted by volume since the open; dashed dark line',
+      bollinger: 'A band two deviations around the 20 average; dotted grey lines',
+    },
+  },
+  /** Each indicator line's short name in the legend. */
+  studyShort: {
+    sma20: 'SMA 20',
+    sma50: 'SMA 50',
+    ema20: 'EMA 20',
+    vwap: 'VWAP',
+    'bollinger-upper': 'BB U',
+    'bollinger-middle': 'BB 20',
+    'bollinger-lower': 'BB L',
+  } as Record<string, string>,
   tooltip: {
     price: 'Price',
     level: 'Level',

@@ -36,7 +36,9 @@ import {
   resolveInterval,
 } from '../model/ranges';
 import { strings } from '../strings';
+import { useChartStudies } from '../model/studiesStore';
 import { ChartTypeMenu } from './ChartTypeMenu';
+import { IndicatorsMenu } from './IndicatorsMenu';
 import { LiveBadge } from './LiveBadge';
 import { PriceChart } from './PriceChart';
 import type { ChartHandle } from './PriceChartCanvas';
@@ -86,6 +88,7 @@ export function IndexChartCard({
   // Fingers down on the plot: a second one makes it a pinch, never a tap.
   const pointersRef = useRef(new Set<number>());
   const phone = usePhoneLayout();
+  const studies = useChartStudies((state) => state.studies);
   const interval = resolveInterval(range, requestedInterval);
   const intervals = CANDLE_INTERVALS[range];
   // The NIFTY 50 page opens on what this card shows.
@@ -217,6 +220,7 @@ export function IndexChartCard({
           {onChartTypeChange ? (
             <ChartTypeMenu value={chartType} onValueChange={onChartTypeChange} touch={phone} />
           ) : null}
+          <IndicatorsMenu touch={phone} />
         </div>
       }
     >
@@ -281,7 +285,8 @@ export function IndexChartCard({
               format="index"
               intraday={isIntraday(range)}
               height={CHART_HEIGHT}
-              tooltip
+              legend
+              studies={studies}
               interactive
               onReady={setChart}
               className={candles.isPlaceholderData ? 'opacity-60' : undefined}

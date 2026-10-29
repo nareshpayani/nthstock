@@ -5,6 +5,8 @@ import {
   CrosshairMode,
   TickMarkType,
   type AreaSeriesPartialOptions,
+  type HistogramSeriesPartialOptions,
+  type LineStyle,
   type BarSeriesPartialOptions,
   type CandlestickSeriesPartialOptions,
   type LineSeriesPartialOptions,
@@ -227,5 +229,55 @@ export function candleSeriesOptions(
       minMove: 1,
       formatter: (value: number) => formatChartValue(value, format),
     },
+  };
+}
+
+/** The price scale the volume bars sit on: their own, in the bottom fifth of the plot. */
+export const VOLUME_SCALE_ID = 'volume';
+/** Room the price series leaves at the bottom for the volume bars, as a share of the height. */
+export const VOLUME_HEIGHT = 0.2;
+
+/** Volume bars (NSTOCK-0460): each bar green or red with its candle, light, behind the price. */
+export const volumeBarColor = (up: boolean): string =>
+  withAlpha(up ? colors.up : colors.down, 0.35);
+
+export function volumeSeriesOptions(): HistogramSeriesPartialOptions {
+  return {
+    priceScaleId: VOLUME_SCALE_ID,
+    priceFormat: { type: 'volume' },
+    lastValueVisible: false,
+    priceLineVisible: false,
+  };
+}
+
+/**
+ * Indicator lines (NSTOCK-0460) in the palette, not the library's defaults (A6): blue and ink,
+ * told apart by solid or dashed as well as colour, so no line relies on colour alone. Marigold
+ * stays the trailing stop's own colour; green and red stay price direction.
+ */
+// The library's LineStyle enum values, spelled out so this module needs only its types.
+const SOLID = 0 as LineStyle;
+const DOTTED = 1 as LineStyle;
+const DASHED = 2 as LineStyle;
+
+export const STUDY_LINE_STYLES = {
+  sma20: { color: colors.brand, lineStyle: SOLID },
+  sma50: { color: colors.brand, lineStyle: DASHED },
+  ema20: { color: colors.ink, lineStyle: SOLID },
+  vwap: { color: colors.ink, lineStyle: DASHED },
+  bollinger: { color: colors['ink-muted'], lineStyle: DOTTED },
+} as const;
+
+export function studyLineOptions(
+  study: keyof typeof STUDY_LINE_STYLES,
+  format: ChartValueFormat,
+): LineSeriesPartialOptions {
+  return {
+    ...STUDY_LINE_STYLES[study],
+    lineWidth: 1,
+    lastValueVisible: false,
+    priceLineVisible: false,
+    crosshairMarkerVisible: false,
+    priceFormat: priceFormat(format),
   };
 }

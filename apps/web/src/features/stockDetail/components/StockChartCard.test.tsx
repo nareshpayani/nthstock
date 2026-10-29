@@ -1,4 +1,4 @@
-import { fixedClock, fromIst } from '@nthstock/utils';
+import { fixedClock, formatInr, fromIst } from '@nthstock/utils';
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { chartsMock } from '@/test/chartsMock';
@@ -130,9 +130,10 @@ describe('stock price chart (T-107)', () => {
     act(() =>
       chartsMock.moveCrosshair({ time, open: 999900, high: 999900, low: 999900, close: 999900 }),
     );
-    const tooltip = screen.getByTestId('chart-tooltip');
-    expect(tooltip).toHaveTextContent('High');
-    expect(tooltip).not.toHaveTextContent('9,999.00');
+    // The legend shows the real candle at that time, not the smoothed bar.
+    const legend = screen.getByTestId('chart-legend');
+    expect(legend).toHaveTextContent('H');
+    expect(legend).not.toHaveTextContent('9,999.00');
   });
 
   it('offers 1m to 1h bars on 1D, keeps the choice in the URL and fetches those bars (NSTOCK-0343)', async () => {
@@ -179,30 +180,28 @@ describe('stock price chart (T-107)', () => {
     expect(screen.queryByRole('radiogroup', { name: 'Bar size' })).not.toBeInTheDocument();
   });
 
-  it('the crosshair tooltip shows the IST time and en-IN grouped rupees', async () => {
-    renderApp('/stocks/INFY?range=1W', { apiClient: api.apiClient });
-    await screen.findByTestId('chart-host');
-    // 25 Sep 2026, 14:05 IST.
-    const time = Date.parse('2026-09-25T08:35:00.000Z') / 1000;
-    act(() => chartsMock.moveCrosshair({ time, value: 12345678 }));
-    const tooltip = screen.getByTestId('chart-tooltip');
-    expect(tooltip).toHaveTextContent('25 Sept, 14:05');
-    expect(tooltip).toHaveTextContent('Price₹1,23,456.78');
-    act(() => chartsMock.moveCrosshair(null));
-    expect(screen.queryByTestId('chart-tooltip')).not.toBeInTheDocument();
-  });
-
-  it('shows candle OHLC in the tooltip', async () => {
+  it('the legend follows the crosshair with en-IN grouped values, and rests on the last bar (NSTOCK-0460)', async () => {
     renderApp('/stocks/INFY?range=1Y&chart=candle', { apiClient: api.apiClient });
     await screen.findByTestId('chart-host');
-    const time = Date.parse('2026-09-24T18:30:00.000Z') / 1000;
-    act(() =>
-      chartsMock.moveCrosshair({ time, open: 150000, high: 152500, low: 149050, close: 151235 }),
-    );
-    const tooltip = screen.getByTestId('chart-tooltip');
-    expect(tooltip).toHaveTextContent('25 Sept 2026');
-    expect(tooltip).toHaveTextContent('High₹1,525.00');
-    expect(tooltip).toHaveTextContent('Close₹1,512.35');
+    const series = await waitFor(() => {
+      const found = chartsMock.active()[0]?.series[0];
+      expect(found?.setData).toHaveBeenCalled();
+      return found;
+    });
+    const bars = series?.setData.mock.lastCall?.[0] as {
+      time: number;
+      high: number;
+      close: number;
+    }[];
+    const legend = screen.getByTestId('chart-legend');
+    const last = bars.at(-1);
+    expect(legend).toHaveTextContent(`C${formatInr(last?.close ?? 0).slice(1)}`);
+    const held = bars[3];
+    act(() => chartsMock.moveCrosshair({ ...held, open: 0, low: 0 } as never));
+    expect(legend).toHaveTextContent(`H${formatInr(held?.high ?? 0).slice(1)}`);
+    expect(legend).toHaveTextContent(`C${formatInr(held?.close ?? 0).slice(1)}`);
+    act(() => chartsMock.moveCrosshair(null));
+    expect(legend).toHaveTextContent(`C${formatInr(last?.close ?? 0).slice(1)}`);
   });
 });
 
@@ -280,10 +279,10 @@ describe('live chart (T-108, NSTOCK-0441)', () => {
         close: 999900,
       }),
     );
-    const tooltip = screen.getByTestId('chart-tooltip');
-    expect(tooltip).toHaveTextContent('Open₹1,513.00');
-    expect(tooltip).toHaveTextContent('Close₹1,513.00');
-    expect(tooltip).not.toHaveTextContent('9,999.00');
+    const legend = screen.getByTestId('chart-legend');
+    expect(legend).toHaveTextContent('O1,513.00');
+    expect(legend).toHaveTextContent('C1,513.00');
+    expect(legend).not.toHaveTextContent('9,999.00');
   });
 
   it('follows ticks on longer ranges too (NSTOCK-0441)', async () => {

@@ -14,6 +14,7 @@ import {
   CHART_RANGES,
   type ChartHandle,
   ChartTypeMenu,
+  IndicatorsMenu,
   LiveBadge,
   PriceChart,
   candlesQuery,
@@ -22,6 +23,7 @@ import {
   isIntraday,
   rangeLabel,
   resolveInterval,
+  useChartStudies,
   useLiveCandles,
 } from '@/features/charts';
 import { Card } from '@/shared/components/Card';
@@ -108,6 +110,7 @@ export function StockChartCard({
   const today = useDayDirection(symbol, exchange);
   const direction = range === '1D' ? today : undefined;
 
+  const studies = useChartStudies((state) => state.studies);
   const touch = controls === 'touch';
   const liveBadge = marketOpen && !offline ? <LiveBadge /> : null;
   const rangeControl = (
@@ -121,7 +124,10 @@ export function StockChartCard({
     />
   );
   const typeControl = (
-    <ChartTypeMenu value={chartType} onValueChange={onChartTypeChange} touch={touch} />
+    <>
+      <ChartTypeMenu value={chartType} onValueChange={onChartTypeChange} touch={touch} />
+      <IndicatorsMenu touch={touch} />
+    </>
   );
   const showIntervals = intervals.length > 1 && onIntervalChange !== undefined;
   const plot = (
@@ -150,7 +156,8 @@ export function StockChartCard({
           format={format}
           intraday={isIntraday(range)}
           height={height}
-          tooltip
+          legend
+          studies={studies}
           interactive
           onReady={trading ? setChart : undefined}
           overlay={
