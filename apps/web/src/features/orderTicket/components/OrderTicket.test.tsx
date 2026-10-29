@@ -6,6 +6,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } 
 import { createMockServer } from '@/mocks/node';
 import { useOpenTicket } from '@/shared/hooks/useOpenTicket';
 import { useConnectivityStore } from '@/shared/lib/connectivity';
+import { orderCue } from '@/shared/motion/orderCues';
 import type { MarketSession } from '@/shared/lib/marketSessionContext';
 import { initialTicketIntentState, useTicketIntentStore } from '@/shared/lib/ticketIntentStore';
 import { createTestQuoteStore, testQuote } from '@/test/quotes';
@@ -16,6 +17,12 @@ import { loginOnMock } from '@/test/watchlists';
 import { ticketKeys } from '../api/ticketQueries';
 import { OrderTicket } from './OrderTicket';
 import { OrderTicketHost } from './OrderTicketHost';
+
+// The cue itself (haptic and sound) is tested in orderCues.test.tsx; here we check which one fires.
+vi.mock('@/shared/motion/orderCues', async (importOriginal) => ({
+  ...(await importOriginal<Record<string, unknown>>()),
+  orderCue: vi.fn(),
+}));
 
 /** Monday 28 Sep 2026, 10:00 IST: NSE is open. Saturday 26 Sep, 11:30 IST: closed. */
 const OPEN_MS = fromIst(2026, 9, 28, 10 * 60).getTime();
@@ -96,6 +103,7 @@ afterEach(() => {
 describe('order ticket with the market open', () => {
   const mock = mockAt(OPEN_MS);
   beforeAll(() => mock.server.listen({ onUnhandledFrame: 'error' }));
+  beforeEach(() => vi.mocked(orderCue).mockClear());
   afterEach(() => mock.server.resetHandlers());
   afterAll(() => {
     mock.server.close();
@@ -302,6 +310,10 @@ describe('order ticket with the market open', () => {
       const confirm = await screen.findByRole('button', { name: 'Confirm' });
       fireEvent.click(confirm);
 
+      // The Confirm button draws its tick and the ticket stays up for the hold, then closes (A17).
+      expect(await screen.findByTestId('success-check')).toBeInTheDocument();
+      expect(screen.getByRole('dialog', { name: 'Trade INFY' })).toBeInTheDocument();
+      expect(orderCue).toHaveBeenCalledExactlyOnceWith('filledBuy');
       await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
       expect(useTicketIntentStore.getState().intent).toBeNull();
       expect((await screen.findAllByText('Order executed')).length).toBeGreaterThan(0);
@@ -326,6 +338,8 @@ describe('order ticket with the market open', () => {
 
       const alert = await screen.findByRole('alert');
       expect(alert).toHaveTextContent('Not enough shares');
+      expect(orderCue).toHaveBeenCalledExactlyOnceWith('rejected');
+      expect(screen.queryByTestId('success-check')).not.toBeInTheDocument();
       expect(alert).toHaveTextContent('You have no INFY shares to sell for delivery.');
       await waitFor(() => expect(alert).toHaveFocus());
       // Still open, still SELL 5 delivery at market.
@@ -476,6 +490,7 @@ describe('order ticket with the market open', () => {
 describe('order ticket with the market closed (T-138)', () => {
   const mock = mockAt(CLOSED_MS);
   beforeAll(() => mock.server.listen({ onUnhandledFrame: 'error' }));
+  beforeEach(() => vi.mocked(orderCue).mockClear());
   afterEach(() => mock.server.resetHandlers());
   afterAll(() => {
     mock.server.close();
@@ -513,6 +528,8 @@ describe('order ticket with the market closed (T-138)', () => {
       ).toBeInTheDocument();
       fireEvent.click(within(summary).getByRole('button', { name: 'Confirm AMO' }));
 
+      expect(await screen.findByTestId('success-check')).toBeInTheDocument();
+      expect(orderCue).toHaveBeenCalledExactlyOnceWith('placed');
       await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
       expect((await screen.findAllByText('AMO placed')).length).toBeGreaterThan(0);
     },
