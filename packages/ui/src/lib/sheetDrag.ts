@@ -1,4 +1,5 @@
 import { useCallback, useRef, type PointerEvent as ReactPointerEvent } from 'react';
+import { syncSheetMaxHeight } from './keyboardInset.js';
 import { animateSpring } from './spring.js';
 
 /** Past this share of its height a released sheet closes (SPEC-CR-1 §5.5). */
@@ -18,8 +19,6 @@ const DIM_FADE = 0.8;
 /** A flicked close takes the time its speed needs to finish the distance, within these (ms). */
 const CLOSE_MIN_MS = 120;
 const CLOSE_MAX_MS = 240;
-/** The full detent: the whole screen less the status bar and a sliver of the page behind. */
-const FULL_HEIGHT = 'calc(100dvh - env(safe-area-inset-top) - 12px)';
 
 type Drag = { pointerId: number; startY: number; lastY: number; lastT: number; speed: number };
 
@@ -103,8 +102,8 @@ export function useSheetDrag(enabled: boolean, onDismiss: () => void): SheetDrag
   // then springs it home: the bottom stays put, so the top moves by the change in height.
   const resize = (element: HTMLElement, full: boolean, offset: number, velocity: number) => {
     const before = element.getBoundingClientRect().height;
-    element.style.maxHeight = full ? FULL_HEIGHT : '';
     element.dataset.detent = full ? 'full' : 'compact';
+    syncSheetMaxHeight(element);
     const after = element.getBoundingClientRect().height;
     springBack(element, offset + after - before, velocity);
   };
@@ -134,7 +133,11 @@ export function useSheetDrag(enabled: boolean, onDismiss: () => void): SheetDrag
     onDismiss();
     // A vetoed or ignored close leaves the panel open and offset: bring it back.
     requestAnimationFrame(() => {
-      if (element.isConnected && element.dataset.state === 'open') springBack(element);
+      if (!element.isConnected || element.dataset.state !== 'open') return;
+      // The close was vetoed: the shortened close time must not leak into the next real close.
+      element.style.animationDuration = '';
+      if (overlay.current) overlay.current.style.animationDuration = '';
+      springBack(element);
     });
   };
 

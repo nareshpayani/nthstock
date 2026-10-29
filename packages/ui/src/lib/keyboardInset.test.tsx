@@ -1,6 +1,6 @@
 import { render } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { useKeyboardInset } from './keyboardInset.js';
+import { syncSheetMaxHeight, useKeyboardInset } from './keyboardInset.js';
 
 class FakeViewport extends EventTarget {
   height = 800;
@@ -42,6 +42,34 @@ describe('useKeyboardInset (SPEC-CR-1 §5.5)', () => {
     viewport.dispatchEvent(new Event('resize'));
     expect(panel.style.bottom).toBe('');
     expect(panel).toHaveAttribute('data-keyboard', 'closed');
+  });
+
+  it('keeps the full detent when the keyboard opens and closes', () => {
+    const viewport = new FakeViewport();
+    Object.defineProperty(window, 'visualViewport', { value: viewport, configurable: true });
+    Object.defineProperty(window, 'innerHeight', { value: 800, configurable: true });
+    const { getByTestId } = render(<Panel enabled />);
+    const panel = getByTestId('panel');
+    panel.dataset.detent = 'full';
+    viewport.height = 460;
+    viewport.dispatchEvent(new Event('resize'));
+    expect(panel.style.maxHeight).toBe('448px');
+    viewport.height = 800;
+    viewport.dispatchEvent(new Event('resize'));
+    expect(panel.style.maxHeight).toContain('100dvh');
+    expect(panel).toHaveAttribute('data-detent', 'full');
+  });
+
+  it('a detent change while the keyboard is open keeps the keyboard cap', () => {
+    const viewport = new FakeViewport();
+    viewport.height = 460;
+    Object.defineProperty(window, 'visualViewport', { value: viewport, configurable: true });
+    Object.defineProperty(window, 'innerHeight', { value: 800, configurable: true });
+    const { getByTestId } = render(<Panel enabled />);
+    const panel = getByTestId('panel');
+    panel.dataset.detent = 'compact';
+    syncSheetMaxHeight(panel);
+    expect(panel.style.maxHeight).toBe('414px');
   });
 
   it('subtracts the visual viewport offset from the inset', () => {

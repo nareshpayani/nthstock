@@ -382,7 +382,13 @@ function TicketFlow({
           />
         </div>
       ) : (
-        <div className={cn(steppedBack && 'animate-step-back')}>
+        <div
+          className={cn(steppedBack && 'animate-step-back')}
+          onAnimationEnd={() => {
+            // Played once for the user's Edit; later remounts of the form stay still.
+            setSteppedBack(false);
+          }}
+        >
           <TicketForm
             form={form}
             instrument={instrument}
