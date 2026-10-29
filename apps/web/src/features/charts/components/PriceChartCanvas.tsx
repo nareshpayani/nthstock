@@ -402,10 +402,10 @@ export function PriceChartCanvas({
     if (series?.seriesType() === 'Line') series.applyOptions(lineSeriesOptions(direction, format));
   }, [direction, format, type, intraday, height]);
 
-  const legendIndex =
-    legendTime === null
-      ? candles.length - 1
-      : candles.findIndex((candle) => toChartTime(candle.t) === legendTime);
+  // A crosshair time that matches no candle (after a range change, say) shows the last bar.
+  const hoveredIndex =
+    legendTime === null ? -1 : candles.findIndex((candle) => toChartTime(candle.t) === legendTime);
+  const legendIndex = hoveredIndex === -1 ? candles.length - 1 : hoveredIndex;
   const legendView = legend
     ? legendContent(candles, legendIndex, lines, { format, volume: showVolume })
     : null;

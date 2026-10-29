@@ -233,7 +233,7 @@ export function IndexChartCard({
           <div
             role="group"
             aria-label={strings.zoom.label}
-            className="absolute top-1 left-1 z-10 flex gap-1 rounded-md border border-line bg-surface/90 p-0.5"
+            className="absolute top-1 right-16 z-10 flex gap-1 rounded-md border border-line bg-surface/90 p-0.5"
           >
             <IconButton
               size="sm"

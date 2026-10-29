@@ -78,6 +78,20 @@ describe('IndexChartCard (T-095)', () => {
     expect(screen.getByText('+212.45, up 0.84 percent')).toBeInTheDocument();
   });
 
+  it('shows an OHLC legend with the bar change, and a picked indicator adds a line (NSTOCK-0460)', async () => {
+    renderCard();
+    await screen.findByTestId('chart-host');
+    const legend = await screen.findByTestId('chart-legend');
+    expect(legend).toHaveTextContent(/O.*H.*L.*C/);
+    expect(legend).toHaveTextContent(/[+-]?\d+(\.\d+)?%/);
+    const lines = () => chartsMock.active()[0]?.series.filter((s) => s.type === 'Line').length;
+    const before = lines();
+    fireEvent.keyDown(screen.getByRole('button', { name: /^Indicators: / }), { key: 'Enter' });
+    fireEvent.click(screen.getByRole('menuitemcheckbox', { name: /Moving average 20/ }));
+    await waitFor(() => expect(lines()).toBe((before ?? 0) + 1));
+    window.localStorage.clear();
+  });
+
   it('shows the LIVE badge beside the heading while NSE is open', async () => {
     renderCard(tradingClock);
     // The badge is not part of the heading, so the section keeps the plain name "NIFTY 50".
