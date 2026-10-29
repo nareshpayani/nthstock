@@ -58,6 +58,10 @@ export const strings = {
     sellLabel: (symbol: string) => `Sell ${symbol}`,
     removeLabel: (symbol: string) => `Remove ${symbol}`,
     dragLabel: (symbol: string) => `Drag to reorder ${symbol}`,
+    actionsLabel: (symbol: string) => `${symbol} actions`,
+    moveUp: 'Move up',
+    moveDown: 'Move down',
+    remove: 'Remove from list',
     keyHint: 'On a stock: B buy, S sell, Alt+↑/↓ move, Delete remove.',
   },
   /** Live-region announcements. */

@@ -2,6 +2,7 @@ import type { OrderSide, Quote, WatchlistItem } from '@nthstock/contracts';
 import { quoteKey } from '@nthstock/apiClient';
 import { defaultRangeExtractor, useVirtualizer, type Range } from '@tanstack/react-virtual';
 import { useCallback, useEffect, useRef, useState, type KeyboardEvent } from 'react';
+import { useTouchScreen } from '@/shared/hooks/usePhoneLayout';
 import { isTypingTarget } from '@/shared/hooks/useShortcut';
 import { usePointerReorder } from '../hooks/usePointerReorder';
 import { ROW_HEIGHT, WatchlistRow } from './WatchlistRow';
@@ -45,6 +46,7 @@ export function WatchlistRows({
   onRemove,
 }: WatchlistRowsProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
+  const touch = useTouchScreen();
   const [activeToken, setActiveToken] = useState<number | null>(null);
   const [focusInside, setFocusInside] = useState(false);
   const focusPending = useRef<number | null>(null);
@@ -164,6 +166,11 @@ export function WatchlistRows({
     }
   };
 
+  const onMove = (item: WatchlistItem, delta: -1 | 1) => {
+    const index = items.indexOf(item);
+    move(index, index + delta);
+  };
+
   const onRowFocus = useCallback((item: WatchlistItem) => setActiveToken(item.token), []);
 
   const height = Math.min(items.length, VISIBLE_ROWS) * ROW_HEIGHT;
@@ -209,6 +216,10 @@ export function WatchlistRows({
                 onRowFocus={onRowFocus}
                 onTrade={onTrade}
                 onRemove={onRemove}
+                touch={touch}
+                onMove={onMove}
+                canMoveUp={row.index > 0}
+                canMoveDown={row.index < items.length - 1}
               />
             </li>
           );
