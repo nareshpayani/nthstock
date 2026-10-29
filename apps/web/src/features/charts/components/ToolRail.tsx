@@ -117,6 +117,7 @@ export function ToolRail({ symbol, touch: touchProp = false, height, className }
   const clear = useDrawings((state) => state.clear);
   const count = useSymbolDrawings(symbol).length;
   const canRestore = useDrawings((state) => state.cleared[symbol] !== undefined);
+  const unsaved = useDrawings((state) => state.unsaved);
   return (
     <div className={cn('relative', className)}>
       <div
@@ -124,7 +125,8 @@ export function ToolRail({ symbol, touch: touchProp = false, height, className }
         aria-label={strings.drawing.rail}
         aria-orientation="vertical"
         data-testid="tool-rail"
-        className="flex flex-col items-center gap-1 overflow-y-auto"
+        // The padding keeps each button's focus ring inside the scrolling box.
+        className="flex flex-col items-center gap-1 overflow-y-auto p-1"
         style={height ? { maxHeight: height } : undefined}
       >
         <RailButton
@@ -178,9 +180,18 @@ export function ToolRail({ symbol, touch: touchProp = false, height, className }
       {tool ? (
         <p
           aria-hidden="true"
-          className="pointer-events-none absolute top-1 left-full z-30 ml-2 rounded-pill bg-ink px-3 py-1 text-label font-medium whitespace-nowrap text-surface shadow-raised"
+          className="pointer-events-none absolute top-1 left-full z-30 ml-2 w-max max-w-[min(16rem,calc(100vw-5rem))] rounded-md bg-ink px-3 py-1 text-label font-medium text-surface shadow-raised"
         >
           {strings.drawing.hints[tool]}
+        </p>
+      ) : null}
+      {unsaved ? (
+        <p
+          role="status"
+          data-testid="drawings-not-saved"
+          className="absolute bottom-1 left-full z-30 ml-2 w-max max-w-[min(16rem,calc(100vw-5rem))] rounded-md border border-line bg-surface px-3 py-1 text-label text-ink shadow-raised"
+        >
+          {strings.drawing.notSaved}
         </p>
       ) : null}
     </div>

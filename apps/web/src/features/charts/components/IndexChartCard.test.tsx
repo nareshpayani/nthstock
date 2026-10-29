@@ -94,6 +94,43 @@ describe('IndexChartCard (T-095)', () => {
     await waitFor(() => expect(lines()).toBe((before ?? 0) + 1));
   });
 
+  it('greys Volume in Indicators with the reason: an index trades no shares (NSTOCK-0461)', async () => {
+    renderCard();
+    await screen.findByTestId('chart-host');
+    fireEvent.keyDown(screen.getByRole('button', { name: /^Indicators/ }), { key: 'Enter' });
+    const volume = screen.getByRole('menuitemcheckbox', { name: /Volume/ });
+    expect(volume).toHaveAttribute('aria-disabled', 'true');
+    expect(volume).toHaveTextContent('An index trades no shares');
+  });
+
+  it('opens full screen with the rail, and Close brings the card back (NSTOCK-0461)', async () => {
+    renderCard();
+    await screen.findByTestId('chart-host');
+    fireEvent.click(screen.getByRole('button', { name: 'Open the chart full screen' }));
+    const dialog = screen.getByRole('dialog', { name: 'NIFTY 50 chart' });
+    expect(within(dialog).getByRole('toolbar', { name: 'Drawing tools' })).toBeInTheDocument();
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Close full screen' }));
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(await screen.findByTestId('dashboard-chart')).toBeInTheDocument();
+  });
+
+  it('full screen shows the error and its retry when the candles fail (NSTOCK-0461)', async () => {
+    const { http, HttpResponse } = await import('msw');
+    api.server.use(
+      http.get('*/v1/market/instruments/:symbol/candles', () =>
+        HttpResponse.json({ error: { code: 'INTERNAL_ERROR', message: 'boom' } }, { status: 500 }),
+      ),
+    );
+    const resizer = installResizeObserver();
+    renderCard();
+    await screen.findAllByRole('alert');
+    fireEvent.click(screen.getByRole('button', { name: 'Open the chart full screen' }));
+    act(() => resizer.resize(400, 300));
+    const dialog = screen.getByRole('dialog', { name: 'NIFTY 50 chart' });
+    expect(within(dialog).getByRole('alert')).toHaveTextContent('Chart unavailable');
+    expect(within(dialog).getByRole('button', { name: 'Retry' })).toBeInTheDocument();
+  });
+
   it('shows the LIVE badge beside the heading while NSE is open', async () => {
     renderCard(tradingClock);
     // The badge is not part of the heading, so the section keeps the plain name "NIFTY 50".

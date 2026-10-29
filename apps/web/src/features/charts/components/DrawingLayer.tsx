@@ -25,6 +25,8 @@ export type DrawingLayerProps = {
   format: ChartValueFormat;
 };
 
+/** The note box's width (Tailwind `w-44`), kept inside the plot's right edge. */
+const NOTE_WIDTH = 176;
 /** A press that travels further than this is a drag from the first point to the second. */
 const DRAG_PX = 8;
 const LINE = colors.brand;
@@ -87,7 +89,8 @@ export function DrawingLayer({ handle, candles, symbol, format }: DrawingLayerPr
   useEffect(() => {
     if (tool === null) return undefined;
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setTool(null);
+      // The full-screen chart may have dropped the tool for this Escape already.
+      if (event.key === 'Escape' && !event.defaultPrevented) setTool(null);
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
@@ -224,17 +227,23 @@ export function DrawingLayer({ handle, candles, symbol, format }: DrawingLayerPr
         ) : null}
       </svg>
       {measured && !liveMeasure ? (
-        <button
-          type="button"
-          onClick={() => setMeasured(null)}
-          className="absolute top-1 right-20 z-30 rounded-pill border border-line bg-surface px-3 py-1 text-label font-medium text-ink shadow-raised"
-        >
-          {strings.drawing.clearMeasure}
-        </button>
+        <>
+          {/* The SVG is hidden from screen readers, so the numbers are read from here. */}
+          <p role="status" data-testid="measure-readout" className="sr-only">
+            {measureReadout(measured.from, measured.to, candles, format).text}
+          </p>
+          <button
+            type="button"
+            onClick={() => setMeasured(null)}
+            className="absolute top-1 right-20 z-30 inline-flex min-h-11 items-center rounded-pill border border-line bg-surface px-4 text-label font-medium text-ink shadow-raised [@media(pointer:fine)]:min-h-8"
+          >
+            {strings.drawing.clearMeasure}
+          </button>
+        </>
       ) : null}
       {note ? (
         <NoteInput
-          left={x(note.time)}
+          left={Math.min(x(note.time), width - NOTE_WIDTH)}
           top={y(note.price)}
           onDone={(text) => {
             if (text.trim())
@@ -350,6 +359,20 @@ function DrawingShape({
   }
 }
 
+/** The measure tool's numbers: change, percent, bars and time, with which way it went. */
+function measureReadout(
+  from: ChartPoint,
+  to: ChartPoint,
+  candles: readonly Candle[],
+  format: ChartValueFormat,
+): { up: boolean; text: string } {
+  const result = measure(from, to, candles);
+  const up = result.change >= 0;
+  const change = formatChange(result.basisPoints);
+  const text = `${up ? '+' : '-'}${formatChartValue(Math.abs(result.change), format).replace('₹', '')} (${change.text}) · ${String(result.bars)} ${strings.drawing.bars} · ${formatSpan(result.seconds)}`;
+  return { up, text };
+}
+
 /** The measure tool's read-out (and the zoom tool's span): a shaded box and its numbers. */
 function MeasureBox({
   from,
@@ -370,11 +393,8 @@ function MeasureBox({
   const top = Math.min(y(from.price), y(to.price));
   const boxWidth = Math.abs(x(to.time) - x(from.time));
   const boxHeight = zoom ? 9999 : Math.abs(y(to.price) - y(from.price));
-  const result = measure(from, to, candles);
-  const up = result.change >= 0;
+  const { up, text } = measureReadout(from, to, candles, format);
   const tone = up ? colors.up : colors.down;
-  const change = formatChange(result.basisPoints);
-  const text = `${up ? '+' : '-'}${formatChartValue(Math.abs(result.change), format).replace('₹', '')} (${change.text}) · ${String(result.bars)} ${strings.drawing.bars} · ${formatSpan(result.seconds)}`;
   return (
     <g data-testid="measure-box">
       <rect
@@ -417,6 +437,13 @@ function NoteInput({
 }) {
   const [text, setText] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
+  // Enter, Escape and the blur that follows either one all end the note: only the first counts.
+  const doneRef = useRef(false);
+  const done = (value: string) => {
+    if (doneRef.current) return;
+    doneRef.current = true;
+    onDone(value);
+  };
   // The box appears where the finger was; focus follows it so the keyboard opens.
   useEffect(() => inputRef.current?.focus(), []);
   return (
@@ -427,12 +454,17 @@ function NoteInput({
       maxLength={60}
       onChange={(event) => setText(event.target.value)}
       onKeyDown={(event) => {
-        if (event.key === 'Enter') onDone(text);
-        if (event.key === 'Escape') onDone('');
+        if (event.key === 'Enter') done(text);
+        if (event.key === 'Escape') {
+          // The note's Escape, not the full-screen chart's.
+          event.preventDefault();
+          event.stopPropagation();
+          done('');
+        }
       }}
-      onBlur={() => onDone(text)}
-      className="absolute z-30 h-9 w-44 rounded-md border border-brand bg-surface px-2 text-body text-ink shadow-raised focus-visible:ring-3 focus-visible:ring-brand-soft focus-visible:outline-none"
-      style={{ left: Math.max(0, left), top: Math.max(0, top - 18) }}
+      onBlur={() => done(text)}
+      className="absolute z-30 h-11 w-44 rounded-md border border-brand bg-surface px-2 text-body text-ink shadow-raised focus-visible:ring-3 focus-visible:ring-brand-soft focus-visible:outline-none"
+      style={{ left: Math.max(0, left), top: Math.max(0, top - 22) }}
     />
   );
 }

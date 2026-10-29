@@ -1,8 +1,9 @@
 import type { Candle } from '@nthstock/contracts';
 import { act, fireEvent, render, screen } from '@testing-library/react';
+import type { ReactNode } from 'react';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { installResizeObserver } from '@/test/resizeObserver';
-import { drawingsStorageKey, useDrawings } from '../model/drawingsStore';
+import { drawingsStorageKey, unreadableDrawingsKey, useDrawings } from '../model/drawingsStore';
 import { ChartWorkspace } from './ChartWorkspace';
 import { DrawingLayer } from './DrawingLayer';
 import type { ChartHandle } from './PriceChartCanvas';
@@ -53,26 +54,45 @@ const tap = (layer: Element, x: number, y: number) => {
 
 const stored = () => JSON.parse(window.localStorage.getItem(drawingsStorageKey('INFY')) ?? '[]');
 
+let resizer: ReturnType<typeof installResizeObserver>;
 beforeAll(() => {
-  installResizeObserver();
+  resizer = installResizeObserver();
   Element.prototype.setPointerCapture = vi.fn();
 });
 afterAll(() => vi.unstubAllGlobals());
 
 beforeEach(() => {
   window.localStorage.clear();
-  useDrawings.setState({ tool: null, magnet: false, bySymbol: {}, cleared: {} });
+  useDrawings.setState({ tool: null, magnet: false, bySymbol: {}, cleared: {}, unsaved: false });
 });
 
-function renderTools() {
+function renderTools(symbol = 'INFY') {
   const { handle, setVisibleLogicalRange } = fakeHandle();
   render(
     <div>
-      <ToolRail symbol="INFY" />
-      <DrawingLayer handle={handle} candles={candles} symbol="INFY" format="inr" />
+      <ToolRail symbol={symbol} />
+      <DrawingLayer handle={handle} candles={candles} symbol={symbol} format="inr" />
     </div>,
   );
   return { layer: screen.getByTestId('drawing-layer'), setVisibleLogicalRange };
+}
+
+/** An Escape the way a browser sends it: cancelable, so a handler can claim it. */
+const escape = () =>
+  act(() => {
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', cancelable: true }));
+  });
+
+/** The full-screen chart with the drawing layer inside, as the cards render it. */
+function renderWorkspace(onClose: () => void, controls: ReactNode = null) {
+  const { handle } = fakeHandle();
+  render(
+    <ChartWorkspace name="INFY" symbol="INFY" controls={controls} footer={null} onClose={onClose}>
+      {() => <DrawingLayer handle={handle} candles={candles} symbol="INFY" format="inr" />}
+    </ChartWorkspace>,
+  );
+  // The plot is drawn once the box below the header has a height.
+  act(() => resizer.resize(400, 300));
 }
 
 describe('drawing tools (NSTOCK-0461)', () => {
@@ -145,6 +165,8 @@ describe('drawing tools (NSTOCK-0461)', () => {
     tap(layer, 50, 200);
     tap(layer, 150, 100);
     expect(screen.getByTestId('measure-box')).toHaveTextContent('+50.00 (▲ 3.33%) · 10 bars · 10m');
+    // The SVG is hidden from screen readers; the same numbers are announced.
+    expect(screen.getByTestId('measure-readout')).toHaveTextContent('+50.00 (▲ 3.33%) · 10 bars');
     fireEvent.click(screen.getByRole('button', { name: 'Clear measure' }));
     expect(screen.queryByTestId('measure-box')).not.toBeInTheDocument();
   });
@@ -179,17 +201,125 @@ describe('full-screen chart (NSTOCK-0461)', () => {
     expect(onClose).toHaveBeenCalledTimes(2);
   });
 
-  it('a first Escape drops a picked tool instead of closing', () => {
+  it('a first Escape drops a picked tool, with the drawing layer listening too; the next closes', () => {
     const onClose = vi.fn();
-    render(
-      <ChartWorkspace name="INFY" symbol="INFY" controls={null} footer={null} onClose={onClose}>
+    renderWorkspace(onClose);
+    fireEvent.click(screen.getByRole('button', { name: 'Trend line' }));
+    expect(screen.getByTestId('drawing-layer')).toHaveAttribute('data-tool', 'trend');
+    escape();
+    expect(useDrawings.getState().tool).toBeNull();
+    expect(screen.getByTestId('drawing-layer')).not.toHaveAttribute('data-tool');
+    expect(onClose).not.toHaveBeenCalled();
+    escape();
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('leaves Escape to a text field or an open menu inside it', () => {
+    const onClose = vi.fn();
+    renderWorkspace(
+      onClose,
+      <>
+        <input aria-label="Search" />
+        <button type="button" aria-expanded="true">
+          Indicators
+        </button>
+      </>,
+    );
+    fireEvent.keyDown(screen.getByRole('textbox', { name: 'Search' }), { key: 'Escape' });
+    fireEvent.keyDown(screen.getByRole('button', { name: 'Indicators' }), { key: 'Escape' });
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it('makes the page behind inert while open, and gives it back on close', () => {
+    const page = document.createElement('main');
+    document.body.append(page);
+    const view = render(
+      <ChartWorkspace name="INFY" symbol="INFY" controls={null} footer={null} onClose={vi.fn()}>
         {() => null}
       </ChartWorkspace>,
     );
-    act(() => useDrawings.getState().setTool('trend'));
-    act(() => {
-      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
-    });
+    expect(page).toHaveAttribute('inert');
+    expect(screen.getByRole('dialog').closest('[inert]')).toBeNull();
+    view.unmount();
+    expect(page).not.toHaveAttribute('inert');
+    page.remove();
+  });
+
+  it('a note dropped with Escape stays dropped, and keeps the full-screen chart open', () => {
+    const onClose = vi.fn();
+    renderWorkspace(onClose);
+    fireEvent.click(screen.getByRole('button', { name: 'Text note' }));
+    tap(screen.getByTestId('drawing-layer'), 50, 100);
+    const box = screen.getByRole('textbox', { name: 'Note text' });
+    fireEvent.change(box, { target: { value: 'support' } });
+    fireEvent.keyDown(box, { key: 'Escape' });
+    fireEvent.blur(box);
+    expect(stored()).toEqual([]);
     expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it('a note saved with Enter is saved once, not again on the blur that follows', () => {
+    renderWorkspace(vi.fn());
+    fireEvent.click(screen.getByRole('button', { name: 'Text note' }));
+    tap(screen.getByTestId('drawing-layer'), 50, 100);
+    const box = screen.getByRole('textbox', { name: 'Note text' });
+    fireEvent.change(box, { target: { value: 'support' } });
+    fireEvent.keyDown(box, { key: 'Enter' });
+    fireEvent.blur(box);
+    expect(stored()).toEqual([expect.objectContaining({ kind: 'text', text: 'support' })]);
+  });
+});
+
+describe('saved drawings (NSTOCK-0461)', () => {
+  it("reads a symbol's drawings back from storage and keeps symbols apart", () => {
+    window.localStorage.setItem(
+      drawingsStorageKey('INFY'),
+      JSON.stringify([{ id: 'a', kind: 'horizontal', at: { time: T0, price: 150_000 } }]),
+    );
+    const { layer } = renderTools('TCS');
+    fireEvent.click(screen.getByRole('button', { name: 'Horizontal line' }));
+    tap(layer, 50, 100);
+    expect(useDrawings.getState().drawingsFor('INFY')).toHaveLength(1);
+    expect(useDrawings.getState().drawingsFor('TCS')).toHaveLength(1);
+    expect(stored()).toHaveLength(1);
+  });
+
+  it('sets aside a stored value it cannot read, so the next drawing does not lose it', () => {
+    window.localStorage.setItem(drawingsStorageKey('INFY'), '{not json');
+    const { layer } = renderTools();
+    fireEvent.click(screen.getByRole('button', { name: 'Horizontal line' }));
+    tap(layer, 50, 100);
+    expect(window.localStorage.getItem(unreadableDrawingsKey('INFY'))).toBe('{not json');
+    expect(stored()).toHaveLength(1);
+  });
+
+  it('a new drawing after Clear means Undo removes it, not bring the cleared ones back', () => {
+    const { layer } = renderTools();
+    for (const x of [50, 80]) {
+      fireEvent.click(screen.getByRole('button', { name: 'Horizontal line' }));
+      tap(layer, x, 100);
+    }
+    fireEvent.click(screen.getByRole('button', { name: 'Clear all drawings' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Horizontal line' }));
+    tap(layer, 120, 100);
+    fireEvent.click(screen.getByRole('button', { name: 'Undo last drawing' }));
+    expect(stored()).toEqual([]);
+    expect(screen.getByRole('button', { name: 'Undo last drawing' })).toBeDisabled();
+  });
+
+  it('says so when storage refuses the drawing, instead of looking saved', () => {
+    const setItem = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      throw new DOMException('full', 'QuotaExceededError');
+    });
+    try {
+      const { layer } = renderTools();
+      fireEvent.click(screen.getByRole('button', { name: 'Horizontal line' }));
+      tap(layer, 50, 100);
+      expect(screen.getByTestId('drawings-not-saved')).toHaveTextContent(
+        "Drawings can't be saved on this device",
+      );
+    } finally {
+      setItem.mockRestore();
+    }
   });
 });

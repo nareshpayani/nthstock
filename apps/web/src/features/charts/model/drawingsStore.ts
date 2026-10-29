@@ -5,12 +5,16 @@ import { parseDrawings, type Drawing, type DrawingTool } from './drawings';
 export const drawingsStorageKey = (symbol: string) => `nth.chart.drawings.${symbol}`;
 export const MAGNET_STORAGE_KEY = 'nth.chart.magnet';
 
+/** Where a stored value that could not be read is set aside, so the next save does not lose it. */
+export const unreadableDrawingsKey = (symbol: string) => `${drawingsStorageKey(symbol)}.unreadable`;
+
 function readDrawings(symbol: string): Drawing[] {
   const raw = safeStorage.get(drawingsStorageKey(symbol));
   if (raw === null) return [];
   try {
     return parseDrawings(JSON.parse(raw));
   } catch {
+    safeStorage.set(unreadableDrawingsKey(symbol), raw);
     return [];
   }
 }
@@ -27,6 +31,8 @@ export type DrawingsState = {
   bySymbol: Record<string, Drawing[]>;
   /** What the last Clear removed, per symbol, so Undo can bring it back. */
   cleared: Record<string, Drawing[]>;
+  /** The last save failed (storage full or blocked): drawings last only until the page closes. */
+  unsaved: boolean;
   setTool: (tool: DrawingTool | null) => void;
   toggleMagnet: () => void;
   drawingsFor: (symbol: string) => Drawing[];
@@ -41,14 +47,15 @@ export type DrawingsState = {
  */
 export const useDrawings = create<DrawingsState>()((set, get) => {
   const save = (symbol: string, drawings: Drawing[]) => {
-    safeStorage.set(drawingsStorageKey(symbol), JSON.stringify(drawings));
-    set({ bySymbol: { ...get().bySymbol, [symbol]: drawings } });
+    const stored = safeStorage.set(drawingsStorageKey(symbol), JSON.stringify(drawings));
+    set({ bySymbol: { ...get().bySymbol, [symbol]: drawings }, unsaved: !stored });
   };
   return {
     tool: null,
     magnet: safeStorage.get(MAGNET_STORAGE_KEY) === 'on',
     bySymbol: {},
     cleared: {},
+    unsaved: false,
     setTool: (tool) => set({ tool }),
     toggleMagnet: () => {
       const magnet = !get().magnet;

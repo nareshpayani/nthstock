@@ -10,11 +10,14 @@ export const safeStorage = {
       return null;
     }
   },
-  set(key: string, value: string): void {
+  /** Whether the value was stored: a caller that must not lose it can say so. */
+  set(key: string, value: string): boolean {
     try {
       window.localStorage.setItem(key, value);
+      return true;
     } catch {
-      // Storage is a convenience only; ignore failures.
+      // Storage is a convenience only; most callers ignore failures.
+      return false;
     }
   },
   remove(key: string): void {

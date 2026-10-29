@@ -193,7 +193,7 @@ export function StockChartCard({
       ) : (
         <ChartSkeleton height={plotHeight} label={strings.chart.loading} />
       )}
-      {chart && loaded && !failed ? <ChartZoomControls chart={chart.chart} /> : null}
+      {handle && loaded && !failed ? <ChartZoomControls chart={handle.chart} /> : null}
       {offline && loaded && !failed ? (
         <span
           role="status"

@@ -97,6 +97,7 @@ export const strings = {
     undo: 'Undo last drawing',
     clear: 'Clear all drawings',
     clearMeasure: 'Clear measure',
+    notSaved: "Drawings can't be saved on this device, so they last until you leave the page",
     noteLabel: 'Note text',
     bars: 'bars',
     draw: 'Draw',

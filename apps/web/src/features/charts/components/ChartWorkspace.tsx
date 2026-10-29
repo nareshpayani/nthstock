@@ -21,6 +21,18 @@ function useBoxHeight<T extends HTMLElement>(): [RefObject<T | null>, number] {
   return [ref, height];
 }
 
+/**
+ * Escape that belongs to the control it was pressed in: a text field (the note box), a native
+ * select, or an open menu. Those close themselves; the full-screen chart stays.
+ */
+function keepsEscape(target: EventTarget | null): boolean {
+  if (!(target instanceof Element)) return false;
+  return (
+    target.matches('input, textarea, select, [aria-expanded="true"]') ||
+    target.closest('[role="menu"], [role="listbox"]') !== null
+  );
+}
+
 export type ChartWorkspaceProps = {
   /** "INFY" or "NIFTY 50": named in the dialog title. */
   name: string;
@@ -38,8 +50,8 @@ export type ChartWorkspaceProps = {
 /**
  * The full-screen chart (NSTOCK-0461): the whole window for the plot, the tool rail down its left
  * side, the controls along the top and the ranges along the bottom. A modal dialog over the page,
- * so it works the same on a phone (landscape too) and on a desktop; Escape or Close leave it, and
- * focus goes back to the button that opened it.
+ * so it works the same on a phone (landscape too) and on a desktop. The page behind is inert while
+ * it is open; Escape or Close leave it, and focus goes back to the button that opened it.
  */
 export function ChartWorkspace({
   name,
@@ -50,6 +62,7 @@ export function ChartWorkspace({
   children,
 }: ChartWorkspaceProps) {
   const closeRef = useRef<HTMLButtonElement>(null);
+  const dialogRef = useRef<HTMLDivElement>(null);
   // The plot takes whatever the header and the ranges leave, measured, so nothing is pushed off.
   const [bodyRef, height] = useBoxHeight<HTMLDivElement>();
   const onCloseRef = useRef(onClose);
@@ -61,14 +74,28 @@ export function ChartWorkspace({
     const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     const overflow = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
+    // Modal: the page behind can't be tabbed to, clicked or read while the chart is full screen.
+    const dialog = dialogRef.current;
+    const behind = [...document.body.children].filter(
+      (element): element is HTMLElement =>
+        element instanceof HTMLElement &&
+        !element.contains(dialog) &&
+        !element.hasAttribute('inert'),
+    );
+    for (const element of behind) element.setAttribute('inert', '');
     closeRef.current?.focus();
     const onKey = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape' || event.defaultPrevented || keepsEscape(event.target)) return;
+      event.preventDefault();
       // Escape first drops a tool that is waiting for taps; the next one closes.
-      if (event.key === 'Escape' && useDrawings.getState().tool === null) onCloseRef.current();
+      const { tool, setTool } = useDrawings.getState();
+      if (tool === null) onCloseRef.current();
+      else setTool(null);
     };
     window.addEventListener('keydown', onKey);
     return () => {
       window.removeEventListener('keydown', onKey);
+      for (const element of behind) element.removeAttribute('inert');
       document.body.style.overflow = overflow;
       useDrawings.getState().setTool(null);
       opener?.focus();
@@ -77,6 +104,7 @@ export function ChartWorkspace({
 
   return createPortal(
     <div
+      ref={dialogRef}
       role="dialog"
       aria-modal="true"
       aria-label={strings.fullscreen.title(name)}

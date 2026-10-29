@@ -4,6 +4,7 @@ import {
   type CandleInterval,
   type CandleRange,
 } from '@nthstock/contracts';
+import { ChartSkeleton } from '@/shared/components/ChartSkeleton';
 import { ErrorState, IconButton, IconChevronRight, SegmentedControl, Skeleton } from '@nthstock/ui';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { Link, useNavigate } from '@tanstack/react-router';
@@ -224,7 +225,16 @@ export function IndexChartCard({
       onClose={() => setExpanded(false)}
     >
       {(height) =>
-        candles.data ? (
+        candles.isError && !candles.data ? (
+          <div style={{ height }} className="grid place-items-center">
+            <ErrorState
+              title={strings.errorTitle}
+              description={strings.errorBody}
+              retryLabel={strings.retry}
+              onRetry={() => void candles.refetch()}
+            />
+          </div>
+        ) : candles.data ? (
           <PriceChart
             candles={bars}
             direction={direction}
@@ -238,9 +248,10 @@ export function IndexChartCard({
             interactive
             onReady={setFullChart}
             overlay={drawingsFor(fullChart)}
+            className={candles.isPlaceholderData ? 'opacity-60' : undefined}
           />
         ) : (
-          <Skeleton className="w-full" style={{ height }} />
+          <ChartSkeleton height={height} label={strings.loadingChart} />
         )
       }
     </ChartWorkspace>
