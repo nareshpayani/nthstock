@@ -1,6 +1,5 @@
 import {
   CANDLE_INTERVALS,
-  INTRADAY_INTERVAL_MINUTES,
   type Candle,
   type CandleInterval,
   type CandleRange,
@@ -59,8 +58,9 @@ const NO_CANDLES: readonly Candle[] = [];
 /**
  * Stock price chart (T-107): 1D to 5Y range tabs, a bar size picker (1, 5, 15, 30 or 60-minute
  * bars on 1D; NSTOCK-0343) and a chart type menu, all kept in the URL by the page, and a crosshair tooltip with the hovered bar's IST time and ₹ values. The previous
- * range stays on screen, dimmed, while the next one loads. On 1D while the market is open, the
- * last bar moves with every live quote and a new bar starts each minute (T-108).
+ * range stays on screen, dimmed, while the next one loads. While the market is open, on every
+ * range and bar size, the last bar moves with every live quote and a new bar starts when its
+ * interval begins (T-108, NSTOCK-0441).
  */
 export function StockChartCard({
   instrument,
@@ -91,24 +91,19 @@ export function StockChartCard({
   const failed = forced === 'error' || (candles.isError && !candles.data);
   const loaded = forced === 'loading' ? false : candles.data !== undefined;
   const format = instrument.type === 'INDEX' ? 'index' : 'inr';
-  // T-108: while NSE is open, today's bars follow the quote store, whatever their size.
-  const barMinutes = INTRADAY_INTERVAL_MINUTES[interval];
-  const live =
-    marketOpen &&
-    range === '1D' &&
-    barMinutes !== null &&
-    candles.data?.interval === interval &&
-    !candles.isPlaceholderData;
+  // T-108, NSTOCK-0441: while NSE is open the last bar follows the quote store on every range and
+  // bar size, and a new bar starts when its interval begins.
+  const live = marketOpen && candles.data?.interval === interval && !candles.isPlaceholderData;
   const bars = useLiveCandles(
     symbol,
     exchange,
     candles.data?.candles ?? NO_CANDLES,
     live,
-    barMinutes ?? 1,
+    interval,
   );
 
   const touch = controls === 'touch';
-  const liveBadge = marketOpen && range === '1D' && !offline ? <LiveBadge /> : null;
+  const liveBadge = marketOpen && !offline ? <LiveBadge /> : null;
   const rangeControl = (
     <SegmentedControl
       label={strings.chart.rangeLabel}

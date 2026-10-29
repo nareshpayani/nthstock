@@ -228,4 +228,26 @@ describe('IndexChartCard (T-095)', () => {
       '/stocks/NIFTY50?exchange=NSE&range=1Y',
     );
   });
+
+  it('moves the last bar with the live level, and starts a new one on time (NSTOCK-0441)', async () => {
+    const { quotes } = renderCard();
+    await screen.findByTestId('chart-host');
+    const series = await waitFor(() => {
+      const found = chartsMock.active()[0]?.series[0];
+      expect(found?.setData).toHaveBeenCalled();
+      return found;
+    });
+    const data = series?.setData.mock.lastCall?.[0] as { time: number; value: number }[];
+    const last = data[data.length - 1] as { time: number; value: number };
+    // 1Y draws daily bars: a tick on the last bar's day moves it, the next trading day adds one.
+    const sameDay = new Date(last.time * 1000 + 60_000).toISOString();
+    act(() => quotes.push(testQuote('NIFTY50', 2541860, { ts: sameDay })));
+    expect(series?.update).toHaveBeenLastCalledWith({ time: last.time, value: 2541860 });
+    const nextDay = new Date(last.time * 1000 + 86_400_000).toISOString();
+    act(() => quotes.push(testQuote('NIFTY50', 2542000, { ts: nextDay })));
+    expect(series?.update).toHaveBeenLastCalledWith({
+      time: last.time + 86_400,
+      value: 2542000,
+    });
+  });
 });

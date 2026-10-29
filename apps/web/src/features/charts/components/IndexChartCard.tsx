@@ -1,4 +1,4 @@
-import type { CandleRange } from '@nthstock/contracts';
+import type { Candle, CandleRange } from '@nthstock/contracts';
 import {
   ErrorState,
   IconButton,
@@ -18,6 +18,7 @@ import { PriceCell } from '@/shared/components/PriceCell';
 import { useMarketOpen } from '@/shared/hooks/useMarketOpen';
 import { useApiClient } from '@/shared/lib/apiClientContext';
 import { candlesQuery } from '../api/candlesQuery';
+import { useLiveCandles } from '../hooks/useLiveCandles';
 import { CHART_RANGES, NIFTY, isIntraday } from '../model/ranges';
 import { strings } from '../strings';
 import { LiveBadge } from './LiveBadge';
@@ -35,6 +36,8 @@ const CHART_HEIGHT = 260;
 const TAP_SLOP = 6;
 /** A press held longer than this, in ms, is a look at the crosshair, not a tap. */
 const TAP_MAX_MS = 300;
+
+const NO_CANDLES: readonly Candle[] = [];
 
 /**
  * NIFTY 50 chart card (T-095): the live level and day change, an area chart of the chosen range
@@ -96,6 +99,14 @@ export function IndexChartCard({ range, onRangeChange }: IndexChartCardProps) {
     // Keep the old range on screen while the new one loads, so the card does not jump.
     placeholderData: keepPreviousData,
   });
+  // NSTOCK-0441: the last bar follows the live level and a new bar starts on time.
+  const bars = useLiveCandles(
+    NIFTY.symbol,
+    NIFTY.exchange,
+    candles.data?.candles ?? NO_CANDLES,
+    marketOpen && candles.data !== undefined && !candles.isPlaceholderData,
+    candles.data?.interval,
+  );
 
   return (
     <Card
@@ -175,7 +186,7 @@ export function IndexChartCard({ range, onRangeChange }: IndexChartCardProps) {
             onPointerCancel={onPointerCancel}
           >
             <PriceChart
-              candles={candles.data.candles}
+              candles={bars}
               label={strings.niftyChartLabel(strings.ranges[range])}
               format="index"
               intraday={isIntraday(range)}

@@ -556,7 +556,17 @@ and the candle store. Tests override any part; the app disposes only what it cre
   paused tab, instruments with working orders replay missed ticks in order (up to 30 minutes).
 - **Candles** (`candles.ts`, `candleHistory.ts`, `minuteBars.ts`): each range's own bars (1D 1-minute,
   1W 5-minute, 1M hourly, 1Y daily, 5Y weekly); `resampleCandles` groups to `1m|5m|15m|30m|1h|1d|1w`
-  (allowed pairs in `CANDLE_INTERVALS`); intraday bars start at 09:15 IST.
+  (allowed pairs in `CANDLE_INTERVALS`); intraday bars start at 09:15 IST. In the browser
+  `useLiveCandles` folds each quote into the last bar of whatever range and bar size is on screen,
+  on the instrument page and the dashboard NIFTY 50 chart alike, and starts the next bar when its
+  interval begins (NSTOCK-0441). The hosted demo is forced open at any hour, so bars keep the same
+  grid outside 09:00 to 15:30 instead of piling into the 09:15 bar.
+- **Index ETFs** (`symbolMaster.ts`, `INDEX_ETFS` in `packages/contracts`, NSTOCK-0440): an index
+  cannot be traded, so each major index has a mock tracking ETF (NIFTYETF, SENSEXETF, BANKETF,
+  ITETF, MIDCAPETF; tokens from 950001) priced at a hundredth of the index level on every tick, with
+  the index's candles scaled the same way. They trade like any equity but stay out of lists and
+  movers; an index page shows a Buy/Sell ETF card (a bottom bar on a phone) that opens the fund's
+  order ticket.
 - **Depth, lists, index levels** (`depth.ts`, `lists.ts`, `indexLevels.ts`): five levels of depth;
   index levels computed from constituents.
 - **Distributed helpers:** `startLease` (`shardLease.ts`) and `followTickStreams`

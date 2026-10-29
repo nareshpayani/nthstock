@@ -206,7 +206,7 @@ describe('stock price chart (T-107)', () => {
   });
 });
 
-describe('live 1D chart (T-108)', () => {
+describe('live chart (T-108, NSTOCK-0441)', () => {
   // The market is open (forced), so the 1D bars follow the quote store.
   const open = { clock: fixedClock(fromIst(2026, 9, 25, 15 * 60)), alwaysOpen: true };
 
@@ -283,14 +283,14 @@ describe('live 1D chart (T-108)', () => {
     expect(tooltip).not.toHaveTextContent('9,999.00');
   });
 
-  it('stays still on other ranges and while the market is closed', async () => {
+  it('follows ticks on longer ranges too (NSTOCK-0441)', async () => {
     const { quotes, series, last } = await renderLive('/stocks/INFY?range=1W');
     act(() =>
       quotes.push(
         testQuote('INFY', 151235, { ts: new Date(last.time * 1000 + 1_000).toISOString() }),
       ),
     );
-    expect(series?.update).not.toHaveBeenCalled();
+    expect(series?.update).toHaveBeenCalled();
   });
 
   it('does not follow ticks on 1D when the market is closed', async () => {

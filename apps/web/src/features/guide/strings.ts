@@ -179,7 +179,7 @@ export const strings = {
           items: [
             {
               name: 'Dashboard',
-              body: 'NIFTY 50 chart that opens on today (1D) and goes to 5 years: drag to pan, wheel, pinch or the − + buttons to zoom, tap to open its full page. Market index cards and the header tickers open each index’s own chart page. Curated stock lists, and top gainers and losers by index.',
+              body: 'NIFTY 50 chart that opens on today (1D) and goes to 5 years: drag to pan, wheel, pinch or the − + buttons to zoom, tap to open its full page. Market index cards and the header tickers open each index’s own chart page, where Buy ETF and Sell ETF trade the fund that tracks the index. Curated stock lists, and top gainers and losers by index.',
             },
             {
               name: 'Live prices',
@@ -945,7 +945,8 @@ export const strings = {
             'Company names, profiles and fundamentals from @faker-js/faker, also seeded.',
             'Prices from a geometric Brownian motion (GBM) per instrument, with drift and volatility by sector, for example Financial Services 12% and 28%, FMCG 9% and 18%.',
             'Index levels computed from their constituents, candles from 1 minute to 5 years, five levels of market depth, curated lists and movers.',
-            'Bar sizes: the API groups a range’s own bars into 1, 5, 15, 30 or 60-minute, daily or weekly bars (GET /v1/market/instruments/:symbol/candles?range=1D&interval=15m). Intraday bars are counted from the 9:15 open, as NSE charts do, so hourly bars open at 9:15, 10:15 and so on; live ticks extend the current bar of the chosen size.',
+            'Bar sizes: the API groups a range’s own bars into 1, 5, 15, 30 or 60-minute, daily or weekly bars (GET /v1/market/instruments/:symbol/candles?range=1D&interval=15m). Intraday bars are counted from the 9:15 open, as NSE charts do, so hourly bars open at 9:15, 10:15 and so on. Live ticks move the last bar on every range and bar size, daily and weekly too, and start a new bar when its interval begins, on the dashboard chart as well as the instrument page.',
+            'Index ETFs: an index cannot be bought or sold, so NIFTY 50, SENSEX, NIFTY BANK, NIFTY IT and NIFTY MIDCAP 100 each have a mock tracking ETF priced at a hundredth of the index on every tick. An index page offers Buy ETF and Sell ETF, which open that fund’s order ticket.',
             'NSE rules: the 9:15 AM to 3:30 PM session and holidays, 5-paise ticks and ±20% circuit bands.',
           ],
         },
