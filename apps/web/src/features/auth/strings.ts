@@ -151,7 +151,7 @@ export const strings = {
     security: 'Security',
     logOut: 'Log out',
     logOutFailedTitle: 'You are still logged in',
-    logOutFailedBody: 'Log out could not reach the server. Check your connection and try again.',
+    logOutFailedBody: 'The server did not end your session. Try again in a moment.',
     logIn: 'Log in',
     accountSignedOut: 'Account',
     loading: 'Checking your session',

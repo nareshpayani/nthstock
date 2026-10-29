@@ -72,12 +72,16 @@ export function useLogout() {
   return useMutation({
     mutationFn: () => endSession(apiClient, queryClient),
     // Only once the server has ended it: a failed revoke keeps the session, and says so.
-    onSuccess: () => navigate({ to: '/login', replace: true }),
-    onError: () =>
+    onSuccess: () => {
+      void navigate({ to: '/login', replace: true });
+    },
+    onError: (error) => {
+      console.error('Log out failed', error);
       toast?.show({
         tone: 'error',
         title: strings.profile.logOutFailedTitle,
         description: strings.profile.logOutFailedBody,
-      }),
+      });
+    },
   });
 }

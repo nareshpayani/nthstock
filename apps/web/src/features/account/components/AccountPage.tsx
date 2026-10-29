@@ -53,8 +53,8 @@ function AvailableCash() {
     );
   }
   return (
-    <div className="flex items-center justify-between gap-3 rounded-lg border border-line bg-surface p-4">
-      <span className="grid gap-0.5">
+    <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-line bg-surface p-4">
+      <span className="grid min-w-0 gap-0.5">
         <span className="text-label text-ink-muted">{strings.available}</span>
         {figure}
       </span>
@@ -140,7 +140,7 @@ export function AccountPage() {
       <Button
         variant="secondary"
         size="lg"
-        disabled={logout.isPending}
+        loading={logout.isPending}
         onClick={() => logout.mutate()}
       >
         {strings.logOut}

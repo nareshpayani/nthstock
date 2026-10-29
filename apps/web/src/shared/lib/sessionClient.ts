@@ -87,9 +87,9 @@ export function createSessionApiClient({
 
 /**
  * Logs out: revokes the session on the server, then forgets it in memory and drops every cached
- * query so no user data outlives the session. A 401 or 403 means the server already holds no
- * session, so that still ends it here. Any other failure (offline, 5xx) rejects and keeps the
- * session: the httpOnly cookie is still valid and the next page load would restore it, so saying
+ * query so no user data outlives the session. A 401 means the server already holds no session,
+ * so that still ends it here. Any other failure (offline, 5xx, a 403 for a stale CSRF token) rejects
+ * and keeps the session: the httpOnly cookie is still valid and the next page load would restore it, so saying
  * "logged out" would be false on a shared device (NSTOCK-0466 review).
  * The trusted-device cookie stays, so the next login on this browser can use the PIN.
  */
@@ -97,8 +97,7 @@ export async function endSession(apiClient: ApiClient, queryClient: QueryClient)
   try {
     await apiClient.request('logout');
   } catch (error) {
-    const gone = isApiError(error) && (error.status === 401 || error.status === 403);
-    if (!gone) throw error;
+    if (!(isApiError(error) && error.status === 401)) throw error;
   }
   useSessionStore.getState().clearSession();
   queryClient.clear();
