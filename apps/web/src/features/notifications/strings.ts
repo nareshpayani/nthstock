@@ -17,7 +17,10 @@ export const strings = {
     emptyBody: 'Set a price alert from any stock page, and fills and alerts will show up here.',
     unread: 'Unread',
     loadError: 'Notifications could not load.',
+    alertsLoadError: 'Price alerts could not load.',
+    loading: 'Loading',
     retry: 'Try again',
+    markReadError: 'Notifications could not be marked read. Try again.',
   },
   alerts: {
     empty: 'No price alerts',
@@ -27,6 +30,7 @@ export const strings = {
     cancelled: 'Cancelled',
     remove: (symbol: string) => `Remove the ${symbol} alert`,
     removed: (symbol: string) => `${symbol} alert removed.`,
+    removeError: (symbol: string) => `The ${symbol} alert could not be removed. Try again.`,
     rule: (condition: PriceAlertCondition, price: string) =>
       condition === 'ABOVE' ? `Rises to ${price}` : `Falls to ${price}`,
     firedAt: (price: string, time: string) => `Fired at ${price}, ${time} IST`,
