@@ -150,7 +150,11 @@ describe('NotificationsBridge (NSTOCK-0384)', () => {
     renderBell(api, fakeSource().source);
     const badge = await screen.findByTestId('notification-badge');
     expect(badge).toHaveTextContent('1');
-    expect(badge.querySelector('[data-part="ripple"]')).not.toBeNull();
+    const ripple = badge.querySelector('[data-part="ripple"]');
+    expect(ripple).not.toBeNull();
+    expect(ripple).toHaveClass('animate-ripple');
+    // Reduced motion turns the ring off (acceptance criterion of NSTOCK-0462).
+    expect(ripple).toHaveClass('motion-reduce:hidden');
   });
 
   it('shows no badge or ripple when nothing is unread (NSTOCK-0462)', async () => {
