@@ -169,7 +169,8 @@ function screenWidth(width: number) {
 
 describe('the rail below 1024 px (NSTOCK-0465)', () => {
   it('is not rendered on a narrow screen; the drawer still has the watchlist and search', async () => {
-    screenWidth(390);
+    // A tablet: below 768 px the phone app shell has no drawer (NSTOCK-0466).
+    screenWidth(800);
     await renderDashboard();
     expect(
       screen.queryByRole('complementary', { name: 'Watchlist and search' }),

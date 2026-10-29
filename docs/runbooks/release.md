@@ -17,7 +17,7 @@ The API, realtime server and databases are not hosted until the scalability phas
 |---|---|---|---|
 | 1 | Agent | Build the change on a branch off `develop` with tests (unit, E2E, axe where it is UI); `npm run check` and `npm run e2e` locally. | anything is red |
 | 2 | CI | On the PR into `develop`: lint, typecheck, tests, build, E2E (msw and api mode), Web Vitals, audit, secret scan, dependency review, workflow lint and CodeQL (suites a PR cannot affect are skipped, `docs/ci-cd.md`), gated by **CI result**, and for app changes a **preview channel** smoke-tested as a reviewer (demo login, a paper buy, the guide, axe). | any check is red: the agent fixes it, never skips a test |
-| 3 | Agent / CI | Auto-merge squash-merges the PR into `develop` once the Reviewer has passed it (PRs touching `.github/`, `.claude/` or `CLAUDE.md` are merged by the owner). | Reviewer blocks: the Fixer runs, back to 2 |
+| 3 | Agent / CI | Auto-merge squash-merges the PR into `develop` once the Reviewer has passed it (production release/deploy workflow, `.env` and data-dropping migration changes are held for the owner). | Reviewer blocks: the Fixer runs, back to 2 |
 | 4 | CI | CI runs on `develop`; when green, Deploy: Web hosting deploys it to the **development** environment and smoke-tests it there. | red: the Fixer opens a fix PR into `develop`; nothing ships |
 | 5 | Owner | Asks for a production deploy. | |
 | 6 | Agent | Runs **Actions → Release: Promote to production**. It checks develop's latest commit has green CI (every test and E2E suite) and a green Security: CodeQL run, and is the commit the development site last deployed and smoke-tested, then moves `production` to it and tags it `prod-<UTC time>`. | any gate fails: nothing moves; the agent says why |

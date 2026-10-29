@@ -18,6 +18,22 @@ export const strings = {
     lists: 'Stocks lists',
     movers: 'Market movers',
   },
+  /** Home on a phone (NSTOCK-0466). */
+  phone: {
+    valueLabel: 'Portfolio value',
+    signedOutLabel: 'Virtual cash',
+    valueLoading: 'Loading your portfolio value',
+    stale: 'Not refreshed: the last value shown.',
+    feedSection: 'Your stocks and market movers',
+    today: 'today',
+    signedOutNote: 'Virtual cash to practise with',
+    valueError: 'Your portfolio value could not load',
+    logIn: 'Log in',
+    addFunds: 'Add funds',
+    placeOrder: 'Place order',
+    feedLabel: 'Stocks',
+    feeds: { watchlist: 'Watchlist', gainers: 'Gainers', losers: 'Losers' },
+  },
   sectionError: {
     title: 'This section could not load',
     body: 'The rest of the dashboard still works. Try this section again.',

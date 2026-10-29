@@ -1,0 +1,31 @@
+name: 'PR: Clear needs-human on a new push'
+
+# Not an LLM agent: plain automation. `needs-human` means "agents stopped on this commit" (the
+# no-progress safeguard, a review with no verdict, a conflict that cannot keep both sides, or an
+# auto-merge hold). A new commit is progress, so the label comes off and the agents pick the PR up
+# again. If the new commit is stuck the same way, the same safeguard puts the label back.
+# Owner decision 2026-10-29: routine PRs must not sit on needs-human.
+
+on:
+  pull_request:
+    types: [synchronize]
+
+permissions:
+  pull-requests: write
+
+jobs:
+  clear:
+    name: Clear needs-human
+    if: >-
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      contains(github.event.pull_request.labels.*.name, 'needs-human')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      GH_TOKEN: ${{ github.token }}
+      PR: ${{ github.event.pull_request.number }}
+      SHA: ${{ github.event.pull_request.head.sha }}
+    steps:
+      - run: |
+          gh pr edit "$PR" --repo "$GITHUB_REPOSITORY" --remove-label needs-human
+          gh pr comment "$PR" --repo "$GITHUB_REPOSITORY" --body "New commit ${SHA:0:7}: removed \`needs-human\` so the Reviewer, Fixer and auto-merge carry on."

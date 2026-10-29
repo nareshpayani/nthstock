@@ -91,7 +91,8 @@ export function WatchlistPanel({ list, onAddStock }: WatchlistPanelProps) {
         onTrade={onTrade}
         onRemove={onRemove}
       />
-      <p className="border-t border-line px-3 py-2 text-label text-ink-muted">
+      {/* Keyboard keys mean nothing on a phone's touch screen (NSTOCK-0466). */}
+      <p className="border-t border-line px-3 py-2 text-label text-ink-muted max-[767px]:hidden">
         {strings.row.keyHint}
       </p>
     </div>

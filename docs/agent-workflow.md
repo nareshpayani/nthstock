@@ -20,12 +20,14 @@ PR opened or updated
   └─► Reviewer ─┬─ no blocking findings ─► `ready-to-merge` ─► all checks green ─► auto-merge (squash)
                 │                                                     └─► linked issues closed with "Done in #PR";
                 │                                                         epic closed when all its stories are
-                │                           (spec PRs and agent/CI config changes: the owner merges)
+                │                           (spec PRs, prod release/deploy, .env, data-dropping migrations: held)
                 ├─ blocking findings ─► `agent:fix-needed` ─► Fixer pushes to the same PR ─► Reviewer again
                 └─ bug outside the PR's scope ─► new `bug` issue (`agent:ready`) ─► Developer
 CI red on an owner, agent or Dependabot PR
   └─► Fixer finds the root cause and pushes a fix to the same PR, again on every red run until CI is green
-      └─ no progress (same failure on 5 commits in a row, or a run that pushes nothing) ─► `needs-human`
+      └─ nothing to fix (a runner flake) ─► failed jobs re-run once on the same commit
+      └─ no progress (same failure on 5 commits in a row, or red again after that re-run) ─► `needs-human`
+         (cleared automatically by the next push)
       └─ Dependabot bump the stack can't take ─► `@dependabot ignore this major version`
 CI red on develop (after a merge, or in a scheduled health run: 09:20 and 12:30 IST on weekdays, 20:00 IST daily)
   └─► Fixer opens an `agent/fix-develop-*` PR (never pushes to develop) ─► Reviewer ─► checks green ─► auto-merge
@@ -61,6 +63,7 @@ else is plain scripted automation. The full pipeline map is [ci-cd.md](ci-cd.md)
 | Agent: Merge conflict resolver | agent | `.github/workflows/agent-merge-conflict-resolver.yml` | `.claude/agents/merge-conflict-resolver.md` |
 | E2E test author (the way the Developer and Fixer write Playwright specs; no workflow) | agent | — | `.claude/agents/e2e-test-author.md` |
 | PR: Auto-merge | automation | `.github/workflows/pr-auto-merge.yml` | — |
+| PR: Clear needs-human on a new push | automation | `.github/workflows/pr-clear-needs-human.yml` | — |
 | PR: Title check | automation | `.github/workflows/pr-title-check.yml` | — |
 | PR: Screenshots | automation | `.github/workflows/pr-screenshots.yml` | — |
 | Issues: Assign NSTOCK key | automation | `.github/workflows/issues-assign-keys.yml`, `tools/github/issueKey.sh` | — |
@@ -108,15 +111,16 @@ section became the Merge conflict resolver with its own role; `planner`, `develo
   re-reviews every push until the PR is green and approved. Only one fix-develop PR is open at a time.
 - **No-progress safeguard:** so an identical loop cannot drain the plan quota, a PR gets `needs-human`
   when CI fails in exactly the same jobs and steps on the last `AGENT_NO_PROGRESS_RUNS` (default 5)
-  commits, when a CI-fix run ends without pushing anything, or when the Reviewer sees the same
-  blocking finding unresolved in 3 reviews in a row. Removing `needs-human` lets the agents carry on.
+  commits, when a CI-fix run finds nothing to fix and the commit is still red after its failed jobs
+  were re-run, or when the Reviewer sees the same blocking finding unresolved in 3 reviews in a row.
+  The next push to the PR removes `needs-human` (`pr-clear-needs-human.yml`), so the agents carry on.
 - **Auto-merge (owner decision 2026-09-26, ADR 0006):** `pr-auto-merge.yml` squash-merges an open PR
   into `develop` when the Reviewer has labelled it `ready-to-merge`, it is from the owner or an agent, not
   a draft or fork, mergeable, its **CI result** check passed and every other check on its head
-  commit is green. It runs after CI and Security: CodeQL finish, on label changes, and hourly. It skips spec PRs (the owner still approves specs), PRs that
-  change `.github/**`, `.claude/**` or `CLAUDE.md` (the owner merges agent and CI config; see
-  `.github/CODEOWNERS`), Dependabot PRs, and PRs labelled `needs-human`, `agent:fix-needed` or
-  `do-not-merge`. To hold a PR, add `do-not-merge`. To turn auto-merge off, set the repository
+  commit is green. It runs after CI and Security: CodeQL finish, on label changes, and hourly. It skips spec PRs (the owner still approves specs), Dependabot PRs, and PRs labelled `needs-human`, `agent:fix-needed` or
+  `do-not-merge`. Agent and CI config merges like any other change (owner decision 2026-10-29); only
+  the production release/deploy workflows, a `.env` file or a migration that drops or truncates data
+  is held, with `needs-human` and a comment. To hold a PR, add `do-not-merge`. To turn auto-merge off, set the repository
   variable `AGENT_AUTOMERGE` to `false`. It merges one PR per run, because the other PRs' checks ran
   against the old `develop`. After merging it starts CI, Security: CodeQL, the merge conflict resolver and the label
   sync on `develop`, because merges made with the Actions token don't trigger push workflows. It
@@ -160,6 +164,7 @@ Optional repository variables: `OWNER_LOGIN`, `OWNER_ID` (default `15100692`, th
 - **Approve a spec:** review and merge the spec PR. Stories start automatically.
 - **Report a bug:** open a Bug issue and add `agent:ready`.
 - **Merge:** happens automatically once the Reviewer labels a PR `ready-to-merge` and checks are green.
-  You merge spec PRs and PRs that change `.github/`, `.claude/` or `CLAUDE.md`. Add `do-not-merge`
+  You merge spec PRs and the few PRs auto-merge holds (production release/deploy, `.env`,
+  data-dropping migrations). Add `do-not-merge`
   to hold any PR for your review.
 - **Stop an agent:** remove its label, or cancel the run in the Actions tab.

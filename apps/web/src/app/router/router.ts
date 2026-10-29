@@ -13,6 +13,7 @@ export const routeDefaults = {
   defaultPendingComponent: RoutePending,
   defaultNotFoundComponent: NotFound,
   defaultPendingMs: 150,
+  defaultPendingMinMs: 0,
 } as const;
 
 export type AppRouterOptions = {

@@ -61,8 +61,9 @@ for (const width of [360, 390, 768, 1024, 1440]) {
   });
 }
 
-test('under 1024 px the rail and tabs live in a drawer', async ({ page }) => {
-  await page.setViewportSize({ width: 390, height: 844 });
+test('from 768 to 1023 px the rail and tabs live in a drawer', async ({ page }) => {
+  // Below 768 px the phone app's tab bar replaces the drawer (phoneShell.spec.ts, NSTOCK-0466).
+  await page.setViewportSize({ width: 800, height: 1024 });
   await page.goto('/dashboard');
   await expect(page.getByRole('complementary', { name: 'Watchlist and search' })).toBeHidden();
   await page.getByRole('button', { name: 'Open menu' }).click();

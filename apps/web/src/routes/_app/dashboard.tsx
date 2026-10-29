@@ -19,6 +19,7 @@ const dashboardSearch = z.object({
   list: StockListId.optional().catch(undefined),
   movers: MoverDirection.optional().catch(undefined),
   moversIndex: TradingSymbol.optional().catch(undefined),
+  feed: z.enum(['watchlist', 'gainers', 'losers']).optional().catch(undefined),
 });
 
 export const Route = createFileRoute('/_app/dashboard')({

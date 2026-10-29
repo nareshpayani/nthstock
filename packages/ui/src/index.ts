@@ -40,7 +40,13 @@ export {
   DropdownMenuTrigger,
 } from './components/DropdownMenu.js';
 export { Tooltip, TooltipProvider, type TooltipProps } from './components/Tooltip.js';
-export { ToastProvider, useToast, type ToastMessage, type ToastTone } from './components/Toast.js';
+export {
+  ToastProvider,
+  useOptionalToast,
+  useToast,
+  type ToastMessage,
+  type ToastTone,
+} from './components/Toast.js';
 export {
   SegmentedControl,
   type SegmentOption,
