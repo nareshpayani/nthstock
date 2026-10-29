@@ -44,6 +44,15 @@ const PORTFOLIO_SWITCH: PhoneSwitch = {
 export type PhoneTopBarCentre =
   { kind: 'switch'; value: PhoneSwitch } | { kind: 'title'; value: string };
 
+/** A malformed escape such as `%E0` makes decodeURIComponent throw; show the raw segment then. */
+function safeDecode(segment: string): string {
+  try {
+    return decodeURIComponent(segment);
+  } catch {
+    return segment;
+  }
+}
+
 export function phoneTopBarCentre(pathname: string): PhoneTopBarCentre {
   if (pathname === '/dashboard' || pathname === '/watchlist')
     return { kind: 'switch', value: HOME_SWITCH };
@@ -56,6 +65,6 @@ export function phoneTopBarCentre(pathname: string): PhoneTopBarCentre {
   if (pathname.startsWith('/settings')) return { kind: 'title', value: titles.security };
   if (pathname === '/guide') return { kind: 'title', value: titles.guide };
   if (pathname.startsWith('/stocks/'))
-    return { kind: 'title', value: decodeURIComponent(pathname.slice('/stocks/'.length)) };
+    return { kind: 'title', value: safeDecode(pathname.slice('/stocks/'.length)) };
   return { kind: 'title', value: '' };
 }

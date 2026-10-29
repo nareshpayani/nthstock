@@ -30,8 +30,26 @@ function AvailableCash() {
   const funds = useQuery(fundsSummaryQuery(api));
   let figure;
   if (funds.data) figure = formatInr(funds.data.available);
-  else if (funds.isError) figure = strings.fundsError;
-  else figure = <span className="inline-block h-6 w-36 animate-pulse rounded-sm bg-canvas" />;
+  else if (funds.isError) {
+    return (
+      <div
+        role="alert"
+        className="flex items-center justify-between gap-3 rounded-lg border border-line bg-surface p-4"
+      >
+        <span className="text-body text-ink-muted">{strings.fundsError}</span>
+        <Button variant="secondary" size="sm" onClick={() => void funds.refetch()}>
+          {strings.retry}
+        </Button>
+      </div>
+    );
+  } else
+    figure = (
+      <span
+        role="status"
+        aria-label={strings.fundsLoading}
+        className="inline-block h-6 w-36 animate-pulse rounded-sm bg-canvas"
+      />
+    );
   return (
     <Link
       to="/funds"
@@ -56,6 +74,18 @@ export function AccountPage() {
   const { status, session } = useSession();
   const logout = useLogout();
 
+  if (status === 'unknown') {
+    return (
+      <div className="mx-auto grid w-full max-w-xl gap-3">
+        <h1 className="sr-only">{strings.title}</h1>
+        <div
+          role="status"
+          aria-label={strings.loading}
+          className="h-24 animate-pulse rounded-lg border border-line bg-surface"
+        />
+      </div>
+    );
+  }
   if (status !== 'authenticated' || !session) {
     return (
       <div className="mx-auto grid w-full max-w-xl gap-4">
@@ -104,12 +134,16 @@ export function AccountPage() {
       <Button
         variant="secondary"
         size="lg"
-        className="text-down"
         disabled={logout.isPending}
         onClick={() => logout.mutate()}
       >
         {strings.logOut}
       </Button>
+      {logout.isError ? (
+        <p role="alert" className="text-center text-label text-ink-muted">
+          {strings.logOutError}
+        </p>
+      ) : null}
       <p className="text-center text-label text-ink-muted">{strings.paperNote}</p>
     </div>
   );

@@ -48,6 +48,11 @@ describe('phone navigation map (NSTOCK-0466)', () => {
     expect(phoneTopBarCentre('/stocks/INFY')).toEqual({ kind: 'title', value: 'INFY' });
     expect(phoneTopBarCentre('/nowhere')).toEqual({ kind: 'title', value: '' });
   });
+
+  it('does not throw on a malformed stock path', () => {
+    expect(phoneTopBarCentre('/stocks/%E0')).toEqual({ kind: 'title', value: '%E0' });
+    expect(phoneTopBarCentre('/stocks/M%26M')).toEqual({ kind: 'title', value: 'M&M' });
+  });
 });
 
 describe('phone app shell (NSTOCK-0466)', () => {
@@ -104,6 +109,12 @@ describe('phone app shell (NSTOCK-0466)', () => {
       expect(within(menu).getByRole('link', { name })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Log out' })).toBeInTheDocument();
     expect(await screen.findByText('Balance unavailable')).toBeInTheDocument();
+  });
+
+  it('logs out from Account and lands on the login page', async () => {
+    renderPhone('/account');
+    fireEvent.click(await screen.findByRole('button', { name: 'Log out' }));
+    expect(await screen.findByRole('heading', { name: /log in/i })).toBeInTheDocument();
   });
 
   it('asks to log in on Account and Home when signed out', async () => {

@@ -1,5 +1,5 @@
 import type { SearchHit } from '@nthstock/contracts';
-import { Sheet } from '@nthstock/ui';
+import { Sheet, useToast } from '@nthstock/ui';
 import { useRef } from 'react';
 import { SearchBox } from '@/features/search';
 import { useOpenTicket } from '@/shared/hooks/useOpenTicket';
@@ -18,9 +18,12 @@ export type TradeSheetProps = {
 export function TradeSheet({ open, onOpenChange }: TradeSheetProps) {
   const searchRef = useRef<HTMLInputElement>(null);
   const openTicket = useOpenTicket();
+  const toast = useToast();
   const choose = (hit: SearchHit) => {
     onOpenChange(false);
-    void openTicket({ symbol: hit.symbol, exchange: hit.exchange, side: 'BUY' });
+    openTicket({ symbol: hit.symbol, exchange: hit.exchange, side: 'BUY' }).catch(() =>
+      toast.show({ title: strings.phone.tradeError, tone: 'error' }),
+    );
   };
   return (
     <Sheet

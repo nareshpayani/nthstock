@@ -24,6 +24,7 @@ export const strings = {
     today: 'today',
     signedOutNote: 'Virtual cash to practise with',
     valueError: 'Your portfolio value could not load.',
+    retry: 'Try again',
     logIn: 'Log in',
     addFunds: 'Add funds',
     placeOrder: 'Place order',

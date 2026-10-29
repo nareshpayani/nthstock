@@ -76,7 +76,7 @@ function PortfolioValue() {
   const holdings = useQuery({ ...holdingsQuery(api), enabled: signedIn });
   const funds = useQuery({ ...fundsSummaryQuery(api), enabled: signedIn });
 
-  if (!signedIn) {
+  if (status === 'anonymous') {
     return (
       <HeroFrame>
         <Value paise={OPENING_CASH} />
@@ -84,20 +84,33 @@ function PortfolioValue() {
       </HeroFrame>
     );
   }
-  if (holdings.data && funds.data) {
+  if (signedIn && holdings.data && funds.data) {
     return (
       <HeroFrame>
         <LiveValue holdings={holdings.data.items} cash={funds.data.balance} />
       </HeroFrame>
     );
   }
-  if (holdings.isError || funds.isError) {
+  if (signedIn && (holdings.isError || funds.isError)) {
     return (
       <HeroFrame>
-        <p className="text-body text-ink-muted">{strings.phone.valueError}</p>
+        <p role="alert" className="text-body text-ink-muted">
+          {strings.phone.valueError}
+        </p>
+        <Button
+          variant="secondary"
+          size="sm"
+          onClick={() => {
+            void holdings.refetch();
+            void funds.refetch();
+          }}
+        >
+          {strings.phone.retry}
+        </Button>
       </HeroFrame>
     );
   }
+  // Session still unknown, or data on its way: a skeleton, never the signed-out figure.
   return (
     <HeroFrame>
       <span aria-hidden="true" className="mt-1 h-10 w-56 animate-pulse rounded-md bg-surface" />

@@ -50,6 +50,7 @@ export const strings = {
       stock: 'Stock',
     },
     tradeTitle: 'Trade',
+    tradeError: 'The order ticket could not open. Try again.',
     tradeHint: 'Pick a stock: its page opens with the order ticket up.',
   },
   shortcuts: {

@@ -3,6 +3,10 @@ export const strings = {
   profileLabel: 'Profile',
   available: 'Available to trade',
   fundsCta: 'Funds',
+  fundsLoading: 'Loading your balance',
+  loading: 'Loading your account',
+  retry: 'Try again',
+  logOutError: 'Could not log out on the server. Your session may still be active.',
   fundsError: 'Balance unavailable',
   menuLabel: 'Account',
   items: {
