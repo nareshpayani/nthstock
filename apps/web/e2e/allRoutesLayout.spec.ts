@@ -26,6 +26,8 @@ const ROUTES = [
   { name: 'ordersCancelled', path: '/orders?tab=cancelled' },
   { name: 'funds', path: '/funds' },
   { name: 'security', path: '/settings/security' },
+  { name: 'account', path: '/account' },
+  { name: 'watchlist', path: '/watchlist' },
 ] as const;
 
 /** Every guide tab: each is a long page of tables, diagrams and code. */

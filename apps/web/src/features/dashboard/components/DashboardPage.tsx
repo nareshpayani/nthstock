@@ -10,10 +10,12 @@ import { StocksListsCard } from '@/features/collections';
 import { IndicesRow } from '@/features/indices';
 import { DEFAULT_MOVERS_DIRECTION, MarketMoversCard } from '@/features/movers';
 import { SectionBoundary } from '@/shared/components/SectionBoundary';
+import { usePhoneShell } from '@/shared/hooks/usePhoneLayout';
 import { MarketSessionContext } from '@/shared/lib/marketSessionContext';
 import type { DashboardSearch } from '../model/dashboardSearch';
 import { strings } from '../strings';
 import { Hero } from './Hero';
+import { PhoneHome } from './PhoneHome';
 
 const route = getRouteApi('/_app/dashboard');
 
@@ -48,29 +50,55 @@ export function DashboardPage({ now }: DashboardPageProps) {
   // Section tabs replace the history entry: switching a tab is not a new page.
   const setSearch = (patch: DashboardSearch) =>
     void navigate({ search: (prev) => ({ ...prev, ...patch }), replace: true, resetScroll: false });
+  const phone = usePhoneShell();
+
+  const chart = (
+    <Section label={strings.sections.chart}>
+      <IndexChartCard
+        range={search.range ?? DEFAULT_CHART_RANGE}
+        interval={search.interval}
+        chartType={search.chart ?? DEFAULT_INDEX_CHART_TYPE}
+        onRangeChange={(range) =>
+          setSearch({ range, interval: keepInterval(range, search.interval) })
+        }
+        onIntervalChange={(interval) => setSearch({ interval })}
+        onChartTypeChange={(chart) => setSearch({ chart })}
+      />
+    </Section>
+  );
+  const indices = (
+    <Section label={strings.sections.indices}>
+      <IndicesRow />
+    </Section>
+  );
+  const lists = (
+    <Section label={strings.sections.lists}>
+      <StocksListsCard listId={search.list} onListChange={(list) => setSearch({ list })} />
+    </Section>
+  );
+
+  // A phone gets the app's Home (NSTOCK-0466); Gainers and Losers sit in Home's own tabs.
+  if (phone) {
+    return (
+      <PhoneHome
+        chart={chart}
+        indices={indices}
+        lists={lists}
+        moversIndex={search.moversIndex}
+        onMoversIndexChange={(moversIndex) => setSearch({ moversIndex })}
+        feed={search.feed ?? 'watchlist'}
+        onFeedChange={(feed) => setSearch({ feed })}
+      />
+    );
+  }
 
   return (
     <div className="mx-auto grid w-full max-w-[1200px] grid-cols-[minmax(0,1fr)] gap-4 lg:gap-6">
       <Hero now={now ?? clock.now()} />
-      <Section label={strings.sections.chart}>
-        <IndexChartCard
-          range={search.range ?? DEFAULT_CHART_RANGE}
-          interval={search.interval}
-          chartType={search.chart ?? DEFAULT_INDEX_CHART_TYPE}
-          onRangeChange={(range) =>
-            setSearch({ range, interval: keepInterval(range, search.interval) })
-          }
-          onIntervalChange={(interval) => setSearch({ interval })}
-          onChartTypeChange={(chart) => setSearch({ chart })}
-        />
-      </Section>
-      <Section label={strings.sections.indices}>
-        <IndicesRow />
-      </Section>
+      {chart}
+      {indices}
       <div className="grid grid-cols-[minmax(0,1fr)] gap-4 lg:gap-6 xl:grid-cols-2">
-        <Section label={strings.sections.lists}>
-          <StocksListsCard listId={search.list} onListChange={(list) => setSearch({ list })} />
-        </Section>
+        {lists}
         <Section label={strings.sections.movers}>
           <MarketMoversCard
             index={search.moversIndex}

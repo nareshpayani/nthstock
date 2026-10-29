@@ -13,4 +13,6 @@ export type DashboardSearch = {
   movers?: MoverDirection | undefined;
   /** Index whose movers are shown, e.g. `NIFTYBANK`. */
   moversIndex?: string | undefined;
+  /** The phone Home's list tab (NSTOCK-0466); Watchlist when absent. */
+  feed?: 'watchlist' | 'gainers' | 'losers' | undefined;
 };

@@ -90,6 +90,16 @@ handle, and the chart's price axis becomes a ruler you set prices on.
     dock beside the page instead of covering it. From 1024 px on a touch screen, the desktop
     layout gets 44 px controls.
 
+11. **A phone app, not a shrunk website.** Below 768 px the shell is a native app's: a bottom tab
+    bar in thumb reach (Home, Portfolio, a raised blue Trade button, Orders, Account) replaces the
+    menu drawer. The top bar holds the avatar, a switch between sibling pages (Market or
+    Watchlist, Holdings or Positions) and the bell, over the index strip. Home leads with the
+    portfolio value and the day's P&L, then the chart, Add funds and Place order side by side,
+    and Watchlist, Gainers and Losers as rows. Trade, from any tab, is search and then the stock's
+    page with the ticket up. A stock's page is pushed over the tabs with a back button, so its
+    Sell, Buy and Scalp bar keeps the bottom edge. Tablets keep the drawer. An E2E test
+    (`phoneShell.spec.ts`) walks from the tabs to every feature the desktop has.
+
 **Reduced motion.** With `prefers-reduced-motion`, springs and slides become instant or a 120 ms
 fade, digit rolls become swaps, the hint does not nudge, and the ratchet jumps without a trace.
 Haptics are unaffected; they have their own setting. An E2E test checks that no finite animation
@@ -111,6 +121,16 @@ open ticket, order line on the chart): [before](docs/design/before/README.md) an
 | 320 × 640 instrument (iPhone SE 1st gen) | ![](docs/design/before/phone-320x640-instrument.jpg) | ![](docs/design/after/phone-320x640-instrument.jpg) |
 | 844 × 390 landscape | ![](docs/design/before/landscape-844x390-instrument.jpg) | ![](docs/design/after/landscape-844x390-instrument.jpg) |
 | 820 × 1180 ticket (iPad Air) | ![](docs/design/before/tablet-820x1180-ticket.jpg) | ![](docs/design/after/tablet-820x1180-ticket.jpg) |
+
+The phone app shell (NSTOCK-0466), before from `develop` at `3bb0572`, after on its branch, both
+390 × 844 and signed in as the demo user:
+
+| Screen | Before | After |
+|---|---|---|
+| Home | ![](docs/design/before/shell-390x844-home.jpg) | ![](docs/design/after/shell-390x844-home.jpg) |
+| Portfolio | ![](docs/design/before/shell-390x844-portfolio.jpg) | ![](docs/design/after/shell-390x844-portfolio.jpg) |
+| Orders | ![](docs/design/before/shell-390x844-orders.jpg) | ![](docs/design/after/shell-390x844-orders.jpg) |
+| Account (new; before, a 404) | ![](docs/design/before/shell-390x844-account.jpg) | ![](docs/design/after/shell-390x844-account.jpg) |
 
 What changed in those frames:
 

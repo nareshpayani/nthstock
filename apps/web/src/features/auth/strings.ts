@@ -151,6 +151,7 @@ export const strings = {
     security: 'Security',
     logOut: 'Log out',
     logIn: 'Log in',
+    accountSignedOut: 'Account',
     loading: 'Checking your session',
   },
 
