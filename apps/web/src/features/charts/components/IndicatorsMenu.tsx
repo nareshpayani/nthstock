@@ -54,7 +54,8 @@ export function IndicatorsMenu({ touch: touchProp = false }: IndicatorsMenuProps
         )}
       >
         <IndicatorsGlyph />
-        <span className="max-[359px]:sr-only">{strings.studies.button}</span>
+        {/* On a phone the drawing and the count say it; the name would push the row off screen. */}
+        <span className={touch ? 'sr-only' : undefined}>{strings.studies.button}</span>
         {studies.length > 0 ? (
           <span className="rounded-pill bg-brand-soft px-1.5 text-label text-brand">
             {studies.length}
