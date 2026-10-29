@@ -30,11 +30,13 @@ import {
 } from '../model/ranges';
 import { strings } from '../strings';
 import { useChartStudies } from '../model/studiesStore';
+import { ChartSnapshotButton } from './ChartSnapshotButton';
 import { ChartTypeMenu } from './ChartTypeMenu';
 import { ChartWorkspace, ExpandGlyph } from './ChartWorkspace';
 import { DrawingLayer } from './DrawingLayer';
 import { ToolRail } from './ToolRail';
 import { IndicatorsMenu } from './IndicatorsMenu';
+import { IstClock } from './IstClock';
 import { ChartZoomControls } from './ChartZoomControls';
 import { LiveBadge } from './LiveBadge';
 import { PriceChart } from './PriceChart';
@@ -212,6 +214,13 @@ export function IndexChartCard({
               ))}
             </select>
           ) : null}
+          <ChartSnapshotButton
+            handle={fullChart}
+            name={strings.niftyTitle}
+            details={[range, interval === intervals[0] ? undefined : interval]}
+            touch={phone}
+          />
+          <IstClock />
         </>
       }
       footer={
@@ -322,6 +331,17 @@ export function IndexChartCard({
             <ChartTypeMenu value={chartType} onValueChange={onChartTypeChange} touch={phone} />
           ) : null}
           <IndicatorsMenu touch={phone} volume={false} />
+          {/* A phone keeps the row short: the image and the clock are in full screen. */}
+          {phone ? null : (
+            <>
+              <ChartSnapshotButton
+                handle={chart}
+                name={strings.niftyTitle}
+                details={[range, interval === intervals[0] ? undefined : interval]}
+              />
+              <IstClock />
+            </>
+          )}
           <IconButton
             label={strings.fullscreen.open}
             icon={<ExpandGlyph />}

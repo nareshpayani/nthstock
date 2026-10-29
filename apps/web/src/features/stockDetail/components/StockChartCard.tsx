@@ -15,7 +15,9 @@ import {
   ChartWorkspace,
   DrawGlyph,
   DrawingLayer,
+  ChartSnapshotButton,
   ExpandGlyph,
+  IstClock,
   type ChartHandle,
   ChartTypeMenu,
   IndicatorsMenu,
@@ -239,6 +241,13 @@ export function StockChartCard({
           {liveBadge}
           {typeControl}
           {intervalSelect}
+          <ChartSnapshotButton
+            handle={fullChart}
+            name={symbol}
+            details={[range, interval === intervals[0] ? undefined : interval]}
+            touch={touch}
+          />
+          <IstClock />
         </>
       }
       footer={
@@ -319,6 +328,12 @@ export function StockChartCard({
             />
           ) : null}
           {typeControl}
+          <ChartSnapshotButton
+            handle={chart}
+            name={symbol}
+            details={[range, interval === intervals[0] ? undefined : interval]}
+          />
+          <IstClock />
           <IconButton
             label={strings.chart.fullscreen}
             icon={<ExpandGlyph />}
