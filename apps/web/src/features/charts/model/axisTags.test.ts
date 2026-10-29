@@ -12,11 +12,23 @@ describe('visibleTickLabels', () => {
   });
 
   it('keeps every label without tags, and one exactly at the clearance', () => {
-    expect(visibleTickLabels([1500, 1490], y, [])).toEqual([true, true]);
-    expect(visibleTickLabels([1500], y, [y(1500) + TAG_CLEARANCE_PX])).toEqual([true]);
+    expect(visibleTickLabels([1510, 1500, 1490], y, [])).toEqual([true, true, true]);
+    expect(visibleTickLabels([1510, 1500, 1490], y, [y(1500) + TAG_CLEARANCE_PX])).toEqual([
+      true,
+      true,
+      true,
+    ]);
+  });
+
+  it('always keeps the first and last labels, which set the axis width', () => {
+    expect(visibleTickLabels([1520, 1510, 1500], y, [y(1520), y(1500)])).toEqual([
+      true,
+      true,
+      true,
+    ]);
   });
 
   it('keeps a label whose price is off the scale', () => {
-    expect(visibleTickLabels([2000], () => null, [0])).toEqual([true]);
+    expect(visibleTickLabels([2100, 2000, 1900], () => null, [0])).toEqual([true, true, true]);
   });
 });

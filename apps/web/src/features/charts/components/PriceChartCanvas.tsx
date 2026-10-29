@@ -157,6 +157,8 @@ export function PriceChartCanvas({
     // A new chart type fades in over 160 ms (NSTOCK-0430); the overlay above it does not move.
     const switched = builtTypeRef.current !== null && builtTypeRef.current !== type;
     builtTypeRef.current = type;
+    // A new chart draws its own tick labels; the old one's say nothing about them.
+    ticksRef.current = null;
     if (switched && !reducedMotion() && typeof host.animate === 'function') {
       host.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 160, easing: 'ease-out' });
     }

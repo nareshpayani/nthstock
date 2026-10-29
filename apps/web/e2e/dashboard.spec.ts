@@ -96,8 +96,10 @@ async function loadFrozenDashboard(page: Page) {
       { timeout: 45_000, intervals: [20] },
     )
     .toBe(true);
-  // No price has ticked: every live value still shows its first quote.
-  await expect(page.locator('[data-tick="up"], [data-tick="down"]')).toHaveCount(0);
+  // No price has ticked: every live value still shows its first quote, so no digit has rolled.
+  // (`data-tick` is the day's direction since NSTOCK-0446, so it no longer says whether a tick
+  // came.)
+  await expect(page.locator('[data-rolled]')).toHaveCount(0);
 }
 
 const shot = (page: Page, path?: string) =>
