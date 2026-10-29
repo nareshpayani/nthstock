@@ -81,6 +81,9 @@ export function DrawingLayer({ handle, candles, symbol, format }: DrawingLayerPr
     };
   }, [chart, host, active]);
 
+  // A tool picked here is put down when this chart goes, so another chart is not armed at once.
+  useEffect(() => () => setTool(null), [setTool]);
+
   // A new tool, or none, drops a half-made drawing.
   const [toolSeen, setToolSeen] = useState(tool);
   if (toolSeen !== tool) {

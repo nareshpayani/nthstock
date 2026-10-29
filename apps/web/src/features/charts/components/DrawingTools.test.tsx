@@ -358,6 +358,8 @@ describe('full-screen chart (NSTOCK-0461)', () => {
       </ToastProvider>,
     );
     act(() => toast?.show({ title: 'Order filled' }));
+    // The workspace keeps whatever carries this mark usable; the toast viewport must carry it.
+    expect(document.querySelector('[data-nth-toasts]')).not.toBeNull();
     expect(screen.getByTestId('page')).toHaveAttribute('inert');
     expect(screen.getByText('Order filled').closest('[inert]')).toBeNull();
     view.unmount();
@@ -472,6 +474,26 @@ describe('saved drawings (NSTOCK-0461)', () => {
     } finally {
       spy.mockRestore();
     }
+  });
+
+  it('keeps the first copy set aside, and will not save over a second unreadable value', () => {
+    window.localStorage.setItem(unreadableDrawingsKey('HDFC'), 'first');
+    window.localStorage.setItem(drawingsStorageKey('HDFC'), '{not json');
+    const at = { time: T0, price: 150_000 };
+    act(() => useDrawings.getState().add('HDFC', { id: 'a', kind: 'horizontal', at }));
+    expect(window.localStorage.getItem(unreadableDrawingsKey('HDFC'))).toBe('first');
+    expect(window.localStorage.getItem(drawingsStorageKey('HDFC'))).toBe('{not json');
+    expect(useDrawings.getState().unsaved.HDFC).toBe(true);
+  });
+
+  it('puts a picked tool down when the chart goes', () => {
+    const { handle } = fakeHandle();
+    const view = render(
+      <DrawingLayer handle={handle} candles={candles} symbol="INFY" format="inr" />,
+    );
+    act(() => useDrawings.getState().setTool('trend'));
+    view.unmount();
+    expect(useDrawings.getState().tool).toBeNull();
   });
 
   it('a new drawing after Clear means Undo removes it, not bring the cleared ones back', () => {
