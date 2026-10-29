@@ -2,6 +2,7 @@ import { act, render } from '@testing-library/react';
 import { createElement } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { prefersReducedMotion } from '@/shared/motion/useReducedMotion';
+import { installResizeObserver } from '@/test/resizeObserver';
 import {
   AUTO_SCROLL_CYCLES,
   AUTO_SCROLL_REST_MS,
@@ -122,14 +123,19 @@ describe('useAutoScroll (WCAG 2.2.2)', () => {
     expect(callbacks).toHaveLength(0);
   });
 
-  it('waits while nothing overflows, then drifts once it does', () => {
+  it('requests no frames while nothing overflows, then drifts once the layout changes', () => {
+    const observer = installResizeObserver();
     scrollWidth = 200;
     render(createElement(Strip));
-    frame(1);
-    frame(10_000);
-    expect(callbacks).toHaveLength(1);
+    expect(callbacks).toHaveLength(0);
+    observer.resize(200);
+    expect(callbacks).toHaveLength(0);
     scrollWidth = 400;
+    observer.resize(400);
+    expect(callbacks).toHaveLength(1);
     frame(1);
+    observer.resize(400);
+    expect(callbacks).toHaveLength(1);
     for (let t = 0; t < AUTO_SCROLL_REST_MS + travel; t += 200) frame(200);
     expect(el?.scrollLeft).toBe(200);
   });

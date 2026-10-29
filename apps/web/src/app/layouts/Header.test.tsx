@@ -1,5 +1,6 @@
 import type { QuoteStore } from '@nthstock/apiClient';
 import type * as Ui from '@nthstock/ui';
+import type * as PhoneLayout from '@/shared/hooks/usePhoneLayout';
 import type { IndexTickerProps, LogoProps } from '@nthstock/ui';
 import {
   createMemoryHistory,
@@ -9,7 +10,8 @@ import {
 } from '@tanstack/react-router';
 import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import { createElement } from 'react';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { AUTO_SCROLL_REST_MS, AUTO_SCROLL_SPEED } from '@/shared/hooks/useAutoScroll';
 import { createTestQuoteStore, testQuote } from '@/test/quotes';
 import { AppProviders } from '../providers/AppProviders';
 import { createQueryClient } from '../queryClient';
@@ -32,6 +34,13 @@ vi.mock('@nthstock/ui', async (importOriginal) => {
     },
   };
 });
+
+// jsdom has no matchMedia, so the phone layout is switched here.
+const phone = vi.hoisted(() => ({ value: false }));
+vi.mock('@/shared/hooks/usePhoneLayout', async (importOriginal) => ({
+  ...(await importOriginal<typeof PhoneLayout>()),
+  usePhoneLayout: () => phone.value,
+}));
 
 function renderHeader(user: { name: string } | null, quoteStore?: QuoteStore) {
   if (user) signIn(testSession({ name: user.name }));
@@ -121,5 +130,52 @@ describe('Header status strip (narrow screens)', () => {
     const strip = await screen.findByRole('region', { name: 'Market status and indices' });
     expect(strip).toHaveAttribute('tabindex', '0');
     expect(within(strip).getByRole('status', { name: /NSE market status/ })).toBeInTheDocument();
+  });
+});
+
+describe('Header phone strip (A21)', () => {
+  afterEach(() => {
+    phone.value = false;
+    vi.unstubAllGlobals();
+    Reflect.deleteProperty(HTMLElement.prototype, 'scrollWidth');
+    Reflect.deleteProperty(HTMLElement.prototype, 'clientWidth');
+  });
+
+  const stripNames = ['NIFTY 50', 'SENSEX', 'NIFTY BANK', 'NIFTY IT', 'NIFTY MIDCAP 100'];
+
+  it('lists every index on a phone', async () => {
+    phone.value = true;
+    renderHeader(null);
+    const strip = await screen.findByRole('region', { name: 'Market status and indices' });
+    for (const name of stripNames) expect(within(strip).getByText(name)).toBeInTheDocument();
+  });
+
+  it('lists only Nifty 50 and Sensex off a phone', async () => {
+    renderHeader(null);
+    const strip = await screen.findByRole('region', { name: 'Market status and indices' });
+    expect(within(strip).getByText('NIFTY 50')).toBeInTheDocument();
+    expect(within(strip).getByText('SENSEX')).toBeInTheDocument();
+    expect(within(strip).queryByText('NIFTY BANK')).not.toBeInTheDocument();
+  });
+
+  it('drifts the strip sideways through its ref', async () => {
+    let now = 0;
+    let pending: FrameRequestCallback[] = [];
+    vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => pending.push(cb));
+    vi.stubGlobal('cancelAnimationFrame', () => {
+      pending = [];
+    });
+    Object.defineProperty(HTMLElement.prototype, 'scrollWidth', { value: 400, configurable: true });
+    Object.defineProperty(HTMLElement.prototype, 'clientWidth', { value: 200, configurable: true });
+    renderHeader(null);
+    const strip = await screen.findByRole('region', { name: 'Market status and indices' });
+    const total = AUTO_SCROLL_REST_MS + (200 / AUTO_SCROLL_SPEED) * 1000;
+    for (let t = 0; t <= total + 200; t += 200) {
+      const run = pending;
+      pending = [];
+      act(() => run.forEach((cb) => cb(now)));
+      now += 200;
+    }
+    expect(strip.scrollLeft).toBe(200);
   });
 });

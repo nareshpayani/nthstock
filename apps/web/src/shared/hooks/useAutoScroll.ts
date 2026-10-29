@@ -54,9 +54,12 @@ export function useAutoScroll<T extends HTMLElement>() {
     let frame = 0;
     let start: number | undefined;
     let last: number | undefined;
+    let observer: ResizeObserver | undefined;
+    const overflowPx = () => element.scrollWidth - element.clientWidth;
     const stop = () => {
       cancelAnimationFrame(frame);
       frame = 0;
+      observer?.disconnect();
       element.removeEventListener('pointerdown', stop);
       element.removeEventListener('wheel', stop);
       element.removeEventListener('focusin', stop);
@@ -68,11 +71,13 @@ export function useAutoScroll<T extends HTMLElement>() {
         start += now - last;
       last = now;
       start ??= now;
-      const overflow = element.scrollWidth - element.clientWidth;
-      // Nothing to show yet (skeletons, or a layout that changes later): wait, do not give up.
+      const overflow = overflowPx();
+      // Nothing to show (it fits, or the quotes are still skeletons): park the loop. The
+      // observer wakes it when the layout changes, so a fitting strip costs no frames.
       if (overflow <= 0) {
+        frame = 0;
         start = undefined;
-        frame = requestAnimationFrame(tick);
+        last = undefined;
         return;
       }
       const at = driftAt(now - start, overflow);
@@ -83,11 +88,20 @@ export function useAutoScroll<T extends HTMLElement>() {
       element.scrollLeft = Math.round(at * overflow);
       frame = requestAnimationFrame(tick);
     };
+    const wake = () => {
+      if (frame === 0 && overflowPx() > 0) frame = requestAnimationFrame(tick);
+    };
     element.addEventListener('pointerdown', stop);
     element.addEventListener('wheel', stop, { passive: true });
     element.addEventListener('focusin', stop);
     element.addEventListener('keydown', stop);
-    frame = requestAnimationFrame(tick);
+    if (typeof ResizeObserver === 'function') {
+      // The strip itself (rotation, breakpoints) and its content (quotes arriving).
+      observer = new ResizeObserver(wake);
+      observer.observe(element);
+      for (const child of Array.from(element.children)) observer.observe(child);
+    }
+    wake();
     return stop;
   }, []);
   return ref;

@@ -68,6 +68,8 @@ describe('HeaderTickers states (CR-T18, SPEC-CR-1 §7)', () => {
     force('offline');
     expect(screen.getByTestId('tickers-stale')).toHaveTextContent('Stale');
     expect(group).toHaveAttribute('data-stale', 'true');
+    // Pinned, so a drifting strip never scrolls the text cue away.
+    expect(screen.getByTestId('tickers-stale')).toHaveClass('sticky', 'left-0');
     expect(group).toHaveTextContent('NIFTY');
     force('live');
     expect(screen.queryByTestId('tickers-stale')).not.toBeInTheDocument();

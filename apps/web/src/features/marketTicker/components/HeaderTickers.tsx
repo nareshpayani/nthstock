@@ -84,11 +84,11 @@ export function HeaderTickers({
         className,
       )}
     >
-      {/* First, so a narrow strip that clips its end still says it. */}
+      {/* First, and pinned, so a drifting or clipped strip still says it. */}
       {offline ? (
         <span
           data-testid="tickers-stale"
-          className="shrink-0 rounded-sm border border-line px-1.5 py-0.5 text-label font-medium whitespace-nowrap text-ink-muted"
+          className="sticky left-0 z-10 shrink-0 rounded-sm border border-line bg-surface px-1.5 py-0.5 text-label font-medium whitespace-nowrap text-ink-muted"
         >
           {strings.stale}
         </span>
