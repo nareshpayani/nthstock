@@ -11,6 +11,8 @@ name: 'Agent: PR fixer'
 # The one safeguard is for no progress: when the last AGENT_NO_PROGRESS_RUNS (default 5) CI runs
 # on a PR, each on a new commit, all fail in exactly the same jobs and steps, the PR gets
 # `needs-human` instead of another identical attempt, so a stuck loop cannot drain the plan quota.
+# A Fixer run that finds nothing to fix re-runs the failed jobs first (a slow runner, a flaky
+# browser check); only a commit that is red again after that re-run goes to the owner.
 
 on:
   pull_request:
@@ -26,7 +28,8 @@ permissions:
   contents: write
   pull-requests: write
   issues: write
-  actions: read
+  # write: re-run the failed jobs of a red run the Fixer found nothing to fix in.
+  actions: write
   id-token: write
 
 jobs:
@@ -41,6 +44,7 @@ jobs:
       pr: ${{ steps.target.outputs.pr }}
       branch: ${{ steps.target.outputs.branch }}
       reason: ${{ steps.target.outputs.reason }}
+      run: ${{ steps.target.outputs.run }}
     steps:
       - id: target
         env:
@@ -59,12 +63,13 @@ jobs:
           RUN_SHA: ${{ github.event.workflow_run.head_sha }}
           RUN_EVENT: ${{ github.event.workflow_run.event }}
           RUN_URL: ${{ github.event.workflow_run.html_url }}
+          RUN_ID: ${{ github.event.workflow_run.id }}
           RUN_HEAD_REPO: ${{ github.event.workflow_run.head_repository.full_name }}
         run: |
           set -euo pipefail
           repo="$GITHUB_REPOSITORY"
-          emit() { # mode pr branch reason
-            { echo "mode=$1"; echo "pr=$2"; echo "branch=$3"; echo "reason=$4"; } >> "$GITHUB_OUTPUT"
+          emit() { # mode pr branch reason [ci-run-id]
+            { echo "mode=$1"; echo "pr=$2"; echo "branch=$3"; echo "reason=$4"; echo "run=${5:-}"; } >> "$GITHUB_OUTPUT"
             echo "Target: mode=$1 pr=$2 branch=$3 ($4)"
           }
           fix_develop_pr_open() {
@@ -116,7 +121,7 @@ jobs:
             esac
             if stuck=$(no_progress "$branch"); then
               gh pr edit "$pr" --repo "$repo" --add-label needs-human >/dev/null
-              gh pr comment "$pr" --repo "$repo" --body "CI failed the same way ($stuck) on each of the last $NO_PROGRESS_RUNS commits, so fixes are not making progress. Labelled \`needs-human\`; push a change and remove the label to let the Fixer carry on."
+              gh pr comment "$pr" --repo "$repo" --body "CI failed the same way ($stuck) on each of the last $NO_PROGRESS_RUNS commits, so fixes are not making progress. Labelled \`needs-human\`; the label clears on the next push."
               return 0
             fi
             echo ok
@@ -144,7 +149,7 @@ jobs:
             [ -n "$pr" ] || exit 0
             # A PR whose head is develop or production is never fixed on its branch: agents never push there.
             case "$RUN_BRANCH" in develop|production) exit 0 ;; esac
-            [ "$(eligible "$pr")" = "ok" ] && emit pr "$pr" "$RUN_BRANCH" "failing CI ($RUN_URL)"
+            [ "$(eligible "$pr")" = "ok" ] && emit pr "$pr" "$RUN_BRANCH" "failing CI ($RUN_URL)" "$RUN_ID"
             exit 0
           fi
 
@@ -157,11 +162,11 @@ jobs:
               --json number,headRefName,headRefOid --jq 'sort_by(.number) | .[] | "\(.number):\(.headRefName):\(.headRefOid)"'); do
             pr=${row%%:*}; rest=${row#*:}; branch=${rest%%:*}; sha=${rest#*:}
             [ "$branch" != "develop" ] || continue
-            conclusion=$(gh run list --repo "$repo" --workflow ci.yml --commit "$sha" --event pull_request \
-              --status completed --limit 1 --json conclusion --jq '.[0].conclusion // ""')
-            [ "$conclusion" = "failure" ] || continue
+            latest=$(gh run list --repo "$repo" --workflow ci.yml --commit "$sha" --event pull_request \
+              --status completed --limit 1 --json conclusion,databaseId --jq '.[0] // {}')
+            [ "$(jq -r '.conclusion // ""' <<< "$latest")" = "failure" ] || continue
             if [ "$(eligible "$pr")" = "ok" ]; then
-              emit pr "$pr" "$branch" "failing CI on the PR head ($sha)"
+              emit pr "$pr" "$branch" "failing CI on the PR head ($sha)" "$(jq -r .databaseId <<< "$latest")"
               exit 0
             fi
           done
@@ -221,19 +226,28 @@ jobs:
           claude_args: |
             --allowedTools "Read,Glob,Grep,Edit,Write,Bash(npm:*),Bash(npx:*),Bash(node:*),Bash(git:*),Bash(gh pr view:*),Bash(gh pr diff:*),Bash(gh pr checks:*),Bash(gh pr list:*),Bash(gh pr comment:*),Bash(gh pr edit:*),Bash(gh pr checkout:*),Bash(gh pr create:*),Bash(gh issue create:*),Bash(gh run view:*),Bash(gh run list:*),Bash(gh api repos/*/pulls/*/comments*),Bash(gh api repos/*/pulls/*/reviews*),Bash(gh api repos/*/issues/*/comments*),Bash(gh api repos/*/actions/*),Bash(gh api repos/*/commits/*),Bash(bash tools/github/issueKey.sh:*)"
       # The other half of the no-progress safeguard: a CI-fix run that pushes nothing leaves the same
-      # red commit, which the hourly sweep would pick again forever. Hand it to the owner instead.
-      - name: Flag a CI fix that pushed nothing
+      # red commit, which the hourly sweep would pick again forever. When the Fixer finds no defect
+      # the failure is usually the runner (a Lighthouse score on the floor, a browser timeout), so
+      # the failed jobs are re-run first. Only a commit that is still red after its re-run, with no
+      # fix found again, goes to the owner: that is no progress, not a count of tries.
+      - name: Re-run or flag a CI fix that pushed nothing
         if: >-
           always() && env.HAS_AGENT_TOKEN == 'true' && needs.resolve-target.outputs.mode == 'pr' &&
           startsWith(needs.resolve-target.outputs.reason, 'failing CI')
         env:
           GH_TOKEN: ${{ github.token }}
           PR: ${{ needs.resolve-target.outputs.pr }}
+          RUN: ${{ needs.resolve-target.outputs.run }}
           BEFORE: ${{ steps.before.outputs.sha }}
         run: |
           info=$(gh pr view "$PR" --repo "$GITHUB_REPOSITORY" --json state,headRefOid,labels)
           [ "$(jq -r .state <<< "$info")" = "OPEN" ] || exit 0
           [ "$(jq -r .headRefOid <<< "$info")" = "$BEFORE" ] || exit 0
           jq -e '[.labels[].name] | index("needs-human")' <<< "$info" >/dev/null && exit 0
+          if [ -n "$RUN" ] && [ "$(gh run view "$RUN" --repo "$GITHUB_REPOSITORY" --json attempt --jq .attempt)" -lt 2 ]; then
+            gh run rerun "$RUN" --repo "$GITHUB_REPOSITORY" --failed
+            gh pr comment "$PR" --repo "$GITHUB_REPOSITORY" --body "The Fixer found no defect behind the red CI on ${BEFORE:0:7}, so it looks like the runner. Re-running the failed jobs ([CI run]($GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$RUN)); the Fixer looks again if they fail."
+            exit 0
+          fi
           gh pr edit "$PR" --repo "$GITHUB_REPOSITORY" --add-label needs-human
-          gh pr comment "$PR" --repo "$GITHUB_REPOSITORY" --body "The Fixer finished without pushing a fix for the red CI on ${BEFORE:0:7} ([run]($GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID)). Labelled \`needs-human\`; remove the label to let the Fixer try again."
+          gh pr comment "$PR" --repo "$GITHUB_REPOSITORY" --body "The Fixer finished without pushing a fix for the red CI on ${BEFORE:0:7} ([run]($GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID)). It was also red after a re-run, so the failure is real but has no fix yet. Labelled \`needs-human\`; the label clears on the next push."

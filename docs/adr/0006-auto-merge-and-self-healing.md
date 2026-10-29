@@ -23,8 +23,12 @@ label changes and hourly, and merges one PR per run. After a merge it dispatches
 conflict resolver and the label sync on `main`, because merges made with `GITHUB_TOKEN` start no
 push workflows. `AGENT_AUTOMERGE=false` turns it off.
 
-**What still needs the owner.** Spec PRs, because merging a spec is what approves it, and any PR that
-changes `.github/**`, `.claude/**` or `CLAUDE.md`, because those decide what the agents may do.
+**What still needs the owner.** Spec PRs, because merging a spec is what approves it. Until
+2026-10-29 this also covered any PR that changes `.github/**`, `.claude/**` or `CLAUDE.md`; the owner
+then gave standing approval for those, and auto-merge now holds only the real risks: the production
+release and deploy workflows, a committed `.env` file, and a migration that drops or truncates data.
+A held PR gets `needs-human` with a comment saying why. `needs-human` comes off on the next push
+(`pr-clear-needs-human.yml`).
 `.github/CODEOWNERS` names the owner for them and for `docs/adr/`. Agents never merge by hand.
 
 **Conflict resolver** (`agent-conflicts.yml`). On every push to `main`, open owner and agent PRs that
