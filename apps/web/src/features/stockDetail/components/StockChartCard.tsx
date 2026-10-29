@@ -13,9 +13,11 @@ import { AlertLines } from '@/features/notifications';
 import {
   CHART_RANGES,
   type ChartHandle,
+  ChartTypeMenu,
   LiveBadge,
   PriceChart,
   candlesQuery,
+  chartTypeName,
   intervalLabel,
   isIntraday,
   rangeLabel,
@@ -25,11 +27,11 @@ import {
 import { Card } from '@/shared/components/Card';
 import { ChartSkeleton } from '@/shared/components/ChartSkeleton';
 import { useMarketOpen } from '@/shared/hooks/useMarketOpen';
+import { useDayDirection } from '@/shared/hooks/useQuote';
 import { useApiClient } from '@/shared/lib/apiClientContext';
 import { useForcedState, useOffline } from '@/shared/lib/connectivity';
 import { DESKTOP_CHART_HEIGHT } from '@/shared/lib/phoneChart';
 import type { ChartType } from '../model/stockDetailSearch';
-import { ChartTypeMenu } from './ChartTypeMenu';
 import { strings } from '../strings';
 
 export type StockChartCardProps = {
@@ -101,6 +103,10 @@ export function StockChartCard({
     live,
     interval,
   );
+  // NSTOCK-0446: on 1D the line's colour is the day's change, so it agrees with the header's
+  // badge. The series can't say it: in the first hour it leads with the previous session.
+  const today = useDayDirection(symbol, exchange);
+  const direction = range === '1D' ? today : undefined;
 
   const touch = controls === 'touch';
   const liveBadge = marketOpen && !offline ? <LiveBadge /> : null;
@@ -132,10 +138,11 @@ export function StockChartCard({
       ) : loaded ? (
         <PriceChart
           candles={forced === 'empty' ? NO_CANDLES : bars}
+          direction={direction}
           emptyText={range === '1D' ? strings.chart.emptyToday : undefined}
           label={strings.chart.label(
             symbol,
-            strings.chart.typeNames[chartType],
+            chartTypeName(chartType),
             rangeLabel(range),
             interval === intervals[0] ? undefined : intervalLabel(interval),
           )}

@@ -22,7 +22,11 @@ export function prefetchDashboard(
   search: DashboardSearch,
 ): void {
   void queryClient.prefetchQuery(
-    candlesQuery(api, { ...NIFTY, range: search.range ?? DEFAULT_CHART_RANGE }),
+    candlesQuery(api, {
+      ...NIFTY,
+      range: search.range ?? DEFAULT_CHART_RANGE,
+      interval: search.interval,
+    }),
   );
   void queryClient.prefetchQuery(indicesQuery(api));
   void queryClient.prefetchQuery(listQuery(api, resolveListId(search.list)));

@@ -5,7 +5,7 @@ flow looks, moves and feels: the instrument page, the order ticket, and the line
 order lines, the position and the trailing stop). This file covers the decisions, the references,
 what is now distinctive, before and after frames at every screen size, the numbers, and the AI note.
 
-- **Live:** https://nthstock-a13a5.web.app/dashboard?demo=1 (opens signed in; open INFY)
+- **Live:** https://nthstock-a13a5.web.app/login?try=1 (signs in to the demo and opens RELIANCE with a position and a trailing stop on the chart)
 - **Spec and plan:** [SPEC-CR-1](docs/specs/craft-round.md), [PLAN-CR-1](docs/specs/craft-round-tasks.md)
 - **Recording script:** [docs/design/recordingScript.md](docs/design/recordingScript.md)
 - **Frames:** [before](docs/design/before/README.md) and [after](docs/design/after/README.md)

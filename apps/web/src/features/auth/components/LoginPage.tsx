@@ -38,6 +38,8 @@ export type LoginPageProps = {
   devOtp?: string | null;
   /** Set after the user deleted their account (`?deleted=`): when its data is erased. */
   deletedPurgeAfter?: string | undefined;
+  /** The reviewer link (`?try=1`): start Try demo without a tap. */
+  autoStartDemo?: boolean;
 };
 
 /**
@@ -45,7 +47,12 @@ export type LoginPageProps = {
  * then OTP, then the authenticator code when two-factor is on (NSTOCK-0220), then (first login)
  * PIN setup, then the page they came for.
  */
-export function LoginPage({ redirect, devOtp = devOtpHint, deletedPurgeAfter }: LoginPageProps) {
+export function LoginPage({
+  redirect,
+  devOtp = devOtpHint,
+  deletedPurgeAfter,
+  autoStartDemo = false,
+}: LoginPageProps) {
   const navigate = useNavigate();
   const [step, setStep] = useState<Step>(() => {
     if (deletedPurgeAfter) {
@@ -144,7 +151,7 @@ export function LoginPage({ redirect, devOtp = devOtpHint, deletedPurgeAfter }: 
     <main className="grid min-h-dvh grid-cols-[minmax(0,1fr)] place-items-center bg-canvas p-4">
       <div className="grid w-full max-w-sm grid-cols-[minmax(0,1fr)] gap-6 rounded-lg border border-line bg-surface p-6 max-[359px]:p-4">
         {content}
-        {devOtp ? <TryDemo devOtp={devOtp} /> : null}
+        {devOtp ? <TryDemo devOtp={devOtp} autoStart={autoStartDemo} /> : null}
         <p className="text-label text-ink-muted">{strings.paperNote}</p>
         <div className="grid gap-3">
           {/* Before logging in: what the app does and how to trade, then back here (NSTOCK-0280). */}

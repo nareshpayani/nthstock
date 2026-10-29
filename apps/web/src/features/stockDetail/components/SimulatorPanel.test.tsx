@@ -44,4 +44,20 @@ describe('SimulatorPanel (T09)', () => {
     expect(simulator.setSplitFills).toHaveBeenCalledWith('INFY', true);
     expect(split).toHaveAttribute('aria-pressed', 'true');
   });
+
+  it('folds to one Demo controls button when collapsible (NSTOCK-0447)', async () => {
+    registerSimulator(fakeSimulator());
+    const user = userEvent.setup();
+    render(<SimulatorPanel symbol="INFY" collapsible />);
+
+    const toggle = screen.getByRole('button', { name: 'Demo controls' });
+    expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.queryByRole('button', { name: 'Rally +1%' })).not.toBeInTheDocument();
+    await user.click(toggle);
+    expect(screen.getByRole('button', { name: 'Hide demo controls' })).toHaveAttribute(
+      'aria-expanded',
+      'true',
+    );
+    expect(screen.getByRole('button', { name: 'Rally +1%' })).toBeVisible();
+  });
 });

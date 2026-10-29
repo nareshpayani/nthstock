@@ -40,7 +40,7 @@ describe('dashboard URL state', () => {
   it('drops an invalid range from the URL and falls back to 1 day', async () => {
     const { router } = renderApp('/dashboard?range=2Y', { apiClient: api.apiClient });
     expect(
-      await screen.findByRole('figure', { name: 'NIFTY 50 area chart over 1 day' }),
+      await screen.findByRole('figure', { name: 'NIFTY 50 line chart over 1 day' }),
     ).toBeInTheDocument();
     expect(router.state.location.search).toEqual({});
   });
@@ -48,12 +48,68 @@ describe('dashboard URL state', () => {
   it('reads the chart range from the URL and writes it back when a range is picked', async () => {
     const { router } = renderApp('/dashboard?range=1M', { apiClient: api.apiClient });
     expect(
-      await screen.findByRole('figure', { name: 'NIFTY 50 area chart over 1 month' }),
+      await screen.findByRole('figure', { name: 'NIFTY 50 line chart over 1 month' }),
     ).toBeInTheDocument();
     expect(candleRanges()).toContain('1M');
     fireEvent.click(screen.getByRole('radio', { name: '5Y' }));
     await waitFor(() => expect(router.state.location.search).toEqual({ range: '5Y' }));
     await waitFor(() => expect(candleRanges()).toContain('5Y'));
+  });
+
+  const candleIntervals = () =>
+    api.requestsTo('/NIFTY50/candles').map((url) => url.searchParams.get('interval'));
+
+  it('reads the bar size and chart type from the URL (NSTOCK-0443)', async () => {
+    renderApp('/dashboard?range=1D&interval=5m&chart=candle', { apiClient: api.apiClient });
+    expect(
+      await screen.findByRole('figure', {
+        name: 'NIFTY 50 candlestick chart over 1 day, 5-minute bars',
+      }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Chart type: Candles' })).toBeInTheDocument();
+    expect(screen.getByRole('radio', { name: '5-minute bars' })).toBeChecked();
+    expect(candleIntervals()).toEqual(['5m']);
+    await waitFor(() => expect(chartsMock.active()[0]?.series[0]?.type).toBe('Candlestick'));
+  });
+
+  it('writes a picked bar size and chart type back to the URL (NSTOCK-0443)', async () => {
+    const { router } = renderApp('/dashboard', { apiClient: api.apiClient });
+    await screen.findByRole('figure', { name: 'NIFTY 50 line chart over 1 day' });
+    fireEvent.click(screen.getByRole('radio', { name: '15-minute bars' }));
+    await waitFor(() => expect(router.state.location.search).toEqual({ interval: '15m' }));
+    await waitFor(() => expect(candleIntervals()).toContain('15m'));
+    fireEvent.keyDown(screen.getByRole('button', { name: 'Chart type: Line' }), { key: 'Enter' });
+    fireEvent.click(await screen.findByRole('menuitemradio', { name: /^OHLC/ }));
+    await waitFor(() =>
+      expect(router.state.location.search).toEqual({ interval: '15m', chart: 'bar' }),
+    );
+    expect(
+      await screen.findByRole('figure', {
+        name: 'NIFTY 50 OHLC bar chart over 1 day, 15-minute bars',
+      }),
+    ).toBeInTheDocument();
+  });
+
+  it('drops an invalid bar size and chart type (NSTOCK-0443)', async () => {
+    const { router } = renderApp('/dashboard?interval=7m&chart=pie', {
+      apiClient: api.apiClient,
+    });
+    expect(
+      await screen.findByRole('figure', { name: 'NIFTY 50 line chart over 1 day' }),
+    ).toBeInTheDocument();
+    expect(router.state.location.search).toEqual({});
+    expect(candleIntervals()).toEqual(['1m']);
+  });
+
+  it('keeps a bar size the next range offers and drops one it does not (NSTOCK-0443)', async () => {
+    const { router } = renderApp('/dashboard?interval=15m', { apiClient: api.apiClient });
+    await screen.findByRole('figure', { name: /NIFTY 50 line chart over 1 day/ });
+    fireEvent.click(screen.getByRole('radio', { name: '1W' }));
+    await waitFor(() =>
+      expect(router.state.location.search).toEqual({ range: '1W', interval: '15m' }),
+    );
+    fireEvent.click(screen.getByRole('radio', { name: '1Y' }));
+    await waitFor(() => expect(router.state.location.search).toEqual({ range: '1Y' }));
   });
 
   it('opens the curated list named in the URL and writes the tab back', async () => {
@@ -95,7 +151,7 @@ describe('dashboard on MSW data (T-100)', () => {
   it('renders every section from the mock API with no errors', async () => {
     renderApp('/dashboard', { apiClient: api.apiClient, marketSession: at(16) });
     expect(
-      await screen.findByRole('figure', { name: 'NIFTY 50 area chart over 1 day' }),
+      await screen.findByRole('figure', { name: 'NIFTY 50 line chart over 1 day' }),
     ).toBeInTheDocument();
     const indices = await screen.findByRole('region', { name: 'Market indices' });
     await waitFor(() =>
@@ -158,7 +214,7 @@ describe('section error isolation (T-099)', () => {
     // Every other section still loads its data.
     await waitFor(() => expect(linksIn('Stocks lists')).toHaveLength(5));
     expect(
-      await screen.findByRole('figure', { name: 'NIFTY 50 area chart over 1 day' }),
+      await screen.findByRole('figure', { name: 'NIFTY 50 line chart over 1 day' }),
     ).toBeInTheDocument();
     await waitFor(() =>
       expect(within(section('Market indices')).getAllByRole('listitem').length).toBeGreaterThan(0),

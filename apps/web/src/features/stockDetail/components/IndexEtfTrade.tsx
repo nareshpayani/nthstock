@@ -29,7 +29,13 @@ export function IndexEtfTrade({ index, phone = false }: IndexEtfTradeProps) {
   };
   const price = (
     <div className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-0.5">
-      <PriceCell symbol={fund.symbol} exchange={fund.exchange} size={phone ? 'sm' : 'md'} />
+      {/* On a phone the change beside it carries the ▲ or ▼, so the price does not repeat it. */}
+      <PriceCell
+        symbol={fund.symbol}
+        exchange={fund.exchange}
+        size={phone ? 'sm' : 'md'}
+        marker={!phone}
+      />
       <LiveChange symbol={fund.symbol} exchange={fund.exchange} percentOnly={phone} size="sm" />
     </div>
   );

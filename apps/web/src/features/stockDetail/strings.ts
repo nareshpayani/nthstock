@@ -16,6 +16,9 @@ export const strings = {
   },
   simulator: {
     label: 'Demo simulator',
+    /** The folded panel's toggle on a phone (NSTOCK-0447). */
+    show: 'Demo controls',
+    hide: 'Hide demo controls',
     badge: 'Simulated',
     rally: 'Rally +1%',
     pullBack: 'Pull back −1%',
@@ -35,30 +38,11 @@ export const strings = {
   chart: {
     title: 'Price chart',
     rangeLabel: 'Chart range',
-    typeLabel: 'Chart type',
-    typeButton: (type: string) => `Chart type: ${type}`,
     intervalLabel: 'Bar size',
     intervalOption: (bars: string) => `${bars} bars`,
-    types: { line: 'Line', area: 'Area', candle: 'Candles', bar: 'OHLC', heikin: 'Heikin-Ashi' },
-    /** Each type's tooltip and the menu's description line (NSTOCK-0430). */
-    typeHints: {
-      line: 'Closing prices joined by a line',
-      area: 'Closing prices with the area below shaded',
-      candle: 'Open, high, low and close; rising bars green, falling bars red',
-      bar: 'Open tick left, close tick right, high to low',
-      heikin:
-        'Smoothed candles that show the trend. Not traded prices; the tooltip shows the real ones',
-    },
     /** `bars` only when the reader picked a bar size other than the range's own. */
     label: (symbol: string, type: string, range: string, bars?: string) =>
       `${symbol} ${type} chart over ${range}${bars ? `, ${bars} bars` : ''}`,
-    typeNames: {
-      line: 'line',
-      area: 'area',
-      candle: 'candlestick',
-      bar: 'OHLC bar',
-      heikin: 'Heikin-Ashi (smoothed)',
-    },
     loading: 'Loading chart',
     /** An empty day (SPEC-CR-1 §7). */
     emptyToday: 'No trades yet today',

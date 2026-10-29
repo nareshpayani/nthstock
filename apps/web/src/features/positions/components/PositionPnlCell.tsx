@@ -17,3 +17,9 @@ export const PositionPnlCell = memo(function PositionPnlCell({ position }: { pos
     </TableCell>
   );
 });
+
+/** The same live P&L outside a table, for the phone list (NSTOCK-0447). */
+export const PositionPnl = memo(function PositionPnl({ position }: { position: Position }) {
+  const live = useLivePosition(position);
+  return <PnlAmount value={live.pnl} size="sm" className="shrink-0" />;
+});

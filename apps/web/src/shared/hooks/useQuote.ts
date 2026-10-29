@@ -35,3 +35,25 @@ export function useHasQuote(symbol: string, exchange: Exchange = 'NSE'): boolean
   );
   return useSyncExternalStore(subscribe, snapshot, snapshot);
 }
+
+/**
+ * The day's direction for the symbol, from its change against the previous close (NSTOCK-0446).
+ * Re-renders only when that flips, so a chart can colour its line to agree with the change badge
+ * without re-rendering on every tick. `undefined` until the first quote arrives.
+ */
+export function useDayDirection(
+  symbol: string,
+  exchange: Exchange = 'NSE',
+): 'up' | 'down' | 'flat' | undefined {
+  const store = useQuoteStore();
+  const subscribe = useCallback(
+    (onChange: () => void) => store.subscribe(symbol, exchange, onChange),
+    [store, symbol, exchange],
+  );
+  const snapshot = useCallback(() => {
+    const change = store.get(symbol, exchange)?.quote.change;
+    if (change === undefined) return undefined;
+    return change > 0 ? 'up' : change < 0 ? 'down' : 'flat';
+  }, [store, symbol, exchange]);
+  return useSyncExternalStore(subscribe, snapshot, snapshot);
+}
