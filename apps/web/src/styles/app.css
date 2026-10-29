@@ -34,6 +34,8 @@
     --header-h: 97px;
     --nth-dock-w: clamp(320px, 44vw, 420px);
     --nth-dock-top: calc(var(--header-h) + env(safe-area-inset-top));
+    /* The phone tab bar's height above the home indicator (NSTOCK-0466). */
+    --nth-tabbar-h: 64px;
   }
 
   @media (min-width: 1360px) {

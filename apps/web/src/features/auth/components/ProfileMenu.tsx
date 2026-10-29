@@ -52,6 +52,39 @@ export function KycBadge({ status }: { status: KycStatus }) {
 }
 
 /**
+ * The phone top bar's profile slot (NSTOCK-0466): the initials (a person icon when signed out or
+ * unnamed), a link to the Account tab, which holds what the desktop profile menu does.
+ */
+export function AccountAvatar() {
+  const { status, session } = useSession();
+  if (status === 'unknown') {
+    return <span aria-hidden="true" className="m-1 size-9 rounded-pill bg-canvas" />;
+  }
+  const name = session?.user.name ?? null;
+  const shown = name ? initials(name) : undefined;
+  return (
+    <Link
+      to="/account"
+      aria-label={
+        session
+          ? strings.profile.menu(name ?? strings.profile.defaultName, shown)
+          : strings.profile.accountSignedOut
+      }
+      className="grid size-11 place-items-center rounded-pill"
+    >
+      <span
+        className={cn(
+          'grid size-9 place-items-center rounded-pill text-label font-semibold',
+          session ? 'bg-brand-soft text-ink' : 'bg-canvas text-ink-muted',
+        )}
+      >
+        {shown ?? <IconUser size={18} />}
+      </span>
+    </Link>
+  );
+}
+
+/**
  * The header's profile slot (T-090): "Log in" when signed out; when signed in, the initials open a
  * menu with the name, masked mobile, the mocked KYC badge, "Security" (two-factor, NSTOCK-0221)
  * and "Log out".

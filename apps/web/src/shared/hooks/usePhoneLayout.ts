@@ -41,6 +41,15 @@ export function usePhoneLayout(): boolean {
   return useMediaQuery(PHONE_QUERY);
 }
 
+/**
+ * True below 768 px wide in any orientation (NSTOCK-0466): the app shell becomes a phone app, with
+ * a bottom tab bar and a slim top bar in place of the menu drawer. A phone turned sideways is
+ * wider than this, so it keeps the drawer and the landscape page layout.
+ */
+export function usePhoneShell(): boolean {
+  return useMediaQuery('(max-width: 767.98px)');
+}
+
 /** True on a phone in landscape (SPEC-CR-1 §6.2): the chart takes the height, the price one line. */
 export function useLandscapePhone(): boolean {
   return useMediaQuery(LANDSCAPE_QUERY);

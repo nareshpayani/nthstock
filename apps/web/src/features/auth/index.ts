@@ -8,7 +8,8 @@ export const LoginPage = lazy(() =>
   import('./components/LoginPage').then((module) => ({ default: module.LoginPage })),
 );
 export type { LoginPageProps } from './components/LoginPage';
-export { ProfileMenu } from './components/ProfileMenu';
+export { AccountAvatar, KycBadge, ProfileMenu } from './components/ProfileMenu';
+export { useLogout } from './hooks/useAuthMutations';
 export { RequireSession } from './components/RequireSession';
 export { StepUpDialog } from './components/StepUpDialog';
 export { useEnsureSteppedUp, useStepUp } from './hooks/useStepUp';

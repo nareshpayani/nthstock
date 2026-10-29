@@ -103,3 +103,8 @@ export function useToast(): ToastApi {
   if (!api) throw new Error('useToast must be used inside <ToastProvider>');
   return api;
 }
+
+/** { show } for the nearest ToastProvider, or null outside one (shared hooks used in bare renders). */
+export function useOptionalToast(): ToastApi | null {
+  return useContext(ToastContext);
+}

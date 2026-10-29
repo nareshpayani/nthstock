@@ -15,25 +15,39 @@ async function logInTo(page: Page, path: string, mobile: string, demo = false) {
 
 clip(
   'phoneLayout',
-  'the phone layout: menu, search, stock page, bottom-sheet ticket',
+  'the phone app: tabs, Trade search, stock page, bottom-sheet ticket',
   async (page) => {
     const touch = finger(page);
     await page.clock.setFixedTime(MONDAY_10_00_IST);
     await logInTo(page, '/dashboard', freshMobile());
-    await expect(page.getByRole('heading', { level: 1, name: 'Good morning' })).toBeVisible();
-    await say(page, 'On a phone, the same app in one column, with 44 px touch targets.', 2400);
+    await expect(page.getByRole('heading', { level: 1, name: 'Portfolio value' })).toBeVisible();
+    await say(
+      page,
+      'On a phone, nthstock is a phone app: tabs at the bottom, in thumb reach.',
+      2400,
+    );
     await touch.scroll(500);
     await touch.scroll(500);
-    await say(page, 'Indices, lists and movers stack under the chart.', 1800);
+    await say(page, 'Watchlist, gainers and losers, indices and lists under the chart.', 1800);
     await touch.scroll(-2000);
-    await touch.tap(page.getByRole('button', { name: 'Open menu' }));
-    const drawer = page.getByRole('dialog', { name: 'Menu' });
-    await expect(drawer).toBeVisible();
-    await say(page, 'The menu drawer holds the pages, the watchlists and search.', 2200);
-    await touch.type(drawer.getByRole('combobox', { name: 'Search stocks' }), 'infy', 800);
-    await touch.tap(drawer.getByRole('option').first(), 1200);
+    await touch.tap(page.getByRole('button', { name: /^Trade:/ }));
+    const sheet = page.getByRole('dialog', { name: 'Trade' });
+    await expect(sheet).toBeVisible();
+    await say(page, 'The centre Trade button: search, then straight to the order ticket.', 2200);
+    await touch.type(sheet.getByRole('combobox', { name: 'Search stocks' }), 'infy', 800);
+    await touch.tap(sheet.getByRole('option').first(), 1200);
     await expect(page).toHaveURL(/\/stocks\/INFY$/);
+    const ticket = page.getByRole('dialog', { name: 'Trade INFY' });
+    await expect(ticket).toBeVisible();
+    await say(page, 'The stock page opens with the ticket up, a bottom sheet.', 2000);
+    await touch.type(ticket.getByRole('textbox', { name: 'Quantity' }), '2');
+    await touch.tap(ticket.getByRole('button', { name: 'Buy INFY' }));
+    await touch.tap(ticket.getByRole('button', { name: 'Confirm' }), 1200);
+    await expect(ticket).toBeHidden();
     await expect(page.getByRole('heading', { level: 1, name: 'Infosys Ltd' })).toBeVisible();
+    const strip = page.getByTestId('position-strip');
+    await expect(strip).toBeVisible();
+    await say(page, 'Filled: the position strip shows quantity, average and live P&L.', 2400);
     await say(
       page,
       'The stock page: chart first, details in tabs, a sticky Buy and Sell bar.',
@@ -42,18 +56,6 @@ clip(
     const tabs = page.getByRole('tablist', { name: 'Stock details' });
     await touch.tap(tabs.getByRole('tab', { name: 'Depth' }), 1400);
     await say(page, 'Market depth in its own tab.', 1600);
-    const bar = page.getByRole('group', { name: 'Trade INFY' });
-    await touch.tapInPlace(bar.getByRole('button', { name: 'Buy INFY' }), 900);
-    const ticket = page.getByRole('dialog', { name: 'Trade INFY' });
-    await expect(ticket).toBeVisible();
-    await say(page, 'The ticket is a bottom sheet, with depth prices to tap.', 2000);
-    await touch.type(ticket.getByRole('textbox', { name: 'Quantity' }), '2');
-    await touch.tap(ticket.getByRole('button', { name: 'Buy INFY' }));
-    await touch.tap(ticket.getByRole('button', { name: 'Confirm' }), 1200);
-    await expect(ticket).toBeHidden();
-    const strip = page.getByTestId('position-strip');
-    await expect(strip).toBeVisible();
-    await say(page, 'Filled: the position strip shows quantity, average and live P&L.', 2400);
     await touch.tap(tabs.getByRole('tab', { name: 'Orders' }), 1400);
     await say(page, "The Orders tab lists today's orders for this stock.", 2400);
   },

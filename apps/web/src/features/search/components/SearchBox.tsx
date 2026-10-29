@@ -35,6 +35,13 @@ export type SearchBoxProps = {
   addTo?: SearchAddTarget | null | undefined;
   /** Called after a stock is chosen and navigation has started, e.g. to close a drawer. */
   onNavigate?: () => void;
+  /** Called with the chosen stock before its page opens, e.g. to open its order ticket. */
+  onChoose?: (hit: SearchHit) => void;
+  /**
+   * Lay the results out under the box in the page's flow, not as a floating popup: the phone
+   * trade sheet (NSTOCK-0466), where the results are the sheet's content.
+   */
+  inline?: boolean;
 };
 
 type Group = { key: 'results' | 'recent' | 'popular'; title: string | null; hits: SearchHit[] };
@@ -45,7 +52,7 @@ type Group = { key: 'results' | 'recent' | 'popular'; title: string | null; hits
  * shows recent searches, then popular ones. ↑/↓ move, Enter opens /stocks/<symbol>, Esc closes the
  * list and returns focus to where it was before the search.
  */
-export function SearchBox({ ref, onNavigate, addTo }: SearchBoxProps) {
+export function SearchBox({ ref, onNavigate, onChoose, addTo, inline = false }: SearchBoxProps) {
   const api = useApiClient();
   const queryClient = useQueryClient();
   const navigate = useNavigate();
@@ -124,6 +131,7 @@ export function SearchBox({ ref, onNavigate, addTo }: SearchBoxProps) {
     setQuery('');
     setActive(-1);
     setDismissed(true);
+    onChoose?.(hit);
     void navigate({ to: '/stocks/$symbol', params: { symbol: hit.symbol } });
     onNavigate?.();
   };
@@ -250,7 +258,11 @@ export function SearchBox({ ref, onNavigate, addTo }: SearchBoxProps) {
         hidden={!expanded}
         // Keep focus in the input while the pointer picks an option.
         onMouseDown={(event) => event.preventDefault()}
-        className="absolute inset-x-0 top-full z-(--nth-z-popover) mt-1 rounded-md border border-line bg-surface p-1 shadow-overlay"
+        className={
+          inline
+            ? 'mt-2'
+            : 'absolute inset-x-0 top-full z-(--nth-z-popover) mt-1 rounded-md border border-line bg-surface p-1 shadow-overlay'
+        }
       >
         {message === null ? null : <p className="px-3 py-2 text-label text-ink-muted">{message}</p>}
         <div
