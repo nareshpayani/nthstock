@@ -8,6 +8,7 @@ import {
 } from '@/features/orderTicket';
 import { NotificationsBridge } from '@/features/notifications';
 import { OrderUpdatesBridge } from '@/features/orders';
+import { useMarkFirstPaint } from '../firstPaint';
 import { TradingIntentTimeouts } from '../live/TradingIntentTimeouts';
 import { TrailingStopAnnouncer } from '../live/TrailingStopAnnouncer';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
@@ -46,6 +47,7 @@ export type AppShellProps = {
  * pushed over the tabs, so it has its own Buy and Sell bar at the bottom instead.
  */
 export function AppShell({ children, rail = true }: AppShellProps) {
+  useMarkFirstPaint();
   const drawerOpen = useShellStore((s) => s.drawerOpen);
   // A trading panel docked on a tablet (SPEC-CR-1 §6.2) sits beside the page, not over it.
   const docked = useDockedPanelOpen();
