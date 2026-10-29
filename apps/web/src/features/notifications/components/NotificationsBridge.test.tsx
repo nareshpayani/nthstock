@@ -144,4 +144,25 @@ describe('NotificationsBridge (NSTOCK-0384)', () => {
     socket.reconnect();
     await waitFor(() => expect(lists).toHaveBeenCalledTimes(2));
   });
+
+  it('pings a ripple from the badge while something is unread (NSTOCK-0462)', async () => {
+    const { api } = fakeApi({ items: [fired], unread: 1 });
+    renderBell(api, fakeSource().source);
+    const badge = await screen.findByTestId('notification-badge');
+    expect(badge).toHaveTextContent('1');
+    const ripple = badge.querySelector('[data-part="ripple"]');
+    expect(ripple).not.toBeNull();
+    expect(ripple).toHaveClass('animate-ripple');
+    // Reduced motion turns the ring off (acceptance criterion of NSTOCK-0462).
+    expect(ripple).toHaveClass('motion-reduce:hidden');
+  });
+
+  it('shows no badge or ripple when nothing is unread (NSTOCK-0462)', async () => {
+    const { api, lists } = fakeApi({ items: [], unread: 0 });
+    const { container } = renderBell(api, fakeSource().source);
+    await waitFor(() => expect(lists).toHaveBeenCalledTimes(1));
+    expect(await screen.findByRole('button', { name: /notifications/i })).toBeInTheDocument();
+    expect(screen.queryByTestId('notification-badge')).not.toBeInTheDocument();
+    expect(container.querySelector('[data-part="ripple"]')).toBeNull();
+  });
 });
