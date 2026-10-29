@@ -62,6 +62,28 @@ describe('afterFirstPaint (NSTOCK-0469)', () => {
     expect(done).toHaveBeenCalledTimes(1);
   });
 
+  it('still resolves when a route chunk fails to load or the route lookup throws', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'requestAnimationFrame'] });
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const error = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const { afterFirstPaint, useMarkFirstPaint } = await load();
+    const failing = afterFirstPaint(routerWith(Promise.reject(new Error('chunk'))), 1000);
+    const throwing = routerWith(Promise.resolve()) as unknown as { matchRoutes: () => never };
+    throwing.matchRoutes = () => {
+      throw new Error('no match');
+    };
+    const lookup = afterFirstPaint(throwing as unknown as AnyRouter, 1000);
+    const done = vi.fn();
+    void Promise.all([failing, lookup]).then(done);
+    render(<Page mark={useMarkFirstPaint} />);
+    await vi.advanceTimersByTimeAsync(100);
+    expect(done).toHaveBeenCalledTimes(1);
+    expect(warn).toHaveBeenCalledWith('A route chunk failed to load.', expect.any(Error));
+    expect(error).toHaveBeenCalled();
+    warn.mockRestore();
+    error.mockRestore();
+  });
+
   it('resolves at the cap when the first screen never marks itself painted', async () => {
     vi.useFakeTimers({ toFake: ['setTimeout', 'requestAnimationFrame'] });
     const { afterFirstPaint } = await load();
