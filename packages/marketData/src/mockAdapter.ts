@@ -1,4 +1,5 @@
 import type {
+  Candle,
   CandleInterval,
   CandleRange,
   CandleSeries,
@@ -17,6 +18,7 @@ import type {
   StockList,
 } from '@nthstock/contracts';
 import {
+  INTRADAY_INTERVAL_MINUTES,
   POPULAR_SEARCHES_LIMIT_DEFAULT,
   POPULAR_SEARCHES_LIMIT_MAX,
   TICK_SIZE_PAISE,
@@ -54,6 +56,8 @@ import { SearchIndex, toSearchHit } from './search.js';
 import { DAILY_TURNOVER, INDEX_GBM, equityGbm } from './candleHistory.js';
 import type { GbmParams } from './sectors.js';
 import {
+  allInstruments,
+  etfPriceOf,
   generateSymbolMaster,
   type MasterEquity,
   type MasterIndex,
@@ -124,7 +128,14 @@ const DEFAULT_REPLAY_LIMIT_MS = 30 * 60_000;
 const MIN_ELAPSED_FRACTION = 0.15;
 const SPARKLINE_STEP = 5;
 
-type EquityEntry = { kind: 'equity'; master: MasterEquity; state: PriceState; gbm: GbmParams };
+type EquityEntry = {
+  kind: 'equity';
+  master: MasterEquity;
+  state: PriceState;
+  gbm: GbmParams;
+  /** A tracking ETF's index (NSTOCK-0440): its price follows that, never a walk of its own. */
+  tracks?: IndexEntry;
+};
 type IndexEntry = {
   kind: 'index';
   master: MasterIndex;
@@ -174,6 +185,8 @@ export class MockMarketDataAdapter implements MarketDataAdapter {
   private readonly entries = new Map<string, Entry>();
   private readonly equityEntries: EquityEntry[] = [];
   private readonly indexEntries: IndexEntry[] = [];
+  /** The tracking ETFs (NSTOCK-0440): not in `equityEntries`, so lists and movers stay stocks. */
+  private readonly etfEntries: EquityEntry[] = [];
   private readonly instruments: Instrument[];
   private readonly searchIndex: SearchIndex;
   /** Indices each equity is a constituent of, in index-definition order. */
@@ -253,10 +266,27 @@ export class MockMarketDataAdapter implements MarketDataAdapter {
       }
     }
 
-    this.instruments = [
-      ...this.master.indices.map((ix) => ix.instrument),
-      ...this.master.equities.map((e) => e.instrument),
-    ];
+    for (const master of this.master.etfs) {
+      const tracks = this.entries.get(master.tracks);
+      if (tracks?.kind !== 'index') continue;
+      const entry: EquityEntry = {
+        kind: 'equity',
+        master,
+        gbm: INDEX_GBM,
+        tracks,
+        state: createPriceState(etfPriceOf(tracks.state.prevClose), etfPriceOf(tracks.state.open)),
+      };
+      entry.state.volume = Math.round(master.sharesOutstanding * DAILY_TURNOVER * elapsed);
+      this.followIndex(entry);
+      Object.assign(entry.state, {
+        high: Math.max(entry.state.open, entry.state.ltp),
+        low: Math.min(entry.state.open, entry.state.ltp),
+      });
+      this.entries.set(master.instrument.symbol, entry);
+      this.etfEntries.push(entry);
+    }
+
+    this.instruments = allInstruments(this.master);
     this.searchIndex = new SearchIndex(this.instruments);
   }
 
@@ -364,6 +394,7 @@ export class MockMarketDataAdapter implements MarketDataAdapter {
   getProfile(symbol: string, exchange?: Exchange): Promise<InstrumentProfile | null> {
     const entry = this.resolve(symbol, exchange);
     if (entry?.kind !== 'equity') return Promise.resolve(null);
+    if (entry.tracks) return Promise.resolve(this.etfProfileOf(entry, entry.tracks));
     const { instrument, sector, capBucket } = entry.master;
     const indices = this.membership.get(instrument.symbol) ?? [];
     return Promise.resolve({
@@ -522,7 +553,8 @@ export class MockMarketDataAdapter implements MarketDataAdapter {
    */
   focus(symbol: string | null): void {
     const entry = symbol === null ? undefined : this.entries.get(symbol);
-    const next = entry?.kind === 'equity' ? entry.master.instrument.symbol : null;
+    // An ETF has no walk of its own to speed up: it moves when its index does.
+    const next = entry?.kind === 'equity' && !entry.tracks ? entry.master.instrument.symbol : null;
     if (next === this.focused) return;
     this.focused = next;
     this.lastFastAt = this.clock.now().getTime();
@@ -552,7 +584,7 @@ export class MockMarketDataAdapter implements MarketDataAdapter {
    */
   nudge(symbol: string, ratio: number): boolean {
     const entry = this.entries.get(symbol);
-    if (entry?.kind !== 'equity') return false;
+    if (entry?.kind !== 'equity' || entry.tracks) return false;
     assertRatio(ratio);
     this.nudges.set(symbol, { factor: Math.pow(1 + ratio, 1 / NUDGE_TICKS), left: NUDGE_TICKS });
     return true;
@@ -565,7 +597,7 @@ export class MockMarketDataAdapter implements MarketDataAdapter {
    */
   gap(symbol: string, ratio: number): Quote | null {
     const entry = this.entries.get(symbol);
-    if (entry?.kind !== 'equity') return null;
+    if (entry?.kind !== 'equity' || entry.tracks) return null;
     assertRatio(ratio);
     if (!this.prepareTick()) return null;
     const now = this.clock.now().getTime();
@@ -709,6 +741,20 @@ export class MockMarketDataAdapter implements MarketDataAdapter {
       }
       batch.set(symbol, this.quoteOf(entry, now));
     }
+    for (const entry of this.etfEntries) {
+      const volumeBefore = entry.state.volume;
+      this.followIndex(entry, now);
+      const { symbol } = entry.master.instrument;
+      if (!wanted.has(symbol) && !this.replaySymbols.has(symbol)) continue;
+      this.barsOf(symbol).record(now, entry.state.ltp, entry.state.volume - volumeBefore);
+      if (!wanted.has(symbol)) continue;
+      let batch = events.get(now);
+      if (!batch) {
+        batch = new Map();
+        events.set(now, batch);
+      }
+      batch.set(symbol, this.quoteOf(entry, now));
+    }
     this.dispatch(events);
   }
 
@@ -794,6 +840,7 @@ export class MockMarketDataAdapter implements MarketDataAdapter {
     this.lastSlowAt = now;
     this.lastFastAt = now;
     for (const entry of this.equityEntries) rollSession(entry.state);
+    for (const entry of this.etfEntries) rollSession(entry.state);
     for (const entry of this.indexEntries) {
       rollSession(entry.state);
       entry.baseLevel = entry.state.ltp;
@@ -855,6 +902,43 @@ export class MockMarketDataAdapter implements MarketDataAdapter {
     if (level < entry.state.low) entry.state.low = level;
   }
 
+  /**
+   * Prices a tracking ETF from its index (NSTOCK-0440): a hundredth of the level, on the tick.
+   * `at` (a tick time) adds that tick's share of the day's volume.
+   */
+  private followIndex(entry: EquityEntry, at?: number): void {
+    const index = entry.tracks;
+    if (!index) return;
+    const { state } = entry;
+    state.ltp = etfPriceOf(index.state.ltp);
+    state.raw = state.ltp;
+    if (state.ltp > state.high) state.high = state.ltp;
+    if (state.ltp < state.low) state.low = state.ltp;
+    if (at === undefined) return;
+    const ticksPerSession = (SESSION_MINUTES * 60_000) / this.tickIntervalMs;
+    state.volume += Math.round((entry.master.sharesOutstanding * DAILY_TURNOVER) / ticksPerSession);
+  }
+
+  private etfProfileOf(entry: EquityEntry, index: IndexEntry): InstrumentProfile {
+    const { instrument } = entry.master;
+    const indexName = index.master.instrument.name;
+    return {
+      token: instrument.token,
+      symbol: instrument.symbol,
+      exchange: instrument.exchange,
+      name: instrument.name,
+      sector: 'Exchange traded fund',
+      capCategory: entry.master.capBucket,
+      about: [
+        `${instrument.name} is an exchange traded fund that tracks the ${indexName} index, listed on the National Stock Exchange.`,
+        `Each unit is priced at a hundredth of the ${indexName} level, so it rises and falls with the index tick for tick.`,
+        `An index cannot be bought or sold itself; buying this fund is how you invest in the ${indexName} on nthstock.`,
+        'This overview is sample text generated for nthstock paper trading, not an official fund description.',
+      ].join(' '),
+      indices: [{ symbol: index.master.instrument.symbol, name: indexName }],
+    };
+  }
+
   private resolve(symbol: string, exchange?: Exchange): Entry | undefined {
     const entry = this.entries.get(symbol);
     if (!entry) return undefined;
@@ -907,7 +991,34 @@ export class MockMarketDataAdapter implements MarketDataAdapter {
    * Candles for a range. The 1D range ends with the bars built from live ticks; the generated
    * part runs up to the first of them and ends at its open, so the series is continuous.
    */
-  private candlesOf(entry: Entry, range: CandleRange) {
+  private candlesOf(
+    entry: Entry,
+    range: CandleRange,
+  ): {
+    interval: CandleInterval;
+    candles: Candle[];
+  } {
+    // A tracking ETF's chart is its index's, a hundredth of the level (NSTOCK-0440).
+    if (entry.kind === 'equity' && entry.tracks) {
+      const index = this.candlesOf(entry.tracks, range);
+      // Index bars carry no volume; the fund trades its day's units spread over the session.
+      const minutes = INTRADAY_INTERVAL_MINUTES[index.interval] ?? SESSION_MINUTES;
+      const perBar = Math.round(
+        (entry.master.sharesOutstanding * DAILY_TURNOVER * Math.min(minutes, SESSION_MINUTES)) /
+          SESSION_MINUTES,
+      );
+      return {
+        interval: index.interval,
+        candles: index.candles.map((c) => ({
+          ...c,
+          o: etfPriceOf(c.o),
+          h: etfPriceOf(c.h),
+          l: etfPriceOf(c.l),
+          c: etfPriceOf(c.c),
+          v: perBar,
+        })),
+      };
+    }
     const built = range === '1D' ? this.bars.get(entry.master.instrument.symbol) : undefined;
     const first = built?.firstMinute() ?? null;
     if (!built || first === null) return this.generatedCandlesOf(entry, range);

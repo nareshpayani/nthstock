@@ -1,4 +1,4 @@
-import { Quote } from '@nthstock/contracts';
+import { INDEX_ETFS, Quote } from '@nthstock/contracts';
 import { fixedClock, fromIst, type Clock } from '@nthstock/utils';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { runAdapterContractTests } from './contractTests.js';
@@ -250,10 +250,48 @@ describe('MockMarketDataAdapter data', () => {
     expect(await adapter.getCandles('INFY', '1D', 'BSE')).toBeNull();
   });
 
-  it('lists 5,005 instruments, indices first', async () => {
+  it('lists every equity, the five indices first and their five ETFs last', async () => {
     const instruments = await adapter.listInstruments();
-    expect(instruments).toHaveLength(master.equities.length + 5);
+    expect(instruments).toHaveLength(master.equities.length + 10);
     expect(instruments[0]?.type).toBe('INDEX');
+    expect(instruments.slice(-5).map((i) => i.symbol)).toEqual([
+      'NIFTYETF',
+      'SENSEXETF',
+      'BANKETF',
+      'ITETF',
+      'MIDCAPETF',
+    ]);
+  });
+
+  it('prices each tracking ETF at a hundredth of its index, tick for tick (NSTOCK-0440)', async () => {
+    for (const ix of master.indices) {
+      const fund = INDEX_ETFS[ix.instrument.symbol];
+      if (!fund) throw new Error(`no ETF for ${ix.instrument.symbol}`);
+      const index = Quote.parse(await adapter.getQuote(ix.instrument.symbol));
+      const etf = Quote.parse(await adapter.getQuote(fund.symbol, 'NSE'));
+      expect(Math.abs(etf.ltp - index.ltp / 100)).toBeLessThanOrEqual(2.5);
+      expect(Math.abs(etf.prevClose - index.prevClose / 100)).toBeLessThanOrEqual(2.5);
+      expect(Math.sign(etf.change)).toBe(Math.sign(Math.round(index.change / 100 / 5)));
+      expect(etf.volume).toBeGreaterThan(0);
+    }
+  });
+
+  it('a tracking ETF trades like a stock: depth, stats, a fund profile and its index chart (NSTOCK-0440)', async () => {
+    const instrument = await adapter.getInstrument('NIFTYETF');
+    expect(instrument).toMatchObject({ type: 'EQUITY', exchange: 'NSE', name: 'NIFTY 50 ETF' });
+    expect(await adapter.getDepth('NIFTYETF')).not.toBeNull();
+    expect(await adapter.getStats('NIFTYETF')).not.toBeNull();
+    const profile = await adapter.getProfile('NIFTYETF');
+    expect(profile?.about).toMatch(/tracks the NIFTY 50 index/);
+    expect(profile?.indices).toEqual([{ symbol: 'NIFTY50', name: 'NIFTY 50' }]);
+    const index = await adapter.getCandles('NIFTY50', '1M');
+    const etf = await adapter.getCandles('NIFTYETF', '1M');
+    expect(etf?.candles).toHaveLength(index?.candles.length ?? -1);
+    expect(etf?.candles.at(-1)?.c).toBe(Math.round((index?.candles.at(-1)?.c ?? 0) / 500) * 5);
+    // It is not a stock: no lists, no movers, no walk of its own.
+    const lists = await adapter.getStockLists();
+    expect(lists.flatMap((l) => l.items.map((i) => i.symbol))).not.toContain('NIFTYETF');
+    expect(adapter.nudge('NIFTYETF', 0.01)).toBe(false);
   });
 
   it('builds each curated list with 10–20 items, in its own order', async () => {

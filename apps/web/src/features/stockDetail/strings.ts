@@ -150,6 +150,20 @@ export const strings = {
     sellLabel: (symbol: string) => `Sell ${symbol}`,
     paperNote: 'Paper trading: virtual cash only.',
   },
+  /** Trading an index through its tracking ETF (NSTOCK-0440). */
+  indexEtf: {
+    title: (index: string) => `Trade ${index}`,
+    body: (index: string, fund: string) =>
+      `An index cannot be bought or sold itself. ${fund} tracks ${index} tick for tick: one unit is priced at a hundredth of the index level.`,
+    phoneNote: (index: string, fund: string) =>
+      `An index cannot be traded. ${fund} tracks ${index}, so you buy or sell that instead.`,
+    view: (fund: string) => `View ${fund}`,
+    tradeLabel: (fund: string) => `Trade ${fund}`,
+    buy: 'Buy ETF',
+    sell: 'Sell ETF',
+    buyLabel: (fund: string) => `Buy ETF, ${fund}`,
+    sellLabel: (fund: string) => `Sell ETF, ${fund}`,
+  },
   /** The phone layout (T12, SPEC-TFC-1 §9.4). */
   phone: {
     tabsLabel: 'Stock details',

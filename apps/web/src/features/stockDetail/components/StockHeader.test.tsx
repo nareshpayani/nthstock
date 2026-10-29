@@ -103,10 +103,12 @@ describe('stock detail header (T-106)', () => {
     });
   });
 
-  it('has no Buy or Sell for an index, and SENSEX opens on BSE', async () => {
+  it('has no Buy or Sell for an index itself, and SENSEX opens on BSE', async () => {
     await openStock('/stocks/SENSEX');
     expect(screen.getByRole('heading', { level: 1, name: 'SENSEX' })).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: /Buy/ })).not.toBeInTheDocument();
+    // Only the tracking fund trades (NSTOCK-0440), never the index.
+    expect(screen.queryByRole('button', { name: 'Buy SENSEX' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Buy ETF, SENSEX ETF' })).toBeInTheDocument();
     expect(screen.getByRole('radio', { name: 'BSE' })).toHaveAttribute('aria-checked', 'true');
   });
 

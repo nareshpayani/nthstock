@@ -47,18 +47,62 @@ describe('live 1-minute bars (T-108)', () => {
     });
   });
 
-  it('ignores an older tick, a repeat, and a tick from the next IST day', () => {
+  it('ignores an older tick and a repeat', () => {
     expect(applyTick(bars, { price: 1, at: at('2026-09-25T08:34:10.000Z'), volumeDelta: 0 })).toBe(
       bars,
     );
     expect(
       applyTick(bars, { price: 150200, at: at('2026-09-25T08:35:10.000Z'), volumeDelta: 0 }),
     ).toBe(bars);
-    // 09:15 IST on Monday 28 Sep.
-    expect(
-      applyTick(bars, { price: 150500, at: at('2026-09-28T03:45:00.000Z'), volumeDelta: 1 }),
-    ).toBe(bars);
     expect(applyTick(bars, { price: 1, at: Number.NaN, volumeDelta: 0 })).toBe(bars);
+  });
+
+  it('starts a new bar on a new day, so a market open past midnight keeps drawing (NSTOCK-0441)', () => {
+    // 06:54 IST on Monday 28 Sep: the demo market forced open before the session.
+    const next = applyTick(bars, {
+      price: 150500,
+      at: at('2026-09-28T01:24:20.000Z'),
+      volumeDelta: 1,
+    });
+    expect(next).toHaveLength(bars.length + 1);
+    expect(next.at(-1)?.t).toBe('2026-09-28T01:24:00.000Z');
+    const later = applyTick(
+      next,
+      { price: 150600, at: at('2026-09-28T01:26:00.000Z'), volumeDelta: 1 },
+      '5m',
+    );
+    expect(later.at(-1)).toMatchObject({ t: '2026-09-28T01:25:00.000Z', o: 150600 });
+  });
+
+  it('keeps daily and weekly bars live: the last one moves, the next starts on its day', () => {
+    // Daily bars open at 9:15 IST (03:45 UTC); Friday 25 Sep and Monday 28 Sep 2026.
+    const days: Candle[] = [
+      { t: '2026-09-25T03:45:00.000Z', o: 100, h: 110, l: 95, c: 105, v: 10 },
+    ];
+    const same = applyTick(
+      days,
+      { price: 120, at: at('2026-09-25T09:00:00.000Z'), volumeDelta: 5 },
+      '1d',
+    );
+    expect(same).toEqual([{ t: '2026-09-25T03:45:00.000Z', o: 100, h: 120, l: 95, c: 120, v: 15 }]);
+    const monday = applyTick(
+      same,
+      { price: 118, at: at('2026-09-28T04:00:00.000Z'), volumeDelta: 1 },
+      '1d',
+    );
+    expect(monday.at(-1)).toMatchObject({ t: '2026-09-28T03:45:00.000Z', o: 118, c: 118 });
+    // The week of Monday 21 Sep holds Friday 25 Sep; Monday 28 Sep starts the next week.
+    const weeks: Candle[] = [
+      { t: '2026-09-21T03:45:00.000Z', o: 100, h: 110, l: 95, c: 105, v: 10 },
+    ];
+    expect(
+      applyTick(weeks, { price: 99, at: at('2026-09-25T09:00:00.000Z'), volumeDelta: 0 }, '1w'),
+    ).toEqual([{ t: '2026-09-21T03:45:00.000Z', o: 100, h: 110, l: 95, c: 99, v: 10 }]);
+    expect(
+      applyTick(weeks, { price: 99, at: at('2026-09-28T09:00:00.000Z'), volumeDelta: 0 }, '1w').at(
+        -1,
+      )?.t,
+    ).toBe('2026-09-28T03:45:00.000Z');
   });
 
   it('folds ticks into longer bars counted from the 9:15 open (NSTOCK-0343)', () => {
@@ -66,19 +110,19 @@ describe('live 1-minute bars (T-108)', () => {
     const first = applyTick(
       [],
       { price: 100, at: at('2026-09-25T04:10:00.000Z'), volumeDelta: 1 },
-      30,
+      '30m',
     );
     expect(first[0]?.t).toBe('2026-09-25T03:45:00.000Z');
     const same = applyTick(
       first,
       { price: 90, at: at('2026-09-25T04:14:59.000Z'), volumeDelta: 2 },
-      30,
+      '30m',
     );
     expect(same).toEqual([{ t: '2026-09-25T03:45:00.000Z', o: 100, h: 100, l: 90, c: 90, v: 3 }]);
     const next = applyTick(
       same,
       { price: 95, at: at('2026-09-25T04:15:00.000Z'), volumeDelta: 1 },
-      30,
+      '30m',
     );
     expect(next.map((bar) => bar.t)).toEqual([
       '2026-09-25T03:45:00.000Z',

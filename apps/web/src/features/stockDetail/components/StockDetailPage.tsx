@@ -11,6 +11,7 @@ import { quoteSnapshotQuery } from '../api/stockDetailQueries';
 import { DEFAULT_STOCK_RANGE, type StockDetailSearch } from '../model/stockDetailSearch';
 import { rememberChartType, rememberedChartType } from '../model/chartTypePreference';
 import { strings } from '../strings';
+import { IndexEtfTrade } from './IndexEtfTrade';
 import { KeyStatsCard } from './KeyStatsCard';
 import { MarketDepthCard } from './MarketDepthCard';
 import { OverviewCard } from './OverviewCard';
@@ -46,8 +47,9 @@ const section = (label: string, children: ReactNode) => <Section label={label}>{
 
 /**
  * Stock detail (E5): header, chart, market depth, key stats and overview for one instrument on
- * one exchange. Indices show the header and chart only. An equity on a phone gets its own layout
- * (T12, `PhoneStockDetail`); from 768 px the page is unchanged.
+ * one exchange. Indices show the header and chart, and trade through their tracking ETF
+ * (NSTOCK-0440, `IndexEtfTrade`: a card under the header, or on a phone a bar at the bottom). An
+ * equity on a phone gets its own layout (T12, `PhoneStockDetail`); from 768 px the page is unchanged.
  */
 export function StockDetailPage({
   instrument,
@@ -87,6 +89,7 @@ export function StockDetailPage({
           onRetry={() => void snapshot.refetch()}
           onExchangeChange={(exchange) => onSearchChange({ exchange })}
         />
+        {!equity && !phone ? <IndexEtfTrade index={instrument} /> : null}
         {/*
         T-112: one column under 1024 px, in reading order chart, depth, stats, overview. From
         1024 px (lg) chart, stats and overview fill the left column and depth sits at the top of
@@ -138,6 +141,7 @@ export function StockDetailPage({
             </>
           ) : null}
         </div>
+        {!equity && phone ? <IndexEtfTrade index={instrument} phone /> : null}
       </div>
     </TouchTargets>
   );
