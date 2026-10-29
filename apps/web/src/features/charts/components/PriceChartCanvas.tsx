@@ -145,6 +145,12 @@ export function PriceChartCanvas({
   // The chart the study series below belong to, so a rebuilt chart gets new ones.
   const studyChartRef = useRef<IChartApi | null>(null);
   const studySeriesRef = useRef(new Map<string, StudySeries>());
+  // What the study series last drew, so a live tick updates only their tail.
+  const studyDrawnRef = useRef<{
+    chart: IChartApi;
+    candles: readonly Candle[];
+    keys: string;
+  } | null>(null);
   // The running tick glide (A16), so a new tick or a rebuild can stop it.
   const glideRef = useRef<number | null>(null);
   // Where that glide ends, so cancelling it mid-way still draws the bar's final close.
@@ -285,6 +291,33 @@ export function PriceChartCanvas({
       main.priceScale().applyOptions({
         scaleMargins: showVolume ? PRICE_MARGINS_WITH_VOLUME : PRICE_MARGINS,
       });
+    }
+    // A live tick changes or appends only the last bar, and every study at bar i reads bars 0..i,
+    // so only that tail is updated: a full setData per series on each tick cost long frames on a
+    // throttled phone (T25 perf check).
+    const keys = [...wanted].sort().join(',');
+    const drawn = studyDrawnRef.current;
+    studyDrawnRef.current = { chart, candles, keys };
+    const tail =
+      drawn?.chart === chart && drawn.keys === keys
+        ? trailingChanges(drawn.candles, candles)
+        : null;
+    if (tail) {
+      const from = candles.length - tail.length;
+      for (let i = from; i < candles.length; i += 1) {
+        const candle = candles[i];
+        if (!candle) continue;
+        const time = toChartTime(candle.t);
+        const volume = owned.get(VOLUME_SCALE_ID) as ISeriesApi<'Histogram'> | undefined;
+        volume?.update({ time, value: candle.v, color: volumeBarColor(candle.c >= candle.o) });
+        for (const line of lines) {
+          const value = line.values[i];
+          if (value !== null && value !== undefined) {
+            (owned.get(line.key) as ISeriesApi<'Line'> | undefined)?.update({ time, value });
+          }
+        }
+      }
+      return;
     }
     const times = candles.map((candle) => toChartTime(candle.t));
     if (showVolume) {

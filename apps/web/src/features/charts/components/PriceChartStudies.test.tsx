@@ -54,6 +54,23 @@ describe('PriceChart studies (NSTOCK-0460)', () => {
     expect(seriesOf('Line')).toHaveLength(1);
   });
 
+  it('a live tick updates only the last volume bar and indicator point, not the whole series', async () => {
+    const candles = makeCandles({ count: 30 });
+    const view = render(<PriceChart candles={candles} label="c" studies={['volume', 'sma20']} />);
+    await chartMounted();
+    await waitFor(() => expect(seriesOf('Line')).toHaveLength(1));
+    const [volume] = seriesOf('Histogram');
+    const [sma] = seriesOf('Line');
+    const fills = [volume?.setData.mock.calls.length, sma?.setData.mock.calls.length];
+    const last = candles.at(-1);
+    if (!last) throw new Error('no candles');
+    const ticked = [...candles.slice(0, -1), { ...last, c: last.c + 500, v: last.v + 7 }];
+    view.rerender(<PriceChart candles={ticked} label="c" studies={['volume', 'sma20']} />);
+    expect([volume?.setData.mock.calls.length, sma?.setData.mock.calls.length]).toEqual(fills);
+    expect(volume?.update.mock.calls.at(-1)?.[0]).toMatchObject({ value: last.v + 7 });
+    expect(sma?.update).toHaveBeenCalledTimes(1);
+  });
+
   it('keeps the last bar in the legend when the crosshair time matches no candle', async () => {
     const candles = makeCandles({ count: 4 });
     render(<PriceChart candles={candles} label="c" legend studies={['volume']} />);
