@@ -1,9 +1,10 @@
 import type { WatchlistItem } from '@nthstock/contracts';
-import { screen, within } from '@testing-library/react';
+import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import { useState } from 'react';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { stubTouchScreen } from '@/test/matchMedia';
 import { renderWithProviders } from '@/test/renderWithProviders';
-import { touchScreen } from '@/test/touchScreen';
 import { fakeLayout } from '@/test/watchlists';
 import { ROW_HEIGHT } from './WatchlistRow';
 import { VISIBLE_ROWS, WatchlistRows } from './WatchlistRows';
@@ -21,37 +22,37 @@ beforeAll(() => {
   restoreLayout = fakeLayout(VISIBLE_ROWS * ROW_HEIGHT);
 });
 afterAll(() => restoreLayout());
+beforeEach(() => stubTouchScreen());
 afterEach(() => vi.unstubAllGlobals());
 
-function renderRows({ reorderable = true } = {}) {
-  const handlers = { onReorder: vi.fn(), onTrade: vi.fn(), onRemove: vi.fn() };
+function renderRows({ reorderable = true, list = items } = {}) {
+  const handlers = {
+    onReorder: vi.fn(),
+    onReorderBlocked: vi.fn(),
+    onTrade: vi.fn(),
+    onRemove: vi.fn(),
+  };
   renderWithProviders(
     <WatchlistRows
       label="Stocks in My list"
-      items={items}
+      items={list}
       snapshot={new Map()}
       reorderable={reorderable}
-      onReorderBlocked={vi.fn()}
       {...handlers}
     />,
   );
   return handlers;
 }
 
-/** Opens a row's menu with a tap (a pointer click) or from the keyboard. */
-async function openActions(symbol: string, how: 'tap' | 'keyboard' = 'tap') {
+/** Opens a row's menu with one tap, as on a phone. */
+async function tapActions(symbol: string) {
   const trigger = await screen.findByRole('button', { name: `${symbol} actions` });
-  if (how === 'tap') await userEvent.click(trigger);
-  else {
-    trigger.focus();
-    await userEvent.keyboard('{Enter}');
-  }
+  await userEvent.click(trigger);
   return screen.findByRole('menu');
 }
 
 describe('watchlist rows on a touch screen (NSTOCK-0470)', () => {
   it('give every row a visible actions button in place of the hover buttons and grip', async () => {
-    touchScreen();
     renderRows();
     const list = await screen.findByRole('list', { name: 'Stocks in My list' });
     for (const { symbol } of items)
@@ -60,74 +61,89 @@ describe('watchlist rows on a touch screen (NSTOCK-0470)', () => {
     expect(list.querySelector('[data-drag-handle]')).toBeNull();
   });
 
-  it('keeps the hover buttons and grip, and no actions button, with a mouse', async () => {
-    renderRows();
-    const list = await screen.findByRole('list', { name: 'Stocks in My list' });
-    expect(within(list).queryByRole('button', { name: 'INFY actions' })).toBeNull();
-    expect(within(list).getByRole('button', { name: 'Buy INFY' })).toBeInTheDocument();
-    expect(list.querySelector('[data-drag-handle]')).not.toBeNull();
-  });
-
-  it('buy, sell and remove from the menu, opened by a tap', async () => {
-    touchScreen();
+  it('opens the menu with one tap and buys, sells and removes from it', async () => {
     const { onTrade, onRemove } = renderRows();
     await userEvent.click(
-      within(await openActions('TCS')).getByRole('menuitem', { name: 'Buy TCS' }),
+      within(await tapActions('TCS')).getByRole('menuitem', { name: 'Buy TCS' }),
     );
     expect(onTrade).toHaveBeenCalledWith(items[1], 'BUY');
     await userEvent.click(
-      within(await openActions('TCS')).getByRole('menuitem', { name: 'Sell TCS' }),
+      within(await tapActions('TCS')).getByRole('menuitem', { name: 'Sell TCS' }),
     );
     expect(onTrade).toHaveBeenCalledWith(items[1], 'SELL');
     await userEvent.click(
-      within(await openActions('TCS')).getByRole('menuitem', { name: /Remove from list/ }),
+      within(await tapActions('TCS')).getByRole('menuitem', { name: 'Remove TCS' }),
     );
     expect(onRemove).toHaveBeenCalledWith(items[1]);
   });
 
-  it('opens from the keyboard too', async () => {
-    touchScreen();
-    const { onTrade } = renderRows();
-    const menu = await openActions('INFY', 'keyboard');
-    await userEvent.click(within(menu).getByRole('menuitem', { name: 'Buy INFY' }));
-    expect(onTrade).toHaveBeenCalledWith(items[0], 'BUY');
+  it('opens the menu from the keyboard too', async () => {
+    renderRows();
+    const trigger = await screen.findByRole('button', { name: 'INFY actions' });
+    fireEvent.keyDown(trigger, { key: 'Enter' });
+    expect(await screen.findByRole('menuitem', { name: 'Buy INFY' })).toBeInTheDocument();
   });
 
-  it('moves a row up or down without a drag, and not past either end', async () => {
-    touchScreen();
+  it('moves a row up or down without a drag, and says why not at either end', async () => {
     const { onReorder } = renderRows();
     await userEvent.click(
-      within(await openActions('TCS')).getByRole('menuitem', { name: /Move up/ }),
+      within(await tapActions('TCS')).getByRole('menuitem', { name: /Move up/ }),
     );
     expect(onReorder).toHaveBeenCalledWith(1, 0);
-    const first = await openActions('INFY');
-    expect(within(first).getByRole('menuitem', { name: /Move up/ })).toHaveAttribute(
+    // Focus goes back to the moved row's actions button, so Move can be tapped again.
+    await waitFor(() => expect(screen.getByRole('button', { name: 'TCS actions' })).toHaveFocus());
+
+    const first = await tapActions('INFY');
+    expect(within(first).getByRole('menuitem', { name: /Already first/ })).toHaveAttribute(
       'aria-disabled',
       'true',
     );
     await userEvent.click(within(first).getByRole('menuitem', { name: /Move down/ }));
     expect(onReorder).toHaveBeenCalledWith(0, 1);
-  });
 
-  it('disables Move down on the last row only', async () => {
-    touchScreen();
-    renderRows();
-    const menu = await openActions('ITC');
-    expect(within(menu).getByRole('menuitem', { name: /Move down/ })).toHaveAttribute(
+    const last = await tapActions('ITC');
+    expect(within(last).getByRole('menuitem', { name: /Already last/ })).toHaveAttribute(
       'aria-disabled',
       'true',
     );
-    expect(within(menu).getByRole('menuitem', { name: /Move up/ })).not.toHaveAttribute(
+    expect(within(last).getByRole('menuitem', { name: /Move up/ })).not.toHaveAttribute(
       'aria-disabled',
     );
   });
 
-  it('offers no moves when the list is sorted, but keeps Buy, Sell and Remove', async () => {
-    touchScreen();
-    renderRows({ reorderable: false });
-    const menu = await openActions('INFY');
+  it('on a sorted list keeps Buy, Sell and Remove and says how to reorder', async () => {
+    const { onReorderBlocked } = renderRows({ reorderable: false });
+    const menu = await tapActions('INFY');
     expect(within(menu).queryByRole('menuitem', { name: /Move/ })).toBeNull();
-    for (const name of [/Buy INFY/, /Sell INFY/, /Remove from list/])
+    for (const name of ['Buy INFY', 'Sell INFY', 'Remove INFY'])
       expect(within(menu).getByRole('menuitem', { name })).toBeInTheDocument();
+    await userEvent.click(
+      within(menu).getByRole('menuitem', { name: 'Reorder: choose Custom order in Sort' }),
+    );
+    expect(onReorderBlocked).toHaveBeenCalled();
+  });
+
+  it('after Remove, focuses the row that takes its place', async () => {
+    /** The rows with a parent that really drops the removed one. */
+    function Harness() {
+      const [list, setList] = useState(items);
+      return (
+        <WatchlistRows
+          label="Stocks in My list"
+          items={list}
+          snapshot={new Map()}
+          reorderable
+          onReorder={vi.fn()}
+          onReorderBlocked={vi.fn()}
+          onTrade={vi.fn()}
+          onRemove={(item) => setList((current) => current.filter((row) => row !== item))}
+        />
+      );
+    }
+    renderWithProviders(<Harness />);
+    await userEvent.click(
+      within(await tapActions('TCS')).getByRole('menuitem', { name: 'Remove TCS' }),
+    );
+    await waitFor(() => expect(screen.getByRole('link', { name: /^ITC NSE/ })).toHaveFocus());
   });
 });

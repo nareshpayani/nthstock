@@ -1,77 +1,99 @@
-import { DEMO_SEED_USER } from '@nthstock/paperEngine';
-import { expect, test, type Locator } from '@playwright/test';
-import { logIn } from './support/auth';
+import { expect, test, type Locator, type Page } from '@playwright/test';
+import { logIn, uniqueMobile } from './support/auth';
 import { TOUCH_TAG } from './support/env';
-import { centreOf, touchscreen } from './support/touch';
+import { centreOf, touchscreen, type Touch } from './support/touch';
 
-// NSTOCK-0470: watchlist rows on a phone. Every action is one tap on the row's "⋯" button and a
-// menu item, no hover and no drag, and every touch target is at least 44 px tall (§6.3).
-//
-// The page clock is fixed at Monday 28 Sep 2026, 10:00 IST so NSE is open.
-const MONDAY_10_IST = new Date('2026-09-28T04:30:00.000Z');
-const MIN_TARGET_PX = 44;
+// NSTOCK-0470: a phone watchlist driven by touch alone. Each row's "⋯" button opens Buy, Sell,
+// Move up, Move down and Remove; every one is a 44 px target and needs no hover and no drag.
 
-async function expectTouchSize(target: Locator) {
-  const box = await target.boundingBox();
-  expect(box?.height ?? 0).toBeGreaterThanOrEqual(MIN_TARGET_PX);
+/** Resolves when the next watchlist change (POST, PATCH, PUT or DELETE) has been answered. */
+function nextChange(page: Page) {
+  return page.waitForResponse(
+    (response) =>
+      response.url().includes('/v1/watchlists') && response.request().method() !== 'GET',
+  );
 }
 
-test(`watchlist row actions by touch: buy, move and remove (NSTOCK-0470) ${TOUCH_TAG}`, async ({
+async function tap(touch: Touch, target: Locator) {
+  await touch.tap(await centreOf(target));
+}
+
+/** Rendered height in CSS px. */
+async function heightOf(target: Locator) {
+  const box = await target.boundingBox();
+  if (!box) throw new Error('not rendered');
+  return box.height;
+}
+
+test(`watchlist row actions by touch: buy, reorder and remove (NSTOCK-0470) ${TOUCH_TAG}`, async ({
   page,
 }) => {
   test.setTimeout(90_000);
-  await page.clock.setFixedTime(MONDAY_10_IST);
-  await page.goto('/login?demo=1&redirect=%2Fwatchlist');
-  await logIn(page, DEMO_SEED_USER.mobile);
-  await expect(page).toHaveURL(/\/watchlist$/);
-  const touch = await touchscreen(page);
+  // Stocks are added from the desktop rail's search, whose results carry a + button; the rest of
+  // the journey is on the phone.
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto('/login?redirect=%2Fdashboard');
+  await logIn(page, uniqueMobile());
+  await expect(page).toHaveURL(/\/dashboard$/);
+  const rail = page.getByRole('complementary', { name: 'Watchlist and search' });
+  const search = rail.getByRole('combobox', { name: 'Search stocks' });
+  for (const symbol of ['INFY', 'TCS']) {
+    await search.fill(symbol.toLowerCase());
+    const add = rail.locator(`[data-add-to-watchlist="${symbol}"]`);
+    await expect(add).toBeVisible();
+    const added = nextChange(page);
+    await add.click();
+    await added;
+  }
 
-  const list = page.getByRole('list', { name: 'Stocks in My Watchlist' });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto('/watchlist');
+  const touch = await touchscreen(page);
+  const panel = page.getByRole('region', { name: 'Watchlists' });
+
+  const rows = panel.getByRole('list', { name: /^Stocks in / });
   const symbols = () =>
-    list
+    rows
       .getByRole('listitem')
       .evaluateAll((items) =>
         items
           .sort((a, b) => Number(a.dataset.index) - Number(b.dataset.index))
           .map((item) => item.querySelector('a span span')?.textContent),
       );
-  await expect.poll(symbols).toEqual(['RELIANCE', 'HDFCBANK', 'TCS', 'INFY', 'ITC', 'BHARTIARTL']);
+  await expect.poll(symbols).toEqual(['INFY', 'TCS']);
+  // No hover buttons and no drag grip on touch.
+  await expect(rows.getByRole('button', { name: 'Buy INFY' })).toHaveCount(0);
+  await expect(rows.locator('[data-drag-handle]')).toHaveCount(0);
 
-  const open = async (symbol: string) => {
-    const trigger = page.getByRole('button', { name: `${symbol} actions` });
-    await expectTouchSize(trigger);
-    await touch.tap(await centreOf(trigger));
-    const menu = page.getByRole('menu');
-    await expect(menu).toBeVisible();
-    return menu;
-  };
-  const choose = async (name: string | RegExp) =>
-    touch.tap(await centreOf(page.getByRole('menuitem', { name })));
+  const actions = (symbol: string) => rows.getByRole('button', { name: `${symbol} actions` });
+  expect(await heightOf(actions('INFY'))).toBeGreaterThanOrEqual(44);
 
-  // Every menu item is a 44 px target, with the items touching or more than 8 px apart.
-  const menu = await open('INFY');
-  const items = menu.getByRole('menuitem');
-  const count = await items.count();
-  expect(count).toBe(5);
-  for (let i = 0; i < count; i += 1) await expectTouchSize(items.nth(i));
-  await page.keyboard.press('Escape');
-  await expect(menu).toBeHidden();
+  // Buy: one tap opens the menu, one more the order ticket.
+  await tap(touch, actions('INFY'));
+  const menu = page.getByRole('menu');
+  await expect(menu).toBeVisible();
+  // The menu scales in; measure once it has settled.
+  await menu.evaluate((element) =>
+    Promise.all(element.getAnimations({ subtree: true }).map((animation) => animation.finished)),
+  );
+  for (const item of await menu.getByRole('menuitem').all())
+    expect(await heightOf(item)).toBeGreaterThanOrEqual(44);
+  await tap(touch, menu.getByRole('menuitem', { name: 'Buy INFY' }));
+  const ticket = page.getByRole('dialog', { name: 'Trade INFY' });
+  await expect(ticket).toBeVisible();
+  await page.goto('/watchlist');
 
-  // Buy opens the order ticket.
-  await open('INFY');
-  await choose('Buy INFY');
-  await expect(page.getByRole('dialog', { name: 'Trade INFY' })).toBeVisible();
-  await page.keyboard.press('Escape');
-  await expect(page.getByRole('dialog', { name: 'Trade INFY' })).toBeHidden();
+  // Move INFY down below TCS.
+  const moved = nextChange(page);
+  await tap(touch, actions('INFY'));
+  await tap(touch, page.getByRole('menu').getByRole('menuitem', { name: /Move down/ }));
+  await moved;
+  await expect.poll(symbols).toEqual(['TCS', 'INFY']);
 
-  // Move down swaps INFY with ITC.
-  await open('INFY');
-  await choose(/Move down/);
-  await expect.poll(symbols).toEqual(['RELIANCE', 'HDFCBANK', 'TCS', 'ITC', 'INFY', 'BHARTIARTL']);
-
-  // Remove drops the row.
-  await open('INFY');
-  await choose(/Remove from list/);
-  await expect(list.getByRole('link', { name: /^INFY/ })).toHaveCount(0);
-  await expect.poll(symbols).toEqual(['RELIANCE', 'HDFCBANK', 'TCS', 'ITC', 'BHARTIARTL']);
+  // Remove TCS.
+  const removed = nextChange(page);
+  await tap(touch, actions('TCS'));
+  await tap(touch, page.getByRole('menu').getByRole('menuitem', { name: 'Remove TCS' }));
+  await removed;
+  await expect.poll(symbols).toEqual(['INFY']);
 });

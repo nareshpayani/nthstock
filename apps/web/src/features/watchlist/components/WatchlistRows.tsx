@@ -166,13 +166,17 @@ export function WatchlistRows({
     }
   };
 
+  // From the touch menu: focus goes back to the moved row's actions button (the menu's own
+  // return), so Move can be tapped again; it does not jump to the row's link as Alt+arrow does.
   const onMove = (item: WatchlistItem, delta: -1 | 1) => {
-    const index = items.indexOf(item);
-    if (index < 0) return;
-    move(index, index + delta);
+    const from = items.indexOf(item);
+    const to = from + delta;
+    if (from < 0 || to < 0 || to >= items.length) return;
+    onReorder(from, to);
+    virtualizer.scrollToIndex(to, { align: 'auto' });
   };
 
-  // Menu Remove: focus the row that takes its place, as the Delete key does (WCAG 2.4.3).
+  // From the touch menu, as Delete does: focus the row that takes its place.
   const onMenuRemove = (item: WatchlistItem) => {
     const index = items.indexOf(item);
     const next = items[index + 1] ?? items[index - 1];
@@ -230,6 +234,7 @@ export function WatchlistRows({
                 onRemove={touch ? onMenuRemove : onRemove}
                 touch={touch}
                 onMove={onMove}
+                onReorderBlocked={onReorderBlocked}
                 canMoveUp={row.index > 0}
                 canMoveDown={row.index < items.length - 1}
               />

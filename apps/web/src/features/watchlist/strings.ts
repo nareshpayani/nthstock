@@ -61,7 +61,9 @@ export const strings = {
     actionsLabel: (symbol: string) => `${symbol} actions`,
     moveUp: 'Move up',
     moveDown: 'Move down',
-    remove: 'Remove from list',
+    firstAlready: 'Already first',
+    lastAlready: 'Already last',
+    reorderHow: 'Reorder: choose Custom order in Sort',
     keyHint: 'On a stock: B buy, S sell, Alt+↑/↓ move, Delete remove.',
   },
   /** Live-region announcements. */

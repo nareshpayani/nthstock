@@ -47,10 +47,12 @@ export type WatchlistRowProps = {
   onMove?: (item: WatchlistItem, delta: -1 | 1) => void;
   canMoveUp?: boolean;
   canMoveDown?: boolean;
+  /** A sorted list: the menu's reorder item says how to reorder instead. */
+  onReorderBlocked?: () => void;
 };
 
-/** The menu only renders on touch screens, so every item takes the 44 px touch size (§6.3). */
-const MENU_ITEM = 'min-h-11';
+/** Menu items are full 44 px touch targets, like the button that opens them. */
+const ITEM = 'min-h-11';
 
 /**
  * The touch row's actions (NSTOCK-0470): one 44 px button that opens Buy, Sell, Move up, Move down
@@ -66,6 +68,7 @@ function RowActionsMenu({
   onTrade,
   onRemove,
   onMove,
+  onReorderBlocked,
 }: {
   item: WatchlistItem;
   tabIndex: number;
@@ -75,6 +78,7 @@ function RowActionsMenu({
   onTrade: (item: WatchlistItem, side: OrderSide) => void;
   onRemove: (item: WatchlistItem) => void;
   onMove: ((item: WatchlistItem, delta: -1 | 1) => void) | undefined;
+  onReorderBlocked: (() => void) | undefined;
 }) {
   const { symbol } = item;
   return (
@@ -84,38 +88,50 @@ function RowActionsMenu({
           tabIndex={tabIndex}
           label={strings.row.actionsLabel(symbol)}
           icon={<IconMore size={18} />}
-          className="mr-1 shrink-0"
+          className="mr-1 size-11 shrink-0"
         />
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
-        <DropdownMenuItem className={MENU_ITEM} onSelect={() => onTrade(item, 'BUY')}>
+        <DropdownMenuItem className={ITEM} onSelect={() => onTrade(item, 'BUY')}>
           {strings.row.buyLabel(symbol)}
         </DropdownMenuItem>
-        <DropdownMenuItem className={MENU_ITEM} onSelect={() => onTrade(item, 'SELL')}>
+        <DropdownMenuItem className={ITEM} onSelect={() => onTrade(item, 'SELL')}>
           {strings.row.sellLabel(symbol)}
         </DropdownMenuItem>
         {reorderable && onMove ? (
           <>
             <DropdownMenuSeparator />
             <DropdownMenuItem
-              className={MENU_ITEM}
+              className={ITEM}
               disabled={!canMoveUp}
               onSelect={() => onMove(item, -1)}
             >
-              <IconChevronUp size={16} /> {strings.row.moveUp}
+              <IconChevronUp size={16} />{' '}
+              {canMoveUp ? strings.row.moveUp : strings.row.firstAlready}
             </DropdownMenuItem>
             <DropdownMenuItem
-              className={MENU_ITEM}
+              className={ITEM}
               disabled={!canMoveDown}
               onSelect={() => onMove(item, 1)}
             >
-              <IconChevronDown size={16} /> {strings.row.moveDown}
+              <IconChevronDown size={16} />{' '}
+              {canMoveDown ? strings.row.moveDown : strings.row.lastAlready}
             </DropdownMenuItem>
           </>
         ) : null}
-        <DropdownMenuSeparator />
-        <DropdownMenuItem className={MENU_ITEM} onSelect={() => onRemove(item)}>
-          <IconTrash size={16} /> {strings.row.remove}
+        {!reorderable && onReorderBlocked ? (
+          <>
+            <DropdownMenuSeparator />
+            {/* Says why there is no Move here, as Alt+arrow does from the keyboard. */}
+            <DropdownMenuItem className={ITEM} onSelect={onReorderBlocked}>
+              {strings.row.reorderHow}
+            </DropdownMenuItem>
+          </>
+        ) : null}
+        {/* Extra room above the one destructive item, which colour alone can't mark. */}
+        <DropdownMenuSeparator className="my-2" />
+        <DropdownMenuItem className={ITEM} onSelect={() => onRemove(item)}>
+          <IconTrash size={16} /> {strings.row.removeLabel(symbol)}
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
@@ -144,6 +160,7 @@ export const WatchlistRow = memo(function WatchlistRow({
   onMove,
   canMoveUp = false,
   canMoveDown = false,
+  onReorderBlocked,
 }: WatchlistRowProps) {
   const { symbol, exchange } = item;
   const tabIndex = tabbable ? 0 : -1;
@@ -208,6 +225,7 @@ export const WatchlistRow = memo(function WatchlistRow({
           onTrade={onTrade}
           onRemove={onRemove}
           onMove={onMove}
+          onReorderBlocked={onReorderBlocked}
         />
       ) : (
         <div className="absolute inset-y-0 right-2 hidden items-center gap-1 bg-surface pl-2 group-focus-within:flex group-hover:flex">
