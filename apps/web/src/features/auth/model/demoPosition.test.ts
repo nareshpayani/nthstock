@@ -30,10 +30,10 @@ describe('openDemoPosition (NSTOCK-0444)', () => {
     const { api, calls } = fakeApi({
       positionsList: () => ({ items: [position('DELIVERY', 20)] }),
       instrument: () => ({ token: 2885 }),
-      orderPlace: () => ({ id: 'o1' }),
+      orderPlace: () => ({ id: 'o1', status: 'EXECUTED', statusReason: null }),
     });
 
-    await openDemoPosition(api, 'RELIANCE');
+    await expect(openDemoPosition(api, 'RELIANCE')).resolves.toBe('opened');
 
     expect(calls.map(([name]) => name)).toEqual(['positionsList', 'instrument', 'orderPlace']);
     expect(calls[2]?.[1]).toEqual({
@@ -55,19 +55,41 @@ describe('openDemoPosition (NSTOCK-0444)', () => {
       positionsList: () => ({ items: [position('INTRADAY', 10)] }),
     });
 
-    await openDemoPosition(api, 'RELIANCE');
+    await expect(openDemoPosition(api, 'RELIANCE')).resolves.toBe('skipped');
 
     expect(calls.map(([name]) => name)).toEqual(['positionsList']);
   });
 
-  it('does not throw when the order is refused, and says why in the console', async () => {
+  it('places it again when the intraday position there is closed', async () => {
+    const { api } = fakeApi({
+      positionsList: () => ({ items: [position('INTRADAY', 0)] }),
+      instrument: () => ({ token: 2885 }),
+      orderPlace: () => ({ id: 'o2', status: 'EXECUTED', statusReason: null }),
+    });
+
+    await expect(openDemoPosition(api, 'RELIANCE')).resolves.toBe('opened');
+  });
+
+  it('says failed when the order comes back refused (the market closed)', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const { api } = fakeApi({
+      positionsList: () => ({ items: [] }),
+      instrument: () => ({ token: 2885 }),
+      orderPlace: () => ({ id: 'o3', status: 'REJECTED', statusReason: 'The market is closed' }),
+    });
+
+    await expect(openDemoPosition(api, 'RELIANCE')).resolves.toBe('failed');
+    expect(warn).toHaveBeenCalledWith('The demo position was refused', 'The market is closed');
+  });
+
+  it('does not throw when a request fails, and says why in the console', async () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
     const { api } = fakeApi({
       positionsList: () => ({ items: [] }),
       instrument: () => ({ token: 2885 }),
     });
 
-    await expect(openDemoPosition(api, 'RELIANCE')).resolves.toBeUndefined();
+    await expect(openDemoPosition(api, 'RELIANCE')).resolves.toBe('failed');
     expect(warn).toHaveBeenCalledOnce();
   });
 });

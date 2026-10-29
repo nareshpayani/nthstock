@@ -9,7 +9,15 @@ export const strings = {
   paperNote: 'Paper trading with ₹10,00,000 of virtual cash. No real money moves.',
   explore: 'Explore the markets without logging in',
   guide: 'Documentation: how nthstock works',
-  demo: { label: 'Try demo', starting: 'Starting demo…' },
+  demo: {
+    label: 'Try demo',
+    starting: 'Starting demo…',
+    /** The reviewer link could not open its position (NSTOCK-0444): the demo opens without it. */
+    noPosition: {
+      title: 'The demo position did not open',
+      description: 'Place a trade with Buy to see it on the chart.',
+    },
+  },
 
   mobile: {
     title: 'Log in to nthstock',

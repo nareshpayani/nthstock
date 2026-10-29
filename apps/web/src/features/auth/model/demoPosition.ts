@@ -4,20 +4,26 @@ import type { ApiClient } from '@nthstock/apiClient';
 export const DEMO_POSITION_QTY = 10;
 export const DEMO_TRAIL_BASIS_POINTS = 100;
 
+/** What became of the demo position: placed now, already open, or not placed (a refusal). */
+export type DemoPositionOutcome = 'opened' | 'skipped' | 'failed';
+
 /**
  * Opens the demo's position on `symbol` (an intraday market buy with an attached trailing stop),
  * so the reviewer lands on a chart that already shows a position line and a trailing-stop line.
- * Skipped when the account already holds an intraday position there. Best effort: a refusal
- * leaves the demo as it was, without a position.
+ * Skipped when the account already holds an intraday position there. Never throws: a refused or
+ * failed order is `failed`, and the demo opens without a position.
  */
-export async function openDemoPosition(api: ApiClient, symbol: string): Promise<void> {
+export async function openDemoPosition(
+  api: ApiClient,
+  symbol: string,
+): Promise<DemoPositionOutcome> {
   try {
     const { items } = await api.request('positionsList');
     if (items.some((p) => p.symbol === symbol && p.product === 'INTRADAY' && p.netQty !== 0)) {
-      return;
+      return 'skipped';
     }
     const instrument = await api.request('instrument', { params: { symbol } });
-    await api.request('orderPlace', {
+    const order = await api.request('orderPlace', {
       body: {
         token: instrument.token,
         side: 'BUY',
@@ -29,8 +35,15 @@ export async function openDemoPosition(api: ApiClient, symbol: string): Promise<
         },
       },
     });
+    // A refusal (the market closed, say) comes back as a REJECTED order, not an error.
+    if (order.status === 'REJECTED') {
+      console.warn('The demo position was refused', order.statusReason ?? order.status);
+      return 'failed';
+    }
+    return 'opened';
   } catch (failure) {
     // The demo still opens; the reviewer can place the trade by hand.
     console.warn('The demo position did not open', failure);
+    return 'failed';
   }
 }

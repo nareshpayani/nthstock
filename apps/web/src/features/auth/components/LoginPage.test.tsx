@@ -18,7 +18,11 @@ vi.mock('lightweight-charts', () => import('@/test/chartsMock'));
 
 // The mock auth backend's clock, moved on by hand past the 30 s OTP resend throttle.
 let now = Date.parse('2026-09-25T04:00:00.000Z');
-const { server, adapter } = createMockServer({ auth: { now: () => now } });
+// Orders share that clock and trade at any hour, so the demo position never depends on the time.
+const { server, adapter } = createMockServer({
+  auth: { now: () => now },
+  orders: { now: () => now, marketHours: 'alwaysOpen' },
+});
 const paths: string[] = [];
 server.events.on('request:start', ({ request }) => {
   paths.push(new URL(request.url).pathname);
@@ -185,7 +189,7 @@ describe('Try demo (REQ-DEL-02)', () => {
 });
 
 describe('the reviewer link, /login?try=1 (NSTOCK-0444)', () => {
-  it('starts Try demo without a tap: one OTP, one sign-in, the position check, then the stock page', async () => {
+  it('starts Try demo without a tap: one OTP, one sign-in, the position, then the stock page', async () => {
     setDemoStarter(() => 'ready');
     onTestFinished(() => setDemoStarter(null));
     // Past the OTP resend throttle for the demo mobile, which the test above used.
@@ -196,10 +200,12 @@ describe('the reviewer link, /login?try=1 (NSTOCK-0444)', () => {
     await waitFor(() => expect(router.state.location.pathname).toBe('/stocks/RELIANCE'));
     expect(paths.filter((path) => path === '/v1/auth/otp/request')).toHaveLength(1);
     expect(paths.filter((path) => path === '/v1/auth/otp/verify')).toHaveLength(1);
-    // The demo position: placed on the first run, and the Try demo test above already placed it
-    // on this mock server, so here the check finds it open and places nothing.
-    expect(paths).toContain('/v1/positions');
-    expect(paths).not.toContain('/v1/orders');
+    // The demo account holds the intraday position with its stop, whether this run placed it or
+    // found it open from an earlier Try demo on this mock server.
+    const { items } = await apiClient.request('positionsList');
+    expect(
+      items.find((p) => p.symbol === 'RELIANCE' && p.product === 'INTRADAY')?.netQty,
+    ).toBeGreaterThan(0);
     await heading(/Reliance/);
   });
 });

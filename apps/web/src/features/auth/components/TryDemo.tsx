@@ -1,4 +1,4 @@
-import { Button } from '@nthstock/ui';
+import { Button, useToast } from '@nthstock/ui';
 import { useNavigate } from '@tanstack/react-router';
 import { useEffect, useEffectEvent, useState } from 'react';
 import { useApiClient } from '@/shared/lib/apiClientContext';
@@ -28,6 +28,7 @@ export function TryDemo({ devOtp, autoStart = false }: { devOtp: string; autoSta
   const api = useApiClient();
   const requestOtp = useRequestOtp();
   const verifyOtp = useVerifyOtp();
+  const toast = useToast();
   // After the Try demo reload (outside demo mode), carry on without a second tap.
   const [resume] = useState(isDemoPending);
   const [pending, setPending] = useState(resume || autoStart);
@@ -44,10 +45,22 @@ export function TryDemo({ devOtp, autoStart = false }: { devOtp: string; autoSta
       }
       const sent = await requestOtp.mutateAsync({ mobile: DEMO_MOBILE, purpose: 'LOGIN' });
       await verifyOtp.mutateAsync({ requestId: sent.requestId, mobile: DEMO_MOBILE, otp: devOtp });
-      await openDemoPosition(api, DEMO_INSTRUMENT);
+    } catch (failure) {
+      console.warn('Try demo could not sign in', failure);
+      setPending(false);
+      setError(
+        authFailure(failure).code === 'NETWORK' ? strings.errors.network : strings.errors.generic,
+      );
+      return;
+    }
+    // Signed in: the stock page opens whatever becomes of the position, and says so if it failed.
+    if ((await openDemoPosition(api, DEMO_INSTRUMENT)) === 'failed') {
+      toast.show({ ...strings.demo.noPosition, tone: 'error' });
+    }
+    try {
       await navigate({ to: '/stocks/$symbol', params: { symbol: DEMO_INSTRUMENT }, replace: true });
     } catch (failure) {
-      console.warn('Try demo failed', failure);
+      console.warn('Try demo could not open the stock page', failure);
       setPending(false);
       setError(
         authFailure(failure).code === 'NETWORK' ? strings.errors.network : strings.errors.generic,
