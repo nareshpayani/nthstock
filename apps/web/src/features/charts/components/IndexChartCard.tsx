@@ -4,16 +4,7 @@ import {
   type CandleInterval,
   type CandleRange,
 } from '@nthstock/contracts';
-import {
-  ErrorState,
-  IconButton,
-  IconChevronRight,
-  IconMinus,
-  IconPlus,
-  IconRefresh,
-  SegmentedControl,
-  Skeleton,
-} from '@nthstock/ui';
+import { ErrorState, IconChevronRight, SegmentedControl, Skeleton } from '@nthstock/ui';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { Link, useNavigate } from '@tanstack/react-router';
 import { useRef, useState, type PointerEvent } from 'react';
@@ -37,10 +28,10 @@ import {
 } from '../model/ranges';
 import { strings } from '../strings';
 import { ChartTypeMenu } from './ChartTypeMenu';
+import { ChartZoomControls } from './ChartZoomControls';
 import { LiveBadge } from './LiveBadge';
 import { PriceChart } from './PriceChart';
 import type { ChartHandle } from './PriceChartCanvas';
-import { zoomedLogicalRange } from '../model/chartZoom';
 
 export type IndexChartCardProps = {
   range: CandleRange;
@@ -129,12 +120,6 @@ export function IndexChartCard({
   const onPointerCancel = (event: PointerEvent<HTMLDivElement>) => {
     pointersRef.current.delete(event.pointerId);
     pressRef.current = null;
-  };
-  const zoom = (steps: number) => {
-    const timeScale = chart?.chart.timeScale();
-    const visible = timeScale?.getVisibleLogicalRange();
-    if (!timeScale || !visible) return;
-    timeScale.setVisibleLogicalRange(zoomedLogicalRange(visible, steps));
   };
   const marketOpen = useMarketOpen();
   const candles = useQuery({
@@ -225,32 +210,7 @@ export function IndexChartCard({
         <LiveChange symbol={NIFTY.symbol} exchange={NIFTY.exchange} format="index" soft size="md" />
       </div>
       <div aria-busy={candles.isFetching} className="relative">
-        {chart && candles.data ? (
-          <div
-            role="group"
-            aria-label={strings.zoom.label}
-            className="absolute top-1 left-1 z-10 flex gap-1 rounded-md border border-line bg-surface/90 p-0.5"
-          >
-            <IconButton
-              size="sm"
-              label={strings.zoom.out}
-              icon={<IconMinus aria-hidden="true" className="size-4" />}
-              onClick={() => zoom(-1)}
-            />
-            <IconButton
-              size="sm"
-              label={strings.zoom.in}
-              icon={<IconPlus aria-hidden="true" className="size-4" />}
-              onClick={() => zoom(1)}
-            />
-            <IconButton
-              size="sm"
-              label={strings.zoom.reset}
-              icon={<IconRefresh aria-hidden="true" className="size-4" />}
-              onClick={() => chart.chart.timeScale().fitContent()}
-            />
-          </div>
-        ) : null}
+        {chart && candles.data ? <ChartZoomControls chart={chart.chart} /> : null}
         {candles.isError && !candles.data ? (
           <div style={{ height: CHART_HEIGHT }} className="grid place-items-center">
             <ErrorState

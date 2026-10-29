@@ -18,6 +18,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { toAreaData, toCandleData, toChartTime, toHeikinAshi } from '../model/chartData';
 import { trailingChanges } from '../model/liveCandles';
 import { visibleTickLabels } from '../model/axisTags';
+import { installDirectionLock } from '../model/directionLock';
 import { formatChartValue, type ChartDirection, type ChartValueFormat } from '../model/chartFormat';
 import {
   TRADING_INTERACTION,
@@ -182,9 +183,12 @@ export function PriceChartCanvas({
       );
     };
     if (tooltip) chart.subscribeCrosshairMove(onCrosshairMove);
+    // One direction per swipe (A13): up/down scrolls the page, sideways pans the chart.
+    const unlockDirection = interactive ? installDirectionLock(host, chart) : undefined;
     onReadyRef.current?.({ chart, series, host });
 
     return () => {
+      unlockDirection?.();
       onReadyRef.current?.(null);
       if (tooltip) chart.unsubscribeCrosshairMove(onCrosshairMove);
       setHover(null);
