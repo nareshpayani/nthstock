@@ -47,6 +47,7 @@ export function TryDemo({ devOtp, autoStart = false }: { devOtp: string; autoSta
       await openDemoPosition(api, DEMO_INSTRUMENT);
       await navigate({ to: '/stocks/$symbol', params: { symbol: DEMO_INSTRUMENT }, replace: true });
     } catch (failure) {
+      console.warn('Try demo failed', failure);
       setPending(false);
       setError(
         authFailure(failure).code === 'NETWORK' ? strings.errors.network : strings.errors.generic,
@@ -79,7 +80,7 @@ export function TryDemo({ devOtp, autoStart = false }: { devOtp: string; autoSta
 
   return (
     <div className="grid gap-2">
-      <Button block disabled={pending} onClick={start}>
+      <Button block disabled={pending} loading={pending} onClick={start}>
         {pending ? strings.demo.starting : strings.demo.label}
       </Button>
       {error ? (

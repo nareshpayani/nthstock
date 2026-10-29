@@ -43,7 +43,7 @@ export function SimulatorPanel({ symbol, collapsible = false }: SimulatorPanelPr
           size="sm"
           variant="secondary"
           aria-expanded={open}
-          aria-controls={controlsId}
+          aria-controls={open ? controlsId : undefined}
           onClick={() => setOpen((shown) => !shown)}
         >
           {open ? s.hide : s.show}

@@ -184,6 +184,26 @@ describe('Try demo (REQ-DEL-02)', () => {
   });
 });
 
+describe('the reviewer link, /login?try=1 (NSTOCK-0444)', () => {
+  it('starts Try demo without a tap: one OTP, one sign-in, the position check, then the stock page', async () => {
+    setDemoStarter(() => 'ready');
+    onTestFinished(() => setDemoStarter(null));
+    // Past the OTP resend throttle for the demo mobile, which the test above used.
+    now += (OTP_RESEND_AFTER_SEC + 1) * 1000;
+    const { apiClient } = newBrowser();
+    const { router } = renderApp('/login?try=1', { apiClient });
+
+    await waitFor(() => expect(router.state.location.pathname).toBe('/stocks/RELIANCE'));
+    expect(paths.filter((path) => path === '/v1/auth/otp/request')).toHaveLength(1);
+    expect(paths.filter((path) => path === '/v1/auth/otp/verify')).toHaveLength(1);
+    // The demo position: placed on the first run, and the Try demo test above already placed it
+    // on this mock server, so here the check finds it open and places nothing.
+    expect(paths).toContain('/v1/positions');
+    expect(paths).not.toContain('/v1/orders');
+    await heading(/Reliance/);
+  });
+});
+
 describe('Try demo outside demo mode (TFC-12)', () => {
   it('reloads with the demo account first, sending nothing yet', async () => {
     setDemoStarter(() => 'reloading');

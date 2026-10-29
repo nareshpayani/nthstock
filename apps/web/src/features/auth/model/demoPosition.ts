@@ -29,7 +29,8 @@ export async function openDemoPosition(api: ApiClient, symbol: string): Promise<
         },
       },
     });
-  } catch {
+  } catch (failure) {
     // The demo still opens; the reviewer can place the trade by hand.
+    console.warn('The demo position did not open', failure);
   }
 }

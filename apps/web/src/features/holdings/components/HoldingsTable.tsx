@@ -37,7 +37,6 @@ export function HoldingsTable({ rows, sort, onSortChange }: HoldingsTableProps) 
           <label htmlFor={sortId}>{strings.phone.sort}</label>
           <select
             id={sortId}
-            aria-label={strings.phone.sortLabel}
             value={sort.key}
             onChange={(event) => {
               const key = event.target.value as HoldingsSortKey;

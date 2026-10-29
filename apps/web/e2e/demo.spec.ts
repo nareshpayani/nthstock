@@ -47,3 +47,16 @@ test('Try demo opens the instrument page with the Demo simulator and the demo ac
     await expect(main.getByText(symbol, { exact: true }).first()).toBeVisible();
   }
 });
+
+// NSTOCK-0444: the reviewer link signs in from a cold load, with no tap, and lands on the chart
+// with the demo position and its trailing stop.
+test('/login?try=1 opens RELIANCE signed in with a position and a trailing stop', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto('/login?try=1');
+  await expect(page).toHaveURL(/\/stocks\/RELIANCE$/, { timeout: 20_000 });
+  await expect(page.getByRole('figure', { name: /RELIANCE area chart/ })).toBeVisible();
+  await expect(page.getByTestId('phone-trade-bar')).toContainText('+10');
+  await expect(page.getByTestId('phone-trade-bar')).toContainText(/Trailing stop/);
+});

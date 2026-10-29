@@ -37,7 +37,6 @@ export const strings = {
   phone: {
     qty: (qty: number) => `Qty ${String(qty)}`,
     avg: (price: string) => `Avg ${price}`,
-    sortLabel: 'Sort holdings',
-    sort: 'Sort',
+    sort: 'Sort by',
   },
 } as const;

@@ -33,7 +33,8 @@ function LoginRoute() {
     <LoginPage
       redirect={target}
       deletedPurgeAfter={deleted}
-      autoStartDemo={tryDemo !== undefined}
+      // Mock mode only: against a real API the demo account and its fixed OTP do not exist.
+      autoStartDemo={tryDemo !== undefined && import.meta.env.VITE_API_MODE !== 'api'}
     />
   );
 }
