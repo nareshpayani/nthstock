@@ -9,15 +9,20 @@ const FROZEN_TIME = new Date('2026-09-25T05:00:00.000Z');
 const DESKTOP = { width: 1440, height: 900 };
 /** The mock market ticks every 1,000 ms of page time; the frozen load stays well below that. */
 const FAKE_TIME_BUDGET_MS = 900;
+/** Part of that budget held back for the chart's first paint once the data is in. */
+const PAINT_RESERVE_MS = 200;
 /** Page time advanced per step while loading (a few animation frames). */
 const FAKE_TIME_STEP_MS = 20;
 /** Share of pixels allowed to differ between two frozen loads (anti-aliasing noise only). */
 const MAX_DIFF_RATIO = 0.001;
 
-/** True once every dashboard section and both header tickers show data and fonts are in. */
-function dashboardReady(page: Page): Promise<boolean> {
+/**
+ * True once every dashboard section and both header tickers show data and fonts are in, and (unless
+ * `skipChart`) the chart has drawn its series.
+ */
+function dashboardReady(page: Page, skipChart = false): Promise<boolean> {
   return page
-    .evaluate(() => {
+    .evaluate((skip) => {
       const main = document.querySelector('main');
       const banner = document.querySelector('header');
       if (!main || !banner || document.fonts.status !== 'loaded') return false;
@@ -27,12 +32,14 @@ function dashboardReady(page: Page): Promise<boolean> {
         );
       const stockLinks = (title: string) =>
         section(title)?.querySelectorAll('a[href^="/stocks/"]').length ?? 0;
-      // Lightweight Charts paints on animation frames: some chart canvas has more than one colour.
+      // Lightweight Charts paints on animation frames. Its logo alone is a few dozen sampled
+      // pixels; a drawn series and its area fill are thousands.
       const chartPainted = [...main.querySelectorAll('figure canvas')].some((canvas) => {
         if (!(canvas instanceof HTMLCanvasElement) || canvas.width === 0) return false;
         const pixels = canvas.getContext('2d')?.getImageData(0, 0, canvas.width, canvas.height);
         if (!pixels) return false;
         const { data } = pixels;
+        let differing = 0;
         for (let i = 4; i < data.length; i += 4 * 7) {
           if (
             data[i] !== data[0] ||
@@ -40,21 +47,21 @@ function dashboardReady(page: Page): Promise<boolean> {
             data[i + 2] !== data[2] ||
             data[i + 3] !== data[3]
           ) {
-            return true;
+            differing += 1;
           }
         }
-        return false;
+        return differing > 500;
       });
       return (
         main.querySelector('h1') !== null &&
-        chartPainted &&
+        (skip || chartPainted) &&
         main.querySelectorAll('[role="status"][aria-label^="Loading"]').length === 0 &&
         main.querySelectorAll('[aria-busy="true"]').length === 0 &&
         banner.querySelectorAll('[aria-busy="true"]').length === 0 &&
         stockLinks('Stocks lists') === 5 &&
         stockLinks('Market movers') > 0
       );
-    })
+    }, skipChart)
     .catch(() => false); // the page is still navigating
 }
 
@@ -76,7 +83,11 @@ async function loadFrozenDashboard(page: Page) {
     .poll(
       async () => {
         if (await dashboardReady(page)) return true;
-        if (fakeElapsed < FAKE_TIME_BUDGET_MS) {
+        // The chart draws on animation frames, which only advance with the page clock: the last
+        // PAINT_RESERVE_MS of the budget is kept for it, however long the network took.
+        const loaded = await dashboardReady(page, true);
+        const limit = loaded ? FAKE_TIME_BUDGET_MS : FAKE_TIME_BUDGET_MS - PAINT_RESERVE_MS;
+        if (fakeElapsed < limit) {
           await page.clock.runFor(FAKE_TIME_STEP_MS);
           fakeElapsed += FAKE_TIME_STEP_MS;
         }
