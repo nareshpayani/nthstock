@@ -239,6 +239,48 @@ test.describe(`chart gestures by touch (T20, SPEC-TFC-1 §9.1) ${TOUCH_TAG}`, ()
     expect(sent).toEqual([]);
   });
 
+  test('sliding the thumb sideways slows a line drag, and holding it at the bottom scrolls prices down (A10)', async ({
+    page,
+  }) => {
+    const chart = await openChart(page);
+    const line = await placeBuyLimit(chart);
+    await chart.settle();
+    const loupe = chart.figure.getByTestId('chart-loupe');
+    // The same 60 px drop, once straight and once after a slide most of the way across. Down, so
+    // the buy limit stays under the market and never fills.
+    const drop = async (sideways: number) => {
+      const before = rupees(await line.innerText());
+      const from = await centreOf(line);
+      const finger = await chart.touch.press(from);
+      await finger.move({ x: from.x - 4, y: from.y - 4 }, 2);
+      await finger.move({ x: from.x - 4 - sideways, y: from.y - 4 }, 8);
+      await finger.move({ x: from.x - 4 - sideways, y: from.y + 56 }, 10);
+      const moved = before - rupees(await line.innerText());
+      const note = await loupe.innerText();
+      await finger.release();
+      if (!chart.touch.multiTouch) await page.mouse.move(0, 0);
+      await page.waitForTimeout(800);
+      return { moved, note };
+    };
+    const straight = await drop(0);
+    const fine = await drop(240);
+    expect(straight.note).not.toContain('Fine');
+    expect(fine.note).toContain('Fine');
+    expect(fine.moved).toBeGreaterThan(0);
+    expect(fine.moved).toBeLessThan(straight.moved * 0.6);
+
+    const plot = await chart.host.boundingBox();
+    if (!plot) throw new Error('no chart');
+    const from = await centreOf(line);
+    const finger = await chart.touch.press(from);
+    // The pane ends above the 26 px time axis.
+    await finger.move({ x: from.x, y: plot.y + plot.height - 32 }, 12);
+    const atEdge = rupees(await line.innerText());
+    await expect.poll(async () => rupees(await line.innerText())).toBeLessThan(atEdge);
+    await expect(chart.figure.getByRole('button', { name: /fit/i })).toBeVisible();
+    await finger.release();
+  });
+
   test('a second finger mid-drag cancels the drag and restores the line', async ({ page }) => {
     const chart = await openChart(page);
     test.skip(!chart.touch.multiTouch, NEEDS_REAL_TOUCH);
