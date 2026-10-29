@@ -18,7 +18,11 @@ vi.mock('lightweight-charts', () => import('@/test/chartsMock'));
 
 // The mock auth backend's clock, moved on by hand past the 30 s OTP resend throttle.
 let now = Date.parse('2026-09-25T04:00:00.000Z');
-const { server, adapter } = createMockServer({ auth: { now: () => now } });
+// Orders share that clock and trade at any hour, so the demo position never depends on the time.
+const { server, adapter } = createMockServer({
+  auth: { now: () => now },
+  orders: { now: () => now, marketHours: 'alwaysOpen' },
+});
 const paths: string[] = [];
 server.events.on('request:start', ({ request }) => {
   paths.push(new URL(request.url).pathname);

@@ -90,7 +90,8 @@ export function ToastProvider({
             </ToastPrimitive.Close>
           </ToastPrimitive.Root>
         ))}
-        <ToastPrimitive.Viewport className="fixed right-4 bottom-4 z-(--nth-z-toast) grid w-[min(360px,calc(100vw-32px))] gap-2 outline-none" />
+        {/* Phones: under the status bar, clear of the trade bar and the position strip at the foot. */}
+        <ToastPrimitive.Viewport className="fixed right-4 bottom-4 z-(--nth-z-toast) grid w-[min(360px,calc(100vw-32px))] gap-2 outline-none max-[767px]:top-[calc(env(safe-area-inset-top)+8px)] max-[767px]:bottom-auto" />
       </ToastPrimitive.Provider>
     </ToastContext.Provider>
   );

@@ -127,6 +127,8 @@ const DEFAULT_REPLAY_LIMIT_MS = 30 * 60_000;
 /** Minimum session fraction simulated at start-up, so an early open still shows an opening gap. */
 const MIN_ELAPSED_FRACTION = 0.15;
 const SPARKLINE_STEP = 5;
+/** Until a session is this old, the 1D chart leads with the previous session (see withPreviousSession). */
+const PREVIOUS_SESSION_MINUTES = 60;
 
 type EquityEntry = {
   kind: 'equity';
@@ -1021,7 +1023,10 @@ export class MockMarketDataAdapter implements MarketDataAdapter {
     }
     const built = range === '1D' ? this.bars.get(entry.master.instrument.symbol) : undefined;
     const first = built?.firstMinute() ?? null;
-    if (!built || first === null) return this.generatedCandlesOf(entry, range);
+    if (!built || first === null) {
+      const own = this.generatedCandlesOf(entry, range);
+      return range === '1D' ? this.withPreviousSession(entry, own) : own;
+    }
     const builtBars = built.bars();
     const sessionOpen = latestSessionOpen(this.clock.now(), this.holidays).getTime();
     const before =
@@ -1031,13 +1036,39 @@ export class MockMarketDataAdapter implements MarketDataAdapter {
             endPrice: (builtBars[0] as { o: number }).o,
           }).candles
         : [];
-    return { interval: CANDLE_SPECS['1D'].interval, candles: mergeMinuteBars(before, builtBars) };
+    return this.withPreviousSession(entry, {
+      interval: CANDLE_SPECS['1D'].interval,
+      candles: mergeMinuteBars(before, builtBars),
+    });
+  }
+
+  /**
+   * Early in a session the 1D chart would be a few points wide, so until the session is
+   * {@link PREVIOUS_SESSION_MINUTES} minutes old it leads with the previous session's bars, ending
+   * at the previous close. Later in the day it is today's session only.
+   */
+  private withPreviousSession(
+    entry: Entry,
+    today: { interval: CandleInterval; candles: Candle[] },
+  ): { interval: CandleInterval; candles: Candle[] } {
+    const now = this.clock.now();
+    const open = latestSessionOpen(now, this.holidays);
+    if (now.getTime() - open.getTime() >= PREVIOUS_SESSION_MINUTES * 60_000) return today;
+    const previousOpen = latestSessionOpen(new Date(open.getTime() - 1), this.holidays);
+    const previousClose = previousOpen.getTime() + SESSION_MINUTES * 60_000 - 1;
+    const rng = mulberry32(hashSeed(this.seed, 'previousSession', entry.master.instrument.symbol));
+    const previous = this.generatedCandlesOf(entry, '1D', {
+      now: () => new Date(previousClose),
+      endPrice: entry.state.prevClose,
+      startPrice: entry.state.prevClose * (1 + 0.006 * randomNormal(rng)),
+    }).candles;
+    return { interval: today.interval, candles: [...previous, ...today.candles] };
   }
 
   private generatedCandlesOf(
     entry: Entry,
     range: CandleRange,
-    until?: { now: () => Date; endPrice: number },
+    until?: { now: () => Date; endPrice: number; startPrice?: number },
   ) {
     const { symbol } = entry.master.instrument;
     const { state } = entry;
@@ -1051,7 +1082,9 @@ export class MockMarketDataAdapter implements MarketDataAdapter {
     // Where the chart starts: today's open for 1D, a seeded earlier price otherwise.
     const rng = mulberry32(hashSeed(seed, 'start'));
     let startPrice: number;
-    if (range === '1D') {
+    if (until?.startPrice !== undefined) {
+      startPrice = until.startPrice;
+    } else if (range === '1D') {
       startPrice = state.open;
     } else if (range === '1Y' && !isIndex) {
       startPrice = state.ltp / (1 + entry.master.return1yBp / 10_000);

@@ -17,7 +17,8 @@ import { cn } from '@nthstock/ui';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { toAreaData, toCandleData, toChartTime, toHeikinAshi } from '../model/chartData';
 import { trailingChanges } from '../model/liveCandles';
-import type { ChartDirection, ChartValueFormat } from '../model/chartFormat';
+import { visibleTickLabels } from '../model/axisTags';
+import { formatChartValue, type ChartDirection, type ChartValueFormat } from '../model/chartFormat';
 import {
   TRADING_INTERACTION,
   areaSeriesOptions,
@@ -109,6 +110,8 @@ export function PriceChartCanvas({
   const realRef = useRef<ReadonlyMap<number, Candle>>(new Map());
   // The type last drawn, so a switch (not the first draw) cross-fades in.
   const builtTypeRef = useRef<PriceChartType | null>(null);
+  // The tick labels last drawn and which of them show (NSTOCK-0446), to rebuild only on a change.
+  const ticksRef = useRef<{ prices: readonly number[]; show: readonly boolean[] } | null>(null);
   const [hover, setHover] = useState<ChartTooltipState | null>(null);
   // Kept in a ref so a new callback identity never rebuilds the chart.
   const onReadyRef = useRef(onReady);
@@ -133,9 +136,29 @@ export function PriceChartCanvas({
     });
     chartRef.current = chart;
     seriesRef.current = addSeries(chart, type, format);
+    // NSTOCK-0446: a tick label the live price tag or a line's tag would half cover is left out.
+    const tagged = seriesRef.current;
+    chart.applyOptions({
+      localization: {
+        ...base.localization,
+        tickmarksPriceFormatter: (prices: number[]) => {
+          const show = visibleTickLabels(
+            prices,
+            (price) => tagged.priceToCoordinate(price),
+            axisTagRows(tagged),
+          );
+          ticksRef.current = { prices, show };
+          return prices.map((price: number, i: number) =>
+            show[i] ? formatChartValue(price, format) : '',
+          );
+        },
+      },
+    });
     // A new chart type fades in over 160 ms (NSTOCK-0430); the overlay above it does not move.
     const switched = builtTypeRef.current !== null && builtTypeRef.current !== type;
     builtTypeRef.current = type;
+    // A new chart draws its own tick labels; the old one's say nothing about them.
+    ticksRef.current = null;
     if (switched && !reducedMotion() && typeof host.animate === 'function') {
       host.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 160, easing: 'ease-out' });
     }
@@ -192,6 +215,19 @@ export function PriceChartCanvas({
       for (const point of points.slice(points.length - changes.length)) {
         target.update(point as BarData & LineData);
       }
+      // The live tag moved. Only when that changes which tick labels it covers, build them again
+      // (applying price scale options tells the library its cached labels are stale): a rebuild on
+      // every tick costs a long frame on a slow phone (T25). The chart's own localization is not
+      // reapplied, since that also rebuilds the time axis labels under a held finger.
+      const ticks = ticksRef.current;
+      if (ticks) {
+        const show = visibleTickLabels(
+          ticks.prices,
+          (price) => series.priceToCoordinate(price),
+          axisTagRows(series),
+        );
+        if (show.some((shown, i) => shown !== ticks.show[i])) series.priceScale().applyOptions({});
+      }
       return;
     }
     target.setData(points as (BarData & LineData)[]);
@@ -216,4 +252,20 @@ export function PriceChartCanvas({
       {hover ? <ChartTooltip {...hover} /> : null}
     </div>
   );
+}
+
+/** Pixel rows of the tags on the price axis: the live price (when shown) and each line's label. */
+function axisTagRows(series: AnySeries): number[] {
+  const rows: number[] = [];
+  const last = series.lastValueData(false);
+  if (!last.noData && series.options().lastValueVisible) {
+    const row = series.priceToCoordinate(last.price);
+    if (row !== null) rows.push(row);
+  }
+  for (const line of series.priceLines()) {
+    const { price, axisLabelVisible } = line.options();
+    const row = axisLabelVisible ? series.priceToCoordinate(price) : null;
+    if (row !== null) rows.push(row);
+  }
+  return rows;
 }

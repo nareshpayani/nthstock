@@ -33,4 +33,10 @@ export const strings = {
     pnlBp: 'P&L %',
   } satisfies Record<HoldingsSortKey, string>,
   sortBy: (column: string) => `Sort by ${column}`,
+  /** The phone list (NSTOCK-0447): its rows' second line and its sort picker. */
+  phone: {
+    qty: (qty: number) => `Qty ${String(qty)}`,
+    avg: (price: string) => `Avg ${price}`,
+    sort: 'Sort by',
+  },
 } as const;

@@ -346,6 +346,25 @@ describe('MockMarketDataAdapter data', () => {
     expect(summary?.sparkline.length).toBeLessThanOrEqual(400);
   });
 
+  it('leads the 1D chart with the previous session for the first hour of a session', async () => {
+    // Friday 25 Sep 2026, 9:20 IST: five minutes into the session.
+    const early = new MockMarketDataAdapter({
+      master,
+      clock: fixedClock(fromIst(2026, 9, 25, 9 * 60 + 20)),
+    });
+    const quote = Quote.parse(await early.getQuote('INFY'));
+    const series = await early.getCandles('INFY', '1D');
+    const todayOpen = fromIst(2026, 9, 25, 9 * 60 + 15).getTime();
+    const previous = series?.candles.filter((c) => Date.parse(c.t) < todayOpen) ?? [];
+    expect(previous.length).toBeGreaterThan(300);
+    expect(Date.parse(previous[0]?.t ?? '')).toBe(fromIst(2026, 9, 24, 9 * 60 + 15).getTime());
+    expect(previous.at(-1)?.c).toBe(quote.prevClose);
+    expect(series?.candles.at(-1)?.c).toBe(quote.ltp);
+    // By 11:00 the session carries the chart on its own.
+    const later = await adapter.getCandles('INFY', '1D');
+    expect(later?.candles.every((c) => Date.parse(c.t) >= todayOpen)).toBe(true);
+  });
+
   it('keeps stats consistent: 52-week range covers today, market cap follows the LTP', async () => {
     const stats = await adapter.getStats('INFY');
     const quote = Quote.parse(await adapter.getQuote('INFY'));

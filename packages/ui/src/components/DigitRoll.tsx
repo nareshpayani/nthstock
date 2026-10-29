@@ -17,8 +17,8 @@ const numeric = (text: string) => {
 
 /**
  * A formatted number whose changed digits roll (SPEC-CR-1 §5.6): unchanged characters stay still;
- * a changed digit rolls in from below when the value went up and from above when it went down, with
- * a brief 1 px underline. No colour flash (PR #231). Under reduced motion it is a plain swap
+ * a changed digit rolls in from below when the value went up and from above when it went down. No
+ * underline (NSTOCK-0447) and no colour flash (PR #231). Under reduced motion it is a plain swap
  * (styles.css). The text content is exactly `value`, so screen readers and tests read it whole.
  */
 export function DigitRoll({ value, className }: DigitRollProps) {

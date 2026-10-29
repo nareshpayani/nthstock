@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { LOUPE_INSET, loupeText, placeLoupe } from './loupe';
+import { LOUPE_INSET, LOUPE_SHADOW, loupeText, placeLoupe } from './loupe';
 
 describe('loupe text (CR-T07, SPEC-CR-1 §4.2)', () => {
   it('an order: its price, distance from the LTP and value at that price', () => {
@@ -36,7 +36,7 @@ describe('loupe placement (CR-T07, AC-03)', () => {
     place.left >= LOUPE_INSET - 0.001 &&
     place.top >= LOUPE_INSET - 0.001 &&
     place.left + card.cardWidth <= width - LOUPE_INSET + 0.001 &&
-    place.top + card.cardHeight <= height - LOUPE_INSET + 0.001;
+    place.top + card.cardHeight <= height - LOUPE_SHADOW + 0.001;
 
   it('sits above the finger, left of it above the LTP and right of it below', () => {
     const at = { y: 200, width: 390, height: 300, ...card };

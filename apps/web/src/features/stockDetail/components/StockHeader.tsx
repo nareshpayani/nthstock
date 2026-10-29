@@ -133,7 +133,7 @@ export function StockHeader({
           <p className="truncate font-mono text-label font-medium text-ink">{symbol}</p>
         </div>
         <div className="min-w-0 flex-1">{price}</div>
-        <div className="shrink-0">{exchangeControl}</div>
+        {type === 'INDEX' ? null : <div className="shrink-0">{exchangeControl}</div>}
         {type === 'EQUITY' ? (
           <div className="flex shrink-0">
             <PriceAlertButton symbol={symbol} exchange={exchange} />
@@ -170,7 +170,8 @@ export function StockHeader({
         </div>
         <div className="flex items-center justify-between gap-3">
           {price}
-          <div className="shrink-0">{exchangeControl}</div>
+          {/* An index is on one exchange: the symbol line says so, a switch would only say no. */}
+          {type === 'INDEX' ? null : <div className="shrink-0">{exchangeControl}</div>}
         </div>
       </div>
     );

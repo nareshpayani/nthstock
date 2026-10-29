@@ -38,6 +38,14 @@ for (const viewport of VIEWPORTS) {
     await buyAtMarket(page, viewport.name === 'phone', 10);
 
     await page.goto('/positions');
+    // A phone lists positions as rows of a list, not a table (NSTOCK-0447).
+    const phone = viewport.name === 'phone';
+    const row = phone
+      ? page
+          .getByRole('list', { name: 'Positions' })
+          .getByRole('listitem')
+          .filter({ hasText: 'INFY' })
+      : page.getByRole('row', { name: /INFY/ });
     const edit = page.getByRole('button', { name: /^Edit INFY delivery position/ });
     await expect(edit).toBeVisible();
     if (SHOTS) await page.screenshot({ path: `${SHOTS}/positions-${viewport.name}.png` });
@@ -55,7 +63,7 @@ for (const viewport of VIEWPORTS) {
     if (SHOTS) await page.screenshot({ path: `${SHOTS}/editor-stop-${viewport.name}.png` });
     await editor.getByRole('button', { name: 'Set trailing stop' }).click();
     await expect(editor).toBeHidden();
-    await expect(page.getByRole('row', { name: /INFY/ })).toContainText(/Trailing/);
+    await expect(row).toContainText(/Trailing/);
 
     // Exit part: the full ticket, prefilled with what is held, never more.
     await edit.click();
@@ -72,8 +80,7 @@ for (const viewport of VIEWPORTS) {
     await editor.getByRole('button', { name: 'Sell INFY' }).click();
     await editor.getByRole('button', { name: 'Confirm' }).click();
     await expect(editor).toBeHidden();
-    await expect(
-      page.getByRole('row', { name: /INFY/ }).getByRole('cell', { name: '6', exact: true }),
-    ).toBeVisible();
+    if (phone) await expect(row).toContainText('Qty 6');
+    else await expect(row.getByRole('cell', { name: '6', exact: true })).toBeVisible();
   });
 }

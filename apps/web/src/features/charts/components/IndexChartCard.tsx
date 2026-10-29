@@ -21,6 +21,7 @@ import { Card } from '@/shared/components/Card';
 import { LiveChange } from '@/shared/components/LiveChange';
 import { PriceCell } from '@/shared/components/PriceCell';
 import { useMarketOpen } from '@/shared/hooks/useMarketOpen';
+import { useDayDirection } from '@/shared/hooks/useQuote';
 import { usePhoneLayout } from '@/shared/hooks/usePhoneLayout';
 import { useApiClient } from '@/shared/lib/apiClientContext';
 import { candlesQuery } from '../api/candlesQuery';
@@ -149,6 +150,10 @@ export function IndexChartCard({
     marketOpen && candles.data?.interval === interval && !candles.isPlaceholderData,
     interval,
   );
+  // NSTOCK-0446: on 1D the line's colour is the day's change, the same as the change badge. The
+  // series alone can't say it: in the first hour it leads with the previous session.
+  const today = useDayDirection(NIFTY.symbol, NIFTY.exchange);
+  const direction = range === '1D' ? today : undefined;
   const showIntervals = intervals.length > 1 && onIntervalChange !== undefined;
 
   return (
@@ -266,6 +271,7 @@ export function IndexChartCard({
           >
             <PriceChart
               candles={bars}
+              direction={direction}
               label={strings.niftyChartLabel(
                 chartTypeName(chartType),
                 rangeLabel(range),

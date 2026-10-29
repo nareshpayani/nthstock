@@ -27,6 +27,11 @@ export const strings = {
     actions: 'Actions',
   },
   products: { DELIVERY: 'Delivery', INTRADAY: 'Intraday' } satisfies Record<ProductType, string>,
+  /** The phone list's second line (NSTOCK-0447). */
+  phone: {
+    qty: (qty: number) => `Qty ${String(qty)}`,
+    avg: (price: string) => `Avg ${price}`,
+  },
   closed: 'Closed',
   noAverage: '–',
   edit: 'Edit',
