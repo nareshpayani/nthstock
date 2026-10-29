@@ -11,7 +11,7 @@ import { OrderUpdatesBridge } from '@/features/orders';
 import { TradingIntentTimeouts } from '../live/TradingIntentTimeouts';
 import { TrailingStopAnnouncer } from '../live/TrailingStopAnnouncer';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { usePhoneShell } from '@/shared/hooks/usePhoneLayout';
+import { useNarrowScreen, usePhoneShell } from '@/shared/hooks/usePhoneLayout';
 import { useShortcut } from '@/shared/hooks/useShortcut';
 import { useSearchFocusStore } from '@/shared/lib/searchFocusStore';
 import { useShellStore } from '../store/shellStore';
@@ -58,6 +58,9 @@ export function AppShell({ children, rail = true }: AppShellProps) {
   const [tradeOpen, setTradeOpen] = useState(false);
   // Only a phone has the trade sheet: one left open closes when the window grows past 767 px.
   const tradeSheetOpen = phoneShell && tradeOpen;
+  // Below 1024 px the rail column is hidden, so it is not rendered at all: its watchlist and live
+  // quotes cost the phone's first render (Lighthouse TBT on the instrument page). The drawer has its own.
+  const narrow = useNarrowScreen();
   const railSearch = useRef<HTMLInputElement>(null);
   const drawerSearch = useRef<HTMLInputElement>(null);
 
@@ -96,7 +99,8 @@ export function AppShell({ children, rail = true }: AppShellProps) {
       <Header onOpenMenu={() => setDrawerOpen(true)} onOpenHelp={() => setHelpOpen(true)} />
       <div className="flex">
         {/* A phone has no rail: its watchlists are a page under Home, its search the trade sheet. */}
-        {rail && !phoneShell ? (
+        {rail && !narrow && !phoneShell ? (
+          // `hidden lg:block` stays as the fallback where matchMedia is missing.
           <aside
             aria-label={strings.rail.label}
             className="hidden w-80 shrink-0 border-r border-line bg-surface lg:block"

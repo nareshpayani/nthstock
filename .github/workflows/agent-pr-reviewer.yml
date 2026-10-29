@@ -2,8 +2,8 @@ name: 'Agent: PR reviewer'
 
 # Reviews every PR from the owner or the agents, then routes it:
 # blocking findings -> `agent:fix-needed` (Fixer runs); none -> `ready-to-merge`, which
-# pr-auto-merge.yml merges once every check is green (ADR 0006). The owner merges spec PRs
-# and PRs that change .github/, .claude/ or CLAUDE.md.
+# pr-auto-merge.yml merges once every check is green (ADR 0006). The owner merges spec PRs and
+# the few PRs auto-merge holds (production release/deploy, .env, data-dropping migrations).
 
 on:
   pull_request:

@@ -1256,7 +1256,7 @@ starts the Fixer.
 | Reviewer | PR opened or updated | Reviews with specialists (`frontend-reviewer`, `ux-design-reviewer`, `security-reviewer`, `database-reviewer`, `error-handling-reviewer`, `test-coverage-reviewer`); labels `ready-to-merge` or `agent:fix-needed` |
 | Fixer | `agent:fix-needed`, red CI on a PR, or red CI on `develop` | Pushes the root-cause fix to the same PR, or opens `agent/fix-develop-*` |
 | Merge-conflict resolver | Push to `develop` that conflicts with an open PR | Merges `develop` into the PR branch; hands real conflicts to the Fixer |
-| Auto-merge | Green PR with `ready-to-merge` | Squash-merges; spec PRs and PRs touching `.github/`, `.claude/`, `CLAUDE.md` wait for the owner |
+| Auto-merge | Green PR with `ready-to-merge` | Squash-merges; spec PRs, production release/deploy workflows, `.env` files and data-dropping migrations wait for the owner |
 | Housekeeping | PR events, schedules | Close done issues and epics, sync labels, key issues `NSTOCK-NNNN`, promote stories after a spec merges, delete merged branches |
 
 Claude Code hooks (`.claude/hooks/`) give local and cloud agent sessions the same checks while they

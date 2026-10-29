@@ -1720,7 +1720,7 @@ export const strings = {
         {
           kind: 'list',
           items: [
-            'Auto-merge squash-merges a PR once the Reviewer labels it ready-to-merge and every check is green. Spec PRs and changes to CI or agent config wait for the owner.',
+            'Auto-merge squash-merges a PR once the Reviewer labels it ready-to-merge and every check is green. Spec PRs wait for the owner; so do changes to the production release or deploy workflow, environment files and migrations that drop data.',
             'Issue closer: a merged PR closes its stories with “Done in #PR”, and an epic closes when all its stories are done.',
             'Scheduled health runs of the full suite (09:20 and 12:30 IST on weekdays, 20:00 IST daily); a red run sends the Fixer.',
             'Issue keys: every issue is titled NSTOCK-0001 : title, and stories are filed under their epic.',

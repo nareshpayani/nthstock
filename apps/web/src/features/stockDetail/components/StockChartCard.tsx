@@ -14,6 +14,7 @@ import {
   CHART_RANGES,
   type ChartHandle,
   ChartTypeMenu,
+  IndicatorsMenu,
   ChartZoomControls,
   LiveBadge,
   PriceChart,
@@ -23,6 +24,7 @@ import {
   isIntraday,
   rangeLabel,
   resolveInterval,
+  useChartStudies,
   useLiveCandles,
 } from '@/features/charts';
 import { Card } from '@/shared/components/Card';
@@ -109,6 +111,7 @@ export function StockChartCard({
   const today = useDayDirection(symbol, exchange);
   const direction = range === '1D' ? today : undefined;
 
+  const studies = useChartStudies((state) => state.studies);
   const touch = controls === 'touch';
   const liveBadge = marketOpen && !offline ? <LiveBadge /> : null;
   const rangeControl = (
@@ -122,7 +125,10 @@ export function StockChartCard({
     />
   );
   const typeControl = (
-    <ChartTypeMenu value={chartType} onValueChange={onChartTypeChange} touch={touch} />
+    <>
+      <ChartTypeMenu value={chartType} onValueChange={onChartTypeChange} touch={touch} />
+      <IndicatorsMenu touch={touch} />
+    </>
   );
   const showIntervals = intervals.length > 1 && onIntervalChange !== undefined;
   const plot = (
@@ -151,7 +157,8 @@ export function StockChartCard({
           format={format}
           intraday={isIntraday(range)}
           height={height}
-          tooltip
+          legend
+          studies={studies}
           interactive
           onReady={setChart}
           overlay={
@@ -190,12 +197,13 @@ export function StockChartCard({
         className="grid grid-cols-[minmax(0,1fr)] gap-2"
         data-part="phone-chart"
       >
-        <div className="flex items-center gap-2">
+        {/* Wraps rather than pushing the page sideways on a 320 px phone. */}
+        <div className="flex flex-wrap items-center gap-2">
           <h2 id={headingId} className="sr-only">
             {strings.chart.title}
           </h2>
           {liveBadge}
-          <div className="ml-auto flex items-center gap-2">
+          <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
             {typeControl}
             {showIntervals ? (
               // Five more segments would not fit beside the type, so the bar size is a native

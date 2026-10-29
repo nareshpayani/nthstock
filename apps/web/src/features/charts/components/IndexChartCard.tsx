@@ -28,7 +28,9 @@ import {
   resolveInterval,
 } from '../model/ranges';
 import { strings } from '../strings';
+import { useChartStudies } from '../model/studiesStore';
 import { ChartTypeMenu } from './ChartTypeMenu';
+import { IndicatorsMenu } from './IndicatorsMenu';
 import { ChartZoomControls } from './ChartZoomControls';
 import { LiveBadge } from './LiveBadge';
 import { PriceChart } from './PriceChart';
@@ -90,6 +92,7 @@ export function IndexChartCard({
     [],
   );
   const phone = usePhoneLayout();
+  const studies = useChartStudies((state) => state.studies);
   const interval = resolveInterval(range, requestedInterval);
   const intervals = CANDLE_INTERVALS[range];
   // The NIFTY 50 page opens on what this card shows.
@@ -225,6 +228,7 @@ export function IndexChartCard({
           {onChartTypeChange ? (
             <ChartTypeMenu value={chartType} onValueChange={onChartTypeChange} touch={phone} />
           ) : null}
+          <IndicatorsMenu touch={phone} />
         </div>
       }
     >
@@ -264,7 +268,8 @@ export function IndexChartCard({
               format="index"
               intraday={isIntraday(range)}
               height={CHART_HEIGHT}
-              tooltip
+              legend
+              studies={studies}
               interactive
               onReady={setChart}
               className={candles.isPlaceholderData ? 'opacity-60' : undefined}

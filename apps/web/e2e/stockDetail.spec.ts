@@ -24,11 +24,11 @@ test('stock detail: title, live header, URL chart range and type, key stats, Buy
   const candles = page.getByRole('figure', { name: 'INFY candlestick chart over 1 month' });
   await expect(candles.locator('canvas').first()).toBeVisible();
 
-  // Hovering the chart shows the crosshair tooltip with en-IN grouped rupees.
+  // Hovering the chart moves the legend to that bar, with en-IN grouped values.
   const box = await candles.boundingBox();
   if (!box) throw new Error('chart has no box');
   await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
-  await expect(page.getByTestId('chart-tooltip')).toContainText(/Close₹[\d,]+\.\d{2}/);
+  await expect(page.getByTestId('chart-legend')).toContainText(/C[\d,]+\.\d{2}/);
 
   const stats = page.getByRole('region', { name: 'Key stats' });
   await expect(stats.getByText(/^₹[\d,]+(\.\d{1,2})? Cr$/)).toBeVisible();

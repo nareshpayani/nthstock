@@ -1,5 +1,5 @@
 import { Skeleton, cn } from '@nthstock/ui';
-import { useSyncExternalStore, type ReactNode } from 'react';
+import { type ReactNode } from 'react';
 import { ChartSkeleton } from '@/shared/components/ChartSkeleton';
 import { useLandscapePhone, usePhoneLayout } from '@/shared/hooks/usePhoneLayout';
 import {
@@ -8,6 +8,7 @@ import {
   phoneChartHeight,
 } from '@/shared/lib/phoneChart';
 import { strings } from '../strings';
+import { useViewportHeight } from '@/shared/hooks/useViewportHeight';
 
 /**
  * The app shell while it loads (SPEC-CR-1 §5.6): the header with the ticker row under 1360 px, and
@@ -50,12 +51,6 @@ export function ShellSkeleton({ children }: { children: ReactNode }) {
   );
 }
 
-const subscribeResize = (onChange: () => void) => {
-  window.addEventListener('resize', onChange);
-  return () => window.removeEventListener('resize', onChange);
-};
-const viewportHeight = () => window.innerHeight;
-
 /**
  * The instrument page while its data loads, in the page's final shape (SPEC-CR-1 §5.6, §7): on a
  * phone the price block, the chart with its rail and range row, the tabs and the sticky Sell and
@@ -66,7 +61,7 @@ export function InstrumentSkeleton() {
   const phone = usePhoneLayout();
   // Sized like the page it stands in for, so the chart does not jump when the page loads (CLS).
   const landscape = useLandscapePhone();
-  const height = useSyncExternalStore(subscribeResize, viewportHeight, () => 800);
+  const height = useViewportHeight();
   return (
     <div role="status" aria-label={strings.loading} data-testid="instrument-skeleton">
       {phone ? (
