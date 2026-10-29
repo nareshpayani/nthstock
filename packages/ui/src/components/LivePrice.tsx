@@ -25,7 +25,9 @@ const sizeClass = { sm: 'text-label', md: 'text-body', lg: 'text-title' } as con
 /**
  * A live price (T-057). Presentational: the value comes in as props (apps/web's PriceCell reads
  * the quote store). The value updates in place with no background flash (the owner asked for none,
- * 2026-09-28); ▲ or ▼ in green or red shows the direction, so colour is never the only signal.
+ * 2026-09-28). The price itself is green or red for the day's direction (owner, 2026-10-29) and ▲
+ * or ▼ beside it, or the signed change next to it, says the same by shape, so colour is never the
+ * only signal.
  */
 export function LivePrice({
   value,
@@ -41,20 +43,15 @@ export function LivePrice({
     <span
       data-tick={tick}
       className={cn(
-        'inline-flex items-baseline gap-1 rounded-sm px-1 font-mono font-medium whitespace-nowrap text-ink tabular-nums',
+        'inline-flex items-baseline gap-1 rounded-sm px-1 font-mono font-medium whitespace-nowrap tabular-nums',
+        tick === 'up' ? 'text-up' : tick === 'down' ? 'text-down' : 'text-ink',
         sizeClass[size],
         className,
       )}
     >
       {roll ? <DigitRoll value={text} /> : text}
       {marker ? (
-        <span
-          aria-hidden="true"
-          className={cn(
-            'text-[0.75em]',
-            tick === 'up' ? 'text-up' : tick === 'down' ? 'text-down' : 'invisible',
-          )}
-        >
+        <span aria-hidden="true" className={cn('text-[0.75em]', tick === 'flat' && 'invisible')}>
           {tick === 'down' ? '▼' : '▲'}
         </span>
       ) : null}

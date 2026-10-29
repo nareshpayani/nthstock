@@ -38,14 +38,45 @@ describe('bottom sheet drag to dismiss (SPEC-CR-1 §5.5, CR-T10)', () => {
     expect(onOpenChange).toHaveBeenCalledWith(false);
   });
 
-  it('springs back when let go slowly below the threshold', () => {
+  it('springs back when let go slowly below the threshold, and the backdrop dims again', async () => {
     const { panel, grabber, onOpenChange } = renderSheet();
+    const backdrop = document.querySelector<HTMLElement>('[data-overlay]');
     pointer(grabber, 'pointerdown', 100, 0);
     pointer(grabber, 'pointermove', 160, 600);
+    // A quarter of the way down lifts a fifth of the dim (A14).
+    expect(backdrop?.style.opacity).toBe('0.88');
     pointer(grabber, 'pointerup', 160, 1200);
     expect(onOpenChange).not.toHaveBeenCalled();
-    expect(panel.style.transform).toBe('');
-    expect(panel.style.transition).toContain('var(--nth-duration-slow)');
+    await waitFor(() => expect(panel.style.transform).toBe(''));
+    expect(backdrop?.style.opacity).toBe('');
+  });
+
+  it('an upward pull opens a sheet with more to show in full; a pull down returns it first', async () => {
+    const { panel, grabber, onOpenChange } = renderSheet();
+    const body = panel.querySelector('[data-part="sheet-body"]');
+    if (!body) throw new Error('no body');
+    Object.defineProperty(body, 'scrollHeight', { value: 900 });
+    Object.defineProperty(body, 'clientHeight', { value: 300 });
+    pointer(grabber, 'pointerdown', 300, 0);
+    pointer(grabber, 'pointermove', 240, 300);
+    pointer(grabber, 'pointerup', 240, 600);
+    expect(panel.dataset.detent).toBe('full');
+    expect(panel.style.maxHeight).toContain('100dvh');
+    await waitFor(() => expect(panel.style.transform).toBe(''));
+    pointer(grabber, 'pointerdown', 100, 0);
+    pointer(grabber, 'pointermove', 300, 400);
+    pointer(grabber, 'pointerup', 300, 800);
+    expect(panel.dataset.detent).toBe('compact');
+    expect(panel.style.maxHeight).toBe('');
+    expect(onOpenChange).not.toHaveBeenCalled();
+  });
+
+  it('an upward pull leaves a sheet that already shows everything as it is', () => {
+    const { panel, grabber } = renderSheet();
+    pointer(grabber, 'pointerdown', 300, 0);
+    pointer(grabber, 'pointermove', 200, 300);
+    pointer(grabber, 'pointerup', 200, 600);
+    expect(panel.dataset.detent).toBeUndefined();
   });
 
   it('closes on a fast downward flick however short', () => {
@@ -57,6 +88,78 @@ describe('bottom sheet drag to dismiss (SPEC-CR-1 §5.5, CR-T10)', () => {
     expect(onOpenChange).toHaveBeenCalledWith(false);
   });
 
+  describe('flick close duration', () => {
+    const backdrop = () => document.querySelector<HTMLElement>('[data-overlay]');
+
+    it('a very fast flick closes in the 120 ms minimum, on panel and backdrop', () => {
+      const { panel, grabber } = renderSheet();
+      pointer(grabber, 'pointerdown', 100, 0);
+      pointer(grabber, 'pointermove', 110, 10);
+      // 20 px in 5 ms = 4 px/ms over 290 px left: well under the minimum.
+      pointer(grabber, 'pointermove', 130, 15);
+      pointer(grabber, 'pointerup', 130, 15);
+      expect(panel.style.animationDuration).toBe('120ms');
+      expect(backdrop()?.style.animationDuration).toBe('120ms');
+    });
+
+    it('a slow far drag closes in the 240 ms maximum', () => {
+      const { panel, grabber } = renderSheet();
+      // (Timestamps start above 0: React swaps a 0 for the wall clock.)
+      pointer(grabber, 'pointerdown', 100, 1);
+      // 0.1 px/ms is past the 30% threshold but not a flick; 200 px at that speed is far over 240.
+      pointer(grabber, 'pointermove', 300, 2001);
+      pointer(grabber, 'pointerup', 300, 2001);
+      expect(panel.style.animationDuration).toBe('240ms');
+    });
+
+    it('a mid-speed flick takes the time its speed needs to finish the distance', () => {
+      const { panel, grabber } = renderSheet();
+      pointer(grabber, 'pointerdown', 100, 1);
+      // 0.6 px/ms (just over the flick speed) with 400 - 60 = 340 px left: 567 ms, capped at 240.
+      pointer(grabber, 'pointermove', 160, 101);
+      pointer(grabber, 'pointerup', 160, 101);
+      expect(panel.style.animationDuration).toBe('240ms');
+      expect(backdrop()?.style.animationDuration).toBe('240ms');
+    });
+
+    it('a flick fast enough to land between the limits uses its own time', () => {
+      const { panel, grabber } = renderSheet();
+      // 2 px/ms with 400 - 100 = 300 px left: the 150 ms the distance needs.
+      pointer(grabber, 'pointerdown', 0, 0);
+      pointer(grabber, 'pointermove', 20, 10);
+      pointer(grabber, 'pointermove', 100, 50);
+      pointer(grabber, 'pointerup', 100, 50);
+      expect(panel.style.animationDuration).toBe('150ms');
+    });
+
+    it('reduced motion leaves the duration alone', () => {
+      vi.stubGlobal('matchMedia', (query: string) => ({
+        matches: query.includes('reduce'),
+        media: query,
+        addEventListener: () => undefined,
+        removeEventListener: () => undefined,
+      }));
+      const { panel, grabber, onOpenChange } = renderSheet();
+      pointer(grabber, 'pointerdown', 100, 0);
+      pointer(grabber, 'pointermove', 110, 10);
+      pointer(grabber, 'pointermove', 160, 60);
+      pointer(grabber, 'pointerup', 160, 60);
+      expect(onOpenChange).toHaveBeenCalledWith(false);
+      expect(panel.style.animationDuration).toBe('');
+    });
+
+    it('a vetoed flick clears the shortened duration so the next close is standard', async () => {
+      const { panel, grabber, onOpenChange } = renderSheet();
+      pointer(grabber, 'pointerdown', 100, 0);
+      pointer(grabber, 'pointermove', 110, 10);
+      pointer(grabber, 'pointermove', 160, 60);
+      pointer(grabber, 'pointerup', 160, 60);
+      expect(onOpenChange).toHaveBeenCalledWith(false);
+      await waitFor(() => expect(panel.style.animationDuration).toBe(''));
+      expect(backdrop()?.style.animationDuration).toBe('');
+    });
+  });
+
   it('resists an upward pull and never closes from it', () => {
     const { panel, grabber, onOpenChange } = renderSheet();
     pointer(grabber, 'pointerdown', 300, 0);
@@ -66,7 +169,7 @@ describe('bottom sheet drag to dismiss (SPEC-CR-1 §5.5, CR-T10)', () => {
     expect(onOpenChange).not.toHaveBeenCalled();
   });
 
-  it('a press on the header Close is a tap, not a drag; a cancelled pointer springs back', () => {
+  it('a press on the header Close is a tap, not a drag; a cancelled pointer springs back', async () => {
     const { panel, grabber, onOpenChange } = renderSheet();
     const close = screen.getByRole('button', { name: 'Close' });
     pointer(close, 'pointerdown', 50, 0);
@@ -77,7 +180,7 @@ describe('bottom sheet drag to dismiss (SPEC-CR-1 §5.5, CR-T10)', () => {
     pointer(grabber, 'pointermove', 300, 10);
     pointer(grabber, 'pointercancel', 300, 10);
     expect(onOpenChange).not.toHaveBeenCalled();
-    expect(panel.style.transform).toBe('');
+    await waitFor(() => expect(panel.style.transform).toBe(''));
   });
 
   it('with reduced motion the sheet returns without easing', () => {

@@ -783,7 +783,8 @@ export function ChartOverlay({
       ref={(element) => {
         elementsRef.current.root = element;
       }}
-      className="pointer-events-none absolute inset-0 overflow-hidden"
+      // Above the zoom buttons (z-10): a line's handle is never hidden under them.
+      className="pointer-events-none absolute inset-0 z-20 overflow-hidden"
       data-testid="chart-overlay"
     >
       {/* The price axis is the gutter: tap to start an order there (§8.2), drag to zoom prices. */}

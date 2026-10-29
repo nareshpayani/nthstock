@@ -15,6 +15,7 @@ import {
   type ChartHandle,
   ChartTypeMenu,
   IndicatorsMenu,
+  ChartZoomControls,
   LiveBadge,
   PriceChart,
   candlesQuery,
@@ -159,7 +160,7 @@ export function StockChartCard({
           legend
           studies={studies}
           interactive
-          onReady={trading ? setChart : undefined}
+          onReady={setChart}
           overlay={
             trading && chart ? (
               <>
@@ -173,6 +174,7 @@ export function StockChartCard({
       ) : (
         <ChartSkeleton height={height} label={strings.chart.loading} />
       )}
+      {chart && loaded && !failed ? <ChartZoomControls chart={chart.chart} /> : null}
       {offline && loaded && !failed ? (
         <span
           role="status"

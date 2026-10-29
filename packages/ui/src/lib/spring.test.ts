@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { animateSpring, stepSpring, type SpringState } from './spring';
+import { animateSpring, stepSpring, type SpringState } from './spring.js';
 
 function settle(from: number, to: number, velocity = 0, dt = 1 / 60) {
   let state: SpringState = { value: from, velocity };
