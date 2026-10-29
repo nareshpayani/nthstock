@@ -32,7 +32,9 @@ const candleRanges = () =>
 describe('stock price chart (T-107)', () => {
   it('an index chart, which has no trading, still pans and zooms (NSTOCK-0437)', async () => {
     renderApp('/stocks/NIFTY50', { apiClient: api.apiClient });
-    await screen.findByTestId('chart-host');
+    // The file's first test transforms the stock route and chart chunks cold, which can pass the
+    // 5 s default on a busy CI runner.
+    await screen.findByTestId('chart-host', {}, { timeout: 12_000 });
     await waitFor(() => expect(chartsMock.active()[0]?.series[0]).toBeDefined());
     expect(chartsMock.active()[0]?.options).toMatchObject({
       handleScroll: { horzTouchDrag: true, vertTouchDrag: false },
