@@ -1,5 +1,5 @@
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createTestQuoteStore, testQuote } from '@/test/quotes';
 import { renderApp } from '@/test/renderApp';
 import { resetSession, signIn, signOut } from '@/test/session';
@@ -7,6 +7,7 @@ import { useSearchFocusStore } from '@/shared/lib/searchFocusStore';
 import { initialShellState, useShellStore } from '../store/shellStore';
 
 afterEach(() => {
+  vi.unstubAllGlobals();
   act(() => {
     useShellStore.setState(initialShellState);
     resetSession();
@@ -145,5 +146,44 @@ describe('Left rail on the guide (NSTOCK-0342)', () => {
     expect(
       screen.queryByRole('complementary', { name: 'Watchlist and search' }),
     ).not.toBeInTheDocument();
+  });
+});
+
+/** A screen `width` px wide: answers the shell's width media queries. */
+function screenWidth(width: number) {
+  vi.stubGlobal('matchMedia', (query: string) => {
+    const max = /max-width:\s*([\d.]+)px/.exec(query);
+    const min = /min-width:\s*([\d.]+)px/.exec(query);
+    const matches =
+      (max ? width <= Number(max[1]) : true) &&
+      (min ? width >= Number(min[1]) : true) &&
+      !/height|pointer/.test(query);
+    return {
+      matches,
+      media: query,
+      addEventListener: () => undefined,
+      removeEventListener: () => undefined,
+    };
+  });
+}
+
+describe('the rail below 1024 px (NSTOCK-0465)', () => {
+  it('is not rendered on a narrow screen; the drawer still has the watchlist and search', async () => {
+    screenWidth(390);
+    await renderDashboard();
+    expect(
+      screen.queryByRole('complementary', { name: 'Watchlist and search' }),
+    ).not.toBeInTheDocument();
+    fireEvent.keyDown(document.body, { key: '/' });
+    const drawer = await screen.findByRole('dialog', { name: 'Menu' });
+    await waitFor(() =>
+      expect(within(drawer).getByRole('combobox', { name: 'Search stocks' })).toHaveFocus(),
+    );
+  });
+
+  it('is rendered from 1024 px', async () => {
+    screenWidth(1280);
+    await renderDashboard();
+    expect(screen.getByRole('complementary', { name: 'Watchlist and search' })).toBeInTheDocument();
   });
 });

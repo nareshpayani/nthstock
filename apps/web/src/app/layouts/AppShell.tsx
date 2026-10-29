@@ -11,7 +11,7 @@ import { OrderUpdatesBridge } from '@/features/orders';
 import { TradingIntentTimeouts } from '../live/TradingIntentTimeouts';
 import { TrailingStopAnnouncer } from '../live/TrailingStopAnnouncer';
 import { useEffect, useRef, type ReactNode } from 'react';
-import { useMediaQuery } from '@/shared/hooks/usePhoneLayout';
+import { useNarrowScreen } from '@/shared/hooks/usePhoneLayout';
 import { useShortcut } from '@/shared/hooks/useShortcut';
 import { useSearchFocusStore } from '@/shared/lib/searchFocusStore';
 import { useShellStore } from '../store/shellStore';
@@ -39,9 +39,6 @@ export type AppShellProps = {
  * order-update listener (T-147), so fills refresh the book and toast on any page. From 600 to
  * 1023 px a docked trading panel takes the right of the screen and the page narrows beside it.
  */
-/** Below the `lg` breakpoint, where the rail column is hidden. */
-const NARROW_QUERY = '(max-width: 1023.98px)';
-
 export function AppShell({ children, rail = true }: AppShellProps) {
   const drawerOpen = useShellStore((s) => s.drawerOpen);
   // A trading panel docked on a tablet (SPEC-CR-1 §6.2) sits beside the page, not over it.
@@ -51,7 +48,7 @@ export function AppShell({ children, rail = true }: AppShellProps) {
   const setHelpOpen = useShellStore((s) => s.setHelpOpen);
   // Below 1024 px the rail column is hidden, so it is not rendered at all: its watchlist and live
   // quotes cost the phone's first render (Lighthouse TBT on the instrument page). The drawer has its own.
-  const narrow = useMediaQuery(NARROW_QUERY);
+  const narrow = useNarrowScreen();
   const railSearch = useRef<HTMLInputElement>(null);
   const drawerSearch = useRef<HTMLInputElement>(null);
 
@@ -86,6 +83,7 @@ export function AppShell({ children, rail = true }: AppShellProps) {
       <Header onOpenMenu={() => setDrawerOpen(true)} onOpenHelp={() => setHelpOpen(true)} />
       <div className="flex">
         {rail && !narrow ? (
+          // `hidden lg:block` stays as the fallback where matchMedia is missing.
           <aside
             aria-label={strings.rail.label}
             className="hidden w-80 shrink-0 border-r border-line bg-surface lg:block"
