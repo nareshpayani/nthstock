@@ -1,4 +1,10 @@
-import { CandleRange, MoverDirection, StockListId, TradingSymbol } from '@nthstock/contracts';
+import {
+  CandleInterval,
+  CandleRange,
+  MoverDirection,
+  StockListId,
+  TradingSymbol,
+} from '@nthstock/contracts';
 import { createFileRoute } from '@tanstack/react-router';
 import { z } from 'zod';
 import { DashboardPage, prefetchDashboard } from '@/features/dashboard';
@@ -8,6 +14,8 @@ import { DashboardPage, prefetchDashboard } from '@/features/dashboard';
 // feature, so the feature's code stays out of the initial chunk.
 const dashboardSearch = z.object({
   range: CandleRange.optional().catch(undefined),
+  interval: CandleInterval.optional().catch(undefined),
+  chart: z.enum(['line', 'area', 'candle', 'bar', 'heikin']).optional().catch(undefined),
   list: StockListId.optional().catch(undefined),
   movers: MoverDirection.optional().catch(undefined),
   moversIndex: TradingSymbol.optional().catch(undefined),

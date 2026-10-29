@@ -8,11 +8,11 @@ import {
   cn,
   useTouchTargets,
 } from '@nthstock/ui';
-import { CHART_TYPES, type ChartType } from '../model/stockDetailSearch';
+import { PRICE_CHART_TYPES, type PriceChartType } from '../model/chartTypes';
 import { strings } from '../strings';
 
 /** 16 px line drawings of each type, in the text colour (NSTOCK-0430). */
-function TypeGlyph({ type }: { type: ChartType }) {
+function TypeGlyph({ type }: { type: PriceChartType }) {
   const common = {
     width: 16,
     height: 16,
@@ -69,8 +69,8 @@ function TypeGlyph({ type }: { type: ChartType }) {
 }
 
 export type ChartTypeMenuProps = {
-  value: ChartType;
-  onValueChange: (type: ChartType) => void;
+  value: PriceChartType;
+  onValueChange: (type: PriceChartType) => void;
   /** 44 px trigger on phones. */
   touch?: boolean;
 };
@@ -78,7 +78,8 @@ export type ChartTypeMenuProps = {
 /**
  * Chart type picker (NSTOCK-0430): one compact button with the current type's drawing and name,
  * opening a menu of all five with a line on what each shows. A menu, not five segments, so it fits
- * beside the bar size on a 320 px phone and beside the ranges on desktop.
+ * beside the bar size on a 320 px phone and beside the ranges on desktop. Used by the instrument
+ * page and the dashboard chart (NSTOCK-0443).
  */
 export function ChartTypeMenu({
   value,
@@ -90,25 +91,25 @@ export function ChartTypeMenu({
   return (
     <DropdownMenu>
       <DropdownMenuTrigger
-        aria-label={strings.chart.typeButton(strings.chart.types[value])}
+        aria-label={strings.typeButton(strings.types[value])}
         className={cn(
           'inline-flex items-center gap-1.5 rounded-md border border-line bg-canvas px-2.5 text-body font-medium text-ink hover:bg-surface focus-visible:border-brand focus-visible:ring-3 focus-visible:ring-brand-soft focus-visible:outline-none',
           touch ? 'h-11' : 'h-8',
         )}
       >
         <TypeGlyph type={value} />
-        <span>{strings.chart.types[value]}</span>
+        <span>{strings.types[value]}</span>
         <IconChevronDown size={14} />
       </DropdownMenuTrigger>
       <DropdownMenuContent className="w-72">
         <DropdownMenuRadioGroup
           value={value}
           onValueChange={(next) => {
-            const type = CHART_TYPES.find((candidate) => candidate === next);
+            const type = PRICE_CHART_TYPES.find((candidate) => candidate === next);
             if (type) onValueChange(type);
           }}
         >
-          {CHART_TYPES.map((type) => (
+          {PRICE_CHART_TYPES.map((type) => (
             <DropdownMenuRadioItem
               key={type}
               value={type}
@@ -118,8 +119,8 @@ export function ChartTypeMenu({
                 <TypeGlyph type={type} />
               </span>
               <span className="grid">
-                <span className="font-medium">{strings.chart.types[type]}</span>
-                <span className="text-label text-ink-muted">{strings.chart.typeHints[type]}</span>
+                <span className="font-medium">{strings.types[type]}</span>
+                <span className="text-label text-ink-muted">{strings.typeHints[type]}</span>
               </span>
             </DropdownMenuRadioItem>
           ))}
