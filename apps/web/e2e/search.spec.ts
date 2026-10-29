@@ -40,10 +40,10 @@ test('/ focuses search; typing, ↓ and Enter open the stock; an empty box shows
   await expect(search).not.toBeFocused();
 });
 
-test('in the phone drawer, Esc closes only the list and choosing a stock closes the drawer', async ({
+test('in the tablet drawer, Esc closes only the list and choosing a stock closes the drawer', async ({
   page,
 }) => {
-  await page.setViewportSize({ width: 390, height: 844 });
+  await page.setViewportSize({ width: 800, height: 1024 });
   await page.goto('/dashboard');
   await page.getByRole('heading', { level: 1 }).waitFor();
   await page.keyboard.press('/');

@@ -1,0 +1,29 @@
+export const strings = {
+  title: 'Account',
+  profileLabel: 'Profile',
+  available: 'Available to trade',
+  fundsCta: 'Funds',
+  fundsError: 'Balance unavailable',
+  fundsLoading: 'Loading your balance',
+  retry: 'Try again',
+  sessionLoading: 'Checking your session',
+  menuLabel: 'Account',
+  items: {
+    funds: { label: 'Funds', hint: 'Virtual cash, the ledger and reset' },
+    security: {
+      label: 'Security and privacy',
+      hint: 'Two-factor, active sessions, consent, delete account',
+    },
+    portfolio: { label: 'Positions', hint: "Today's intraday and delivery trades" },
+    watchlists: { label: 'Watchlists', hint: 'Your lists: add, sort and reorder stocks' },
+    guide: { label: 'Help and documentation', hint: 'How nthstock works and how to trade' },
+  },
+  logOut: 'Log out',
+  defaultName: 'nthstock investor',
+  paperNote: 'Paper trading only: ₹10,00,000 of virtual cash, no real money moves.',
+  signedOut: {
+    title: 'Log in to your account',
+    body: 'Your portfolio, orders and virtual funds appear here once you log in.',
+    cta: 'Log in',
+  },
+} as const;

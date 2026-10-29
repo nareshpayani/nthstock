@@ -5,7 +5,7 @@ import { useState } from 'react';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { createMockApi } from '@/test/mockApi';
 import { renderWithProviders } from '@/test/renderWithProviders';
-import { MOVERS_ROWS, MarketMoversCard, resolveMoversIndex } from './MarketMoversCard';
+import { MOVERS_ROWS, MarketMoversCard, MoversList, resolveMoversIndex } from './MarketMoversCard';
 
 const api = createMockApi();
 beforeAll(() => api.listen());
@@ -95,5 +95,16 @@ describe('MarketMoversCard (T-098)', () => {
     api.server.resetHandlers();
     fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
     await waitFor(() => expect(rows().length).toBeGreaterThan(0));
+  });
+});
+
+describe('MoversList (NSTOCK-0466)', () => {
+  it('lists the rows on its own, and an unknown index asks for the Nifty 50', async () => {
+    renderWithProviders(<MoversList index="SENSEX" direction="losers" />, {
+      apiClient: api.apiClient,
+    });
+    await waitFor(() => expect(screen.queryAllByRole('link').length).toBeGreaterThan(0));
+    for (const row of screen.getAllByRole('link')) expect(row).toHaveTextContent(/▼/);
+    expect(moverRequests()).toEqual(['NIFTY50:losers']);
   });
 });

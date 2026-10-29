@@ -69,6 +69,17 @@ describe('profile menu (T-090)', () => {
     await expect(apiClient.request('sessionRefresh')).rejects.toMatchObject({ status: 401 });
   });
 
+  it('keeps the session and says so when log out cannot end it on the server', async () => {
+    signIn(testSession({ name: 'Demo Investor' }));
+    // The default test client has no network: the revoke fails.
+    const { router } = renderApp('/orders');
+    const menu = await openMenu('DI, account: Demo Investor');
+    fireEvent.click(within(menu).getByRole('menuitem', { name: /Log out/ }));
+    expect(await screen.findByText('You are still logged in')).toBeInTheDocument();
+    expect(router.state.location.pathname).toBe('/orders');
+    expect(useSessionStore.getState().session).not.toBeNull();
+  });
+
   it('a user without a name gets a generic label and an icon', async () => {
     signIn(testSession({ name: null, kycStatus: 'NOT_STARTED' }));
     renderApp('/dashboard');

@@ -14,15 +14,15 @@ what is now distinctive, before and after frames at every screen size, the numbe
 
 The baseline audit on 28 Oct (captured before any change, [before set](docs/design/before/README.md)):
 
-| Finding | Where |
-|---|---|
-| A press near an order line woke the chart's crosshair, and the line did not move | Every touch screen; the before recording shows it at 390 × 844 |
-| The ticket's primary button sat below the fold | Every phone |
-| The chart started below the fold | Every phone from 360 × 740 up; in landscape no chart showed at all |
-| The index ticker clipped SENSEX | Every phone |
-| The page scrolled sideways, and Buy could not be reached | 320 × 640 |
-| Buy was green in the trade bar and blue on the chart | Everywhere |
-| Tablets and foldables got the desktop card layout | 673 to 1180 px |
+| Finding                                                                          | Where                                                              |
+| -------------------------------------------------------------------------------- | ------------------------------------------------------------------ |
+| A press near an order line woke the chart's crosshair, and the line did not move | Every touch screen; the before recording shows it at 390 × 844     |
+| The ticket's primary button sat below the fold                                   | Every phone                                                        |
+| The chart started below the fold                                                 | Every phone from 360 × 740 up; in landscape no chart showed at all |
+| The index ticker clipped SENSEX                                                  | Every phone                                                        |
+| The page scrolled sideways, and Buy could not be reached                         | 320 × 640                                                          |
+| Buy was green in the trade bar and blue on the chart                             | Everywhere                                                         |
+| Tablets and foldables got the desktop card layout                                | 673 to 1180 px                                                     |
 
 ## 2. Direction: "Instrument"
 
@@ -33,17 +33,17 @@ handle, and the chart's price axis becomes a ruler you set prices on.
 
 **Decisions**
 
-| Decision | Why |
-|---|---|
-| Brand blue (#1463D8) means action: Buy, the primary button, the selected side | Green and red mean price direction only. Buy was green in one place and blue in another, so a colour carried two meanings. |
-| Sell is outlined in down red; Buy is filled blue | The two actions can't be confused, even in greyscale, and the primary one is heavier |
-| IBM Plex Sans for words, IBM Plex Mono with tabular figures for every number | Prices don't jitter sideways as they tick; the mono gives the instrument feel |
-| Darker ink (#0B1526), finer hairlines (#E4E8EE), cooler canvas | More contrast and a quieter ground, so the chart and the numbers lead |
-| Marigold for the trailing stop, as fill only, with `marigold-ink` (#A86B00) for its stroke | The stop is its own kind of thing, neither buy nor sell. Marigold fails contrast as text, so it never is text. |
-| A new wordmark and app icon: a bold two-tone "nth" with a lighter "stock", in brand blue and IBM Plex | The mark matches the type and the blue the screens use, and it reads at favicon size |
-| Full-bleed sections divided by hairlines on phones, not cards | Cards cost 32 px of width and a border on a 360 px screen |
-| Motion tokens: one ease-out, one ease-in, 120 / 180 / 280 ms, one critically damped spring | Every movement in the flow uses the same few curves, so it feels like one system |
-| Haptics follow Apple's three meanings (impact, selection, notification) | They feel native on both platforms. They never carry meaning alone, and a setting turns them off. |
+| Decision                                                                                              | Why                                                                                                                        |
+| ----------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| Brand blue (#1463D8) means action: Buy, the primary button, the selected side                         | Green and red mean price direction only. Buy was green in one place and blue in another, so a colour carried two meanings. |
+| Sell is outlined in down red; Buy is filled blue                                                      | The two actions can't be confused, even in greyscale, and the primary one is heavier                                       |
+| IBM Plex Sans for words, IBM Plex Mono with tabular figures for every number                          | Prices don't jitter sideways as they tick; the mono gives the instrument feel                                              |
+| Darker ink (#0B1526), finer hairlines (#E4E8EE), cooler canvas                                        | More contrast and a quieter ground, so the chart and the numbers lead                                                      |
+| Marigold for the trailing stop, as fill only, with `marigold-ink` (#A86B00) for its stroke            | The stop is its own kind of thing, neither buy nor sell. Marigold fails contrast as text, so it never is text.             |
+| A new wordmark and app icon: a bold two-tone "nth" with a lighter "stock", in brand blue and IBM Plex | The mark matches the type and the blue the screens use, and it reads at favicon size                                       |
+| Full-bleed sections divided by hairlines on phones, not cards                                         | Cards cost 32 px of width and a border on a 360 px screen                                                                  |
+| Motion tokens: one ease-out, one ease-in, 120 / 180 / 280 ms, one critically damped spring            | Every movement in the flow uses the same few curves, so it feels like one system                                           |
+| Haptics follow Apple's three meanings (impact, selection, notification)                               | They feel native on both platforms. They never carry meaning alone, and a setting turns them off.                          |
 
 **References** (for inspiration only; nothing was copied):
 
@@ -90,6 +90,16 @@ handle, and the chart's price axis becomes a ruler you set prices on.
     dock beside the page instead of covering it. From 1024 px on a touch screen, the desktop
     layout gets 44 px controls.
 
+11. **A phone app, not a shrunk website.** Below 768 px the shell is a native app's: a bottom tab
+    bar in thumb reach (Home, Portfolio, a raised blue Trade button, Orders, Account) replaces the
+    menu drawer. The top bar holds the avatar, a switch between sibling pages (Market or
+    Watchlist, Holdings or Positions) and the bell, over the index strip. Home leads with the
+    portfolio value and the day's P&L, then the chart, Add funds and Place order side by side,
+    and Watchlist, Gainers and Losers as rows. Trade, from any tab, is search and then the stock's
+    page with the ticket up. A stock's page is pushed over the tabs with a back button, so its
+    Sell, Buy and Scalp bar keeps the bottom edge. Tablets keep the drawer. An E2E test
+    (`phoneShell.spec.ts`) walks from the tabs to every feature the desktop has.
+
 **Reduced motion.** With `prefers-reduced-motion`, springs and slides become instant or a 120 ms
 fade, digit rolls become swaps, the hint does not nudge, and the ratchet jumps without a trace.
 Haptics are unaffected; they have their own setting. An E2E test checks that no finite animation
@@ -102,15 +112,25 @@ after from `develop` at the end of the round. All 16 sizes, three frames each (i
 open ticket, order line on the chart): [before](docs/design/before/README.md) and
 [after](docs/design/after/README.md). Highlights:
 
-| Size | Before | After |
-|---|---|---|
-| 390 × 844 instrument (iPhone 12 to 16) | ![](docs/design/before/phone-390x844-instrument.jpg) | ![](docs/design/after/phone-390x844-instrument.jpg) |
-| 390 × 844 ticket | ![](docs/design/before/phone-390x844-ticket.jpg) | ![](docs/design/after/phone-390x844-ticket.jpg) |
-| 390 × 844 order line | ![](docs/design/before/phone-390x844-orderLine.jpg) | ![](docs/design/after/phone-390x844-orderLine.jpg) |
-| 360 × 740 ticket (small Android) | ![](docs/design/before/phone-360x740-ticket.jpg) | ![](docs/design/after/phone-360x740-ticket.jpg) |
-| 320 × 640 instrument (iPhone SE 1st gen) | ![](docs/design/before/phone-320x640-instrument.jpg) | ![](docs/design/after/phone-320x640-instrument.jpg) |
-| 844 × 390 landscape | ![](docs/design/before/landscape-844x390-instrument.jpg) | ![](docs/design/after/landscape-844x390-instrument.jpg) |
-| 820 × 1180 ticket (iPad Air) | ![](docs/design/before/tablet-820x1180-ticket.jpg) | ![](docs/design/after/tablet-820x1180-ticket.jpg) |
+| Size                                     | Before                                                   | After                                                   |
+| ---------------------------------------- | -------------------------------------------------------- | ------------------------------------------------------- |
+| 390 × 844 instrument (iPhone 12 to 16)   | ![](docs/design/before/phone-390x844-instrument.jpg)     | ![](docs/design/after/phone-390x844-instrument.jpg)     |
+| 390 × 844 ticket                         | ![](docs/design/before/phone-390x844-ticket.jpg)         | ![](docs/design/after/phone-390x844-ticket.jpg)         |
+| 390 × 844 order line                     | ![](docs/design/before/phone-390x844-orderLine.jpg)      | ![](docs/design/after/phone-390x844-orderLine.jpg)      |
+| 360 × 740 ticket (small Android)         | ![](docs/design/before/phone-360x740-ticket.jpg)         | ![](docs/design/after/phone-360x740-ticket.jpg)         |
+| 320 × 640 instrument (iPhone SE 1st gen) | ![](docs/design/before/phone-320x640-instrument.jpg)     | ![](docs/design/after/phone-320x640-instrument.jpg)     |
+| 844 × 390 landscape                      | ![](docs/design/before/landscape-844x390-instrument.jpg) | ![](docs/design/after/landscape-844x390-instrument.jpg) |
+| 820 × 1180 ticket (iPad Air)             | ![](docs/design/before/tablet-820x1180-ticket.jpg)       | ![](docs/design/after/tablet-820x1180-ticket.jpg)       |
+
+The phone app shell (NSTOCK-0466), before from `develop` at `3bb0572`, after on its branch, both
+390 × 844 and signed in as the demo user:
+
+| Screen                       | Before                                              | After                                              |
+| ---------------------------- | --------------------------------------------------- | -------------------------------------------------- |
+| Home                         | ![](docs/design/before/shell-390x844-home.jpg)      | ![](docs/design/after/shell-390x844-home.jpg)      |
+| Portfolio                    | ![](docs/design/before/shell-390x844-portfolio.jpg) | ![](docs/design/after/shell-390x844-portfolio.jpg) |
+| Orders                       | ![](docs/design/before/shell-390x844-orders.jpg)    | ![](docs/design/after/shell-390x844-orders.jpg)    |
+| Account (new; before, a 404) | ![](docs/design/before/shell-390x844-account.jpg)   | ![](docs/design/after/shell-390x844-account.jpg)   |
 
 What changed in those frames:
 
@@ -132,11 +152,11 @@ What changed in those frames:
 **Frame time while dragging** (390 × 844, the instrument ticking four times a second, a line
 dragged and the page scrolled; `e2e/chartTradingPerf.spec.ts`):
 
-| Measure | Result | Budget |
-|---|---|---|
-| Frame time p50 / p95 / p99, unthrottled | 16.7 / 16.7 / 16.8 ms (607 frames in 10 s) | p95 within one 60 fps frame |
-| Price updates on screen | 31 a second | n/a |
-| Longest animation frame at 4× CPU | Enforced in CI's "Web vitals and render budgets" job, which passed on every merge | 50 ms |
+| Measure                                 | Result                                                                            | Budget                      |
+| --------------------------------------- | --------------------------------------------------------------------------------- | --------------------------- |
+| Frame time p50 / p95 / p99, unthrottled | 16.7 / 16.7 / 16.8 ms (607 frames in 10 s)                                        | p95 within one 60 fps frame |
+| Price updates on screen                 | 31 a second                                                                       | n/a                         |
+| Longest animation frame at 4× CPU       | Enforced in CI's "Web vitals and render budgets" job, which passed on every merge | 50 ms                       |
 
 The drag moves the line, tab and loupe with transforms only. No React render runs per pointer
 move, so the drag itself never makes a long frame.
@@ -144,12 +164,12 @@ move, so the drag itself never makes a long frame.
 **Cold load on a phone** (production build, 390 × 844, fresh profile, median of three runs;
 detail in [docs/design/coldLoad.md](docs/design/coldLoad.md)):
 
-| Screen | Profile | LCP before | LCP after | CLS |
-|---|---|---|---|---|
-| `/login`, first visit | Slow 4G, 4× CPU | 5.05 s | 3.19 s | 0 |
-| `/login`, first visit | 4G, 4× CPU | 2.05 s | 1.81 s | 0 |
-| `/dashboard?demo=1` | 4G, 4× CPU | 2.06 s | 2.13 s | 0.001 |
-| `/stocks/INFY` | 4G, 4× CPU | 2.64 s | 2.71 s | 0.001 |
+| Screen                | Profile         | LCP before | LCP after | CLS   |
+| --------------------- | --------------- | ---------- | --------- | ----- |
+| `/login`, first visit | Slow 4G, 4× CPU | 5.05 s     | 3.19 s    | 0     |
+| `/login`, first visit | 4G, 4× CPU      | 2.05 s     | 1.81 s    | 0     |
+| `/dashboard?demo=1`   | 4G, 4× CPU      | 2.06 s     | 2.13 s    | 0.001 |
+| `/stocks/INFY`        | 4G, 4× CPU      | 2.64 s     | 2.71 s    | 0.001 |
 
 Initial JS is 189 KB gzipped (budget 200 KB) and fonts are 84 KB (budget 100 KB). In the demo,
 the data screens wait for the in-browser mock backend (348 KB). With the real API that chunk is
