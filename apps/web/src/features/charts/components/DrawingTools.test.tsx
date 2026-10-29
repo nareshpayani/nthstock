@@ -125,6 +125,35 @@ describe('drawing tools (NSTOCK-0461)', () => {
     );
   });
 
+  it('draws a trend line with one drag from the first point to the second', () => {
+    const { layer } = renderTools();
+    fireEvent.click(screen.getByRole('button', { name: 'Trend line' }));
+    fireEvent.pointerDown(layer, { clientX: 50, clientY: 100, pointerId: 1 });
+    fireEvent.pointerMove(layer, { clientX: 150, clientY: 40, pointerId: 1 });
+    fireEvent.pointerUp(layer, { clientX: 150, clientY: 40, pointerId: 1 });
+    expect(stored()).toEqual([
+      expect.objectContaining({
+        kind: 'trend',
+        from: { time: T0 + 5 * 60, price: 155_000 },
+        to: { time: T0 + 15 * 60, price: 158_000 },
+      }),
+    ]);
+  });
+
+  it('draws a ray on to the plot edge, and Fibonacci levels between two taps', () => {
+    const { layer } = renderTools();
+    fireEvent.click(screen.getByRole('button', { name: 'Ray' }));
+    tap(layer, 50, 100);
+    tap(layer, 100, 80);
+    fireEvent.click(screen.getByRole('button', { name: 'Fibonacci retracement' }));
+    tap(layer, 50, 200);
+    tap(layer, 150, 100);
+    expect(stored().map((drawing: { kind: string }) => drawing.kind)).toEqual(['ray', 'fib']);
+    // The ray runs past its second point to the right edge of the 340 px plot.
+    expect(layer.querySelector('line')).toHaveAttribute('x2', '340');
+    expect(layer).toHaveTextContent('0.618');
+  });
+
   it('draws a horizontal line with one tap, snapping to the bar with the magnet', () => {
     const { layer } = renderTools();
     fireEvent.click(screen.getByRole('button', { name: /^Magnet/ }));
