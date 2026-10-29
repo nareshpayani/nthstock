@@ -171,7 +171,7 @@ export function Sheet({
   // Drag to dismiss (CR-T10) closes through the sheet's own Close, so focus return and
   // onOpenChange behave exactly as for a tap on it.
   const closeRef = useRef<HTMLButtonElement>(null);
-  const { panelRef, grabProps } = useSheetDrag(touch, () => closeRef.current?.click());
+  const { panelRef, overlayRef, grabProps } = useSheetDrag(touch, () => closeRef.current?.click());
   const contentRef = useCallback(
     (element: HTMLDivElement | null) => {
       keyboardInset(element);
@@ -186,6 +186,7 @@ export function Sheet({
       <DialogPrimitive.Portal>
         {docked ? null : (
           <DialogPrimitive.Overlay
+            ref={overlayRef}
             className={cn(overlayClass, overlay === 'light' && 'bg-ink/10')}
             data-overlay={overlay}
           />
@@ -243,7 +244,9 @@ export function Sheet({
           </div>
           <TouchTargets enabled={touch || docked || touchSize}>
             {/* A container: what is inside lays out by the panel's width, not the screen's. */}
-            <div className="@container min-h-0 flex-1 overflow-y-auto">{children}</div>
+            <div data-part="sheet-body" className="@container min-h-0 flex-1 overflow-y-auto">
+              {children}
+            </div>
             {footer ? <div className="flex gap-2 border-t border-line p-4">{footer}</div> : null}
           </TouchTargets>
         </DialogPrimitive.Content>

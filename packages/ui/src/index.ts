@@ -1,4 +1,11 @@
 export { cn, type ClassValue } from './lib/cn.js';
+export {
+  animateSpring,
+  isAtRest,
+  stepSpring,
+  type SpringOptions,
+  type SpringState,
+} from './lib/spring.js';
 export { TouchTargets, useTouchTargets } from './lib/touchTargets.js';
 export { createIcon, type IconComponent, type IconProps } from './icons/createIcon.js';
 export * from './icons/icons.js';

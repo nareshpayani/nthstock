@@ -35,6 +35,31 @@ describe('IndexTicker', () => {
   });
 });
 
+describe('IndexTicker level colour', () => {
+  const props = { name: 'SENSEX', level: 8309215 };
+  const levelOf = () => screen.getByText('83,092.15');
+
+  it.each([false, true])('colours the level red on a down day (stacked=%s)', (stacked) => {
+    render(<IndexTicker {...props} change={-9970} changeBasisPoints={-12} stacked={stacked} />);
+    expect(levelOf()).toHaveClass('text-down');
+    expect(levelOf()).not.toHaveClass('text-up');
+  });
+
+  it.each([false, true])('colours the level green on an up day (stacked=%s)', (stacked) => {
+    render(<IndexTicker {...props} change={9970} changeBasisPoints={12} stacked={stacked} />);
+    expect(levelOf()).toHaveClass('text-up');
+    expect(levelOf()).not.toHaveClass('text-down');
+  });
+
+  it.each([false, true])('keeps the level ink on a flat day (stacked=%s)', (stacked) => {
+    render(<IndexTicker {...props} change={0} changeBasisPoints={0} stacked={stacked} />);
+    expect(levelOf()).toHaveClass('text-ink');
+    expect(levelOf()).not.toHaveClass('text-up');
+    expect(levelOf()).not.toHaveClass('text-down');
+    expect(screen.getByText(/0\.00%/)).toHaveClass('text-ink-muted');
+  });
+});
+
 describe('IndexTicker compact', () => {
   it('shows only the percent but still speaks the points', () => {
     const { container } = render(

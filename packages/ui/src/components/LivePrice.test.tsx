@@ -10,27 +10,29 @@ describe('LivePrice', () => {
     expect(screen.getByText('25,418.60')).toBeInTheDocument();
   });
 
-  it('shows a green ▲ on an up tick, with no background flash', () => {
+  it('shows the price and ▲ in green on an up day, with no background flash', () => {
     const { container, rerender } = render(<LivePrice value={151240} tick="up" />);
     const root = container.firstElementChild;
     expect(root).toHaveAttribute('data-tick', 'up');
     expect(root?.className).not.toMatch(/animate-|bg-/);
-    expect(screen.getByText('▲')).toHaveClass('text-up');
+    expect(root).toHaveClass('text-up');
     expect(screen.getByText('▲')).toHaveAttribute('aria-hidden', 'true');
     rerender(<LivePrice value={151245} tick="up" />);
     expect(screen.getByText('₹1,512.45')).toBeInTheDocument();
     expect(root?.className).not.toMatch(/animate-|bg-/);
   });
 
-  it('shows a red ▼ on a down tick', () => {
+  it('shows the price and ▼ in red on a down day', () => {
     const { container } = render(<LivePrice value={151230} tick="down" size="lg" />);
     expect(container.firstElementChild).toHaveClass('text-title');
     expect(container.firstElementChild?.className).not.toMatch(/animate-/);
-    expect(screen.getByText('▼')).toHaveClass('text-down');
+    expect(container.firstElementChild).toHaveClass('text-down');
+    expect(screen.getByText('▼')).toBeInTheDocument();
   });
 
   it('keeps the marker space reserved before the first change', () => {
     render(<LivePrice value={151235} tick="flat" size="sm" />);
     expect(screen.getByText('▲')).toHaveClass('invisible');
+    expect(screen.getByText('₹1,512.35').closest('[data-tick]')).toHaveClass('text-ink');
   });
 });

@@ -13,8 +13,9 @@ import { isTouchViewport, VIEWPORT_MATRIX, type MatrixViewport } from './support
 //   4. the primary action (Buy on the page, the submit button in the ticket) on screen without
 //      scrolling;
 //
-// plus AC-08 on the page: from 360 px the index ticker strip fits without scrolling (below 360 px it
-// may scroll inside its strip, which check 2 allows).
+// plus AC-08 on the page: on a tablet-sized header (768 px and wider, 500 px tall or more) the index
+// ticker strip fits without scrolling. On a phone it holds all five indices and drifts sideways
+// (NSTOCK-0458), which check 2 allows.
 //
 // A failure names the viewport, the check and the element. Checks the craft round has not fixed
 // yet are listed in KNOWN_GAPS with the story that fixes them: they run as expected failures, so
@@ -240,7 +241,9 @@ for (const viewport of VIEWPORT_MATRIX) {
       }
       await run('page', 'primaryAction', onScreen(page, buy));
       // The index strip is a header row only below 1360 px: from there the indices sit in the top bar.
-      if (viewport.width >= 360 && viewport.width < 1360) {
+      // The phone layout (under 768 px wide or 500 px tall) scrolls its strip on purpose.
+      const phoneStrip = viewport.width < 768 || viewport.height < 500;
+      if (!phoneStrip && viewport.width < 1360) {
         await run('page', 'tickerFits', tickerOverflow(page));
       }
 
