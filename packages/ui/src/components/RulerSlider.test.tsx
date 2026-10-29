@@ -47,11 +47,28 @@ describe('RulerSlider (A8)', () => {
     expect(onChange).toHaveBeenLastCalledWith(5);
   });
 
-  it('arrows move one tick and Page keys ten; disabled ignores them', () => {
+  it('arrows move one tick and Page keys ten', () => {
     const { slider, onChange } = setup(100);
     fireEvent.keyDown(slider, { key: 'ArrowRight' });
     expect(onChange).toHaveBeenLastCalledWith(105);
     fireEvent.keyDown(slider, { key: 'PageDown' });
     expect(onChange).toHaveBeenLastCalledWith(50);
+  });
+
+  it('Home and End go to the ends', () => {
+    const { slider, onChange } = setup(100, { max: 500 });
+    fireEvent.keyDown(slider, { key: 'End' });
+    expect(onChange).toHaveBeenLastCalledWith(500);
+    fireEvent.keyDown(slider, { key: 'Home' });
+    expect(onChange).toHaveBeenLastCalledWith(5);
+  });
+
+  it('a disabled slider ignores keys and drags and is out of the tab order', () => {
+    const { slider, onChange } = setup(100, { disabled: true });
+    expect(slider).toHaveAttribute('tabindex', '-1');
+    fireEvent.keyDown(slider, { key: 'ArrowRight' });
+    fireEvent.pointerDown(slider, { pointerId: 1, clientX: 200 });
+    fireEvent.pointerMove(slider, { pointerId: 1, clientX: 100 });
+    expect(onChange).not.toHaveBeenCalled();
   });
 });

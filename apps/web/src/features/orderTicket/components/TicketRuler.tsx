@@ -40,11 +40,14 @@ export function TicketRuler({
   const priceValue = price ?? fallbackPrice;
   return (
     <div className="grid scroll-mb-24" data-testid="ticket-ruler">
-      {active === 'price' && priceValue !== null ? (
+      {active === 'price' ? (
         <RulerSlider
+          key="price"
           label={strings.form.ruler.price}
           badge={strings.form.ruler.priceBadge}
-          value={priceValue}
+          // No price typed and no quote yet: a disabled price ruler, never the quantity one.
+          value={priceValue ?? tickSize}
+          disabled={priceValue === null}
           onChange={onPrice}
           step={tickSize}
           min={tickSize}
@@ -54,6 +57,7 @@ export function TicketRuler({
         />
       ) : (
         <RulerSlider
+          key="qty"
           label={strings.form.ruler.qty}
           badge={strings.form.ruler.qtyBadge}
           value={qty ?? 1}

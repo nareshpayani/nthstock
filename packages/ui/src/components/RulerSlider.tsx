@@ -88,8 +88,14 @@ export function RulerSlider({
       PageUp: majorEvery,
       PageDown: -majorEvery,
     };
+    if (disabled) return;
+    if (event.key === 'Home' || event.key === 'End') {
+      event.preventDefault();
+      set(event.key === 'Home' ? min : max);
+      return;
+    }
     const steps = by[event.key];
-    if (steps === undefined || disabled) return;
+    if (steps === undefined) return;
     event.preventDefault();
     set(snapped + steps * step);
   };
