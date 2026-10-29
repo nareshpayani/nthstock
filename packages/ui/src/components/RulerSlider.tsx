@@ -109,6 +109,8 @@ export function RulerSlider({
       <span
         key={at}
         aria-hidden="true"
+        // The scale slides under the clipped edges by design; the viewport matrix skips it.
+        data-matrix-ignore
         className="absolute bottom-0 flex -translate-x-1/2 flex-col items-center"
         style={{ left: `calc(50% + ${k * tickPx}px)` }}
       >
