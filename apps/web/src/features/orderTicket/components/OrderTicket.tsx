@@ -384,8 +384,10 @@ function TicketFlow({
       ) : (
         <div
           className={cn(steppedBack && 'animate-step-back')}
-          onAnimationEnd={() => {
-            // Played once for the user's Edit; later remounts of the form stay still.
+          onAnimationEnd={(e) => {
+            // Child animations (digit rolls, content-in) bubble here and end first; only the
+            // wrapper's own slide resets. Played once for the user's Edit; remounts stay still.
+            if (e.target !== e.currentTarget || e.animationName !== 'nth-step-back') return;
             setSteppedBack(false);
           }}
         >
