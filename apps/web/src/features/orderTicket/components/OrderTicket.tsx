@@ -6,7 +6,7 @@ import type {
   PlaceOrderRequest,
   TrailingStop,
 } from '@nthstock/contracts';
-import { ErrorState, useToast } from '@nthstock/ui';
+import { ErrorState, cn, useToast } from '@nthstock/ui';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
@@ -122,6 +122,8 @@ function TicketFlow({
   const modifyOrder = useModifyOrder();
   const modifying = intent.modify;
   const [review, setReview] = useState<Review | null>(null);
+  // Review slides in from the right and Edit slides the form back from the left (A14).
+  const [steppedBack, setSteppedBack] = useState(false);
   const [error, setError] = useState<TicketError | null>(null);
   const [trailingMode, setTrailingMode] = useState(false);
   const [attach, setAttach] = useState<AttachState>(initialAttachState);
@@ -305,7 +307,7 @@ function TicketFlow({
   };
 
   return (
-    <div className="grid">
+    <div className="grid overflow-x-clip">
       <div className="grid gap-1 border-b border-line px-4 py-3">
         {/* The sheet's title already names the stock, so a phone keeps this to one line. */}
         <p className="truncate text-body text-ink-muted max-md:hidden">{instrument.name}</p>
@@ -361,49 +363,56 @@ function TicketFlow({
           }
         />
       ) : review ? (
-        <ReviewStep
-          request={review.request}
-          symbol={instrument.symbol}
-          exchange={instrument.exchange}
-          ltp={review.ltp}
-          value={review.value}
-          amoDate={amoDate}
-          mode={modifying ? 'modify' : 'place'}
-          {...(review.attached ? { attached: review.attached } : {})}
-          placing={placeOrder.isPending || modifyOrder.isPending}
-          onEdit={() => setReview(null)}
-          onConfirm={onConfirm}
-        />
+        <div className="animate-step-forward">
+          <ReviewStep
+            request={review.request}
+            symbol={instrument.symbol}
+            exchange={instrument.exchange}
+            ltp={review.ltp}
+            value={review.value}
+            amoDate={amoDate}
+            mode={modifying ? 'modify' : 'place'}
+            {...(review.attached ? { attached: review.attached } : {})}
+            placing={placeOrder.isPending || modifyOrder.isPending}
+            onEdit={() => {
+              setSteppedBack(true);
+              setReview(null);
+            }}
+            onConfirm={onConfirm}
+          />
+        </div>
       ) : (
-        <TicketForm
-          form={form}
-          instrument={instrument}
-          marketOpen={marketOpen}
-          amoDate={amoDate}
-          modifying={modifying}
-          snapshotLtp={snapshot.data?.ltp}
-          available={funds.data?.available}
-          fundsLoading={funds.isPending}
-          error={error}
-          onSubmit={(event) => void onSubmit(event)}
-          trailing={trailingOffer}
-          compact={intent.compact === true && !modifying}
-          attachNeedsAttention={!modifying && attach.enabled && attach.touched}
-          attach={
-            modifying ? undefined : (
-              <AttachedStop
-                control={control}
-                symbol={intent.symbol}
-                exchange={intent.exchange}
-                snapshotLtp={snapshot.data?.ltp}
-                trailingAvailable={trailingAvailable}
-                activeStops={activeStops}
-                state={attach}
-                onState={setAttach}
-              />
-            )
-          }
-        />
+        <div className={cn(steppedBack && 'animate-step-back')}>
+          <TicketForm
+            form={form}
+            instrument={instrument}
+            marketOpen={marketOpen}
+            amoDate={amoDate}
+            modifying={modifying}
+            snapshotLtp={snapshot.data?.ltp}
+            available={funds.data?.available}
+            fundsLoading={funds.isPending}
+            error={error}
+            onSubmit={(event) => void onSubmit(event)}
+            trailing={trailingOffer}
+            compact={intent.compact === true && !modifying}
+            attachNeedsAttention={!modifying && attach.enabled && attach.touched}
+            attach={
+              modifying ? undefined : (
+                <AttachedStop
+                  control={control}
+                  symbol={intent.symbol}
+                  exchange={intent.exchange}
+                  snapshotLtp={snapshot.data?.ltp}
+                  trailingAvailable={trailingAvailable}
+                  activeStops={activeStops}
+                  state={attach}
+                  onState={setAttach}
+                />
+              )
+            }
+          />
+        </div>
       )}
     </div>
   );
