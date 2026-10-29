@@ -7,7 +7,7 @@ import {
 } from '@nthstock/contracts';
 import { ErrorState, IconButton, SegmentedControl } from '@nthstock/ui';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
-import { useId, useState } from 'react';
+import { useId, useRef, useState } from 'react';
 import { ChartTrading } from '@/features/chartTrading';
 import { AlertLines } from '@/features/notifications';
 import {
@@ -87,6 +87,8 @@ export function StockChartCard({
   const [chart, setChart] = useState<ChartHandle | null>(null);
   // The full-screen chart with the tool rail (NSTOCK-0461).
   const [expanded, setExpanded] = useState(false);
+  // The button that opened full screen, for focus to go back to (Safari does not focus a tap).
+  const openerRef = useRef<HTMLElement | null>(null);
   // The full-screen chart's own handle: never the page chart's, which is gone while it is open.
   const [fullChart, setFullChart] = useState<ChartHandle | null>(null);
   const headingId = useId();
@@ -250,6 +252,7 @@ export function StockChartCard({
         />
       }
       onClose={() => setExpanded(false)}
+      opener={openerRef}
     >
       {(fullHeight) => renderPlot(fullHeight, fullChart, setFullChart)}
     </ChartWorkspace>
@@ -280,7 +283,10 @@ export function StockChartCard({
               icon={<DrawGlyph />}
               variant="secondary"
               className="size-11"
-              onClick={() => setExpanded(true)}
+              onClick={(event) => {
+                openerRef.current = event.currentTarget;
+                setExpanded(true);
+              }}
             />
           </div>
         </div>
@@ -318,7 +324,10 @@ export function StockChartCard({
             icon={<ExpandGlyph />}
             variant="secondary"
             size="sm"
-            onClick={() => setExpanded(true)}
+            onClick={(event) => {
+              openerRef.current = event.currentTarget;
+              setExpanded(true);
+            }}
           />
         </div>
       }

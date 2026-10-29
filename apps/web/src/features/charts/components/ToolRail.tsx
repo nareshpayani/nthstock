@@ -117,7 +117,7 @@ export function ToolRail({ symbol, touch: touchProp = false, height, className }
   const clear = useDrawings((state) => state.clear);
   const count = useSymbolDrawings(symbol).length;
   const canRestore = useDrawings((state) => state.cleared[symbol] !== undefined);
-  const unsaved = useDrawings((state) => state.unsaved);
+  const unsaved = useDrawings((state) => state.unsaved[symbol] === true);
   return (
     <div className={cn('relative', className)}>
       <div
@@ -185,15 +185,18 @@ export function ToolRail({ symbol, touch: touchProp = false, height, className }
           {strings.drawing.hints[tool]}
         </p>
       ) : null}
-      {unsaved ? (
-        <p
-          role="status"
-          data-testid="drawings-not-saved"
-          className="absolute bottom-1 left-full z-30 ml-2 w-max max-w-[min(16rem,calc(100vw-5rem))] rounded-md border border-line bg-surface px-3 py-1 text-label text-ink shadow-raised"
-        >
-          {strings.drawing.notSaved}
-        </p>
-      ) : null}
+      {/* Always there, so a warning that appears is announced. */}
+      <p
+        role="status"
+        data-testid="drawings-not-saved"
+        className={
+          unsaved
+            ? 'absolute bottom-1 left-full z-30 ml-2 w-max max-w-[min(16rem,calc(100vw-5rem))] rounded-md border border-line bg-surface px-3 py-1 text-label text-ink shadow-raised'
+            : 'sr-only'
+        }
+      >
+        {unsaved ? strings.drawing.notSaved : ''}
+      </p>
     </div>
   );
 }

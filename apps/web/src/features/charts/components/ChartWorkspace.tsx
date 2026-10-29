@@ -1,6 +1,7 @@
 import { IconButton, IconClose } from '@nthstock/ui';
 import { useEffect, useRef, useState, type ReactNode, type RefObject } from 'react';
 import { createPortal } from 'react-dom';
+import { keepsEscape } from '../model/drawings';
 import { useDrawings } from '../model/drawingsStore';
 import { strings } from '../strings';
 import { ToolRail } from './ToolRail';
@@ -21,18 +22,6 @@ function useBoxHeight<T extends HTMLElement>(): [RefObject<T | null>, number] {
   return [ref, height];
 }
 
-/**
- * Escape that belongs to the control it was pressed in: a text field (the note box), a native
- * select, or an open menu. Those close themselves; the full-screen chart stays.
- */
-function keepsEscape(target: EventTarget | null): boolean {
-  if (!(target instanceof Element)) return false;
-  return (
-    target.matches('input, textarea, select, [aria-expanded="true"]') ||
-    target.closest('[role="menu"], [role="listbox"]') !== null
-  );
-}
-
 export type ChartWorkspaceProps = {
   /** "INFY" or "NIFTY 50": named in the dialog title. */
   name: string;
@@ -43,6 +32,11 @@ export type ChartWorkspaceProps = {
   /** The ranges, under the chart. */
   footer: ReactNode;
   onClose: () => void;
+  /**
+   * The button that opened it, for focus to go back to. Safari does not focus a tapped button, so
+   * the focused element at open is not always it.
+   */
+  opener?: RefObject<HTMLElement | null>;
   /** The chart at the height left over. */
   children: (height: number) => ReactNode;
 };
@@ -51,7 +45,8 @@ export type ChartWorkspaceProps = {
  * The full-screen chart (NSTOCK-0461): the whole window for the plot, the tool rail down its left
  * side, the controls along the top and the ranges along the bottom. A modal dialog over the page,
  * so it works the same on a phone (landscape too) and on a desktop. The page behind is inert while
- * it is open; Escape or Close leave it, and focus goes back to the button that opened it.
+ * it is open; Escape or Close leave it, and focus goes back to the button that opened it. It sits
+ * on the overlay layer, so its menus (popover), toasts and an order ticket opened from it show above.
  */
 export function ChartWorkspace({
   name,
@@ -59,6 +54,7 @@ export function ChartWorkspace({
   controls,
   footer,
   onClose,
+  opener: openerRef,
   children,
 }: ChartWorkspaceProps) {
   const closeRef = useRef<HTMLButtonElement>(null);
@@ -71,7 +67,8 @@ export function ChartWorkspace({
   });
 
   useEffect(() => {
-    const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const focused = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const opener = openerRef?.current ?? focused;
     const overflow = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
     // Modal: the page behind can't be tabbed to, clicked or read while the chart is full screen.
@@ -95,11 +92,13 @@ export function ChartWorkspace({
     window.addEventListener('keydown', onKey);
     return () => {
       window.removeEventListener('keydown', onKey);
+      // The opener is read when the dialog opens; a later change of button is not followed.
       for (const element of behind) element.removeAttribute('inert');
       document.body.style.overflow = overflow;
       useDrawings.getState().setTool(null);
       opener?.focus();
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- once per open
   }, []);
 
   return createPortal(
@@ -109,7 +108,7 @@ export function ChartWorkspace({
       aria-modal="true"
       aria-label={strings.fullscreen.title(name)}
       data-testid="chart-workspace"
-      className="fixed inset-0 z-50 flex flex-col gap-2 bg-surface px-2 pt-[max(0.5rem,env(safe-area-inset-top))] pb-[max(0.5rem,env(safe-area-inset-bottom))]"
+      className="fixed inset-0 z-(--nth-z-overlay) flex flex-col gap-2 bg-surface px-2 pt-[max(0.5rem,env(safe-area-inset-top))] pb-[max(0.5rem,env(safe-area-inset-bottom))]"
     >
       {/* Name and Close on one row, the controls on the next where a phone is narrow. */}
       <div className="flex flex-wrap items-center gap-2">

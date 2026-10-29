@@ -82,6 +82,8 @@ export function IndexChartCard({
   const [chart, setChart] = useState<ChartHandle | null>(null);
   // The full-screen chart with the tool rail (NSTOCK-0461).
   const [expanded, setExpanded] = useState(false);
+  // The button that opened full screen, for focus to go back to (Safari does not focus a tap).
+  const openerRef = useRef<HTMLElement | null>(null);
   // The full-screen chart's own handle: never the card's, which is gone while it is open.
   const [fullChart, setFullChart] = useState<ChartHandle | null>(null);
   const pressRef = useRef<{ id: number; x: number; y: number; at: number } | null>(null);
@@ -223,6 +225,7 @@ export function IndexChartCard({
         />
       }
       onClose={() => setExpanded(false)}
+      opener={openerRef}
     >
       {(height) =>
         candles.isError && !candles.data ? (
@@ -325,7 +328,10 @@ export function IndexChartCard({
             variant="secondary"
             size="sm"
             className={phone ? 'size-11' : undefined}
-            onClick={() => setExpanded(true)}
+            onClick={(event) => {
+              openerRef.current = event.currentTarget;
+              setExpanded(true);
+            }}
           />
         </div>
       }

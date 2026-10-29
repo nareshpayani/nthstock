@@ -63,7 +63,7 @@ afterAll(() => vi.unstubAllGlobals());
 
 beforeEach(() => {
   window.localStorage.clear();
-  useDrawings.setState({ tool: null, magnet: false, bySymbol: {}, cleared: {}, unsaved: false });
+  useDrawings.setState({ tool: null, magnet: false, bySymbol: {}, cleared: {}, unsaved: {} });
 });
 
 function renderTools(symbol = 'INFY') {
@@ -101,7 +101,11 @@ describe('drawing tools (NSTOCK-0461)', () => {
     expect(layer).toHaveStyle({ pointerEvents: 'none' });
     fireEvent.click(screen.getByRole('button', { name: 'Trend line' }));
     expect(layer).toHaveStyle({ pointerEvents: 'auto' });
-    expect(screen.getByRole('status')).toHaveTextContent(/Tap the start, then the end/);
+    expect(
+      screen
+        .getAllByRole('status')
+        .some((line) => /Tap the start, then the end/.test(line.textContent ?? '')),
+    ).toBe(true);
   });
 
   it('draws a trend line with two taps and saves it for the symbol', () => {
@@ -188,6 +192,47 @@ describe('drawing tools (NSTOCK-0461)', () => {
     expect(stored()).toEqual([]);
   });
 
+  it('a zoom across fewer than two bars changes nothing', () => {
+    const { layer, setVisibleLogicalRange } = renderTools();
+    fireEvent.click(screen.getByRole('button', { name: 'Zoom to an area' }));
+    fireEvent.pointerDown(layer, { clientX: 50, clientY: 100, pointerId: 1 });
+    fireEvent.pointerMove(layer, { clientX: 60, clientY: 100, pointerId: 1 });
+    fireEvent.pointerUp(layer, { clientX: 60, clientY: 100, pointerId: 1 });
+    expect(setVisibleLogicalRange).not.toHaveBeenCalled();
+  });
+
+  it('a right click is not a point', () => {
+    const { layer } = renderTools();
+    fireEvent.click(screen.getByRole('button', { name: 'Horizontal line' }));
+    fireEvent.pointerDown(layer, {
+      clientX: 50,
+      clientY: 100,
+      pointerId: 1,
+      button: 2,
+      pointerType: 'mouse',
+    });
+    fireEvent.pointerUp(layer, {
+      clientX: 50,
+      clientY: 100,
+      pointerId: 1,
+      button: 2,
+      pointerType: 'mouse',
+    });
+    expect(stored()).toEqual([]);
+    expect(useDrawings.getState().tool).toBe('horizontal');
+  });
+
+  it('an Escape in an open menu keeps the picked tool', () => {
+    renderTools();
+    fireEvent.click(screen.getByRole('button', { name: 'Ray' }));
+    const menu = document.createElement('div');
+    menu.setAttribute('role', 'menu');
+    document.body.append(menu);
+    fireEvent.keyDown(menu, { key: 'Escape' });
+    expect(useDrawings.getState().tool).toBe('ray');
+    menu.remove();
+  });
+
   it('measures between two taps and shows the change', () => {
     const { layer } = renderTools();
     fireEvent.click(screen.getByRole('button', { name: 'Measure' }));
@@ -259,6 +304,44 @@ describe('full-screen chart (NSTOCK-0461)', () => {
     expect(onClose).not.toHaveBeenCalled();
   });
 
+  it('on close gives focus back to the opener, restores scrolling and puts the tool down', () => {
+    const opener = document.createElement('button');
+    document.body.append(opener);
+    const openerRef = { current: opener };
+    const view = render(
+      <ChartWorkspace
+        name="INFY"
+        symbol="INFY"
+        controls={null}
+        footer={null}
+        onClose={vi.fn()}
+        opener={openerRef}
+      >
+        {() => null}
+      </ChartWorkspace>,
+    );
+    act(() => useDrawings.getState().setTool('trend'));
+    view.unmount();
+    expect(opener).toHaveFocus();
+    expect(document.body.style.overflow).toBe('');
+    expect(useDrawings.getState().tool).toBeNull();
+    opener.remove();
+  });
+
+  it('leaves an element that was inert before it opened inert after it closes', () => {
+    const already = document.createElement('aside');
+    already.setAttribute('inert', '');
+    document.body.append(already);
+    const view = render(
+      <ChartWorkspace name="INFY" symbol="INFY" controls={null} footer={null} onClose={vi.fn()}>
+        {() => null}
+      </ChartWorkspace>,
+    );
+    view.unmount();
+    expect(already).toHaveAttribute('inert');
+    already.remove();
+  });
+
   it('makes the page behind inert while open, and gives it back on close', () => {
     const page = document.createElement('main');
     document.body.append(page);
@@ -320,6 +403,30 @@ describe('saved drawings (NSTOCK-0461)', () => {
     tap(layer, 50, 100);
     expect(window.localStorage.getItem(unreadableDrawingsKey('INFY'))).toBe('{not json');
     expect(stored()).toHaveLength(1);
+  });
+
+  it('sets aside a stored list when it drops an unreadable entry from it', () => {
+    const raw = JSON.stringify([
+      { id: 'bad', kind: 'trend' },
+      { id: 'a', kind: 'horizontal', at: { time: T0, price: 150_000 } },
+    ]);
+    window.localStorage.setItem(drawingsStorageKey('INFY'), raw);
+    expect(useDrawings.getState().drawingsFor('INFY')).toHaveLength(1);
+    expect(window.localStorage.getItem(unreadableDrawingsKey('INFY'))).toBe(raw);
+  });
+
+  it('keeps the not-saved warning to the symbol whose save failed', () => {
+    const setItem = vi.spyOn(Storage.prototype, 'setItem').mockImplementationOnce(() => {
+      throw new DOMException('full', 'QuotaExceededError');
+    });
+    try {
+      const at = { time: T0, price: 150_000 };
+      act(() => useDrawings.getState().add('INFY', { id: 'a', kind: 'horizontal', at }));
+      act(() => useDrawings.getState().add('TCS', { id: 'b', kind: 'horizontal', at }));
+      expect(useDrawings.getState().unsaved).toEqual({ INFY: true, TCS: false });
+    } finally {
+      setItem.mockRestore();
+    }
   });
 
   it('a new drawing after Clear means Undo removes it, not bring the cleared ones back', () => {

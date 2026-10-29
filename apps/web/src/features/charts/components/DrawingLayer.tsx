@@ -7,6 +7,7 @@ import {
   TWO_POINT_TOOLS,
   fibPrices,
   formatSpan,
+  keepsEscape,
   logicalToTime,
   measure,
   snapToBar,
@@ -89,8 +90,11 @@ export function DrawingLayer({ handle, candles, symbol, format }: DrawingLayerPr
   useEffect(() => {
     if (tool === null) return undefined;
     const onKey = (event: KeyboardEvent) => {
-      // The full-screen chart may have dropped the tool for this Escape already.
-      if (event.key === 'Escape' && !event.defaultPrevented) setTool(null);
+      // The full-screen chart may have dropped the tool for this Escape already, and an Escape in
+      // a menu or a field is that control's.
+      if (event.key === 'Escape' && !event.defaultPrevented && !keepsEscape(event.target)) {
+        setTool(null);
+      }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
@@ -128,6 +132,8 @@ export function DrawingLayer({ handle, candles, symbol, format }: DrawingLayerPr
   };
 
   const onPointerDown = (event: PointerEvent<SVGSVGElement>) => {
+    // The main button or the first finger only: a right click or a second finger is not a point.
+    if (event.pointerType === 'touch' ? !event.isPrimary : event.button !== 0) return;
     const point = pointAt(event);
     if (!point || tool === null) return;
     // The tap is the tool's: not a tap that opens the chart page, nor a pan.
@@ -226,20 +232,21 @@ export function DrawingLayer({ handle, candles, symbol, format }: DrawingLayerPr
           <MeasureBox {...measured} candles={candles} x={x} y={y} format={format} zoom={false} />
         ) : null}
       </svg>
+      {/* The SVG is hidden from screen readers, so the numbers are read from here. Always there,
+          so a new read-out is announced. */}
+      <p role="status" data-testid="measure-readout" className="sr-only">
+        {measured && !liveMeasure
+          ? measureReadout(measured.from, measured.to, candles, format).text
+          : ''}
+      </p>
       {measured && !liveMeasure ? (
-        <>
-          {/* The SVG is hidden from screen readers, so the numbers are read from here. */}
-          <p role="status" data-testid="measure-readout" className="sr-only">
-            {measureReadout(measured.from, measured.to, candles, format).text}
-          </p>
-          <button
-            type="button"
-            onClick={() => setMeasured(null)}
-            className="absolute top-1 right-20 z-30 inline-flex min-h-11 items-center rounded-pill border border-line bg-surface px-4 text-label font-medium text-ink shadow-raised [@media(pointer:fine)]:min-h-8"
-          >
-            {strings.drawing.clearMeasure}
-          </button>
-        </>
+        <button
+          type="button"
+          onClick={() => setMeasured(null)}
+          className="absolute top-1 right-20 z-30 inline-flex min-h-11 items-center rounded-pill border border-line bg-surface px-4 text-label font-medium text-ink shadow-raised [@media(pointer:fine)]:min-h-8"
+        >
+          {strings.drawing.clearMeasure}
+        </button>
       ) : null}
       {note ? (
         <NoteInput

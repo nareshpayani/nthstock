@@ -250,6 +250,21 @@ describe('IndexChartCard (T-095)', () => {
     expect(router.state.location.search).toEqual({ exchange: 'NSE', range: '1Y', chart: 'line' });
   });
 
+  it('with a tool picked, a tap on the chart draws and stays on the dashboard (NSTOCK-0461)', async () => {
+    const { router } = renderCard();
+    await screen.findByTestId('chart-host');
+    fireEvent.click(await screen.findByRole('button', { name: 'Horizontal line' }));
+    const layer = await screen.findByTestId('drawing-layer');
+    vi.spyOn(layer, 'getBoundingClientRect').mockReturnValue({ left: 0, top: 0 } as DOMRect);
+    Object.assign(layer, { setPointerCapture: vi.fn() });
+    fireEvent.pointerDown(layer, { clientX: 100, clientY: 50, pointerId: 1 });
+    fireEvent.pointerUp(layer, { clientX: 100, clientY: 50, pointerId: 1 });
+    await stillOnDashboard(router);
+    expect(JSON.parse(window.localStorage.getItem('nth.chart.drawings.NIFTY50') ?? '[]')).toEqual([
+      expect.objectContaining({ kind: 'horizontal' }),
+    ]);
+  });
+
   it('a touch tap opens the page after the double-tap window, not at once (NSTOCK-0452)', async () => {
     const { router } = renderCard();
     await screen.findByTestId('chart-host');

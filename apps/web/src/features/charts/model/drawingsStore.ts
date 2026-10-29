@@ -8,15 +8,23 @@ export const MAGNET_STORAGE_KEY = 'nth.chart.magnet';
 /** Where a stored value that could not be read is set aside, so the next save does not lose it. */
 export const unreadableDrawingsKey = (symbol: string) => `${drawingsStorageKey(symbol)}.unreadable`;
 
+// Symbols whose stored value could not be read nor set aside: saving over it would lose it.
+const unprotected = new Set<string>();
+
 function readDrawings(symbol: string): Drawing[] {
   const raw = safeStorage.get(drawingsStorageKey(symbol));
   if (raw === null) return [];
+  let stored: unknown;
   try {
-    return parseDrawings(JSON.parse(raw));
+    stored = JSON.parse(raw);
   } catch {
-    safeStorage.set(unreadableDrawingsKey(symbol), raw);
-    return [];
+    stored = undefined;
   }
+  const drawings = parseDrawings(stored);
+  // Anything dropped as unreadable is kept aside before the next save overwrites the value.
+  const dropped = !Array.isArray(stored) || drawings.length !== stored.length;
+  if (dropped && !safeStorage.set(unreadableDrawingsKey(symbol), raw)) unprotected.add(symbol);
+  return drawings;
 }
 
 const without = (record: Record<string, Drawing[]>, key: string) =>
@@ -31,8 +39,8 @@ export type DrawingsState = {
   bySymbol: Record<string, Drawing[]>;
   /** What the last Clear removed, per symbol, so Undo can bring it back. */
   cleared: Record<string, Drawing[]>;
-  /** The last save failed (storage full or blocked): drawings last only until the page closes. */
-  unsaved: boolean;
+  /** Symbols whose last save failed (storage full or blocked): their drawings last until the page closes. */
+  unsaved: Record<string, boolean>;
   setTool: (tool: DrawingTool | null) => void;
   toggleMagnet: () => void;
   drawingsFor: (symbol: string) => Drawing[];
@@ -47,15 +55,20 @@ export type DrawingsState = {
  */
 export const useDrawings = create<DrawingsState>()((set, get) => {
   const save = (symbol: string, drawings: Drawing[]) => {
-    const stored = safeStorage.set(drawingsStorageKey(symbol), JSON.stringify(drawings));
-    set({ bySymbol: { ...get().bySymbol, [symbol]: drawings }, unsaved: !stored });
+    const stored =
+      !unprotected.has(symbol) &&
+      safeStorage.set(drawingsStorageKey(symbol), JSON.stringify(drawings));
+    set({
+      bySymbol: { ...get().bySymbol, [symbol]: drawings },
+      unsaved: { ...get().unsaved, [symbol]: !stored },
+    });
   };
   return {
     tool: null,
     magnet: safeStorage.get(MAGNET_STORAGE_KEY) === 'on',
     bySymbol: {},
     cleared: {},
-    unsaved: false,
+    unsaved: {},
     setTool: (tool) => set({ tool }),
     toggleMagnet: () => {
       const magnet = !get().magnet;

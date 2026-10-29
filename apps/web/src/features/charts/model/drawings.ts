@@ -162,3 +162,15 @@ export function parseDrawings(raw: unknown): Drawing[] {
     }
   });
 }
+
+/**
+ * Escape that belongs to the control it was pressed in: a text field (the note box), a native
+ * select, or an open menu. Those close themselves; the picked tool and the full-screen chart stay.
+ */
+export function keepsEscape(target: EventTarget | null): boolean {
+  if (typeof Element === 'undefined' || !(target instanceof Element)) return false;
+  return (
+    target.matches('input, textarea, select, [aria-expanded="true"]') ||
+    target.closest('[role="menu"], [role="listbox"]') !== null
+  );
+}

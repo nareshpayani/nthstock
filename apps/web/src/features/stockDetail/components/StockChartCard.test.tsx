@@ -72,6 +72,18 @@ describe('stock price chart (T-107)', () => {
     expect(screen.queryByTestId('chart-zoom')).not.toBeInTheDocument();
   });
 
+  it('opens full screen with its own chart, the rail and the trading lines, and Close returns (NSTOCK-0461)', async () => {
+    renderApp('/stocks/INFY', { apiClient: api.apiClient });
+    await screen.findByTestId('chart-host');
+    const open = await screen.findByRole('button', { name: 'Open the chart full screen' });
+    fireEvent.click(open);
+    const dialog = screen.getByRole('dialog', { name: 'INFY chart' });
+    expect(within(dialog).getByRole('toolbar', { name: 'Drawing tools' })).toBeInTheDocument();
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Close full screen' }));
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(open).toHaveFocus();
+  });
+
   it('opens on the 1D area chart when the URL names no range', async () => {
     renderApp('/stocks/INFY', { apiClient: api.apiClient });
     expect(
