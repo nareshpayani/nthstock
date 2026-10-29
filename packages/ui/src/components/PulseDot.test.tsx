@@ -10,4 +10,11 @@ describe('PulseDot (NSTOCK-0462)', () => {
     const ripple = container.querySelector('[data-part="ripple"]');
     expect(ripple).toHaveClass('animate-ripple', 'motion-reduce:hidden', 'bg-down');
   });
+
+  it('defaults to the brand tone', () => {
+    const { container } = render(<PulseDot />);
+    const ripple = container.querySelector('[data-part="ripple"]');
+    expect(ripple).toHaveClass('bg-brand');
+    expect(ripple).not.toHaveClass('bg-down');
+  });
 });
