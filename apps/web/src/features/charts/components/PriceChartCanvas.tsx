@@ -3,6 +3,7 @@ import {
   AreaSeries,
   BarSeries,
   CandlestickSeries,
+  LastPriceAnimationMode,
   LineSeries,
   createChart,
   type BarData,
@@ -17,6 +18,7 @@ import { cn } from '@nthstock/ui';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { toAreaData, toCandleData, toChartTime, toHeikinAshi } from '../model/chartData';
 import { trailingChanges } from '../model/liveCandles';
+import { GLIDE_MS, closeOf, glidePoint } from '../model/tickGlide';
 import { visibleTickLabels } from '../model/axisTags';
 import { formatChartValue, type ChartDirection, type ChartValueFormat } from '../model/chartFormat';
 import {
@@ -113,6 +115,10 @@ export function PriceChartCanvas({
   // The tick labels last drawn and which of them show (NSTOCK-0446), to rebuild only on a change.
   const ticksRef = useRef<{ prices: readonly number[]; show: readonly boolean[] } | null>(null);
   const [hover, setHover] = useState<ChartTooltipState | null>(null);
+  // The running tick glide (A16), so a new tick or a rebuild can stop it.
+  const glideRef = useRef<number | null>(null);
+  // Where that glide ends, so cancelling it mid-way still draws the bar's final close.
+  const glideTargetRef = useRef<LineData<UTCTimestamp> | BarData<UTCTimestamp> | null>(null);
   // Kept in a ref so a new callback identity never rebuilds the chart.
   const onReadyRef = useRef(onReady);
   useLayoutEffect(() => {
@@ -136,6 +142,10 @@ export function PriceChartCanvas({
     });
     chartRef.current = chart;
     seriesRef.current = addSeries(chart, type, format);
+    // A16: the line's last point pulses once on each live tick, so the price reads as live.
+    if (!isBarType(type) && !reducedMotion()) {
+      seriesRef.current.applyOptions({ lastPriceAnimation: LastPriceAnimationMode.OnDataUpdate });
+    }
     // NSTOCK-0446: a tick label the live price tag or a line's tag would half cover is left out.
     const tagged = seriesRef.current;
     chart.applyOptions({
@@ -185,6 +195,9 @@ export function PriceChartCanvas({
     onReadyRef.current?.({ chart, series, host });
 
     return () => {
+      if (glideRef.current !== null) cancelAnimationFrame(glideRef.current);
+      glideRef.current = null;
+      glideTargetRef.current = null;
       onReadyRef.current?.(null);
       if (tooltip) chart.unsubscribeCrosshairMove(onCrosshairMove);
       setHover(null);
@@ -210,10 +223,45 @@ export function PriceChartCanvas({
     // The library's setData and update take the series' own point type; the switch above made
     // `points` match this series, which TypeScript cannot follow through the union.
     const target = series as ISeriesApi<'Bar'> & ISeriesApi<'Line'>;
+    if (glideRef.current !== null) cancelAnimationFrame(glideRef.current);
+    glideRef.current = null;
+    // A glide cut short by this update must not leave its bar at a half-eased close.
+    const cut = glideTargetRef.current;
+    glideTargetRef.current = null;
+    if (cut && drawn?.series === series) target.update(cut as BarData & LineData);
     if (changes) {
       // Heikin-Ashi bar i depends only on bars 0..i, so the changed tail is the HA tail too.
-      for (const point of points.slice(points.length - changes.length)) {
+      const tail = points.slice(points.length - changes.length);
+      const last = tail.at(-1);
+      const before =
+        drawn && type !== 'heikin' ? seriesData(type, drawn.candles.slice(-1)).at(-1) : undefined;
+      // A16: a tick that moves the last bar in place glides there over 160 ms instead of jumping,
+      // and the price rail's tabs ride along. A new bar, Heikin-Ashi and reduced motion jump.
+      const glide =
+        changes.length === 1 &&
+        last !== undefined &&
+        before !== undefined &&
+        before.time === last.time &&
+        type !== 'heikin' &&
+        !reducedMotion();
+      for (const point of glide ? tail.slice(0, -1) : tail) {
         target.update(point as BarData & LineData);
+      }
+      if (glide) {
+        const from = closeOf(before);
+        const started = performance.now();
+        const step = (now: number) => {
+          const progress = (now - started) / GLIDE_MS;
+          target.update(glidePoint(last, from, progress) as BarData & LineData);
+          if (progress < 1) {
+            glideRef.current = requestAnimationFrame(step);
+          } else {
+            glideRef.current = null;
+            glideTargetRef.current = null;
+          }
+        };
+        glideTargetRef.current = last;
+        glideRef.current = requestAnimationFrame(step);
       }
       // The live tag moved. Only when that changes which tick labels it covers, build them again
       // (applying price scale options tells the library its cached labels are stale): a rebuild on
