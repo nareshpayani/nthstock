@@ -1,6 +1,12 @@
+import type { Candle } from '@nthstock/contracts';
 import { colors } from '@nthstock/tokens';
 import { cn } from '@nthstock/ui';
-import type { LegendContent } from '../model/chartLegend';
+import type { IChartApi, MouseEventParams, Time } from 'lightweight-charts';
+import { memo, useEffect, useState } from 'react';
+import { toChartTime } from '../model/chartData';
+import type { ChartValueFormat } from '../model/chartFormat';
+import { legendContent, type LegendContent } from '../model/chartLegend';
+import type { StudyLine } from '../model/studies';
 import { STUDY_LINE_STYLES } from '../model/chartTheme';
 import { strings } from '../strings';
 
@@ -74,3 +80,44 @@ export function ChartLegend({ values, change, volume, studies }: LegendContent) 
     </div>
   );
 }
+
+type LiveChartLegendProps = {
+  chart: IChartApi;
+  candles: readonly Candle[];
+  lines: readonly StudyLine[];
+  format: ChartValueFormat;
+  volume: boolean;
+};
+
+/**
+ * The legend wired to a chart: it follows the crosshair itself, so a pointer moving over the plot
+ * (or dragging an order line) re-renders the legend alone, not the chart component (T25).
+ */
+export const LiveChartLegend = memo(function LiveChartLegend({
+  chart,
+  candles,
+  lines,
+  format,
+  volume,
+}: LiveChartLegendProps) {
+  // The bar under the crosshair, by its chart time; null shows the last bar.
+  const [time, setTime] = useState<number | null>(null);
+  useEffect(() => {
+    const onMove = (param: MouseEventParams<Time>) => {
+      setTime(param.point && param.time !== undefined ? Number(param.time) : null);
+    };
+    chart.subscribeCrosshairMove(onMove);
+    return () => {
+      chart.unsubscribeCrosshairMove(onMove);
+      setTime(null);
+    };
+  }, [chart]);
+  // A crosshair time that matches no candle (after a range change, say) shows the last bar.
+  const hovered =
+    time === null ? -1 : candles.findIndex((candle) => toChartTime(candle.t) === time);
+  const view = legendContent(candles, hovered === -1 ? candles.length - 1 : hovered, lines, {
+    format,
+    volume,
+  });
+  return view ? <ChartLegend {...view} /> : null;
+});

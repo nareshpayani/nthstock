@@ -54,6 +54,33 @@ describe('PriceChart studies (NSTOCK-0460)', () => {
     expect(seriesOf('Line')).toHaveLength(1);
   });
 
+  it('a live tick updates only the last volume bar and indicator point, not the whole series', async () => {
+    const candles = makeCandles({ count: 30 });
+    const view = render(<PriceChart candles={candles} label="c" studies={['volume', 'sma20']} />);
+    await chartMounted();
+    await waitFor(() => expect(seriesOf('Line')).toHaveLength(1));
+    const [volume] = seriesOf('Histogram');
+    const [sma] = seriesOf('Line');
+    const fills = [volume?.setData.mock.calls.length, sma?.setData.mock.calls.length];
+    const last = candles.at(-1);
+    if (!last) throw new Error('no candles');
+    const ticked = [...candles.slice(0, -1), { ...last, c: last.c + 500, v: last.v + 7 }];
+    view.rerender(<PriceChart candles={ticked} label="c" studies={['volume', 'sma20']} />);
+    expect([volume?.setData.mock.calls.length, sma?.setData.mock.calls.length]).toEqual(fills);
+    expect(volume?.update.mock.calls.at(-1)?.[0]).toMatchObject({ value: last.v + 7 });
+    expect(sma?.update).toHaveBeenCalledTimes(1);
+  });
+
+  it('redraws VWAP whole when a session gains its second bar and the first bar gets a value', async () => {
+    const [first, second] = makeCandles({ count: 2 });
+    if (!first || !second) throw new Error('no candles');
+    const view = render(<PriceChart candles={[first]} label="c" studies={['vwap']} />);
+    await chartMounted();
+    await waitFor(() => expect(seriesOf('Line')).toHaveLength(1));
+    view.rerender(<PriceChart candles={[first, second]} label="c" studies={['vwap']} />);
+    expect(seriesOf('Line')[0]?.setData.mock.calls.at(-1)?.[0]).toHaveLength(2);
+  });
+
   it('keeps the last bar in the legend when the crosshair time matches no candle', async () => {
     const candles = makeCandles({ count: 4 });
     render(<PriceChart candles={candles} label="c" legend studies={['volume']} />);

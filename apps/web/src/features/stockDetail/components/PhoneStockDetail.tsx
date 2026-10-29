@@ -1,6 +1,6 @@
 import type { Instrument, OrderSide, Quote } from '@nthstock/contracts';
 import { Button, Tabs, TabsContent, TabsList, TabsTrigger, TouchTargets, cn } from '@nthstock/ui';
-import { useId, useState, useSyncExternalStore, type ReactNode } from 'react';
+import { useId, useState, type ReactNode } from 'react';
 import { keepInterval } from '@/features/charts';
 import { ScalperPad } from '@/features/scalper';
 import { useOpenTicket } from '@/shared/hooks/useOpenTicket';
@@ -18,15 +18,10 @@ import { PositionStrip } from './PositionStrip';
 import { SimulatorPanel } from './SimulatorPanel';
 import { CHART_HEIGHT, StockChartCard } from './StockChartCard';
 import { StockHeader } from './StockHeader';
+import { useViewportHeight } from '@/shared/hooks/useViewportHeight';
 
 const PHONE_TABS = ['overview', 'depth', 'orders'] as const;
 type PhoneTab = (typeof PHONE_TABS)[number];
-
-const subscribeResize = (onChange: () => void) => {
-  window.addEventListener('resize', onChange);
-  return () => window.removeEventListener('resize', onChange);
-};
-const viewportHeight = () => window.innerHeight;
 
 export type PhoneStockDetailProps = {
   instrument: Instrument;
@@ -59,7 +54,7 @@ export function PhoneStockDetail({
   section,
 }: PhoneStockDetailProps) {
   const [tab, setTab] = useState<PhoneTab>('overview');
-  const height = useSyncExternalStore(subscribeResize, viewportHeight, () => 800);
+  const height = useViewportHeight();
   const landscape = useLandscapePhone();
   const chartHeight =
     height > 0

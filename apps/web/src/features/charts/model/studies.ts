@@ -8,7 +8,7 @@ import type { Candle } from '@nthstock/contracts';
 export const STUDY_IDS = ['volume', 'sma20', 'sma50', 'ema20', 'vwap', 'bollinger'] as const;
 export type StudyId = (typeof STUDY_IDS)[number];
 
-/** Volume shows by default; the owner asked for it on every chart (2026-10-29). */
+/** Volume shows by default (owner, 2026-10-29), except on a phone's first visit (studiesStore). */
 export const DEFAULT_STUDIES: readonly StudyId[] = ['volume'];
 
 export const isStudyId = (value: unknown): value is StudyId =>

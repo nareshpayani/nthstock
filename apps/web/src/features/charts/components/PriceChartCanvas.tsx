@@ -33,7 +33,6 @@ import {
 } from '../model/chartTheme';
 import { isBarType, type PriceChartType } from '../model/chartTypes';
 import { tooltipContent, type HoveredItem } from '../model/chartTooltip';
-import { legendContent } from '../model/chartLegend';
 import { hasVolume, studyLines, type StudyId, type StudyLine } from '../model/studies';
 import {
   VOLUME_HEIGHT,
@@ -42,7 +41,7 @@ import {
   volumeBarColor,
   volumeSeriesOptions,
 } from '../model/chartTheme';
-import { ChartLegend } from './ChartLegend';
+import { LiveChartLegend } from './ChartLegend';
 import { ChartTooltip, type ChartTooltipState } from './ChartTooltip';
 
 export type PriceChartCanvasProps = {
@@ -140,11 +139,18 @@ export function PriceChartCanvas({
   // The tick labels last drawn and which of them show (NSTOCK-0446), to rebuild only on a change.
   const ticksRef = useRef<{ prices: readonly number[]; show: readonly boolean[] } | null>(null);
   const [hover, setHover] = useState<ChartTooltipState | null>(null);
-  // The bar under the crosshair for the legend, by its chart time; null shows the last bar.
-  const [legendTime, setLegendTime] = useState<number | null>(null);
+  // The chart the legend follows; the legend keeps its own crosshair state (LiveChartLegend).
+  const [legendChart, setLegendChart] = useState<IChartApi | null>(null);
   // The chart the study series below belong to, so a rebuilt chart gets new ones.
   const studyChartRef = useRef<IChartApi | null>(null);
   const studySeriesRef = useRef(new Map<string, StudySeries>());
+  // What the study series last drew, so a live tick updates only their tail.
+  const studyDrawnRef = useRef<{
+    chart: IChartApi;
+    candles: readonly Candle[];
+    keys: string;
+    lines: readonly StudyLine[];
+  } | null>(null);
   // The running tick glide (A16), so a new tick or a rebuild can stop it.
   const glideRef = useRef<number | null>(null);
   // Where that glide ends, so cancelling it mid-way still draws the bar's final close.
@@ -223,10 +229,7 @@ export function PriceChartCanvas({
     };
     if (tooltip) chart.subscribeCrosshairMove(onCrosshairMove);
     const owned = studySeriesRef.current;
-    const onLegendMove = (param: MouseEventParams<Time>) => {
-      setLegendTime(param.point && param.time !== undefined ? Number(param.time) : null);
-    };
-    if (legend) chart.subscribeCrosshairMove(onLegendMove);
+    if (legend) setLegendChart(chart);
     // One direction per swipe (A13): up/down scrolls the page, sideways pans the chart.
     const unlockDirection = interactive ? installDirectionLock(host, chart) : undefined;
     onReadyRef.current?.({ chart, series, host });
@@ -238,9 +241,8 @@ export function PriceChartCanvas({
       glideTargetRef.current = null;
       onReadyRef.current?.(null);
       if (tooltip) chart.unsubscribeCrosshairMove(onCrosshairMove);
-      if (legend) chart.unsubscribeCrosshairMove(onLegendMove);
       setHover(null);
-      setLegendTime(null);
+      setLegendChart(null);
       owned.clear();
       studyChartRef.current = null;
       observer.disconnect();
@@ -285,6 +287,39 @@ export function PriceChartCanvas({
       main.priceScale().applyOptions({
         scaleMargins: showVolume ? PRICE_MARGINS_WITH_VOLUME : PRICE_MARGINS,
       });
+    }
+    // A live tick changes or appends only the last bar, and every study at bar i reads bars 0..i,
+    // so only that tail is updated: a full setData per series on each tick cost long frames on a
+    // throttled phone (T25 perf check).
+    const keys = [...wanted].sort().join(',');
+    const drawn = studyDrawnRef.current;
+    studyDrawnRef.current = { chart, candles, keys, lines };
+    const tail =
+      drawn?.chart === chart && drawn.keys === keys
+        ? trailingChanges(drawn.candles, candles)
+        : null;
+    const from = tail ? candles.length - tail.length : 0;
+    // A value before the tail can still change: VWAP has none until a session's second bar, then
+    // gains one on the first. Any such change redraws the whole line.
+    const prefixSame = lines.every((line, n) => {
+      const before = drawn?.lines[n]?.values;
+      return before !== undefined && line.values.slice(0, from).every((v, i) => v === before[i]);
+    });
+    if (tail && prefixSame) {
+      for (let i = from; i < candles.length; i += 1) {
+        const candle = candles[i];
+        if (!candle) continue;
+        const time = toChartTime(candle.t);
+        const volume = owned.get(VOLUME_SCALE_ID) as ISeriesApi<'Histogram'> | undefined;
+        volume?.update({ time, value: candle.v, color: volumeBarColor(candle.c >= candle.o) });
+        for (const line of lines) {
+          const value = line.values[i];
+          if (value !== null && value !== undefined) {
+            (owned.get(line.key) as ISeriesApi<'Line'> | undefined)?.update({ time, value });
+          }
+        }
+      }
+      return;
     }
     const times = candles.map((candle) => toChartTime(candle.t));
     if (showVolume) {
@@ -406,14 +441,6 @@ export function PriceChartCanvas({
     if (series?.seriesType() === 'Line') series.applyOptions(lineSeriesOptions(direction, format));
   }, [direction, format, type, intraday, height]);
 
-  // A crosshair time that matches no candle (after a range change, say) shows the last bar.
-  const hoveredIndex =
-    legendTime === null ? -1 : candles.findIndex((candle) => toChartTime(candle.t) === legendTime);
-  const legendIndex = hoveredIndex === -1 ? candles.length - 1 : hoveredIndex;
-  const legendView = legend
-    ? legendContent(candles, legendIndex, lines, { format, volume: showVolume })
-    : null;
-
   // `isolate` keeps the library's z-indexed canvases below an overlay drawn after the chart.
   return (
     <div
@@ -421,7 +448,15 @@ export function PriceChartCanvas({
       style={{ height }}
     >
       <div ref={hostRef} className="w-full" style={{ height }} data-testid="chart-host" />
-      {legendView ? <ChartLegend {...legendView} /> : null}
+      {legend && legendChart ? (
+        <LiveChartLegend
+          chart={legendChart}
+          candles={candles}
+          lines={lines}
+          format={format}
+          volume={showVolume}
+        />
+      ) : null}
       {hover ? <ChartTooltip {...hover} /> : null}
     </div>
   );

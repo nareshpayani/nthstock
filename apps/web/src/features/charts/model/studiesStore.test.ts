@@ -1,8 +1,9 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { DEFAULT_STUDIES } from './studies';
 import { STUDIES_STORAGE_KEY, readStudies, useChartStudies } from './studiesStore';
 
 afterEach(() => {
+  vi.unstubAllGlobals();
   window.localStorage.clear();
   useChartStudies.setState({ studies: readStudies() });
 });
@@ -10,6 +11,11 @@ afterEach(() => {
 describe('chart studies store (NSTOCK-0460)', () => {
   it('starts on the defaults when nothing is stored', () => {
     expect(readStudies()).toEqual([...DEFAULT_STUDIES]);
+  });
+
+  it('starts with nothing on a phone, where volume bars cost frame time (T25)', () => {
+    vi.stubGlobal('matchMedia', (query: string) => ({ matches: true, media: query }));
+    expect(readStudies()).toEqual([]);
   });
 
   it('restores the stored studies in menu order and drops unknown ids', () => {
