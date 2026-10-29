@@ -3,7 +3,7 @@ import { Link } from '@tanstack/react-router';
 import { memo } from 'react';
 import { useQuote } from '@/shared/hooks/useQuote';
 import { useForcedState, useOffline } from '@/shared/lib/connectivity';
-import { headerIndices, type HeaderIndex } from '../model/headerIndices';
+import { headerIndices, stripIndices, type HeaderIndex } from '../model/headerIndices';
 import { strings } from '../strings';
 
 type LiveIndexTickerProps = HeaderIndex & { compact: boolean; stacked: boolean };
@@ -56,14 +56,17 @@ const LiveIndexTicker = memo(function LiveIndexTicker({
   );
 });
 
-/** Nifty 50 and Sensex in the header, live from the quote store (T-092). */
+/** Nifty 50 and Sensex (or every index) in the header, live from the quote store (T-092). */
 export function HeaderTickers({
   className,
   compact = false,
   stacked = false,
+  all = false,
 }: {
   className?: string;
   compact?: boolean;
+  /** Every index, not only Nifty 50 and Sensex (the phone's drifting strip, A21). */
+  all?: boolean;
   /** Name above the figures, for the phone header (see `IndexTicker`). */
   stacked?: boolean;
 }) {
@@ -81,16 +84,16 @@ export function HeaderTickers({
         className,
       )}
     >
-      {/* First, so a narrow strip that clips its end still says it. */}
+      {/* First, and pinned, so a drifting or clipped strip still says it. */}
       {offline ? (
         <span
           data-testid="tickers-stale"
-          className="shrink-0 rounded-sm border border-line px-1.5 py-0.5 text-label font-medium whitespace-nowrap text-ink-muted"
+          className="sticky left-0 z-10 shrink-0 rounded-sm border border-line bg-surface px-1.5 py-0.5 text-label font-medium whitespace-nowrap text-ink-muted"
         >
           {strings.stale}
         </span>
       ) : null}
-      {headerIndices.map((index) => (
+      {(all ? stripIndices : headerIndices).map((index) => (
         <LiveIndexTicker key={index.symbol} {...index} compact={compact} stacked={stacked} />
       ))}
     </div>

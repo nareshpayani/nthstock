@@ -56,7 +56,7 @@ else is plain scripted automation. The full pipeline map is [ci-cd.md](ci-cd.md)
 | Agent: Spec planner (Planner) | agent | `.github/workflows/agent-spec-planner.yml` | `.claude/agents/spec-planner.md` |
 | Agent: Story developer (Developer) | agent | `.github/workflows/agent-story-developer.yml` | `.claude/agents/story-developer.md` |
 | Agent: PR reviewer (Reviewer) | agent | `.github/workflows/agent-pr-reviewer.yml` | `.claude/agents/pr-reviewer.md` |
-| Review specialists, report-only, called by the PR reviewer | agent | `.github/workflows/agent-pr-reviewer.yml` | `.claude/agents/frontend-reviewer.md`, `security-reviewer.md`, `database-reviewer.md`, `error-handling-reviewer.md`, `test-coverage-reviewer.md` |
+| Review specialists, report-only, called by the PR reviewer | agent | `.github/workflows/agent-pr-reviewer.yml` | `.claude/agents/frontend-reviewer.md`, `ux-design-reviewer.md`, `security-reviewer.md`, `database-reviewer.md`, `error-handling-reviewer.md`, `test-coverage-reviewer.md` |
 | Agent: PR fixer (Fixer): review findings, red CI, red develop | agent | `.github/workflows/agent-pr-fixer.yml` | `.claude/agents/pr-fixer.md` |
 | Agent: Merge conflict resolver | agent | `.github/workflows/agent-merge-conflict-resolver.yml` | `.claude/agents/merge-conflict-resolver.md` |
 | E2E test author (the way the Developer and Fixer write Playwright specs; no workflow) | agent | — | `.claude/agents/e2e-test-author.md` |

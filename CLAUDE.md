@@ -108,7 +108,7 @@ Node 22 is required (`.nvmrc`). On the owner's Mac: `export PATH="$(brew --prefi
 ## Claude Code setup (`.claude/`)
 | Path | What it holds |
 |---|---|
-| `agents/` | `spec-planner`, `story-developer`, `pr-reviewer`, `pr-fixer` and `merge-conflict-resolver` roles (used by GitHub Actions), and the report-only specialists the PR reviewer calls: `frontend-reviewer`, `security-reviewer`, `database-reviewer`, `error-handling-reviewer`, `test-coverage-reviewer`; plus `e2e-test-author` for Playwright specs |
+| `agents/` | `spec-planner`, `story-developer`, `pr-reviewer`, `pr-fixer` and `merge-conflict-resolver` roles (used by GitHub Actions), and the report-only specialists the PR reviewer calls: `frontend-reviewer`, `ux-design-reviewer`, `security-reviewer`, `database-reviewer`, `error-handling-reviewer`, `test-coverage-reviewer`; plus `e2e-test-author` for Playwright specs |
 | `rules/` | Detailed standards, loaded when you work in matching paths: `frontend`, `backend`, `packages`, `testing`, `git-and-prs` |
 | `skills/` | Repeatable procedures: `run-checks`, `local-dev`, `new-web-feature`, `new-api-module`, `browser-qa`, `production-audit`, `database-migrations`, `latency`, `release` |
 | `hooks/` | Automatic checks (see `hooks/README.md`): format + lint after each edit, typecheck of changed workspaces at the end of a turn, guards against pushing to `production` or `develop` and editing secrets or generated files |

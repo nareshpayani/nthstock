@@ -39,6 +39,37 @@ describe('stock price chart (T-107)', () => {
     expect(screen.queryByTestId('chart-overlay')).not.toBeInTheDocument();
   });
 
+  it('the zoom buttons narrow, widen and reset the bars on screen, and are absent while loading (NSTOCK-0452)', async () => {
+    renderApp('/stocks/INFY', { apiClient: api.apiClient });
+    // Loading: the skeleton shows and there are no zoom buttons yet.
+    expect(screen.queryByRole('group', { name: 'Zoom' })).not.toBeInTheDocument();
+    await screen.findByTestId('chart-host');
+    const chart = await waitFor(() => {
+      const found = chartsMock.active()[0];
+      expect(found).toBeDefined();
+      return found;
+    });
+    fireEvent.click(await screen.findByRole('button', { name: 'Zoom in' }));
+    expect(chart?.logicalRange).toEqual({ from: 20, to: 60 });
+    fireEvent.click(screen.getByRole('button', { name: 'Zoom out' }));
+    expect(chart?.logicalRange).toEqual({ from: 0, to: 60 });
+    fireEvent.click(screen.getByRole('button', { name: 'Reset zoom' }));
+    expect(chart?.fitContent).toHaveBeenCalled();
+  });
+
+  it('has no zoom buttons when the candles fail (NSTOCK-0452)', async () => {
+    const { http, HttpResponse } = await import('msw');
+    api.server.use(
+      http.get('*/v1/market/instruments/:symbol/candles', () =>
+        HttpResponse.json({ error: { code: 'INTERNAL_ERROR', message: 'boom' } }, { status: 500 }),
+      ),
+    );
+    renderApp('/stocks/INFY', { apiClient: api.apiClient });
+    expect(await screen.findByRole('alert')).toHaveTextContent('Chart unavailable');
+    expect(screen.queryByRole('button', { name: 'Zoom in' })).not.toBeInTheDocument();
+    expect(screen.queryByTestId('chart-zoom')).not.toBeInTheDocument();
+  });
+
   it('opens on the 1D area chart when the URL names no range', async () => {
     renderApp('/stocks/INFY', { apiClient: api.apiClient });
     expect(
@@ -229,7 +260,10 @@ describe('live chart (T-108, NSTOCK-0441)', () => {
     const setDataCalls = series?.setData.mock.calls.length;
     const inMinute = new Date(last.time * 1000 + 30_000).toISOString();
     act(() => quotes.push(testQuote('INFY', 151235, { ts: inMinute })));
-    expect(series?.update).toHaveBeenLastCalledWith({ time: last.time, value: 151235 });
+    // A tick on the same bar glides there over a few frames (A16).
+    await waitFor(() =>
+      expect(series?.update).toHaveBeenLastCalledWith({ time: last.time, value: 151235 }),
+    );
 
     const nextMinute = new Date(last.time * 1000 + 65_000).toISOString();
     act(() => quotes.push(testQuote('INFY', 151300, { ts: nextMinute })));
@@ -290,7 +324,7 @@ describe('live chart (T-108, NSTOCK-0441)', () => {
         testQuote('INFY', 151235, { ts: new Date(last.time * 1000 + 1_000).toISOString() }),
       ),
     );
-    expect(series?.update).toHaveBeenCalled();
+    await waitFor(() => expect(series?.update).toHaveBeenCalled());
   });
 
   it('does not follow ticks on 1D when the market is closed', async () => {

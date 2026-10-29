@@ -16,6 +16,7 @@ import { Link } from '@tanstack/react-router';
 import { ProfileMenu } from '@/features/auth';
 import { HeaderTickers, MarketStatusPill } from '@/features/marketTicker';
 import { NotificationBell } from '@/features/notifications';
+import { useAutoScroll } from '@/shared/hooks/useAutoScroll';
 import { usePhoneLayout } from '@/shared/hooks/usePhoneLayout';
 import { strings } from '../strings';
 import { navItems } from './navItems';
@@ -29,11 +30,13 @@ export type HeaderProps = {
  * Top bar in the reference layout: logo, Nifty 50 and Sensex, main tabs, market status, support,
  * profile and More. Below 1360 px the tickers and status move to a strip under the bar; below
  * 1024 px the tabs move into the menu drawer. On a phone the strip packs tighter (SPEC-CR-1 §6.2):
- * a status dot with one word, and each index with its name above the figures, so both fit from
- * 320 px; anything narrower scrolls inside the strip, with a fade at the edge.
+ * a status dot with one word, and each index with its name above the figures. All five indices
+ * do not fit, so the strip drifts and scrolls sideways, with a fade at the edge as the cue.
  */
 export function Header({ onOpenMenu, onOpenHelp }: HeaderProps) {
   const phone = usePhoneLayout();
+  // The strip drifts so every index gets seen on a narrow phone (A21).
+  const stripRef = useAutoScroll<HTMLDivElement>(phone);
   return (
     <header className="sticky top-0 z-(--nth-z-header) border-b border-line bg-surface pt-[env(safe-area-inset-top)]">
       <div className="flex h-14 items-center gap-2 px-3 sm:gap-3 lg:gap-5 lg:px-6">
@@ -105,13 +108,14 @@ export function Header({ onOpenMenu, onOpenHelp }: HeaderProps) {
       {/* Scrolls sideways on narrow screens, so it takes focus for keyboard scrolling (WCAG 2.1.1,
           axe scrollable-region-focusable). */}
       <div
+        ref={stripRef}
         role="region"
         aria-label={strings.header.statusStrip}
         tabIndex={0}
-        className="relative flex h-10 items-center gap-4 overflow-x-auto border-t border-line px-3 max-[359px]:mask-r-from-85% lg:px-6 min-[1360px]:hidden"
+        className="relative flex h-10 items-center gap-4 overflow-x-auto border-t border-line px-3 max-[767px]:mask-r-from-85% lg:px-6 min-[1360px]:hidden"
       >
         <MarketStatusPill compact={!phone} dot={phone} className="shrink-0" />
-        <HeaderTickers compact stacked={phone} className="shrink-0" />
+        <HeaderTickers compact stacked={phone} all={phone} className="shrink-0" />
       </div>
     </header>
   );

@@ -4,19 +4,10 @@ import {
   type CandleInterval,
   type CandleRange,
 } from '@nthstock/contracts';
-import {
-  ErrorState,
-  IconButton,
-  IconChevronRight,
-  IconMinus,
-  IconPlus,
-  IconRefresh,
-  SegmentedControl,
-  Skeleton,
-} from '@nthstock/ui';
+import { ErrorState, IconChevronRight, SegmentedControl, Skeleton } from '@nthstock/ui';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { Link, useNavigate } from '@tanstack/react-router';
-import { useRef, useState, type PointerEvent } from 'react';
+import { useEffect, useRef, useState, type PointerEvent } from 'react';
 import { Card } from '@/shared/components/Card';
 import { LiveChange } from '@/shared/components/LiveChange';
 import { PriceCell } from '@/shared/components/PriceCell';
@@ -27,6 +18,7 @@ import { useApiClient } from '@/shared/lib/apiClientContext';
 import { candlesQuery } from '../api/candlesQuery';
 import { useLiveCandles } from '../hooks/useLiveCandles';
 import { DEFAULT_INDEX_CHART_TYPE, chartTypeName, type PriceChartType } from '../model/chartTypes';
+import { DOUBLE_TAP_MS } from '../model/directionLock';
 import {
   CHART_RANGES,
   NIFTY,
@@ -37,10 +29,10 @@ import {
 } from '../model/ranges';
 import { strings } from '../strings';
 import { ChartTypeMenu } from './ChartTypeMenu';
+import { ChartZoomControls } from './ChartZoomControls';
 import { LiveBadge } from './LiveBadge';
 import { PriceChart } from './PriceChart';
 import type { ChartHandle } from './PriceChartCanvas';
-import { zoomedLogicalRange } from '../model/chartZoom';
 
 export type IndexChartCardProps = {
   range: CandleRange;
@@ -85,6 +77,18 @@ export function IndexChartCard({
   const pressRef = useRef<{ id: number; x: number; y: number; at: number } | null>(null);
   // Fingers down on the plot: a second one makes it a pinch, never a tap.
   const pointersRef = useRef(new Set<number>());
+  // A touch tap waits out the double-tap window, so a second press can start the one-thumb zoom.
+  const openTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const cancelOpen = () => {
+    if (openTimerRef.current !== null) clearTimeout(openTimerRef.current);
+    openTimerRef.current = null;
+  };
+  useEffect(
+    () => () => {
+      if (openTimerRef.current !== null) clearTimeout(openTimerRef.current);
+    },
+    [],
+  );
   const phone = usePhoneLayout();
   const interval = resolveInterval(range, requestedInterval);
   const intervals = CANDLE_INTERVALS[range];
@@ -109,6 +113,7 @@ export function IndexChartCard({
     return event.clientX >= event.currentTarget.getBoundingClientRect().right - axis;
   };
   const onPointerDown = (event: PointerEvent<HTMLDivElement>) => {
+    cancelOpen();
     // A primary pointer is the first one down, so any id still held is stale (a press that ended
     // off the plot).
     if (event.isPrimary) pointersRef.current.clear();
@@ -124,17 +129,20 @@ export function IndexChartCard({
     pressRef.current = null;
     if (!press || press.id !== event.pointerId) return;
     const moved = Math.hypot(event.clientX - press.x, event.clientY - press.y);
-    if (moved <= TAP_SLOP && pressTime() - press.at <= TAP_MAX_MS) void openChart();
+    if (moved > TAP_SLOP || pressTime() - press.at > TAP_MAX_MS) return;
+    if (event.pointerType === 'touch') {
+      openTimerRef.current = setTimeout(() => {
+        openTimerRef.current = null;
+        void openChart();
+      }, DOUBLE_TAP_MS);
+    } else {
+      void openChart();
+    }
   };
   const onPointerCancel = (event: PointerEvent<HTMLDivElement>) => {
+    cancelOpen();
     pointersRef.current.delete(event.pointerId);
     pressRef.current = null;
-  };
-  const zoom = (steps: number) => {
-    const timeScale = chart?.chart.timeScale();
-    const visible = timeScale?.getVisibleLogicalRange();
-    if (!timeScale || !visible) return;
-    timeScale.setVisibleLogicalRange(zoomedLogicalRange(visible, steps));
   };
   const marketOpen = useMarketOpen();
   const candles = useQuery({
@@ -225,32 +233,7 @@ export function IndexChartCard({
         <LiveChange symbol={NIFTY.symbol} exchange={NIFTY.exchange} format="index" soft size="md" />
       </div>
       <div aria-busy={candles.isFetching} className="relative">
-        {chart && candles.data ? (
-          <div
-            role="group"
-            aria-label={strings.zoom.label}
-            className="absolute top-1 left-1 z-10 flex gap-1 rounded-md border border-line bg-surface/90 p-0.5"
-          >
-            <IconButton
-              size="sm"
-              label={strings.zoom.out}
-              icon={<IconMinus aria-hidden="true" className="size-4" />}
-              onClick={() => zoom(-1)}
-            />
-            <IconButton
-              size="sm"
-              label={strings.zoom.in}
-              icon={<IconPlus aria-hidden="true" className="size-4" />}
-              onClick={() => zoom(1)}
-            />
-            <IconButton
-              size="sm"
-              label={strings.zoom.reset}
-              icon={<IconRefresh aria-hidden="true" className="size-4" />}
-              onClick={() => chart.chart.timeScale().fitContent()}
-            />
-          </div>
-        ) : null}
+        {chart && candles.data ? <ChartZoomControls chart={chart.chart} /> : null}
         {candles.isError && !candles.data ? (
           <div style={{ height: CHART_HEIGHT }} className="grid place-items-center">
             <ErrorState

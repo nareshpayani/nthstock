@@ -100,6 +100,14 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
+// jsdom has no AnimationEvent, so the init's animationName is dropped; set it on the event.
+function animationEnd(target: Element, animationName: string) {
+  // React listens on the vendor-prefixed name when jsdom's style object exposes WebkitAnimation.
+  const type = 'WebkitAnimation' in document.body.style ? 'webkitAnimationEnd' : 'animationend';
+  const event = Object.assign(new Event(type, { bubbles: true }), { animationName });
+  fireEvent(target, event);
+}
+
 describe('order ticket with the market open', () => {
   const mock = mockAt(OPEN_MS);
   beforeAll(() => mock.server.listen({ onUnhandledFrame: 'error' }));
@@ -306,6 +314,15 @@ describe('order ticket with the market open', () => {
       // Edit goes back with the values kept.
       fireEvent.click(within(summary).getByRole('button', { name: 'Edit' }));
       await waitFor(() => expect(qtyInput()).toHaveValue('2'));
+
+      // The step-back slide survives a child's animation end and clears on its own.
+      const slide = qtyInput().closest('.animate-step-back') as HTMLElement;
+      expect(slide).not.toBeNull();
+      animationEnd(qtyInput(), 'nth-digit-up');
+      expect(slide).toHaveClass('animate-step-back');
+      animationEnd(slide, 'nth-step-back');
+      expect(slide).not.toHaveClass('animate-step-back');
+
       fireEvent.click(screen.getByRole('button', { name: 'Buy INFY' }));
       const confirm = await screen.findByRole('button', { name: 'Confirm' });
       fireEvent.click(confirm);
@@ -474,6 +491,57 @@ describe('order ticket with the market open', () => {
     );
 
     it(
+      'has a ruler that follows focus between quantity and price',
+      async () => {
+        stubViewport(true);
+        await renderTicket(mock.session);
+        const { dialog } = await openTicket();
+        const qtyRuler = within(dialog).getByRole('slider', { name: 'Adjust quantity' });
+        const qtyBefore = Number(qtyRuler.getAttribute('aria-valuenow'));
+        fireEvent.keyDown(qtyRuler, { key: 'ArrowRight' });
+        await waitFor(() =>
+          expect(within(dialog).getByRole('slider', { name: 'Adjust quantity' })).toHaveAttribute(
+            'aria-valuenow',
+            String(qtyBefore + 1),
+          ),
+        );
+
+        fireEvent.click(within(dialog).getByRole('radio', { name: 'Limit' }));
+        fireEvent.focusIn(priceInput());
+        const priceRuler = await within(dialog).findByRole('slider', { name: 'Adjust price' });
+        const priceBefore = priceRuler.getAttribute('aria-valuenow');
+        fireEvent.keyDown(priceRuler, { key: 'ArrowRight' });
+        await waitFor(() =>
+          expect(
+            within(dialog)
+              .getByRole('slider', { name: 'Adjust price' })
+              .getAttribute('aria-valuenow'),
+          ).not.toBe(priceBefore),
+        );
+
+        fireEvent.focusIn(qtyInput());
+        expect(
+          await within(dialog).findByRole('slider', { name: 'Adjust quantity' }),
+        ).toBeInTheDocument();
+      },
+      HEAVY,
+    );
+
+    it(
+      'keeps the ruler on quantity for a market order with price focused',
+      async () => {
+        stubViewport(true);
+        await renderTicket(mock.session);
+        const { dialog } = await openTicket();
+        fireEvent.click(within(dialog).getByRole('radio', { name: 'Market' }));
+        fireEvent.focusIn(priceInput());
+        expect(within(dialog).getByRole('slider', { name: 'Adjust quantity' })).toBeInTheDocument();
+        expect(within(dialog).queryByRole('slider', { name: 'Adjust price' })).toBeNull();
+      },
+      HEAVY,
+    );
+
+    it(
       'shows product inline and no toggle on wider screens',
       async () => {
         stubViewport(false);
@@ -481,6 +549,7 @@ describe('order ticket with the market open', () => {
         const { dialog } = await openTicket();
         expect(within(dialog).queryByRole('button', { name: /More options/ })).toBeNull();
         expect(within(dialog).getByRole('radiogroup', { name: 'Product' })).toBeInTheDocument();
+        expect(within(dialog).queryByTestId('ticket-ruler')).toBeNull();
       },
       HEAVY,
     );

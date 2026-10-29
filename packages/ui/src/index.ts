@@ -1,10 +1,18 @@
 export { cn, type ClassValue } from './lib/cn.js';
+export {
+  animateSpring,
+  isAtRest,
+  stepSpring,
+  type SpringOptions,
+  type SpringState,
+} from './lib/spring.js';
 export { TouchTargets, useTouchTargets } from './lib/touchTargets.js';
 export { createIcon, type IconComponent, type IconProps } from './icons/createIcon.js';
 export * from './icons/icons.js';
 export { Logo, type LogoProps } from './icons/Logo.js';
 export { Button, buttonVariants, type ButtonProps } from './components/Button.js';
 export { IconButton, iconButtonVariants, type IconButtonProps } from './components/IconButton.js';
+export { RulerSlider, type RulerSliderProps } from './components/RulerSlider.js';
 export { Spinner } from './components/Spinner.js';
 export { SuccessCheck } from './components/SuccessCheck.js';
 export {

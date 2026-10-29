@@ -118,13 +118,14 @@ describe('IndexChartCard (T-095)', () => {
 
   const press = (
     plot: HTMLElement,
-    down: { x?: number; id?: number; button?: number; at?: number },
+    down: { x?: number; id?: number; button?: number; at?: number; type?: string },
     up: { x?: number; id?: number; at?: number } = {},
   ) => {
     const now = vi.spyOn(performance, 'now').mockReturnValue(down.at ?? 0);
     fireEvent.pointerDown(plot, {
       pointerId: down.id ?? 1,
       isPrimary: true,
+      pointerType: down.type ?? 'mouse',
       button: down.button ?? 0,
       clientX: down.x ?? 100,
       clientY: 50,
@@ -132,6 +133,7 @@ describe('IndexChartCard (T-095)', () => {
     now.mockReturnValue(up.at ?? down.at ?? 0);
     fireEvent.pointerUp(plot, {
       pointerId: up.id ?? down.id ?? 1,
+      pointerType: down.type ?? 'mouse',
       button: down.button ?? 0,
       clientX: up.x ?? down.x ?? 100,
       clientY: 50,
@@ -188,6 +190,32 @@ describe('IndexChartCard (T-095)', () => {
     press(plotOf(), { x: 100, at: 0 }, { x: 102, at: 120 });
     expect(await screen.findByRole('heading', { name: 'Stock NIFTY50' })).toBeInTheDocument();
     expect(router.state.location.search).toEqual({ exchange: 'NSE', range: '1Y', chart: 'line' });
+  });
+
+  it('a touch tap opens the page after the double-tap window, not at once (NSTOCK-0452)', async () => {
+    const { router } = renderCard();
+    await screen.findByTestId('chart-host');
+    press(plotOf(), { x: 100, at: 0, type: 'touch' }, { x: 101, at: 80 });
+    await stillOnDashboard(router);
+    expect(await screen.findByRole('heading', { name: 'Stock NIFTY50' })).toBeInTheDocument();
+  });
+
+  it('a second press inside the double-tap window cancels the open, so the zoom can start (NSTOCK-0452)', async () => {
+    const { router } = renderCard();
+    await screen.findByTestId('chart-host');
+    const plot = plotOf();
+    press(plot, { x: 100, at: 0, type: 'touch' }, { x: 101, at: 80 });
+    // The second press of a double-tap goes down and is held for the slide.
+    fireEvent.pointerDown(plot, {
+      pointerId: 2,
+      isPrimary: true,
+      pointerType: 'touch',
+      button: 0,
+      clientX: 102,
+      clientY: 50,
+    });
+    await act(() => new Promise((resolve) => setTimeout(resolve, 450)));
+    expect(router.state.location.pathname).toBe('/');
   });
 
   it('opens as a line of 1-minute bars on 1D and offers every 1D bar size (NSTOCK-0443)', async () => {
@@ -354,7 +382,10 @@ describe('IndexChartCard (T-095)', () => {
     // 1Y draws daily bars: a tick on the last bar's day moves it, the next trading day adds one.
     const sameDay = new Date(last.time * 1000 + 60_000).toISOString();
     act(() => quotes.push(testQuote('NIFTY50', 2541860, { ts: sameDay })));
-    expect(series?.update).toHaveBeenLastCalledWith({ time: last.time, value: 2541860 });
+    // A tick on the same bar glides there over a few frames (A16).
+    await waitFor(() =>
+      expect(series?.update).toHaveBeenLastCalledWith({ time: last.time, value: 2541860 }),
+    );
     const nextDay = new Date(last.time * 1000 + 86_400_000).toISOString();
     act(() => quotes.push(testQuote('NIFTY50', 2542000, { ts: nextDay })));
     expect(series?.update).toHaveBeenLastCalledWith({

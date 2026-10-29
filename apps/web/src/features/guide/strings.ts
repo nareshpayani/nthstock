@@ -1557,6 +1557,11 @@ export const strings = {
               'React hooks, render and state bugs, accessibility, render performance',
             ],
             [
+              'UX design reviewer',
+              'PRs that change the web UI',
+              'Design tokens, phone layout from 320 px, touch targets, every state, motion, colour meaning',
+            ],
+            [
               'Security reviewer',
               'PRs touching auth, orders, funds or routes',
               'Checks against OWASP ASVS L2, DPDP and the public-repo rules',
@@ -1822,13 +1827,13 @@ export const strings = {
     agents: {
       title: 'Agent loop',
       description:
-        'The owner approves a plan. The Planner writes a spec and stories; merging the spec makes the stories ready. The Developer opens a PR; the Reviewer, with five specialists, approves it or sends it to the Fixer. Approved green PRs are merged and their issues closed automatically.',
+        'The owner approves a plan. The Planner writes a spec and stories; merging the spec makes the stories ready. The Developer opens a PR; the Reviewer, with six specialists, approves it or sends it to the Fixer. Approved green PRs are merged and their issues closed automatically.',
       groups: {},
       nodes: {
         owner: ['Owner', 'approves specs,', 'asks for releases'],
         planner: ['Planner', 'spec + stories'],
         developer: ['Developer', 'builds a story'],
-        reviewer: ['Reviewer', '+ 5 specialists'],
+        reviewer: ['Reviewer', '+ 6 specialists'],
         fixer: ['Fixer', 'findings, red CI'],
         merge: ['Auto-merge', 'close issues'],
       },
@@ -1844,7 +1849,7 @@ export const strings = {
         'The owner labels an issue plan:approved.',
         'The Planner writes a spec PR and story issues. When the owner merges the spec, the stories become agent:ready.',
         'The Developer builds a story and opens a PR.',
-        'The Reviewer, helped by the frontend, security, database, error-handling and test-coverage specialists, labels the PR ready-to-merge or agent:fix-needed.',
+        'The Reviewer, helped by the frontend, UX design, security, database, error-handling and test-coverage specialists, labels the PR ready-to-merge or agent:fix-needed.',
         'The Fixer pushes fixes for blocking findings and red CI to the same PR, and the Reviewer looks again.',
         'Auto-merge squash-merges green, approved PRs and closes their issues.',
       ],
