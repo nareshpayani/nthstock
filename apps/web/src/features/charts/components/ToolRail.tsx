@@ -1,7 +1,7 @@
 import { cn, useTouchTargets } from '@nthstock/ui';
 import type { ReactNode } from 'react';
 import { DRAWING_TOOLS, type DrawingTool } from '../model/drawings';
-import { useDrawings, useSymbolDrawings } from '../model/drawingsStore';
+import { isUnprotected, useDrawings, useSymbolDrawings } from '../model/drawingsStore';
 import { strings } from '../strings';
 
 const svg = (children: ReactNode) => (
@@ -118,7 +118,8 @@ export function ToolRail({ symbol, touch: touchProp = false, height, className }
   const clear = useDrawings((state) => state.clear);
   const count = useSymbolDrawings(symbol).length;
   const canRestore = useDrawings((state) => state.cleared[symbol] !== undefined);
-  const unsaved = useDrawings((state) => state.unsaved[symbol] === true);
+  // Shown from the first read when the stored value can't be kept safe, before any edit.
+  const unsaved = useDrawings((state) => state.unsaved[symbol] === true) || isUnprotected(symbol);
   return (
     <div className={cn('relative', className)}>
       <div

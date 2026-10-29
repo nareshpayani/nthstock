@@ -1,5 +1,6 @@
 import type { Candle } from '@nthstock/contracts';
 import { act, fireEvent, render, screen } from '@testing-library/react';
+import { colors } from '@nthstock/tokens';
 import { ToastProvider, useToast } from '@nthstock/ui';
 import type { ReactNode } from 'react';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -143,6 +144,8 @@ describe('drawing tools (NSTOCK-0461)', () => {
         to: { time: T0 + 15 * 60, price: 158_000 },
       }),
     ]);
+    // Ink, not brand blue: blue is for actions and the Buy order lines.
+    expect(layer.querySelector('line')).toHaveAttribute('stroke', colors.ink);
   });
 
   it('draws a ray on to the plot edge, and Fibonacci levels between two taps', () => {
@@ -484,6 +487,13 @@ describe('saved drawings (NSTOCK-0461)', () => {
     expect(window.localStorage.getItem(unreadableDrawingsKey('HDFC'))).toBe('first');
     expect(window.localStorage.getItem(drawingsStorageKey('HDFC'))).toBe('{not json');
     expect(useDrawings.getState().unsaved.HDFC).toBe(true);
+  });
+
+  it('shows the not-saved note on first read when a second unreadable value cannot be kept', () => {
+    window.localStorage.setItem(unreadableDrawingsKey('ITC'), 'first');
+    window.localStorage.setItem(drawingsStorageKey('ITC'), '{also not json');
+    renderTools('ITC');
+    expect(screen.getByTestId('drawings-not-saved')).toHaveTextContent("can't be saved");
   });
 
   it('puts a picked tool down when the chart goes', () => {

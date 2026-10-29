@@ -11,6 +11,9 @@ export const unreadableDrawingsKey = (symbol: string) => `${drawingsStorageKey(s
 // Symbols whose stored value could not be read nor set aside: saving over it would lose it.
 const unprotected = new Set<string>();
 
+/** Whether this symbol's stored drawings can't be saved over safely (read them first). */
+export const isUnprotected = (symbol: string) => unprotected.has(symbol);
+
 function readDrawings(symbol: string): Drawing[] {
   const raw = safeStorage.get(drawingsStorageKey(symbol));
   if (raw === null) return [];

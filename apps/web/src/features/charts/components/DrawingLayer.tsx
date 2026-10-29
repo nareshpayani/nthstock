@@ -222,7 +222,12 @@ export function DrawingLayer({ handle, candles, symbol, format }: DrawingLayerPr
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
         onPointerCancel={() => {
+          // A cancelled touch (a system gesture, a call) drops the half-made drawing too.
           pressRef.current = null;
+          startRef.current = null;
+          armedRef.current = false;
+          setStart(null);
+          setEnd(null);
         }}
       >
         {[...drawings, ...(preview ? [preview] : [])].map((drawing) => (
