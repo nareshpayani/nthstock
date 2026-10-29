@@ -167,6 +167,7 @@ describe('Header phone strip (A21)', () => {
     });
     Object.defineProperty(HTMLElement.prototype, 'scrollWidth', { value: 400, configurable: true });
     Object.defineProperty(HTMLElement.prototype, 'clientWidth', { value: 200, configurable: true });
+    phone.value = true;
     renderHeader(null);
     const strip = await screen.findByRole('region', { name: 'Market status and indices' });
     const total = AUTO_SCROLL_REST_MS + (200 / AUTO_SCROLL_SPEED) * 1000;

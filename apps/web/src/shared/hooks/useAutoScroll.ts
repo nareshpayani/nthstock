@@ -8,6 +8,8 @@ export const AUTO_SCROLL_REST_MS = 2500;
 export const AUTO_SCROLL_CYCLES = 3;
 /** A gap between frames longer than this means the page was hidden; that time does not count. */
 export const AUTO_SCROLL_HIDDEN_GAP_MS = 250;
+/** While nothing overflows, look again this often (ms) instead of every frame. */
+export const AUTO_SCROLL_RECHECK_MS = 1000;
 
 type Phase = 'rest' | 'out' | 'back';
 
@@ -46,20 +48,19 @@ export function driftAt(elapsedMs: number, overflowPx: number): number | null {
  * so the user is never fighting it (WCAG 2.2.2). Nothing moves under reduced motion, while the
  * page is hidden, or when everything already fits.
  */
-export function useAutoScroll<T extends HTMLElement>() {
+export function useAutoScroll<T extends HTMLElement>(enabled = true) {
   const ref = useRef<T>(null);
   useEffect(() => {
     const element = ref.current;
-    if (!element || prefersReducedMotion()) return;
+    if (!enabled || !element || prefersReducedMotion()) return;
     let frame = 0;
+    let recheck: ReturnType<typeof setTimeout> | undefined;
     let start: number | undefined;
     let last: number | undefined;
-    let observer: ResizeObserver | undefined;
-    const overflowPx = () => element.scrollWidth - element.clientWidth;
     const stop = () => {
       cancelAnimationFrame(frame);
+      clearTimeout(recheck);
       frame = 0;
-      observer?.disconnect();
       element.removeEventListener('pointerdown', stop);
       element.removeEventListener('wheel', stop);
       element.removeEventListener('focusin', stop);
@@ -71,13 +72,15 @@ export function useAutoScroll<T extends HTMLElement>() {
         start += now - last;
       last = now;
       start ??= now;
-      const overflow = overflowPx();
-      // Nothing to show (it fits, or the quotes are still skeletons): park the loop. The
-      // observer wakes it when the layout changes, so a fitting strip costs no frames.
+      const overflow = element.scrollWidth - element.clientWidth;
+      // Nothing to show yet (skeletons, or a layout that changes later): wait, do not give up,
+      // but look again on a slow timer, not every frame (a frame loop costs the main thread).
       if (overflow <= 0) {
-        frame = 0;
         start = undefined;
         last = undefined;
+        recheck = setTimeout(() => {
+          frame = requestAnimationFrame(tick);
+        }, AUTO_SCROLL_RECHECK_MS);
         return;
       }
       const at = driftAt(now - start, overflow);
@@ -88,21 +91,12 @@ export function useAutoScroll<T extends HTMLElement>() {
       element.scrollLeft = Math.round(at * overflow);
       frame = requestAnimationFrame(tick);
     };
-    const wake = () => {
-      if (frame === 0 && overflowPx() > 0) frame = requestAnimationFrame(tick);
-    };
     element.addEventListener('pointerdown', stop);
     element.addEventListener('wheel', stop, { passive: true });
     element.addEventListener('focusin', stop);
     element.addEventListener('keydown', stop);
-    if (typeof ResizeObserver === 'function') {
-      // The strip itself (rotation, breakpoints) and its content (quotes arriving).
-      observer = new ResizeObserver(wake);
-      observer.observe(element);
-      for (const child of Array.from(element.children)) observer.observe(child);
-    }
-    wake();
+    frame = requestAnimationFrame(tick);
     return stop;
-  }, []);
+  }, [enabled]);
   return ref;
 }
