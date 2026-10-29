@@ -3,6 +3,7 @@ import type { ButtonHTMLAttributes, ReactNode, Ref } from 'react';
 import { cn } from '../lib/cn.js';
 import { useTouchTargets } from '../lib/touchTargets.js';
 import { Spinner } from './Spinner.js';
+import { SuccessCheck } from './SuccessCheck.js';
 
 export const buttonVariants = cva(
   'inline-flex shrink-0 items-center justify-center gap-2 font-semibold whitespace-nowrap transition-colors duration-(--nth-duration-flash) select-none disabled:cursor-not-allowed disabled:opacity-50 aria-busy:cursor-progress',
@@ -34,6 +35,11 @@ export type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> &
   VariantProps<typeof buttonVariants> & {
     /** Shows a spinner, sets aria-busy and blocks clicks while an action runs. */
     loading?: boolean;
+    /**
+     * Shows a drawn tick in place of the spinner once the action has succeeded, and keeps blocking
+     * clicks, for the moment before its sheet closes (order feedback, A17).
+     */
+    success?: boolean;
     /** Icon shown before the label. */
     icon?: ReactNode;
     ref?: Ref<HTMLButtonElement>;
@@ -44,6 +50,7 @@ export function Button({
   size,
   block,
   loading = false,
+  success = false,
   icon,
   disabled,
   className,
@@ -63,10 +70,10 @@ export function Button({
       )}
       disabled={disabled}
       aria-busy={loading || undefined}
-      onClick={loading ? (event) => event.preventDefault() : onClick}
+      onClick={loading || success ? (event) => event.preventDefault() : onClick}
       {...rest}
     >
-      {loading ? <Spinner /> : icon}
+      {success ? <SuccessCheck /> : loading ? <Spinner /> : icon}
       {children}
     </button>
   );

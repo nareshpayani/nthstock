@@ -38,6 +38,20 @@ describe('Button', () => {
     expect(onClick).not.toHaveBeenCalled();
   });
 
+  it('shows a drawn tick in place of the spinner and ignores clicks once it succeeded', () => {
+    const onClick = vi.fn();
+    render(
+      <Button loading success onClick={onClick}>
+        Buy
+      </Button>,
+    );
+    const button = screen.getByRole('button', { name: 'Buy' });
+    expect(screen.getByTestId('success-check')).toBeInTheDocument();
+    expect(button.querySelector('.animate-spin')).toBeNull();
+    fireEvent.click(button);
+    expect(onClick).not.toHaveBeenCalled();
+  });
+
   it('applies variant classes and defaults to type=button', () => {
     render(<Button variant="buy">Buy</Button>);
     const button = screen.getByRole('button', { name: 'Buy' });

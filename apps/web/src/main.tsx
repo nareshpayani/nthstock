@@ -13,6 +13,7 @@ import { writeTradingCommit } from './app/live/tradingCache';
 import { bindTradingSession } from './app/live/tradingSession';
 import { restSnapshot, startVisibilitySync } from './app/live/visibilitySync';
 import { startConnectivity } from './shared/lib/connectivity';
+import { installOrderSoundUnlock } from './shared/motion/orderSounds';
 import { installStaleBuildReload } from './app/staleBuild';
 import { wantsDemo, withoutDemoParam } from './mocks/demoParam';
 import { createSessionApiClient } from './shared/lib/sessionClient';
@@ -71,6 +72,8 @@ function boot() {
   }
   // A tab older than the last deploy reloads to the current build instead of a broken page.
   installStaleBuildReload();
+  // Order sounds (A17) need audio opened inside a gesture: the first tap or key press does it.
+  installOrderSoundUnlock();
 
   // VITE_API_MODE is a build-time constant (vite.config.ts), so in an api-mode build this branch
   // and the MSW chunk it imports are removed entirely (T-050), and nothing is gated.
