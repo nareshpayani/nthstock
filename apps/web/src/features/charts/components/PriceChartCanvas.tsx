@@ -420,7 +420,9 @@ export function PriceChartCanvas({
         const from = closeOf(before);
         const started = performance.now();
         const step = (now: number) => {
-          const progress = (now - started) / GLIDE_MS;
+          // A frame's timestamp can trail performance.now() (jsdom's run behind it by as long as
+          // the test worker has been up), so the later of the two is the time.
+          const progress = (Math.max(now, performance.now()) - started) / GLIDE_MS;
           target.update(glidePoint(last, from, progress) as BarData & LineData);
           if (progress < 1) {
             glideRef.current = requestAnimationFrame(step);
