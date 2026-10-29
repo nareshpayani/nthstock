@@ -75,8 +75,13 @@ function SignedInBell() {
                 <span
                   aria-hidden="true"
                   data-testid="notification-badge"
-                  className="pointer-events-none absolute top-0.5 right-0.5 flex h-4 min-w-4 items-center justify-center rounded-pill bg-down px-1 text-[10px] leading-none font-semibold text-surface"
+                  className="pointer-events-none absolute top-0.5 right-0.5 isolate flex h-4 min-w-4 items-center justify-center rounded-pill bg-down px-1 text-[10px] leading-none font-semibold text-surface"
                 >
+                  {/* A ring pings out of the badge while anything is unread (NSTOCK-0462). */}
+                  <span
+                    data-part="ripple"
+                    className="absolute inset-0 -z-10 animate-ripple rounded-pill bg-down opacity-0 motion-reduce:hidden"
+                  />
                   {strings.bell.badge(unread)}
                 </span>
               ) : null}
