@@ -8,9 +8,14 @@ describe('tick glide (A16)', () => {
   it('eases a line point from the old price to the new one', () => {
     const to = { time, value: 110 };
     expect(glidePoint(to, 100, 0)).toEqual({ time, value: 100 });
-    expect(closeOf(glidePoint(to, 100, 0.5))).toBeGreaterThan(105);
+    expect(closeOf(glidePoint(to, 100, 0.5))).toBe(108.75);
     expect(glidePoint(to, 100, 1)).toEqual(to);
     expect(glidePoint(to, 100, 3)).toEqual(to);
+    expect(glidePoint(to, 100, -2)).toEqual({ time, value: 100 });
+  });
+
+  it('eases a falling price down', () => {
+    expect(closeOf(glidePoint({ time, value: 90 }, 100, 0.5))).toBe(91.25);
   });
 
   it('moves only a bar close, which stays inside the bar', () => {
