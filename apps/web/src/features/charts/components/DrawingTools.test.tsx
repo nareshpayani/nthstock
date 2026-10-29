@@ -148,6 +148,30 @@ describe('drawing tools (NSTOCK-0461)', () => {
     expect(layer.querySelector('line')).toHaveAttribute('stroke', colors.ink);
   });
 
+  it('a cancelled touch drops the half-made line, so the next taps start afresh', () => {
+    const { layer } = renderTools();
+    fireEvent.click(screen.getByRole('button', { name: 'Trend line' }));
+    tap(layer, 50, 100);
+    expect(layer.querySelector('line')).not.toBeNull();
+    fireEvent.pointerCancel(layer, { pointerId: 1 });
+    expect(layer.querySelector('line')).toBeNull();
+    // This tap only arms again; the cancelled first point does not complete a line.
+    tap(layer, 150, 40);
+    expect(stored()).toEqual([]);
+    tap(layer, 200, 40);
+    expect(stored()).toEqual([expect.objectContaining({ kind: 'trend' })]);
+  });
+
+  it('a press cancelled before it lifts leaves a stray pointer-up with nothing to add', () => {
+    const { layer } = renderTools();
+    fireEvent.click(screen.getByRole('button', { name: 'Trend line' }));
+    fireEvent.pointerDown(layer, { clientX: 50, clientY: 100, pointerId: 1 });
+    fireEvent.pointerCancel(layer, { pointerId: 1 });
+    fireEvent.pointerUp(layer, { clientX: 150, clientY: 40, pointerId: 1 });
+    expect(stored()).toEqual([]);
+    expect(layer.querySelector('line')).toBeNull();
+  });
+
   it('draws a ray on to the plot edge, and Fibonacci levels between two taps', () => {
     const { layer } = renderTools();
     fireEvent.click(screen.getByRole('button', { name: 'Ray' }));
