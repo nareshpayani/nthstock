@@ -178,7 +178,8 @@ export function IndexChartCard({
           />
           {showIntervals ? (
             phone ? (
-              // Five more segments would wrap on a phone, so the bar size is a native select there.
+              // Five more segments would wrap on a phone, so the bar size is a native select there,
+              // 44 px tall like the chart type button beside it.
               <select
                 aria-label={strings.intervalLabel}
                 value={interval}
@@ -186,7 +187,7 @@ export function IndexChartCard({
                   const next = intervals.find((value) => value === event.target.value);
                   if (next) onIntervalChange(next);
                 }}
-                className="h-8 rounded-md border border-line bg-canvas px-2 text-body font-medium text-ink focus-visible:border-brand focus-visible:ring-3 focus-visible:ring-brand-soft focus-visible:outline-none"
+                className="h-11 rounded-md border border-line bg-canvas px-3 text-body font-medium text-ink focus-visible:border-brand focus-visible:ring-3 focus-visible:ring-brand-soft focus-visible:outline-none"
               >
                 {intervals.map((value) => (
                   <option key={value} value={value}>
@@ -209,7 +210,7 @@ export function IndexChartCard({
             )
           ) : null}
           {onChartTypeChange ? (
-            <ChartTypeMenu value={chartType} onValueChange={onChartTypeChange} />
+            <ChartTypeMenu value={chartType} onValueChange={onChartTypeChange} touch={phone} />
           ) : null}
         </div>
       }
