@@ -3,6 +3,7 @@ import {
   AreaSeries,
   BarSeries,
   CandlestickSeries,
+  HistogramSeries,
   LastPriceAnimationMode,
   LineSeries,
   createChart,
@@ -15,7 +16,7 @@ import {
   type UTCTimestamp,
 } from 'lightweight-charts';
 import { cn } from '@nthstock/ui';
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { toAreaData, toCandleData, toChartTime, toHeikinAshi } from '../model/chartData';
 import { trailingChanges } from '../model/liveCandles';
 import { GLIDE_MS, closeOf, glidePoint } from '../model/tickGlide';
@@ -32,6 +33,15 @@ import {
 } from '../model/chartTheme';
 import { isBarType, type PriceChartType } from '../model/chartTypes';
 import { tooltipContent, type HoveredItem } from '../model/chartTooltip';
+import { hasVolume, studyLines, type StudyId, type StudyLine } from '../model/studies';
+import {
+  VOLUME_HEIGHT,
+  VOLUME_SCALE_ID,
+  studyLineOptions,
+  volumeBarColor,
+  volumeSeriesOptions,
+} from '../model/chartTheme';
+import { LiveChartLegend } from './ChartLegend';
 import { ChartTooltip, type ChartTooltipState } from './ChartTooltip';
 
 export type PriceChartCanvasProps = {
@@ -50,7 +60,18 @@ export type PriceChartCanvasProps = {
    * are removed. Called again whenever the chart is rebuilt (a new type, range or height).
    */
   onReady?: ((handle: ChartHandle | null) => void) | undefined;
+  /** Volume bars and indicator lines to draw (NSTOCK-0460). */
+  studies?: readonly StudyId[] | undefined;
+  /** The O, H, L, C legend over the top left that follows the crosshair (NSTOCK-0460). */
+  legend?: boolean;
 };
+
+const NO_STUDIES: readonly StudyId[] = [];
+/** The library's default price margins, put back when the volume bars go. */
+const PRICE_MARGINS = { top: 0.2, bottom: 0.1 };
+const PRICE_MARGINS_WITH_VOLUME = { top: 0.15, bottom: VOLUME_HEIGHT + 0.05 };
+
+type StudySeries = ISeriesApi<'Line'> | ISeriesApi<'Histogram'>;
 
 type AnySeries =
   ISeriesApi<'Area'> | ISeriesApi<'Line'> | ISeriesApi<'Candlestick'> | ISeriesApi<'Bar'>;
@@ -104,6 +125,8 @@ export function PriceChartCanvas({
   tooltip = false,
   interactive = false,
   onReady,
+  studies = NO_STUDIES,
+  legend = false,
 }: PriceChartCanvasProps) {
   const hostRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
@@ -116,6 +139,18 @@ export function PriceChartCanvas({
   // The tick labels last drawn and which of them show (NSTOCK-0446), to rebuild only on a change.
   const ticksRef = useRef<{ prices: readonly number[]; show: readonly boolean[] } | null>(null);
   const [hover, setHover] = useState<ChartTooltipState | null>(null);
+  // The chart the legend follows; the legend keeps its own crosshair state (LiveChartLegend).
+  const [legendChart, setLegendChart] = useState<IChartApi | null>(null);
+  // The chart the study series below belong to, so a rebuilt chart gets new ones.
+  const studyChartRef = useRef<IChartApi | null>(null);
+  const studySeriesRef = useRef(new Map<string, StudySeries>());
+  // What the study series last drew, so a live tick updates only their tail.
+  const studyDrawnRef = useRef<{
+    chart: IChartApi;
+    candles: readonly Candle[];
+    keys: string;
+    lines: readonly StudyLine[];
+  } | null>(null);
   // The running tick glide (A16), so a new tick or a rebuild can stop it.
   const glideRef = useRef<number | null>(null);
   // Where that glide ends, so cancelling it mid-way still draws the bar's final close.
@@ -193,6 +228,8 @@ export function PriceChartCanvas({
       );
     };
     if (tooltip) chart.subscribeCrosshairMove(onCrosshairMove);
+    const owned = studySeriesRef.current;
+    if (legend) setLegendChart(chart);
     // One direction per swipe (A13): up/down scrolls the page, sideways pans the chart.
     const unlockDirection = interactive ? installDirectionLock(host, chart) : undefined;
     onReadyRef.current?.({ chart, series, host });
@@ -205,12 +242,122 @@ export function PriceChartCanvas({
       onReadyRef.current?.(null);
       if (tooltip) chart.unsubscribeCrosshairMove(onCrosshairMove);
       setHover(null);
+      setLegendChart(null);
+      owned.clear();
+      studyChartRef.current = null;
       observer.disconnect();
       chart.remove();
       chartRef.current = null;
       seriesRef.current = null;
     };
-  }, [type, format, intraday, height, tooltip, interactive]);
+  }, [type, format, intraday, height, tooltip, interactive, legend]);
+
+  // The indicator lines for the candles, shared by the chart and the legend.
+  const studyKey = studies.join(',');
+  const lines = useMemo<StudyLine[]>(
+    () => studies.flatMap((study) => studyLines(study, candles)),
+    // `studyKey` stands for `studies`, so a new array with the same studies does not recompute.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [candles, studyKey],
+  );
+  const showVolume = studies.includes('volume') && hasVolume(candles);
+
+  // Volume bars and indicator lines (NSTOCK-0460): one series each, added or removed as the
+  // studies change and given the candles' data on every update (a few hundred points each).
+  useEffect(() => {
+    const chart = chartRef.current;
+    const main = seriesRef.current;
+    if (!chart || !main) return;
+    const owned = studySeriesRef.current;
+    if (studyChartRef.current !== chart) {
+      owned.clear();
+      studyChartRef.current = chart;
+    }
+    const hadVolume = owned.has(VOLUME_SCALE_ID);
+    const wanted = new Set(lines.map((line) => line.key));
+    if (showVolume) wanted.add(VOLUME_SCALE_ID);
+    for (const [key, series] of owned) {
+      if (!wanted.has(key)) {
+        chart.removeSeries(series);
+        owned.delete(key);
+      }
+    }
+    // Make room under the price for the bars, and give it back when they go.
+    if (showVolume !== hadVolume) {
+      main.priceScale().applyOptions({
+        scaleMargins: showVolume ? PRICE_MARGINS_WITH_VOLUME : PRICE_MARGINS,
+      });
+    }
+    // A live tick changes or appends only the last bar, and every study at bar i reads bars 0..i,
+    // so only that tail is updated: a full setData per series on each tick cost long frames on a
+    // throttled phone (T25 perf check).
+    const keys = [...wanted].sort().join(',');
+    const drawn = studyDrawnRef.current;
+    studyDrawnRef.current = { chart, candles, keys, lines };
+    const tail =
+      drawn?.chart === chart && drawn.keys === keys
+        ? trailingChanges(drawn.candles, candles)
+        : null;
+    const from = tail ? candles.length - tail.length : 0;
+    // A value before the tail can still change: VWAP has none until a session's second bar, then
+    // gains one on the first. Any such change redraws the whole line.
+    const prefixSame = lines.every((line, n) => {
+      const before = drawn?.lines[n]?.values;
+      return before !== undefined && line.values.slice(0, from).every((v, i) => v === before[i]);
+    });
+    if (tail && prefixSame) {
+      for (let i = from; i < candles.length; i += 1) {
+        const candle = candles[i];
+        if (!candle) continue;
+        const time = toChartTime(candle.t);
+        const volume = owned.get(VOLUME_SCALE_ID) as ISeriesApi<'Histogram'> | undefined;
+        volume?.update({ time, value: candle.v, color: volumeBarColor(candle.c >= candle.o) });
+        for (const line of lines) {
+          const value = line.values[i];
+          if (value !== null && value !== undefined) {
+            (owned.get(line.key) as ISeriesApi<'Line'> | undefined)?.update({ time, value });
+          }
+        }
+      }
+      return;
+    }
+    const times = candles.map((candle) => toChartTime(candle.t));
+    if (showVolume) {
+      let volume = owned.get(VOLUME_SCALE_ID) as ISeriesApi<'Histogram'> | undefined;
+      if (!volume) {
+        volume = chart.addSeries(HistogramSeries, volumeSeriesOptions());
+        chart.priceScale(VOLUME_SCALE_ID).applyOptions({
+          scaleMargins: { top: 1 - VOLUME_HEIGHT, bottom: 0 },
+          visible: false,
+        });
+        owned.set(VOLUME_SCALE_ID, volume);
+      }
+      volume.setData(
+        candles.map((candle, i) => ({
+          time: times[i] as UTCTimestamp,
+          value: candle.v,
+          color: volumeBarColor(candle.c >= candle.o),
+        })),
+      );
+    }
+    for (const line of lines) {
+      let series = owned.get(line.key) as ISeriesApi<'Line'> | undefined;
+      if (!series) {
+        series = chart.addSeries(
+          LineSeries,
+          studyLineOptions(line.study as Exclude<StudyId, 'volume'>, format),
+        );
+        owned.set(line.key, series);
+      }
+      series.setData(
+        line.values.flatMap((value, i) =>
+          value === null ? [] : [{ time: times[i] as UTCTimestamp, value }],
+        ),
+      );
+    }
+    // The chart's own dependencies too: effects run in order, so a rebuilt chart (above) gets its
+    // study series back in the same commit.
+  }, [lines, showVolume, candles, type, format, intraday, height, tooltip, interactive, legend]);
 
   useEffect(() => {
     const series = seriesRef.current;
@@ -301,6 +448,15 @@ export function PriceChartCanvas({
       style={{ height }}
     >
       <div ref={hostRef} className="w-full" style={{ height }} data-testid="chart-host" />
+      {legend && legendChart ? (
+        <LiveChartLegend
+          chart={legendChart}
+          candles={candles}
+          lines={lines}
+          format={format}
+          volume={showVolume}
+        />
+      ) : null}
       {hover ? <ChartTooltip {...hover} /> : null}
     </div>
   );

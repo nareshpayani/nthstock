@@ -7,7 +7,7 @@ const LANDSCAPE_QUERY = '(max-height: 499.98px) and (max-width: 1023.98px)';
  * Below Tailwind's `md` breakpoint, or a phone in landscape: the phone layout of SPEC-TFC-1 §9.4
  * (bottom sheets, the instrument page's tabs and sticky bottom bar).
  */
-const PHONE_QUERY = `(max-width: 767.98px), ${LANDSCAPE_QUERY}`;
+export const PHONE_QUERY = `(max-width: 767.98px), ${LANDSCAPE_QUERY}`;
 
 /**
  * A tablet or an unfolded foldable, 600 to 1023 px wide (SPEC-CR-1 §6.2): trading panels dock

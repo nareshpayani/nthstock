@@ -6,6 +6,7 @@ import { seriesDirection } from '../model/chartData';
 import type { PriceChartType } from '../model/chartTypes';
 import { formatChartValue, type ChartDirection, type ChartValueFormat } from '../model/chartFormat';
 import { strings } from '../strings';
+import type { StudyId } from '../model/studies';
 import type { ChartHandle } from './PriceChartCanvas';
 
 // The charts library loads on first use, in its own chunk (checked by scripts/checkBuild.mjs).
@@ -36,6 +37,10 @@ export type PriceChartProps = {
   overlay?: ReactNode;
   /** What an empty range says, in place of the generic line. */
   emptyText?: string | undefined;
+  /** Volume bars and indicator lines (NSTOCK-0460). */
+  studies?: readonly StudyId[] | undefined;
+  /** The O, H, L, C legend that follows the crosshair (NSTOCK-0460). */
+  legend?: boolean;
   className?: string | undefined;
 };
 
@@ -56,6 +61,8 @@ export function PriceChart({
   onReady,
   overlay,
   emptyText,
+  studies,
+  legend = false,
   className,
 }: PriceChartProps) {
   const first = candles[0];
@@ -81,6 +88,8 @@ export function PriceChart({
               tooltip={tooltip}
               interactive={interactive}
               onReady={onReady}
+              studies={studies}
+              legend={legend}
             />
           </Suspense>
           {overlay}

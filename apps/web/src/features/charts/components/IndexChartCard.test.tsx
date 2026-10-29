@@ -9,6 +9,7 @@ import { createTestQuoteStore, testQuote } from '@/test/quotes';
 import { renderWithProviders } from '@/test/renderWithProviders';
 import { installResizeObserver } from '@/test/resizeObserver';
 import type { PriceChartType } from '../model/chartTypes';
+import { useChartStudies } from '../model/studiesStore';
 import { IndexChartCard } from './IndexChartCard';
 
 vi.mock('lightweight-charts', () => import('@/test/chartsMock'));
@@ -23,6 +24,8 @@ beforeEach(() => {
 });
 afterEach(() => {
   vi.unstubAllGlobals();
+  window.localStorage.clear();
+  useChartStudies.setState({ studies: ['volume'] });
 });
 
 // Friday 25 Sep 2026, 11:00 IST (open) and Friday 2 Oct 2026, 11:00 IST (Gandhi Jayanti).
@@ -69,8 +72,26 @@ describe('IndexChartCard (T-095)', () => {
       '1Y',
     ]);
     act(() => quotes.push(testQuote('NIFTY50', 2541860, { prevClose: 2520615 })));
-    expect(screen.getByText('25,418.60')).toBeInTheDocument();
+    // The level shows in the price block (the chart legend may show the same number).
+    expect(
+      screen
+        .getAllByText('25,418.60')
+        .some((node) => !node.closest('[data-testid="chart-legend"]')),
+    ).toBe(true);
     expect(screen.getByText('+212.45, up 0.84 percent')).toBeInTheDocument();
+  });
+
+  it('shows an OHLC legend with the bar change, and a picked indicator adds a line (NSTOCK-0460)', async () => {
+    renderCard();
+    await screen.findByTestId('chart-host');
+    const legend = await screen.findByTestId('chart-legend');
+    expect(legend).toHaveTextContent(/O.*H.*L.*C/);
+    expect(legend).toHaveTextContent(/[+-]?\d+(\.\d+)?%/);
+    const lines = () => chartsMock.active()[0]?.series.filter((s) => s.type === 'Line').length;
+    const before = lines();
+    fireEvent.keyDown(screen.getByRole('button', { name: /^Indicators/ }), { key: 'Enter' });
+    fireEvent.click(screen.getByRole('menuitemcheckbox', { name: /Moving average 20/ }));
+    await waitFor(() => expect(lines()).toBe((before ?? 0) + 1));
   });
 
   it('shows the LIVE badge beside the heading while NSE is open', async () => {
