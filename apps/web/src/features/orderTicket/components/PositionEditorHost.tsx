@@ -61,7 +61,9 @@ export function PositionEditorHost() {
           <PositionEditor
             key={`${target.exchange}:${target.symbol}:${target.product}:${target.tab ?? ''}`}
             target={target}
-            onClose={closeEditor}
+            onClose={() => {
+              if (usePositionEditorStore.getState().target === target) closeEditor();
+            }}
           />
         </Suspense>
       ) : null}

@@ -39,8 +39,9 @@ export function useOrderSounds(): [enabled: boolean, setEnabled: (enabled: boole
  * The tick's moment: `hold(then)` turns `done` on (the confirm button draws its tick) and runs
  * `then`, usually closing the sheet, `SUCCESS_HOLD_MS` later. If the caller unmounts meanwhile (a
  * partial exit changes the held quantity, which remounts the ticket inside the position editor, and
- * the editor must still close) `then` runs at once and the timer is cancelled, so a close can never
- * fire later against whatever the user opened next.
+ * the editor must still close) `then` runs at once and the timer is cancelled. The hook cannot tell
+ * why it unmounted, so `then` must be safe against a newer sheet: the hosts pass a close that only
+ * acts while its own ticket is still the open one.
  */
 export function useSuccessHold(): [done: boolean, hold: (then: () => void) => void] {
   const [done, setDone] = useState(false);

@@ -460,6 +460,20 @@ describe('trailing-stop line (T19, SPEC-TFC-1 §6.5, §6.6, §8.1)', () => {
     );
   });
 
+  it('a stop modify the engine refuses gives the rejected cue and puts the line back', async () => {
+    const { calls, quotes } = await setup([], [position], [trailing]);
+    act(() => quotes.push(testQuote('INFY', 150_000)));
+    const line = handleFor('stop:ts_1');
+    pointer(line, 'pointerdown', 244);
+    pointer(line, 'pointermove', 234);
+    pointer(line, 'pointerup', 234);
+    const sent = calls.filter((call) => call.route === 'trailingStopModify');
+    await act(async () => sent[0]?.answer.reject(new Error('refused')));
+    expect(await screen.findByText('Trailing stop not changed')).toBeInTheDocument();
+    expect(orderCue).toHaveBeenCalledExactlyOnceWith('rejected');
+    expect(orderCue).not.toHaveBeenCalledWith('stopSet');
+  });
+
   it('a drag to or through the price is refused in words and not sent', async () => {
     const { calls, quotes } = await setup([], [position], [trailing]);
     act(() => quotes.push(testQuote('INFY', 150_000)));

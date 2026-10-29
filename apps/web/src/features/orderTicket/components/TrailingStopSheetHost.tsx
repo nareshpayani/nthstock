@@ -55,7 +55,9 @@ export function TrailingStopSheetHost() {
           <TrailingStopSheet
             key={`${target.exchange}:${target.symbol}:${target.product ?? ''}`}
             target={target}
-            onClose={closeSheet}
+            onClose={() => {
+              if (useTrailingSheetStore.getState().target === target) closeSheet();
+            }}
           />
         </Suspense>
       ) : null}
