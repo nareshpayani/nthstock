@@ -1,10 +1,11 @@
 import { createTradingStore, type ApiClient } from '@nthstock/apiClient';
 import { fixedClock, fromIst } from '@nthstock/utils';
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
-import { http } from 'msw';
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { http, HttpResponse } from 'msw';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createMockServer } from '@/mocks/node';
 import type { MarketSession } from '@/shared/lib/marketSessionContext';
+import { orderCue } from '@/shared/motion/orderCues';
 import { initialTrailingSheetState, useTrailingSheetStore } from '@/shared/lib/trailingSheetStore';
 import { createTestQuoteStore } from '@/test/quotes';
 import { renderWithProviders } from '@/test/renderWithProviders';
@@ -12,6 +13,12 @@ import { installResizeObserver } from '@/test/resizeObserver';
 import { resetSession } from '@/test/session';
 import { loginOnMock } from '@/test/watchlists';
 import { TrailingStopSheetHost } from './TrailingStopSheetHost';
+
+// The cue itself is tested in orderCues.test.tsx; here we check which one fires.
+vi.mock('@/shared/motion/orderCues', async (importOriginal) => ({
+  ...(await importOriginal<Record<string, unknown>>()),
+  orderCue: vi.fn(),
+}));
 
 /** Monday 28 Sep 2026, 10:00 IST: NSE is open. */
 const OPEN_MS = fromIst(2026, 9, 28, 10 * 60).getTime();
@@ -71,6 +78,7 @@ const stopsOf = async (api: ApiClient) =>
 
 beforeAll(() => mock.server.listen({ onUnhandledFrame: 'error' }));
 beforeEach(() => {
+  vi.mocked(orderCue).mockClear();
   installResizeObserver();
 });
 let releaseQuotes = () => {};
@@ -100,6 +108,10 @@ describe('trailing-stop sheet (T18, SPEC-TFC-1 §8.4)', () => {
       expect(within(sheet).queryByRole('textbox', { name: /Activation price/ })).toBeNull();
       fireEvent.click(within(sheet).getByRole('button', { name: 'Set trailing stop' }));
       expect(await screen.findByText('Trailing stop set')).toBeInTheDocument();
+      // The Set button draws its tick and the sheet stays up for the hold, then closes (A17).
+      expect(await within(sheet).findByTestId('success-check')).toBeInTheDocument();
+      expect(screen.getByRole('dialog')).toBeInTheDocument();
+      expect(orderCue).toHaveBeenLastCalledWith('stopSet');
       await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
       expect(await stopsOf(api)).toEqual([
         { status: 'TRAILING', trail: { unit: 'PERCENT', basisPoints: 100 } },
@@ -118,6 +130,7 @@ describe('trailing-stop sheet (T18, SPEC-TFC-1 §8.4)', () => {
       await waitFor(() => expect(update).toBeEnabled());
       fireEvent.click(update);
       expect(await screen.findByText('Now trails by 1.5%.')).toBeInTheDocument();
+      expect(orderCue).toHaveBeenLastCalledWith('stopSet');
       await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
       expect(await stopsOf(api)).toEqual([
         { status: 'TRAILING', trail: { unit: 'PERCENT', basisPoints: 150 } },
@@ -127,7 +140,27 @@ describe('trailing-stop sheet (T18, SPEC-TFC-1 §8.4)', () => {
       sheet = await openSheet(token);
       fireEvent.click(await within(sheet).findByRole('button', { name: 'Cancel trailing stop' }));
       expect(await screen.findByText('Trailing stop cancelled')).toBeInTheDocument();
+      expect(orderCue).toHaveBeenLastCalledWith('cancelled');
       expect((await stopsOf(api))[0]?.status).toBe('CANCELLED');
+    },
+    HEAVY,
+  );
+
+  it(
+    'a refused set cues a rejection, draws no tick and keeps the sheet open',
+    async () => {
+      const { token } = await renderSheet(10);
+      const sheet = await openSheet(token);
+      await within(sheet).findByRole('textbox', { name: 'Trail (%)' });
+      mock.server.use(
+        http.post('*/v1/trailing-stops', () =>
+          HttpResponse.json({ error: { code: 'INTERNAL_ERROR', message: 'x' } }, { status: 500 }),
+        ),
+      );
+      fireEvent.click(within(sheet).getByRole('button', { name: 'Set trailing stop' }));
+      await waitFor(() => expect(orderCue).toHaveBeenCalledExactlyOnceWith('rejected'));
+      expect(within(sheet).queryByTestId('success-check')).not.toBeInTheDocument();
+      expect(screen.getByRole('dialog')).toBeInTheDocument();
     },
     HEAVY,
   );

@@ -2,9 +2,11 @@ import { createTradingStore, type ApiClient } from '@nthstock/apiClient';
 import type { OrderSide, ProductType } from '@nthstock/contracts';
 import { fixedClock, fromIst } from '@nthstock/utils';
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { http, HttpResponse } from 'msw';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createMockServer } from '@/mocks/node';
 import type { MarketSession } from '@/shared/lib/marketSessionContext';
+import { orderCue } from '@/shared/motion/orderCues';
 import {
   initialPositionEditorState,
   usePositionEditorStore,
@@ -17,6 +19,12 @@ import { installResizeObserver } from '@/test/resizeObserver';
 import { resetSession } from '@/test/session';
 import { loginOnMock } from '@/test/watchlists';
 import { PositionEditorHost } from './PositionEditorHost';
+
+// The cue itself is tested in orderCues.test.tsx; here we check which one fires.
+vi.mock('@/shared/motion/orderCues', async (importOriginal) => ({
+  ...(await importOriginal<Record<string, unknown>>()),
+  orderCue: vi.fn(),
+}));
 
 /** Monday 28 Sep 2026, 10:00 IST: NSE is open. */
 const OPEN_MS = fromIst(2026, 9, 28, 10 * 60).getTime();
@@ -95,6 +103,7 @@ beforeEach(() => {
   installResizeObserver();
 });
 afterEach(() => {
+  vi.mocked(orderCue).mockClear();
   mock.server.resetHandlers();
   resetSession();
   usePositionEditorStore.setState(initialPositionEditorState);
@@ -224,8 +233,36 @@ describe('position editor (NSTOCK-0395)', () => {
       fireEvent.click(cancel);
       fireEvent.click(cancel);
       expect(await screen.findByText('Order cancelled')).toBeInTheDocument();
+      expect(orderCue).toHaveBeenCalledExactlyOnceWith('cancelled');
       const book = await api.request('ordersList', {});
       expect(book.items.find((order) => order.type === 'LIMIT')?.status).toBe('CANCELLED');
+    },
+    HEAVY,
+  );
+
+  it(
+    'a cancel the server refuses cues a rejection and says so',
+    async () => {
+      const { api, token, tradingStore } = await renderEditor(5);
+      const ltp = (await mock.adapter.getQuote('INFY'))?.ltp ?? 0;
+      const far = Math.round((ltp * 0.9) / 5) * 5;
+      await api.request('orderPlace', {
+        body: { token, side: 'BUY', type: 'LIMIT', product: 'DELIVERY', qty: 3, price: far },
+      });
+      await tradingStore.start();
+      mock.server.use(
+        http.delete('*/v1/orders/:id', () =>
+          HttpResponse.json({ error: { code: 'INTERNAL_ERROR', message: 'x' } }, { status: 500 }),
+        ),
+      );
+      const editor = await openEditor(token);
+      const orders = await within(editor).findByRole('region', {
+        name: 'Open orders in this stock',
+      });
+      const cancel = within(orders).getByRole('button', { name: /^Cancel Buy Limit/ });
+      fireEvent.click(cancel);
+      fireEvent.click(cancel);
+      await waitFor(() => expect(orderCue).toHaveBeenCalledExactlyOnceWith('rejected'));
     },
     HEAVY,
   );

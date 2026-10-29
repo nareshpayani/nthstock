@@ -362,7 +362,7 @@ function SheetBody({
         </div>
       ) : null}
 
-      {active ? (
+      {active && !placed ? (
         changeable ? (
           <div className="grid gap-2">
             <Button
@@ -397,7 +397,7 @@ function SheetBody({
           block
           loading={place.isPending}
           success={placed}
-          disabled={busy}
+          disabled={busy || placed}
           onClick={onSet}
         >
           {strings.sheet.set}
