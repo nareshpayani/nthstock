@@ -92,6 +92,9 @@ describe('stock price chart (T-107)', () => {
     fireEvent.click(within(dialog).getByRole('button', { name: 'Close full screen' }));
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     expect(open).toHaveFocus();
+    // The page chart comes back in its place.
+    await waitFor(() => expect(chartsMock.active()).toHaveLength(1));
+    expect(screen.getByTestId('chart-overlay')).toBeInTheDocument();
   });
 
   it('on a phone, Draw opens the full-screen chart with the rail (NSTOCK-0461)', async () => {

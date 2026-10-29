@@ -30,7 +30,9 @@ export type DrawingLayerProps = {
 const NOTE_WIDTH = 176;
 /** A press that travels further than this is a drag from the first point to the second. */
 const DRAG_PX = 8;
-const LINE = colors.brand;
+// A user's drawings are ink, not brand blue: blue is for actions, and the Buy order lines are blue
+// on the same chart (DESIGN.md).
+const LINE = colors.ink;
 
 let nextId = 0;
 const newId = () => `${Date.now().toString(36)}-${String((nextId += 1))}`;
@@ -298,7 +300,7 @@ function DrawingShape({
       return (
         <g>
           <line x1={0} x2={width} y1={row} y2={row} stroke={LINE} strokeWidth={1.5} />
-          <text x={width - 4} y={row - 4} textAnchor="end" className="fill-brand text-label">
+          <text x={width - 4} y={row - 4} textAnchor="end" className="fill-ink text-label">
             {label(drawing.at.price)}
           </text>
         </g>
@@ -415,9 +417,9 @@ function MeasureBox({
         y={zoom ? 0 : top}
         width={boxWidth}
         height={boxHeight}
-        fill={zoom ? colors.brand : tone}
+        fill={zoom ? colors['ink-muted'] : tone}
         fillOpacity={0.12}
-        stroke={zoom ? colors.brand : tone}
+        stroke={zoom ? colors['ink-muted'] : tone}
         strokeWidth={1}
       />
       {zoom ? null : (

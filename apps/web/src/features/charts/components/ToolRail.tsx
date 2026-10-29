@@ -127,7 +127,7 @@ export function ToolRail({ symbol, touch: touchProp = false, height, className }
         aria-orientation="vertical"
         data-testid="tool-rail"
         // The padding keeps each button's focus ring inside the scrolling box.
-        className="flex flex-col items-center gap-1 overflow-y-auto p-1"
+        className={cn('flex flex-col items-center overflow-y-auto p-1', touch ? 'gap-2' : 'gap-1')}
         style={height ? { maxHeight: height } : undefined}
       >
         <RailButton

@@ -1,5 +1,6 @@
 import type { Candle } from '@nthstock/contracts';
 import { act, fireEvent, render, screen } from '@testing-library/react';
+import { ToastProvider, useToast } from '@nthstock/ui';
 import type { ReactNode } from 'react';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { installResizeObserver } from '@/test/resizeObserver';
@@ -342,23 +343,24 @@ describe('full-screen chart (NSTOCK-0461)', () => {
     already.remove();
   });
 
-  it('leaves the toasts usable while the page behind is inert', () => {
-    const app = document.createElement('div');
-    const page = document.createElement('main');
-    const toasts = document.createElement('ol');
-    toasts.setAttribute('data-nth-toasts', '');
-    app.append(page, toasts);
-    document.body.append(app);
+  it('leaves a toast raised while full screen usable, with the page beside it inert', () => {
+    let toast: ReturnType<typeof useToast> | undefined;
+    function Raiser() {
+      toast = useToast();
+      return <main data-testid="page">page</main>;
+    }
     const view = render(
-      <ChartWorkspace name="INFY" symbol="INFY" controls={null} footer={null} onClose={vi.fn()}>
-        {() => null}
-      </ChartWorkspace>,
+      <ToastProvider>
+        <Raiser />
+        <ChartWorkspace name="INFY" symbol="INFY" controls={null} footer={null} onClose={vi.fn()}>
+          {() => null}
+        </ChartWorkspace>
+      </ToastProvider>,
     );
-    expect(page).toHaveAttribute('inert');
-    expect(toasts.closest('[inert]')).toBeNull();
+    act(() => toast?.show({ title: 'Order filled' }));
+    expect(screen.getByTestId('page')).toHaveAttribute('inert');
+    expect(screen.getByText('Order filled').closest('[inert]')).toBeNull();
     view.unmount();
-    expect(page).not.toHaveAttribute('inert');
-    app.remove();
   });
 
   it('makes the page behind inert while open, and gives it back on close', () => {
