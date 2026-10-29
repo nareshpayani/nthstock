@@ -35,15 +35,19 @@ export async function openDemoPosition(
         },
       },
     });
-    // A refusal (the market closed, say) comes back as a REJECTED order, not an error.
-    if (order.status === 'REJECTED') {
-      console.warn('The demo position was refused', order.statusReason ?? order.status);
+    // Only a filled order is a position. A refusal (the market closed, say) comes back as a
+    // REJECTED order, not an error; an AMO or open order has no position yet.
+    if (order.status !== 'EXECUTED') {
+      console.warn(
+        `The demo position on ${symbol} did not fill`,
+        order.statusReason ?? order.status,
+      );
       return 'failed';
     }
     return 'opened';
   } catch (failure) {
     // The demo still opens; the reviewer can place the trade by hand.
-    console.warn('The demo position did not open', failure);
+    console.warn(`The demo position on ${symbol} did not open`, failure);
     return 'failed';
   }
 }

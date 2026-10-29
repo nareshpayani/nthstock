@@ -31,6 +31,8 @@ test('Try demo opens the instrument page with the Demo simulator and the demo ac
   page,
 }) => {
   await page.setViewportSize({ width: 390, height: 844 });
+  // In market hours, so the demo position fills and no notice covers the page.
+  await setClock(page, MONDAY_10_00_IST);
   await page.goto('/login');
   await page.getByRole('button', { name: 'Try demo' }).click();
   await expect(page).toHaveURL(/\/stocks\/RELIANCE$/);

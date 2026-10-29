@@ -79,7 +79,10 @@ describe('openDemoPosition (NSTOCK-0444)', () => {
     });
 
     await expect(openDemoPosition(api, 'RELIANCE')).resolves.toBe('failed');
-    expect(warn).toHaveBeenCalledWith('The demo position was refused', 'The market is closed');
+    expect(warn).toHaveBeenCalledWith(
+      'The demo position on RELIANCE did not fill',
+      'The market is closed',
+    );
   });
 
   it('does not throw when a request fails, and says why in the console', async () => {
