@@ -32,6 +32,25 @@ export const Instrument = z.object({
 });
 export type Instrument = z.infer<typeof Instrument>;
 
+/** An exchange-traded fund that tracks an index: what you trade when you want the index. */
+export type IndexEtf = { symbol: string; exchange: Exchange; name: string };
+
+/**
+ * The tracking ETF of each index (NSTOCK-0440). An index cannot be bought or sold, so its page
+ * trades the fund that follows it. Mock funds: one unit is priced at a hundredth of the index
+ * level and moves with it tick for tick.
+ */
+export const INDEX_ETFS: Readonly<Record<string, IndexEtf>> = {
+  NIFTY50: { symbol: 'NIFTYETF', exchange: 'NSE', name: 'NIFTY 50 ETF' },
+  SENSEX: { symbol: 'SENSEXETF', exchange: 'NSE', name: 'SENSEX ETF' },
+  NIFTYBANK: { symbol: 'BANKETF', exchange: 'NSE', name: 'NIFTY BANK ETF' },
+  NIFTYIT: { symbol: 'ITETF', exchange: 'NSE', name: 'NIFTY IT ETF' },
+  NIFTYMIDCAP100: { symbol: 'MIDCAPETF', exchange: 'NSE', name: 'NIFTY MIDCAP 100 ETF' },
+};
+
+/** Index points per rupee of its ETF: the fund's price is the index level divided by this. */
+export const INDEX_ETF_POINTS_PER_RUPEE = 100;
+
 /** Search result row: the parts of an instrument a search list shows. */
 export const SearchHit = Instrument.pick({
   token: true,

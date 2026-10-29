@@ -41,3 +41,27 @@ test('index cards, header tickers and the dashboard chart open the index pages',
   await expect(page).toHaveURL(/\/stocks\/NIFTY50\?exchange=NSE&range=1D$/);
   await expect(page.getByRole('heading', { level: 1, name: 'NIFTY 50' })).toBeVisible();
 });
+
+// NSTOCK-0440: an index trades through the ETF that tracks it.
+test('an index page trades its tracking ETF', async ({ page }) => {
+  await page.goto('/stocks/NIFTYBANK?exchange=NSE');
+  const card = page.getByTestId('index-etf-card');
+  await expect(card.getByRole('heading', { name: 'Trade NIFTY BANK' })).toBeVisible();
+  // Signed out, Buy goes through login first.
+  await card.getByRole('button', { name: 'Buy NIFTY BANK ETF' }).click();
+  await expect(page).toHaveURL(/\/login/);
+
+  await page.goto('/stocks/NIFTYBANK?exchange=NSE');
+  await page.getByRole('link', { name: 'View NIFTY BANK ETF' }).click();
+  await expect(page).toHaveURL(/\/stocks\/BANKETF\?exchange=NSE$/);
+  await expect(page.getByRole('heading', { level: 1, name: 'NIFTY BANK ETF' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Buy BANKETF' })).toBeVisible();
+});
+
+test('on a phone the index page keeps Buy and Sell ETF in a bottom bar', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto('/stocks/SENSEX?exchange=BSE');
+  const bar = page.getByTestId('index-etf-bar');
+  await expect(bar.getByRole('button', { name: 'Sell SENSEX ETF' })).toBeVisible();
+  await expect(bar.getByRole('button', { name: 'Buy SENSEX ETF' })).toBeInViewport();
+});

@@ -63,8 +63,15 @@ if (initialJs > INITIAL_JS_BUDGET) {
   failures.push(`initial JS ${String(initialJs)} B gzipped > ${String(INITIAL_JS_BUDGET)} B`);
 }
 
-// Strings only MSW (its client and service worker) or the mock market contain.
-const MOCK_MARKERS = [/\[MSW\]/, /mockServiceWorker/, /INTEGRITY_CHECK_REQUEST/, /NIFTYMIDCAP100/];
+// Strings only MSW (its client and service worker) or the mock market contain. The mock market's
+// marker is one of its error messages: index symbols are in the contracts now (INDEX_ETFS,
+// NSTOCK-0440), so they no longer mark mock code.
+const MOCK_MARKERS = [
+  /\[MSW\]/,
+  /mockServiceWorker/,
+  /INTEGRITY_CHECK_REQUEST/,
+  /A price move must be a finite ratio/,
+];
 const hasMockCode = (text) => MOCK_MARKERS.some((marker) => marker.test(text));
 const apiMode = /<meta name="nthstock-api-mode" content="(msw|api)"/.exec(html)?.[1];
 if (!apiMode) failures.push('index.html has no nthstock-api-mode meta tag');
