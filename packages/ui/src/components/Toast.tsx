@@ -91,7 +91,11 @@ export function ToastProvider({
           </ToastPrimitive.Root>
         ))}
         {/* Phones: under the status bar, clear of the trade bar and the position strip at the foot. */}
-        <ToastPrimitive.Viewport className="fixed right-4 bottom-4 z-(--nth-z-toast) grid w-[min(360px,calc(100vw-32px))] gap-2 outline-none max-[767px]:top-[calc(env(safe-area-inset-top)+8px)] max-[767px]:bottom-auto" />
+        {/* data-nth-toasts: a full-screen dialog leaves the toasts usable when it makes the page inert. */}
+        <ToastPrimitive.Viewport
+          data-nth-toasts=""
+          className="fixed right-4 bottom-4 z-(--nth-z-toast) grid w-[min(360px,calc(100vw-32px))] gap-2 outline-none max-[767px]:top-[calc(env(safe-area-inset-top)+8px)] max-[767px]:bottom-auto"
+        />
       </ToastPrimitive.Provider>
     </ToastContext.Provider>
   );

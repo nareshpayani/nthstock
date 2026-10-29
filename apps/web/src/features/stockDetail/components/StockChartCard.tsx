@@ -5,13 +5,17 @@ import {
   type CandleRange,
   type Instrument,
 } from '@nthstock/contracts';
-import { ErrorState, SegmentedControl } from '@nthstock/ui';
+import { ErrorState, IconButton, SegmentedControl } from '@nthstock/ui';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
-import { useId, useState } from 'react';
+import { useId, useRef, useState } from 'react';
 import { ChartTrading } from '@/features/chartTrading';
 import { AlertLines } from '@/features/notifications';
 import {
   CHART_RANGES,
+  ChartWorkspace,
+  DrawGlyph,
+  DrawingLayer,
+  ExpandGlyph,
   type ChartHandle,
   ChartTypeMenu,
   IndicatorsMenu,
@@ -22,6 +26,7 @@ import {
   chartTypeName,
   intervalLabel,
   isIntraday,
+  ToolRail,
   rangeLabel,
   resolveInterval,
   useChartStudies,
@@ -80,6 +85,12 @@ export function StockChartCard({
   trading = false,
 }: StockChartCardProps) {
   const [chart, setChart] = useState<ChartHandle | null>(null);
+  // The full-screen chart with the tool rail (NSTOCK-0461).
+  const [expanded, setExpanded] = useState(false);
+  // The button that opened full screen, for focus to go back to (Safari does not focus a tap).
+  const openerRef = useRef<HTMLElement | null>(null);
+  // The full-screen chart's own handle: never the page chart's, which is gone while it is open.
+  const [fullChart, setFullChart] = useState<ChartHandle | null>(null);
   const headingId = useId();
   const api = useApiClient();
   const marketOpen = useMarketOpen();
@@ -127,14 +138,31 @@ export function StockChartCard({
   const typeControl = (
     <>
       <ChartTypeMenu value={chartType} onValueChange={onChartTypeChange} touch={touch} />
-      <IndicatorsMenu touch={touch} />
+      <IndicatorsMenu touch={touch} volume={instrument.type !== 'INDEX'} />
     </>
   );
   const showIntervals = intervals.length > 1 && onIntervalChange !== undefined;
-  const plot = (
+  // Drawings show on every view of the chart; the trading lines only where trading is on.
+  const overlayFor = (handle: ChartHandle | null) =>
+    handle ? (
+      <>
+        {trading ? (
+          <>
+            <ChartTrading handle={handle} instrument={instrument} />
+            <AlertLines handle={handle} symbol={symbol} exchange={exchange} />
+          </>
+        ) : null}
+        <DrawingLayer handle={handle} candles={bars} symbol={symbol} format={format} />
+      </>
+    ) : null;
+  const renderPlot = (
+    plotHeight: number,
+    handle: ChartHandle | null,
+    onReady: (next: ChartHandle | null) => void,
+  ) => (
     <div aria-busy={candles.isFetching} className="relative">
       {failed ? (
-        <div style={{ height }} className="grid place-items-center">
+        <div style={{ height: plotHeight }} className="grid place-items-center">
           <ErrorState
             title={strings.chart.errorTitle}
             description={strings.chart.errorBody}
@@ -156,25 +184,18 @@ export function StockChartCard({
           type={chartType}
           format={format}
           intraday={isIntraday(range)}
-          height={height}
+          height={plotHeight}
           legend
           studies={studies}
           interactive
-          onReady={setChart}
-          overlay={
-            trading && chart ? (
-              <>
-                <ChartTrading handle={chart} instrument={instrument} />
-                <AlertLines handle={chart} symbol={symbol} exchange={exchange} />
-              </>
-            ) : null
-          }
+          onReady={onReady}
+          overlay={overlayFor(handle)}
           className={candles.isPlaceholderData ? 'opacity-60' : undefined}
         />
       ) : (
-        <ChartSkeleton height={height} label={strings.chart.loading} />
+        <ChartSkeleton height={plotHeight} label={strings.chart.loading} />
       )}
-      {chart && loaded && !failed ? <ChartZoomControls chart={chart.chart} /> : null}
+      {handle && loaded && !failed ? <ChartZoomControls chart={handle.chart} /> : null}
       {offline && loaded && !failed ? (
         <span
           role="status"
@@ -187,10 +208,61 @@ export function StockChartCard({
     </div>
   );
 
+  // Five more segments would not fit beside the type on a phone (or in the full-screen header),
+  // so there the bar size is a native select: one row, and the OS picker.
+  const intervalSelect = showIntervals ? (
+    <select
+      aria-label={strings.chart.intervalLabel}
+      value={interval}
+      onChange={(event) => {
+        const next = intervals.find((value) => value === event.target.value);
+        if (next) onIntervalChange(next);
+      }}
+      className="h-11 rounded-md border border-line bg-canvas px-3 text-body font-medium text-ink focus-visible:border-brand focus-visible:ring-3 focus-visible:ring-brand-soft focus-visible:outline-none"
+    >
+      {intervals.map((value) => (
+        <option key={value} value={value}>
+          {value}
+        </option>
+      ))}
+    </select>
+  ) : null;
+  // While the chart is full screen, its place on the page keeps its height and stays empty: one
+  // chart at a time, so the trading lines and drawings have one home.
+  const plot = expanded ? <div style={{ height }} /> : renderPlot(height, chart, setChart);
+  const workspace = expanded ? (
+    <ChartWorkspace
+      name={symbol}
+      symbol={symbol}
+      controls={
+        <>
+          {liveBadge}
+          {typeControl}
+          {intervalSelect}
+        </>
+      }
+      footer={
+        <SegmentedControl
+          label={strings.chart.rangeLabel}
+          size="touch"
+          value={range}
+          onValueChange={onRangeChange}
+          options={CHART_RANGES.map((value) => ({ value, label: value }))}
+          className="w-full"
+        />
+      }
+      onClose={() => setExpanded(false)}
+      opener={openerRef}
+    >
+      {(fullHeight) => renderPlot(fullHeight, fullChart, setFullChart)}
+    </ChartWorkspace>
+  ) : null;
+
   if (touch) {
     // The phone instrument page (SPEC-CR-1 §6.1): no card chrome, the plot edge to edge, the chart
     // type and bar size in a slim row above it and the ranges in a full-width row under it, where
     // the thumb is. The heading stays for screen readers, so the section is still "Price chart".
+    // Draw opens the full-screen chart, where the tool rail has room (NSTOCK-0461).
     return (
       <section
         aria-labelledby={headingId}
@@ -205,29 +277,22 @@ export function StockChartCard({
           {liveBadge}
           <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
             {typeControl}
-            {showIntervals ? (
-              // Five more segments would not fit beside the type, so the bar size is a native
-              // select: one row, and the OS picker.
-              <select
-                aria-label={strings.chart.intervalLabel}
-                value={interval}
-                onChange={(event) => {
-                  const next = intervals.find((value) => value === event.target.value);
-                  if (next) onIntervalChange(next);
-                }}
-                className="h-11 rounded-md border border-line bg-canvas px-3 text-body font-medium text-ink focus-visible:border-brand focus-visible:ring-3 focus-visible:ring-brand-soft focus-visible:outline-none"
-              >
-                {intervals.map((value) => (
-                  <option key={value} value={value}>
-                    {value}
-                  </option>
-                ))}
-              </select>
-            ) : null}
+            {intervalSelect}
+            <IconButton
+              label={strings.chart.draw}
+              icon={<DrawGlyph />}
+              variant="secondary"
+              className="size-11"
+              onClick={(event) => {
+                openerRef.current = event.currentTarget;
+                setExpanded(true);
+              }}
+            />
           </div>
         </div>
         <div className="-mx-4">{plot}</div>
         {rangeControl}
+        {workspace}
       </section>
     );
   }
@@ -254,10 +319,25 @@ export function StockChartCard({
             />
           ) : null}
           {typeControl}
+          <IconButton
+            label={strings.chart.fullscreen}
+            icon={<ExpandGlyph />}
+            variant="secondary"
+            size="sm"
+            onClick={(event) => {
+              openerRef.current = event.currentTarget;
+              setExpanded(true);
+            }}
+          />
         </div>
       }
     >
-      {plot}
+      {/* The drawing tools down the plot's left side, as on a trading terminal (NSTOCK-0461). */}
+      <div className="flex gap-2">
+        <ToolRail symbol={symbol} height={height} />
+        <div className="min-w-0 flex-1">{plot}</div>
+      </div>
+      {workspace}
     </Card>
   );
 }

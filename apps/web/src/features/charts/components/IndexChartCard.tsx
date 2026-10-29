@@ -4,7 +4,8 @@ import {
   type CandleInterval,
   type CandleRange,
 } from '@nthstock/contracts';
-import { ErrorState, IconChevronRight, SegmentedControl, Skeleton } from '@nthstock/ui';
+import { ChartSkeleton } from '@/shared/components/ChartSkeleton';
+import { ErrorState, IconButton, IconChevronRight, SegmentedControl, Skeleton } from '@nthstock/ui';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { Link, useNavigate } from '@tanstack/react-router';
 import { useEffect, useRef, useState, type PointerEvent } from 'react';
@@ -30,6 +31,9 @@ import {
 import { strings } from '../strings';
 import { useChartStudies } from '../model/studiesStore';
 import { ChartTypeMenu } from './ChartTypeMenu';
+import { ChartWorkspace, ExpandGlyph } from './ChartWorkspace';
+import { DrawingLayer } from './DrawingLayer';
+import { ToolRail } from './ToolRail';
 import { IndicatorsMenu } from './IndicatorsMenu';
 import { ChartZoomControls } from './ChartZoomControls';
 import { LiveBadge } from './LiveBadge';
@@ -76,6 +80,12 @@ export function IndexChartCard({
   const api = useApiClient();
   const navigate = useNavigate();
   const [chart, setChart] = useState<ChartHandle | null>(null);
+  // The full-screen chart with the tool rail (NSTOCK-0461).
+  const [expanded, setExpanded] = useState(false);
+  // The button that opened full screen, for focus to go back to (Safari does not focus a tap).
+  const openerRef = useRef<HTMLElement | null>(null);
+  // The full-screen chart's own handle: never the card's, which is gone while it is open.
+  const [fullChart, setFullChart] = useState<ChartHandle | null>(null);
   const pressRef = useRef<{ id: number; x: number; y: number; at: number } | null>(null);
   // Fingers down on the plot: a second one makes it a pinch, never a tap.
   const pointersRef = useRef(new Set<number>());
@@ -166,6 +176,89 @@ export function IndexChartCard({
   const today = useDayDirection(NIFTY.symbol, NIFTY.exchange);
   const direction = range === '1D' ? today : undefined;
   const showIntervals = intervals.length > 1 && onIntervalChange !== undefined;
+  const drawingsFor = (handle: ChartHandle | null) =>
+    handle ? (
+      <DrawingLayer handle={handle} candles={bars} symbol={NIFTY.symbol} format="index" />
+    ) : null;
+  const chartLabel = strings.niftyChartLabel(
+    chartTypeName(chartType),
+    rangeLabel(range),
+    interval === intervals[0] ? undefined : intervalLabel(interval),
+  );
+  const workspace = expanded ? (
+    <ChartWorkspace
+      name={strings.niftyTitle}
+      symbol={NIFTY.symbol}
+      controls={
+        <>
+          {onChartTypeChange ? (
+            <ChartTypeMenu value={chartType} onValueChange={onChartTypeChange} touch />
+          ) : null}
+          <IndicatorsMenu touch volume={false} />
+          {showIntervals ? (
+            <select
+              aria-label={strings.intervalLabel}
+              value={interval}
+              onChange={(event) => {
+                const next = intervals.find((value) => value === event.target.value);
+                if (next) onIntervalChange(next);
+              }}
+              className="h-11 rounded-md border border-line bg-canvas px-3 text-body font-medium text-ink focus-visible:border-brand focus-visible:ring-3 focus-visible:ring-brand-soft focus-visible:outline-none"
+            >
+              {intervals.map((value) => (
+                <option key={value} value={value}>
+                  {value}
+                </option>
+              ))}
+            </select>
+          ) : null}
+        </>
+      }
+      footer={
+        <SegmentedControl
+          label={strings.rangeLabel}
+          size="touch"
+          value={range}
+          onValueChange={onRangeChange}
+          options={CHART_RANGES.map((value) => ({ value, label: value }))}
+          className="w-full"
+        />
+      }
+      onClose={() => setExpanded(false)}
+      opener={openerRef}
+    >
+      {(height) =>
+        candles.isError && !candles.data ? (
+          <div style={{ height }} className="grid place-items-center">
+            <ErrorState
+              title={strings.errorTitle}
+              description={strings.errorBody}
+              retryLabel={strings.retry}
+              onRetry={() => void candles.refetch()}
+            />
+          </div>
+        ) : candles.data ? (
+          <PriceChart
+            candles={bars}
+            direction={direction}
+            label={chartLabel}
+            type={chartType}
+            format="index"
+            intraday={isIntraday(range)}
+            height={height}
+            legend
+            studies={studies}
+            interactive
+            onReady={setFullChart}
+            overlay={drawingsFor(fullChart)}
+            className={candles.isPlaceholderData ? 'opacity-60' : undefined}
+          />
+        ) : (
+          <ChartSkeleton height={height} label={strings.loadingChart} />
+        )
+      }
+    </ChartWorkspace>
+  ) : null;
 
   return (
     <Card
@@ -228,7 +321,18 @@ export function IndexChartCard({
           {onChartTypeChange ? (
             <ChartTypeMenu value={chartType} onValueChange={onChartTypeChange} touch={phone} />
           ) : null}
-          <IndicatorsMenu touch={phone} />
+          <IndicatorsMenu touch={phone} volume={false} />
+          <IconButton
+            label={strings.fullscreen.open}
+            icon={<ExpandGlyph />}
+            variant="secondary"
+            size="sm"
+            className={phone ? 'size-11' : undefined}
+            onClick={(event) => {
+              openerRef.current = event.currentTarget;
+              setExpanded(true);
+            }}
+          />
         </div>
       }
     >
@@ -236,51 +340,60 @@ export function IndexChartCard({
         <PriceCell symbol={NIFTY.symbol} exchange={NIFTY.exchange} format="index" size="lg" />
         <LiveChange symbol={NIFTY.symbol} exchange={NIFTY.exchange} format="index" soft size="md" />
       </div>
-      <div aria-busy={candles.isFetching} className="relative">
-        {chart && candles.data ? <ChartZoomControls chart={chart.chart} /> : null}
-        {candles.isError && !candles.data ? (
-          <div style={{ height: CHART_HEIGHT }} className="grid place-items-center">
-            <ErrorState
-              title={strings.errorTitle}
-              description={strings.errorBody}
-              retryLabel={strings.retry}
-              onRetry={() => void candles.refetch()}
-            />
-          </div>
-        ) : candles.data ? (
-          // A tap opens the full chart; a drag pans and is left to the chart.
-          <div
-            data-testid="dashboard-chart"
-            className="cursor-pointer"
-            onPointerDown={onPointerDown}
-            onPointerUp={onPointerUp}
-            onPointerCancel={onPointerCancel}
-          >
-            <PriceChart
-              candles={bars}
-              direction={direction}
-              label={strings.niftyChartLabel(
-                chartTypeName(chartType),
-                rangeLabel(range),
-                interval === intervals[0] ? undefined : intervalLabel(interval),
-              )}
-              type={chartType}
-              format="index"
-              intraday={isIntraday(range)}
-              height={CHART_HEIGHT}
-              legend
-              studies={studies}
-              interactive
-              onReady={setChart}
-              className={candles.isPlaceholderData ? 'opacity-60' : undefined}
-            />
-          </div>
-        ) : (
-          <div role="status" aria-label={strings.loadingChart} style={{ height: CHART_HEIGHT }}>
-            <Skeleton className="h-full w-full" />
-          </div>
-        )}
+      {/* The drawing tools down the plot's left side on desktop; phones get them full screen. */}
+      <div className="flex gap-2">
+        {phone ? null : <ToolRail symbol={NIFTY.symbol} height={CHART_HEIGHT} />}
+        <div aria-busy={candles.isFetching} className="relative min-w-0 flex-1">
+          {chart && candles.data && !expanded ? <ChartZoomControls chart={chart.chart} /> : null}
+          {candles.isError && !candles.data ? (
+            <div style={{ height: CHART_HEIGHT }} className="grid place-items-center">
+              <ErrorState
+                title={strings.errorTitle}
+                description={strings.errorBody}
+                retryLabel={strings.retry}
+                onRetry={() => void candles.refetch()}
+              />
+            </div>
+          ) : expanded ? (
+            // Full screen holds the one chart; its place here keeps its height.
+            <div style={{ height: CHART_HEIGHT }} />
+          ) : candles.data ? (
+            // A tap opens the full chart; a drag pans and is left to the chart.
+            <div
+              data-testid="dashboard-chart"
+              className="cursor-pointer"
+              onPointerDown={onPointerDown}
+              onPointerUp={onPointerUp}
+              onPointerCancel={onPointerCancel}
+            >
+              <PriceChart
+                candles={bars}
+                direction={direction}
+                label={strings.niftyChartLabel(
+                  chartTypeName(chartType),
+                  rangeLabel(range),
+                  interval === intervals[0] ? undefined : intervalLabel(interval),
+                )}
+                type={chartType}
+                format="index"
+                intraday={isIntraday(range)}
+                height={CHART_HEIGHT}
+                legend
+                studies={studies}
+                interactive
+                onReady={setChart}
+                overlay={drawingsFor(chart)}
+                className={candles.isPlaceholderData ? 'opacity-60' : undefined}
+              />
+            </div>
+          ) : (
+            <div role="status" aria-label={strings.loadingChart} style={{ height: CHART_HEIGHT }}>
+              <Skeleton className="h-full w-full" />
+            </div>
+          )}
+        </div>
       </div>
+      {workspace}
     </Card>
   );
 }

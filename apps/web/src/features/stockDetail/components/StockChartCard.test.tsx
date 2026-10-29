@@ -72,6 +72,46 @@ describe('stock price chart (T-107)', () => {
     expect(screen.queryByTestId('chart-zoom')).not.toBeInTheDocument();
   });
 
+  it('full screen holds the one chart, with the rail, the trading lines and the bar size; Close returns (NSTOCK-0461)', async () => {
+    const { router } = renderApp('/stocks/INFY', { apiClient: api.apiClient });
+    await screen.findByTestId('chart-host');
+    const resizer = installResizeObserver();
+    const open = await screen.findByRole('button', { name: 'Open the chart full screen' });
+    fireEvent.click(open);
+    const dialog = screen.getByRole('dialog', { name: 'INFY chart' });
+    act(() => resizer.resize(800, 400));
+    await within(dialog).findByTestId('chart-host');
+    // The page chart is gone while full screen is open: one chart, one home for the lines.
+    await waitFor(() => expect(chartsMock.active()).toHaveLength(1));
+    expect(within(dialog).getByTestId('chart-overlay')).toBeInTheDocument();
+    expect(within(dialog).getByRole('toolbar', { name: 'Drawing tools' })).toBeInTheDocument();
+    fireEvent.change(within(dialog).getByRole('combobox', { name: /bar size/i }), {
+      target: { value: '15m' },
+    });
+    await waitFor(() => expect(router.state.location.search).toMatchObject({ interval: '15m' }));
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Close full screen' }));
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(open).toHaveFocus();
+    // The page chart comes back in its place.
+    await waitFor(() => expect(chartsMock.active()).toHaveLength(1));
+    expect(screen.getByTestId('chart-overlay')).toBeInTheDocument();
+  });
+
+  it('on a phone, Draw opens the full-screen chart with the rail (NSTOCK-0461)', async () => {
+    vi.stubGlobal('matchMedia', (query: string) => ({
+      matches: query.startsWith('(max-width: 767.98px)'),
+      media: query,
+      addEventListener: () => undefined,
+      removeEventListener: () => undefined,
+    }));
+    renderApp('/stocks/INFY', { apiClient: api.apiClient });
+    await screen.findByTestId('chart-host');
+    expect(screen.queryByRole('toolbar', { name: 'Drawing tools' })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /^Draw/ }));
+    const dialog = screen.getByRole('dialog', { name: 'INFY chart' });
+    expect(within(dialog).getByRole('toolbar', { name: 'Drawing tools' })).toBeInTheDocument();
+  });
+
   it('opens on the 1D area chart when the URL names no range', async () => {
     renderApp('/stocks/INFY', { apiClient: api.apiClient });
     expect(

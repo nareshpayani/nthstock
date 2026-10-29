@@ -51,4 +51,17 @@ describe('IndicatorsMenu (NSTOCK-0460)', () => {
     fireEvent.click(screen.getByRole('menuitemcheckbox', { name: /Volume/ }));
     expect(useChartStudies.getState().studies).toEqual([]);
   });
+
+  it('on an index, shows Volume off and greyed with why, and leaves it out of the count', () => {
+    useChartStudies.setState({ studies: ['volume', 'sma20'] });
+    render(<IndicatorsMenu volume={false} />);
+    expect(screen.getByRole('button', { name: 'Indicators 1 on' })).toBeInTheDocument();
+    open();
+    const volume = screen.getByRole('menuitemcheckbox', { name: /Volume/ });
+    expect(volume).toHaveAttribute('aria-disabled', 'true');
+    expect(volume).toHaveAttribute('aria-checked', 'false');
+    expect(volume).toHaveTextContent('An index trades no shares');
+    // The choice is kept for stock charts.
+    expect(useChartStudies.getState().studies).toEqual(['volume', 'sma20']);
+  });
 });

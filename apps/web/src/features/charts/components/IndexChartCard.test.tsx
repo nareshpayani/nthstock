@@ -94,6 +94,43 @@ describe('IndexChartCard (T-095)', () => {
     await waitFor(() => expect(lines()).toBe((before ?? 0) + 1));
   });
 
+  it('greys Volume in Indicators with the reason: an index trades no shares (NSTOCK-0461)', async () => {
+    renderCard();
+    await screen.findByTestId('chart-host');
+    fireEvent.keyDown(screen.getByRole('button', { name: /^Indicators/ }), { key: 'Enter' });
+    const volume = screen.getByRole('menuitemcheckbox', { name: /Volume/ });
+    expect(volume).toHaveAttribute('aria-disabled', 'true');
+    expect(volume).toHaveTextContent('An index trades no shares');
+  });
+
+  it('opens full screen with the rail, and Close brings the card back (NSTOCK-0461)', async () => {
+    renderCard();
+    await screen.findByTestId('chart-host');
+    fireEvent.click(screen.getByRole('button', { name: 'Open the chart full screen' }));
+    const dialog = screen.getByRole('dialog', { name: 'NIFTY 50 chart' });
+    expect(within(dialog).getByRole('toolbar', { name: 'Drawing tools' })).toBeInTheDocument();
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Close full screen' }));
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(await screen.findByTestId('dashboard-chart')).toBeInTheDocument();
+  });
+
+  it('full screen shows the error and its retry when the candles fail (NSTOCK-0461)', async () => {
+    const { http, HttpResponse } = await import('msw');
+    api.server.use(
+      http.get('*/v1/market/instruments/:symbol/candles', () =>
+        HttpResponse.json({ error: { code: 'INTERNAL_ERROR', message: 'boom' } }, { status: 500 }),
+      ),
+    );
+    const resizer = installResizeObserver();
+    renderCard();
+    await screen.findAllByRole('alert');
+    fireEvent.click(screen.getByRole('button', { name: 'Open the chart full screen' }));
+    act(() => resizer.resize(400, 300));
+    const dialog = screen.getByRole('dialog', { name: 'NIFTY 50 chart' });
+    expect(within(dialog).getByRole('alert')).toHaveTextContent('Chart unavailable');
+    expect(within(dialog).getByRole('button', { name: 'Retry' })).toBeInTheDocument();
+  });
+
   it('shows the LIVE badge beside the heading while NSE is open', async () => {
     renderCard(tradingClock);
     // The badge is not part of the heading, so the section keeps the plain name "NIFTY 50".
@@ -211,6 +248,21 @@ describe('IndexChartCard (T-095)', () => {
     press(plotOf(), { x: 100, at: 0 }, { x: 102, at: 120 });
     expect(await screen.findByRole('heading', { name: 'Stock NIFTY50' })).toBeInTheDocument();
     expect(router.state.location.search).toEqual({ exchange: 'NSE', range: '1Y', chart: 'line' });
+  });
+
+  it('with a tool picked, a tap on the chart draws and stays on the dashboard (NSTOCK-0461)', async () => {
+    const { router } = renderCard();
+    await screen.findByTestId('chart-host');
+    fireEvent.click(await screen.findByRole('button', { name: 'Horizontal line' }));
+    const layer = await screen.findByTestId('drawing-layer');
+    vi.spyOn(layer, 'getBoundingClientRect').mockReturnValue({ left: 0, top: 0 } as DOMRect);
+    Object.assign(layer, { setPointerCapture: vi.fn() });
+    fireEvent.pointerDown(layer, { clientX: 100, clientY: 50, pointerId: 1 });
+    fireEvent.pointerUp(layer, { clientX: 100, clientY: 50, pointerId: 1 });
+    await stillOnDashboard(router);
+    expect(JSON.parse(window.localStorage.getItem('nth.chart.drawings.NIFTY50') ?? '[]')).toEqual([
+      expect.objectContaining({ kind: 'horizontal' }),
+    ]);
   });
 
   it('a touch tap opens the page after the double-tap window, not at once (NSTOCK-0452)', async () => {

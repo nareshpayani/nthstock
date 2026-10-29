@@ -171,6 +171,11 @@ export function createChart(_host: HTMLElement, options: unknown) {
       chart.crosshair.delete(handler),
     timeScale: () => ({
       fitContent: chart.fitContent,
+      subscribeVisibleLogicalRangeChange: vi.fn(),
+      unsubscribeVisibleLogicalRangeChange: vi.fn(),
+      // Bar i at x = 10 i, the fake's 10 px bar spacing.
+      logicalToCoordinate: (logical: number) => logical * 10,
+      coordinateToLogical: (x: number) => x / 10,
       options: () => ({ barSpacing: 10 }),
       getVisibleLogicalRange: () => ({ ...chart.logicalRange }),
       setVisibleLogicalRange: (range: { from: number; to: number }) => {

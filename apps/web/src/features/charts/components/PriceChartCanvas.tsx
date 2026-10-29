@@ -57,7 +57,7 @@ export type PriceChartCanvasProps = {
   interactive?: boolean;
   /**
    * The chart and its series once created, for an overlay that draws on it (T15); null when they
-   * are removed. Called again whenever the chart is rebuilt (a new type, range or height).
+   * are removed. Called again whenever the chart is rebuilt (a new type or format); a new height only resizes it.
    */
   onReady?: ((handle: ChartHandle | null) => void) | undefined;
   /** Volume bars and indicator lines to draw (NSTOCK-0460). */
@@ -160,6 +160,14 @@ export function PriceChartCanvas({
   useLayoutEffect(() => {
     onReadyRef.current = onReady;
   });
+  // The height is read when the chart is built and followed by a resize, not a rebuild: a rebuild
+  // would drop what sits on the chart (a half-made drawing, a note being typed) when a phone's
+  // keyboard or a rotation changes the full-screen chart's height (NSTOCK-0461).
+  const heightRef = useRef(height);
+  const builtHeightRef = useRef(height);
+  useLayoutEffect(() => {
+    heightRef.current = height;
+  });
 
   useEffect(() => {
     const host = hostRef.current;
@@ -174,8 +182,9 @@ export function PriceChartCanvas({
           }
         : {}),
       width: Math.floor(host.clientWidth),
-      height,
+      height: heightRef.current,
     });
+    builtHeightRef.current = heightRef.current;
     chartRef.current = chart;
     seriesRef.current = addSeries(chart, type, format);
     // A16: the line's last point pulses once on each live tick, so the price reads as live.
@@ -211,7 +220,7 @@ export function PriceChartCanvas({
 
     const observer = new ResizeObserver((entries) => {
       const width = entries[0]?.contentRect.width;
-      if (width && width > 0) chart.resize(Math.floor(width), height);
+      if (width && width > 0) chart.resize(Math.floor(width), heightRef.current);
     });
     observer.observe(host);
 
@@ -250,7 +259,16 @@ export function PriceChartCanvas({
       chartRef.current = null;
       seriesRef.current = null;
     };
-  }, [type, format, intraday, height, tooltip, interactive, legend]);
+  }, [type, format, intraday, tooltip, interactive, legend]);
+
+  useEffect(() => {
+    const chart = chartRef.current;
+    const host = hostRef.current;
+    // A chart built at this height already has it.
+    if (!chart || !host || builtHeightRef.current === height) return;
+    builtHeightRef.current = height;
+    chart.resize(Math.floor(host.clientWidth), height);
+  }, [height]);
 
   // The indicator lines for the candles, shared by the chart and the legend.
   const studyKey = studies.join(',');
@@ -357,7 +375,7 @@ export function PriceChartCanvas({
     }
     // The chart's own dependencies too: effects run in order, so a rebuilt chart (above) gets its
     // study series back in the same commit.
-  }, [lines, showVolume, candles, type, format, intraday, height, tooltip, interactive, legend]);
+  }, [lines, showVolume, candles, type, format, intraday, tooltip, interactive, legend]);
 
   useEffect(() => {
     const series = seriesRef.current;
@@ -433,13 +451,13 @@ export function PriceChartCanvas({
     chartRef.current?.timeScale().fitContent();
     // A new range or chart type fits its prices again, undoing a price-axis zoom (NSTOCK-0436).
     chartRef.current?.priceScale('right').setAutoScale(true);
-  }, [candles, type, format, intraday, height, tooltip, interactive]);
+  }, [candles, type, format, intraday, tooltip, interactive]);
 
   useEffect(() => {
     const series = seriesRef.current;
     if (series?.seriesType() === 'Area') series.applyOptions(areaSeriesOptions(direction, format));
     if (series?.seriesType() === 'Line') series.applyOptions(lineSeriesOptions(direction, format));
-  }, [direction, format, type, intraday, height]);
+  }, [direction, format, type, intraday]);
 
   // `isolate` keeps the library's z-indexed canvases below an overlay drawn after the chart.
   return (

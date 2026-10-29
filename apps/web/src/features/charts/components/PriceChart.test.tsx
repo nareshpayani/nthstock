@@ -79,6 +79,14 @@ describe('PriceChart (T-094)', () => {
     expect(chartsMock.charts[0]?.resize).toHaveBeenCalledTimes(1);
   });
 
+  it('resizes the same chart to a new height instead of building another (NSTOCK-0461)', async () => {
+    const view = render(<PriceChart candles={makeCandles({ count: 2 })} label="c" height={180} />);
+    await chartMounted();
+    view.rerender(<PriceChart candles={makeCandles({ count: 2 })} label="c" height={240} />);
+    expect(chartsMock.charts).toHaveLength(1);
+    expect(chartsMock.charts[0]?.resize).toHaveBeenCalledWith(expect.any(Number), 240);
+  });
+
   it('updates the same chart when candles change instead of creating another', async () => {
     const view = render(<PriceChart candles={makeCandles({ count: 2 })} label="c" />);
     await chartMounted();
