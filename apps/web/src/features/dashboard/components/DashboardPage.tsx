@@ -1,6 +1,11 @@
 import { getRouteApi } from '@tanstack/react-router';
 import { useContext, type ReactNode } from 'react';
-import { DEFAULT_CHART_RANGE, IndexChartCard } from '@/features/charts';
+import {
+  DEFAULT_CHART_RANGE,
+  DEFAULT_INDEX_CHART_TYPE,
+  IndexChartCard,
+  keepInterval,
+} from '@/features/charts';
 import { StocksListsCard } from '@/features/collections';
 import { IndicesRow } from '@/features/indices';
 import { DEFAULT_MOVERS_DIRECTION, MarketMoversCard } from '@/features/movers';
@@ -50,7 +55,13 @@ export function DashboardPage({ now }: DashboardPageProps) {
       <Section label={strings.sections.chart}>
         <IndexChartCard
           range={search.range ?? DEFAULT_CHART_RANGE}
-          onRangeChange={(range) => setSearch({ range })}
+          interval={search.interval}
+          chartType={search.chart ?? DEFAULT_INDEX_CHART_TYPE}
+          onRangeChange={(range) =>
+            setSearch({ range, interval: keepInterval(range, search.interval) })
+          }
+          onIntervalChange={(interval) => setSearch({ interval })}
+          onChartTypeChange={(chart) => setSearch({ chart })}
         />
       </Section>
       <Section label={strings.sections.indices}>

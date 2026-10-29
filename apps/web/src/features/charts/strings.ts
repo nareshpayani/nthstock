@@ -10,9 +10,34 @@ export const strings = {
     reset: 'Reset zoom',
   },
   rangeLabel: 'Chart range',
+  /** Bar size picker (NSTOCK-0343, NSTOCK-0443). */
+  intervalLabel: 'Bar size',
+  intervalOption: (bars: string) => `${bars} bars`,
+  /** Chart type menu (NSTOCK-0430), shared by the dashboard and the instrument page. */
+  typeButton: (type: string) => `Chart type: ${type}`,
+  types: { line: 'Line', area: 'Area', candle: 'Candles', bar: 'OHLC', heikin: 'Heikin-Ashi' },
+  /** Each type's description line in the menu. */
+  typeHints: {
+    line: 'Closing prices joined by a line',
+    area: 'Closing prices with the area below shaded',
+    candle: 'Open, high, low and close; rising bars green, falling bars red',
+    bar: 'Open tick left, close tick right, high to low',
+    heikin:
+      'Smoothed candles that show the trend. Not traded prices; the tooltip shows the real ones',
+  },
+  /** Each type as it reads inside a chart's accessible name. */
+  typeNames: {
+    line: 'line',
+    area: 'area',
+    candle: 'candlestick',
+    bar: 'OHLC bar',
+    heikin: 'Heikin-Ashi (smoothed)',
+  },
   live: 'Live',
   liveLabel: 'Live: the market is open and the price updates as it trades',
-  niftyChartLabel: (range: string) => `NIFTY 50 area chart over ${range}`,
+  /** `bars` only when the reader picked a bar size other than the range's own. */
+  niftyChartLabel: (type: string, range: string, bars?: string) =>
+    `NIFTY 50 ${type} chart over ${range}${bars ? `, ${bars} bars` : ''}`,
   chartSummary: (first: string, last: string, from: string, to: string) =>
     `From ${first} on ${from} to ${last} on ${to}.`,
   loadingLevel: 'Loading NIFTY 50 level',
