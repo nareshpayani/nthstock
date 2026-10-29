@@ -8,12 +8,16 @@ import { initialOrderDraftState, useOrderDraftStore } from '@/shared/lib/orderDr
 import { initialTicketIntentState, useTicketIntentStore } from '@/shared/lib/ticketIntentStore';
 import { initialTrailingSheetState, useTrailingSheetStore } from '@/shared/lib/trailingSheetStore';
 import { AreaSeries, chartsMock, createChart } from '@/test/chartsMock';
+import { orderCue } from '@/shared/motion/orderCues';
 import { createTestQuoteStore, testQuote } from '@/test/quotes';
 import { renderWithProviders } from '@/test/renderWithProviders';
 import { CANCEL_ARM_MS, ChartTrading } from './ChartTrading';
 
-const haptics = vi.hoisted(() => ({ haptic: vi.fn(() => true) }));
-vi.mock('@/shared/motion/haptics', () => haptics);
+// The cue itself (haptic and sound) is tested in orderCues.test.tsx; here we check which one fires.
+vi.mock('@/shared/motion/orderCues', async (importOriginal) => ({
+  ...(await importOriginal<Record<string, unknown>>()),
+  orderCue: vi.fn(),
+}));
 
 // The fake scale: ₹1,600.00 at y = 0, 50 paise per px, a 300 px pane.
 const AT = '2026-09-28T04:30:00.000Z';
@@ -112,6 +116,7 @@ const handleFor = (id: string) =>
   screen.getAllByTestId('chart-handle').find((el) => el.dataset.line === id) as HTMLElement;
 
 afterEach(() => {
+  vi.mocked(orderCue).mockClear();
   chartsMock.reset();
   useOrderDraftStore.setState(initialOrderDraftState);
   useTicketIntentStore.setState(initialTicketIntentState);
@@ -218,6 +223,7 @@ describe('order lines (T16, SPEC-TFC-1 §8.1, §8.3)', () => {
     await waitFor(() => expect(handleFor('ord_1')).toHaveAttribute('data-tone', 'buy'));
     expect(handleFor('ord_1')).toHaveTextContent('Buy 10 @ ₹1,520.00');
     expect(await screen.findByText('Order modified')).toBeInTheDocument();
+    expect(orderCue).toHaveBeenCalledExactlyOnceWith('placed');
   });
 
   it('a refused modify puts the line back at the real price and says why', async () => {
@@ -229,8 +235,8 @@ describe('order lines (T16, SPEC-TFC-1 §8.1, §8.3)', () => {
     await act(async () => calls[0]?.answer.reject(new Error('refused')));
     await waitFor(() => expect(handleFor('ord_1')).toHaveTextContent('Buy 10 @ ₹1,500.00'));
     expect(await screen.findByText('Order not modified')).toBeInTheDocument();
-    // The error haptic says it too, where the phone has one (SPEC-CR-1 §5.4).
-    expect(haptics.haptic).toHaveBeenLastCalledWith('reject');
+    // The error cue says it too: a haptic where the phone has one (SPEC-CR-1 §5.4).
+    expect(orderCue).toHaveBeenCalledExactlyOnceWith('rejected');
   });
 
   it('a fill during the drag ends it, puts nothing on the wire and says it filled first', async () => {
@@ -268,6 +274,17 @@ describe('order lines (T16, SPEC-TFC-1 §8.1, §8.3)', () => {
     await act(async () => calls[0]?.answer.resolve(limit({ status: 'CANCELLED', seq: 2 })));
     await waitFor(() => expect(screen.queryByTestId('chart-handle')).not.toBeInTheDocument());
     expect(await screen.findByText('Order cancelled')).toBeInTheDocument();
+    expect(orderCue).toHaveBeenCalledExactlyOnceWith('cancelled');
+  });
+
+  it('a refused cancel gives the rejected cue and says why', async () => {
+    const { calls } = await setup([limit()]);
+    const cross = () => screen.getByTestId('chart-handle-action');
+    fireEvent.click(cross());
+    fireEvent.click(cross());
+    await act(async () => calls[0]?.answer.reject(new Error('refused')));
+    expect(await screen.findByText('Order not cancelled')).toBeInTheDocument();
+    expect(orderCue).toHaveBeenCalledExactlyOnceWith('rejected');
   });
 });
 
@@ -435,6 +452,7 @@ describe('trailing-stop line (T19, SPEC-TFC-1 §6.5, §6.6, §8.1)', () => {
       await Promise.resolve();
     });
     expect(await screen.findByText('Stop now ₹1,490.00, trailing by ₹10.00.')).toBeInTheDocument();
+    expect(orderCue).toHaveBeenCalledExactlyOnceWith('stopSet');
     await waitFor(() =>
       expect(handleFor('stop:ts_1')).toHaveTextContent(
         'Trailing stop ₹1,490.00 · ₹10.00 · Trailing',
@@ -453,7 +471,7 @@ describe('trailing-stop line (T19, SPEC-TFC-1 §6.5, §6.6, §8.1)', () => {
     expect(await screen.findByText('That stop would trigger immediately.')).toBeInTheDocument();
     expect(calls.filter((call) => call.route === 'trailingStopModify')).toEqual([]);
     expect(handleFor('stop:ts_1')).toHaveTextContent('Trailing stop ₹1,485.00');
-    expect(haptics.haptic).toHaveBeenLastCalledWith('reject');
+    expect(orderCue).toHaveBeenCalledExactlyOnceWith('rejected');
   });
 
   it('an armed stop with an activation price draws it as a dotted line that opens the sheet', async () => {

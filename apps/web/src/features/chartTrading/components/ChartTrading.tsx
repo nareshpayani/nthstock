@@ -12,7 +12,6 @@ import { useEffect, useRef, useState } from 'react';
 import type { ChartHandle } from '@/features/charts';
 import { livePosition } from '@/features/positions';
 import { orderCue } from '@/shared/motion/orderCues';
-import { playOrderSound } from '@/shared/motion/orderSounds';
 import { useOpenTicket } from '@/shared/hooks/useOpenTicket';
 import { useQuote } from '@/shared/hooks/useQuote';
 import { usePendingOrderPrices } from '@/shared/hooks/usePendingOrderPrices';
@@ -169,7 +168,7 @@ export function ChartTrading({ handle, instrument }: ChartTradingProps) {
   const modify = (order: Order, price: number) => {
     actions.modify(order, price).then(
       (modified) => {
-        playOrderSound('placed');
+        orderCue('placed');
         toast.show({
           title: strings.order.modified,
           description: strings.order.modifiedBody(...describe(modified, modified.price ?? price)),
@@ -245,7 +244,7 @@ export function ChartTrading({ handle, instrument }: ChartTradingProps) {
       .modifyStop(stop, price)
       .then(
         (moved) => {
-          playOrderSound('stopSet');
+          orderCue('stopSet');
           toast.show({
             title: strings.stop.moved,
             description: strings.stop.movedBody(
