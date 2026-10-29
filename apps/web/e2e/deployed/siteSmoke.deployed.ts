@@ -55,7 +55,9 @@ test('on a 390 px phone: cold load, Try demo, the chart and trade bar', async ({
   await expect(page.getByRole('figure', { name: /RELIANCE area chart/ })).toBeVisible();
   await expect(page.getByRole('group', { name: 'Trade RELIANCE' })).toBeVisible();
   // Try demo turns on demo mode: the labelled Demo simulator is on the page (TFC-12).
+  // On a phone it is folded to one button (NSTOCK-0447).
   const simulator = page.getByRole('region', { name: 'Demo simulator' });
+  await simulator.getByRole('button', { name: 'Demo controls' }).click();
   await expect(simulator.getByRole('button', { name: 'Rally +1%' })).toBeVisible();
   const overflow = await page.evaluate(
     () => document.documentElement.scrollWidth - document.documentElement.clientWidth,

@@ -16,6 +16,9 @@ export const strings = {
   },
   simulator: {
     label: 'Demo simulator',
+    /** The folded panel's toggle on a phone (NSTOCK-0447). */
+    show: 'Demo controls',
+    hide: 'Hide demo controls',
     badge: 'Simulated',
     rally: 'Rally +1%',
     pullBack: 'Pull back −1%',

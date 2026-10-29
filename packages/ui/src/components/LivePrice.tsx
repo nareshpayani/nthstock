@@ -15,6 +15,8 @@ export type LivePriceProps = {
   size?: 'sm' | 'md' | 'lg';
   /** Roll the changed digits (SPEC-CR-1 §5.6), for a price the eye rests on. */
   roll?: boolean;
+  /** Show the ▲ or ▼; off where a change beside the price already carries one (NSTOCK-0447). */
+  marker?: boolean;
   className?: string | undefined;
 };
 
@@ -31,6 +33,7 @@ export function LivePrice({
   format = 'inr',
   size = 'md',
   roll = false,
+  marker = true,
   className,
 }: LivePriceProps) {
   const text = format === 'index' ? formatIndexLevel(value) : formatInr(value);
@@ -44,15 +47,17 @@ export function LivePrice({
       )}
     >
       {roll ? <DigitRoll value={text} /> : text}
-      <span
-        aria-hidden="true"
-        className={cn(
-          'text-[0.75em]',
-          tick === 'up' ? 'text-up' : tick === 'down' ? 'text-down' : 'invisible',
-        )}
-      >
-        {tick === 'down' ? '▼' : '▲'}
-      </span>
+      {marker ? (
+        <span
+          aria-hidden="true"
+          className={cn(
+            'text-[0.75em]',
+            tick === 'up' ? 'text-up' : tick === 'down' ? 'text-down' : 'invisible',
+          )}
+        >
+          {tick === 'down' ? '▼' : '▲'}
+        </span>
+      ) : null}
     </span>
   );
 }

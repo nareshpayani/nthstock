@@ -11,6 +11,8 @@ export type PriceCellProps = {
   size?: 'sm' | 'md' | 'lg';
   /** Roll the changed digits on each tick (SPEC-CR-1 §5.6). */
   roll?: boolean;
+  /** Show the ▲ or ▼ (see LivePrice). */
+  marker?: boolean;
   /** Price from a REST snapshot, shown until the first live quote arrives. */
   initial?: number | undefined;
   className?: string;
@@ -31,6 +33,7 @@ export const PriceCell = memo(function PriceCell({
   format = 'inr',
   size = 'md',
   roll = false,
+  marker = true,
   initial,
   className,
 }: PriceCellProps) {
@@ -43,6 +46,7 @@ export const PriceCell = memo(function PriceCell({
         format={format}
         size={size}
         roll={roll}
+        marker={marker}
         className={className}
       />
     );
@@ -68,6 +72,7 @@ export const PriceCell = memo(function PriceCell({
       format={format}
       size={size}
       roll={roll}
+      marker={marker}
       className={className}
     />
   );

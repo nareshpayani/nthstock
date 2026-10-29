@@ -79,25 +79,18 @@
  * DigitRoll (SPEC-CR-1 §5.6): a changed digit rolls in from below (value up) or above (down) in
  * 120 ms and gets a 1 px underline that fades in and out. With reduced motion it is a plain swap.
  */
+/* No underline (NSTOCK-0447): a client review read a mid-tick frame's marked digits as a defect. */
 .nth-digit-up,
 .nth-digit-down {
   display: inline-block;
-  text-decoration-line: underline;
-  text-decoration-thickness: 1px;
-  text-underline-offset: 0.18em;
-  text-decoration-color: transparent;
 }
 
 .nth-digit-up {
-  animation:
-    nth-digit-up var(--nth-duration-fast) var(--nth-ease-out),
-    nth-digit-mark 600ms var(--nth-ease-out);
+  animation: nth-digit-up var(--nth-duration-fast) var(--nth-ease-out);
 }
 
 .nth-digit-down {
-  animation:
-    nth-digit-down var(--nth-duration-fast) var(--nth-ease-out),
-    nth-digit-mark 600ms var(--nth-ease-out);
+  animation: nth-digit-down var(--nth-duration-fast) var(--nth-ease-out);
 }
 
 @keyframes nth-digit-up {
@@ -111,12 +104,6 @@
   from {
     opacity: 0;
     transform: translateY(-0.45em);
-  }
-}
-
-@keyframes nth-digit-mark {
-  40% {
-    text-decoration-color: currentColor;
   }
 }
 

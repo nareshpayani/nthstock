@@ -36,7 +36,8 @@ export function FundsSummaryCard({ funds, positions, holdings }: FundsSummaryCar
       aria-label={strings.summary.label}
       className="grid gap-4 rounded-lg border border-line bg-surface p-4 lg:p-5"
     >
-      <dl className="grid grid-cols-2 gap-4 md:grid-cols-4">
+      {/* One column under 360 px: two ₹ lakh figures side by side overlap at 320 (NSTOCK-0447). */}
+      <dl className="grid grid-cols-1 gap-4 min-[360px]:grid-cols-2 md:grid-cols-4">
         <Figure label={strings.summary.available}>
           <span className="text-title">{formatInr(totals.available)}</span>
         </Figure>

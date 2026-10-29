@@ -43,7 +43,8 @@ Until both values are set, the Deploy: Web hosting jobs are skipped, not failed.
 
 ## Sharing with a reviewer
 
-Send `https://<project id>.web.app/dashboard?demo=1`. The reviewer logs in with mobile
+Send `https://<project id>.web.app/login?try=1` (NSTOCK-0444: signs in to the demo and opens
+RELIANCE with a live position). The older `/dashboard?demo=1` link needs a login with mobile
 **9000000001** and OTP **123456**, then "Skip for now" on the PIN step (see
 [local-demo.md](local-demo.md) for what the demo account holds). Use Chrome: the app needs a
 service worker. Each browser tab keeps its own state; `?demo=1` resets it.

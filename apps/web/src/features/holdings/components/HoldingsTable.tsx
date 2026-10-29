@@ -7,9 +7,11 @@ import {
   type HoldingsSort,
   type HoldingsSortKey,
 } from '../model/holdingsSort';
+import { useId } from 'react';
+import { usePhoneLayout } from '@/shared/hooks/usePhoneLayout';
 import { holdingKey } from '../model/liveHoldings';
 import { strings } from '../strings';
-import { HoldingRow } from './HoldingRow';
+import { HoldingCard, HoldingRow } from './HoldingRow';
 
 export type HoldingsTableProps = {
   /** Holdings at live prices (the live selector's rows). */
@@ -24,6 +26,44 @@ export type HoldingsTableProps = {
  */
 export function HoldingsTable({ rows, sort, onSortChange }: HoldingsTableProps) {
   const sorted = sortHoldings(rows, sort);
+  const phone = usePhoneLayout();
+  const sortId = useId();
+  if (phone) {
+    // A list of three-line rows (NSTOCK-0447), as Orders has; the column sort becomes one picker,
+    // A to Z for the stock and largest first for every number.
+    return (
+      <div className="grid gap-2">
+        <div className="flex items-center justify-end gap-2 px-4 pt-3 text-label text-ink-muted">
+          <label htmlFor={sortId}>{strings.phone.sort}</label>
+          <select
+            id={sortId}
+            aria-label={strings.phone.sortLabel}
+            value={sort.key}
+            onChange={(event) => {
+              const key = event.target.value as HoldingsSortKey;
+              onSortChange({ key, dir: key === 'symbol' ? 'asc' : 'desc' });
+            }}
+            className="min-h-11 rounded-md border border-line bg-surface px-2 text-body text-ink"
+          >
+            {HOLDINGS_SORT_KEYS.map((key) => (
+              <option key={key} value={key}>
+                {strings.columns[key]}
+              </option>
+            ))}
+          </select>
+        </div>
+        <ul
+          aria-label={strings.tableLabel}
+          className="grid grid-cols-[minmax(0,1fr)] divide-y divide-line"
+          data-layout="phone"
+        >
+          {sorted.map((holding) => (
+            <HoldingCard key={holdingKey(holding)} holding={holding} />
+          ))}
+        </ul>
+      </div>
+    );
+  }
   const ariaSort = (key: HoldingsSortKey) =>
     sort.key === key ? (sort.dir === 'asc' ? 'ascending' : 'descending') : 'none';
   return (

@@ -9,6 +9,7 @@ import { landscapeChartHeight, phoneChartHeight } from '@/shared/lib/phoneChart'
 import { DEFAULT_STOCK_RANGE, type StockDetailSearch } from '../model/stockDetailSearch';
 import { rememberChartType, rememberedChartType } from '../model/chartTypePreference';
 import { strings } from '../strings';
+import { IndexEtfTrade } from './IndexEtfTrade';
 import { InstrumentOrders } from './InstrumentOrders';
 import { KeyStatsCard } from './KeyStatsCard';
 import { MarketDepthCard } from './MarketDepthCard';
@@ -43,8 +44,9 @@ export type PhoneStockDetailProps = {
  * The instrument page on a phone (T12, SPEC-TFC-1 §9.4), a deliberate layout and not a shrunk
  * desktop: the header, the chart at about half the screen with its range row, then Overview,
  * Depth and Orders tabs (the Demo simulator above them in demo mode), and at the bottom the position strip and a sticky Sell and Buy bar in
- * thumb reach, above the safe area. Every control is at least 44 px. Equities only; indices keep
- * the header and chart. Turned sideways the price block is one line and the chart fills the height
+ * thumb reach, above the safe area. Every control is at least 44 px. An index (NSTOCK-0447) gets
+ * the same header and chart, with its tracking ETF's bar at the bottom in place of the tabs and
+ * Sell and Buy (an index is not traded). Turned sideways the price block is one line and the chart fills the height
  * between the app bar and the dock (SPEC-CR-1 §6.2).
  */
 export function PhoneStockDetail({
@@ -67,6 +69,7 @@ export function PhoneStockDetail({
       : CHART_HEIGHT;
   const openTicket = useOpenTicket();
   const { symbol, exchange } = instrument;
+  const equity = instrument.type === 'EQUITY';
   const trade = (side: OrderSide) => {
     void openTicket({ symbol, exchange, side });
   };
@@ -128,73 +131,83 @@ export function PhoneStockDetail({
             }}
             height={chartHeight}
             controls="touch"
-            trading
+            trading={equity}
           />,
         )}
-        {/* Demo mode only (TFC-12): under the chart, so a phone demo can ratchet and trigger a stop. */}
-        {section(strings.simulator.label, <SimulatorPanel symbol={symbol} />)}
-        <Tabs value={tab} onValueChange={(next) => setTab(next as PhoneTab)} className="grid gap-0">
-          <TabsList aria-label={strings.phone.tabsLabel} className="gap-0">
-            {PHONE_TABS.map((key) => (
-              <TabsTrigger key={key} value={key} className="min-h-11 flex-1 px-3">
-                {strings.phone.tabs[key]}
-              </TabsTrigger>
-            ))}
-          </TabsList>
-          <TabsContent value="overview" className="grid gap-3 pt-3">
-            {section(
-              strings.stats.title,
-              <KeyStatsCard instrument={instrument} snapshot={snapshot} />,
-            )}
-            {section(strings.overview.title, <OverviewCard instrument={instrument} />)}
-          </TabsContent>
-          <TabsContent value="depth" className="pt-3">
-            {section(strings.depth.title, <MarketDepthCard instrument={instrument} />)}
-          </TabsContent>
-          <TabsContent value="orders" className="pt-3">
-            <InstrumentOrders instrument={instrument} />
-          </TabsContent>
-        </Tabs>
-        {/*
+        {equity ? null : <IndexEtfTrade index={instrument} phone />}
+        {equity ? (
+          <>
+            {/* Demo mode only (TFC-12): under the chart, so a phone demo can ratchet and trigger a stop;
+            folded to one button until tapped (NSTOCK-0447). */}
+            {section(strings.simulator.label, <SimulatorPanel symbol={symbol} collapsible />)}
+            <Tabs
+              value={tab}
+              onValueChange={(next) => setTab(next as PhoneTab)}
+              className="grid gap-0"
+            >
+              <TabsList aria-label={strings.phone.tabsLabel} className="gap-0">
+                {PHONE_TABS.map((key) => (
+                  <TabsTrigger key={key} value={key} className="min-h-11 flex-1 px-3">
+                    {strings.phone.tabs[key]}
+                  </TabsTrigger>
+                ))}
+              </TabsList>
+              <TabsContent value="overview" className="grid gap-3 pt-3">
+                {section(
+                  strings.stats.title,
+                  <KeyStatsCard instrument={instrument} snapshot={snapshot} />,
+                )}
+                {section(strings.overview.title, <OverviewCard instrument={instrument} />)}
+              </TabsContent>
+              <TabsContent value="depth" className="pt-3">
+                {section(strings.depth.title, <MarketDepthCard instrument={instrument} />)}
+              </TabsContent>
+              <TabsContent value="orders" className="pt-3">
+                <InstrumentOrders instrument={instrument} />
+              </TabsContent>
+            </Tabs>
+            {/*
         Sticky to the bottom of the screen, edge to edge (it cancels main's padding), clear of the
         iPhone home indicator: the primary actions stay in the lower part of the screen (§9.4).
       */}
-        <div
-          data-testid="phone-trade-bar"
-          className="sticky bottom-0 z-(--nth-z-header) -mx-4 -mb-4 border-t border-line bg-surface pb-[env(safe-area-inset-bottom)]"
-        >
-          <PositionStrip instrument={instrument} />
-          {scalp ? (
-            <>
-              <ScalperPad instrument={instrument} />
-              <div className="flex justify-end px-4 pb-3">{scalpSwitch}</div>
-            </>
-          ) : (
             <div
-              role="group"
-              aria-label={strings.phone.tradeBar(symbol)}
-              className="grid grid-cols-[1fr_1fr_auto] gap-2 px-4 py-3"
+              data-testid="phone-trade-bar"
+              className="sticky bottom-0 z-(--nth-z-header) -mx-4 -mb-4 border-t border-line bg-surface pb-[env(safe-area-inset-bottom)]"
             >
-              <Button
-                variant="sell"
-                size="lg"
-                aria-label={strings.header.sellLabel(symbol)}
-                onClick={() => trade('SELL')}
-              >
-                {strings.header.sell}
-              </Button>
-              <Button
-                variant="buy"
-                size="lg"
-                aria-label={strings.header.buyLabel(symbol)}
-                onClick={() => trade('BUY')}
-              >
-                {strings.header.buy}
-              </Button>
-              {scalpSwitch}
+              <PositionStrip instrument={instrument} />
+              {scalp ? (
+                <>
+                  <ScalperPad instrument={instrument} />
+                  <div className="flex justify-end px-4 pb-3">{scalpSwitch}</div>
+                </>
+              ) : (
+                <div
+                  role="group"
+                  aria-label={strings.phone.tradeBar(symbol)}
+                  className="grid grid-cols-[1fr_1fr_auto] gap-2 px-4 py-3"
+                >
+                  <Button
+                    variant="sell"
+                    size="lg"
+                    aria-label={strings.header.sellLabel(symbol)}
+                    onClick={() => trade('SELL')}
+                  >
+                    {strings.header.sell}
+                  </Button>
+                  <Button
+                    variant="buy"
+                    size="lg"
+                    aria-label={strings.header.buyLabel(symbol)}
+                    onClick={() => trade('BUY')}
+                  >
+                    {strings.header.buy}
+                  </Button>
+                  {scalpSwitch}
+                </div>
+              )}
             </div>
-          )}
-        </div>
+          </>
+        ) : null}
       </div>
     </TouchTargets>
   );

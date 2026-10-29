@@ -43,7 +43,7 @@ describe('PriceCell + quote store (T-056, T-057)', () => {
     expect(screen.getByTestId('INFY')).toHaveTextContent('₹1,505.00▲');
   });
 
-  it('shows a skeleton until the first quote, then the price with the day\'s ▲ or ▼', () => {
+  it("shows a skeleton until the first quote, then the price with the day's ▲ or ▼", () => {
     const { push } = renderCells(['INFY']);
     const cell = screen.getByTestId('INFY');
     expect(cell.querySelector('[data-skeleton]')).not.toBeNull();

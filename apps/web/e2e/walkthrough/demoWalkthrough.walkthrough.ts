@@ -68,6 +68,8 @@ clip('walkthrough', 'demo walkthrough on a phone (T30)', async (page) => {
   await expect(gutter).toBeVisible();
   const simulator = page.getByRole('region', { name: 'Demo simulator' });
   await expect(simulator).toBeVisible();
+  // Folded to one button on a phone (NSTOCK-0447).
+  await finger.tap(simulator.getByRole('button', { name: 'Demo controls' }));
   await say(
     page,
     'One tap from the login page to a live chart. The "Simulated" panel moves the price.',

@@ -35,6 +35,9 @@ test('Try demo opens the instrument page with the Demo simulator and the demo ac
   await expect(page).toHaveURL(/\/stocks\/RELIANCE$/);
   const simulator = page.getByRole('region', { name: 'Demo simulator' });
   await expect(simulator).toBeVisible();
+  // On a phone the panel is folded to one button (NSTOCK-0447).
+  await expect(simulator.getByRole('button', { name: 'Rally +1%' })).toBeHidden();
+  await simulator.getByRole('button', { name: 'Demo controls' }).click();
   await expect(simulator.getByRole('button', { name: 'Rally +1%' })).toBeVisible();
 
   // The demo account comes with it: the seeded holdings are in the portfolio.
