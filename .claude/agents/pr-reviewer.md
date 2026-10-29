@@ -37,6 +37,7 @@ every result, then always go on to "How to report".
 | Agent | When |
 |---|---|
 | `frontend-reviewer` | any `.tsx` or `apps/web`, `packages/ui`, `packages/tokens` change |
+| `ux-design-reviewer` | any `.tsx`, `.css` or `apps/web/src`, `packages/ui`, `packages/tokens` change |
 | `database-reviewer` | `apps/api/src/db`, `apps/api/drizzle`, any `pgRepo.ts` |
 | `security-reviewer` | `apps/api`, `apps/realtime`, auth, sessions, orders, funds, migrations, security headers, `package.json` |
 | `error-handling-reviewer` | any code change |
