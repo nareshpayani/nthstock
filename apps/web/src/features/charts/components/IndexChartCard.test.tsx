@@ -457,14 +457,18 @@ describe('IndexChartCard (T-095)', () => {
     const sameDay = new Date(last.time * 1000 + 60_000).toISOString();
     act(() => quotes.push(testQuote('NIFTY50', 2541860, { ts: sameDay })));
     // A tick on the same bar glides there over a few frames (A16).
-    await waitFor(() =>
-      expect(series?.update).toHaveBeenLastCalledWith({ time: last.time, value: 2541860 }),
-    );
+    // The last point drawn on the chart in use now, by update or by a full setData: a slow runner
+    // can mount the lazy canvas again, and the first series then stays behind with its old bars.
+    const lastDrawn = () => {
+      const live = chartsMock.active().at(-1)?.series[0];
+      if (!live) return undefined;
+      const order = (fn: typeof live.update) => fn.mock.invocationCallOrder.at(-1) ?? -1;
+      if (order(live.update) > order(live.setData)) return live.update.mock.lastCall?.[0];
+      return (live.setData.mock.lastCall?.[0] as unknown[] | undefined)?.at(-1);
+    };
+    await waitFor(() => expect(lastDrawn()).toEqual({ time: last.time, value: 2541860 }));
     const nextDay = new Date(last.time * 1000 + 86_400_000).toISOString();
     act(() => quotes.push(testQuote('NIFTY50', 2542000, { ts: nextDay })));
-    // Waited for like the first tick: on a busy runner a frame of that glide can still land first.
-    await waitFor(() =>
-      expect(series?.update).toHaveBeenLastCalledWith({ time: last.time + 86_400, value: 2542000 }),
-    );
+    await waitFor(() => expect(lastDrawn()).toEqual({ time: last.time + 86_400, value: 2542000 }));
   });
 });
