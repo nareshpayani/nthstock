@@ -14,3 +14,5 @@ export {
   resolveInterval,
 } from './model/ranges';
 export { useLiveCandles } from './hooks/useLiveCandles';
+export { withAlpha } from './model/chartTheme';
+export { PRICE_CHART_TYPES, type PriceChartType } from './model/chartTypes';

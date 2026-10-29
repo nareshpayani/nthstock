@@ -1,17 +1,23 @@
 import { vi } from 'vitest';
 
+type MockSeriesType = 'Area' | 'Candlestick' | 'Line' | 'Bar';
+
 /**
  * A stand-in for `lightweight-charts` in jsdom (no canvas). Use it with
  * `vi.mock('lightweight-charts', () => import('@/test/chartsMock'))` and inspect `chartsMock`.
  */
-type FakePriceLine = { options: Record<string, unknown>; applyOptions: (o: object) => void };
+type FakePriceLine = {
+  options: Record<string, unknown>;
+  removed: boolean;
+  applyOptions: (o: object) => void;
+};
 type FakePrimitive = { attached?: (param: unknown) => void; updateAllViews?: () => void };
 type FakeSeries = {
-  type: 'Area' | 'Candlestick';
+  type: MockSeriesType;
   setData: ReturnType<typeof vi.fn>;
   update: ReturnType<typeof vi.fn>;
   applyOptions: ReturnType<typeof vi.fn>;
-  seriesType: () => 'Area' | 'Candlestick';
+  seriesType: () => MockSeriesType;
   /** Price lines currently drawn. */
   priceLines: FakePriceLine[];
   primitives: FakePrimitive[];
@@ -38,9 +44,9 @@ type FakeChart = {
 /**
  * The fake price scale: `top` paise sits at y = 0 and each px is `paisePerPx` lower, over a pane
  * `height` px tall with a `axisWidth` px price axis. Change it and call `repaint()` to stand in
- * for a pan, pinch or autoscale.
+ * for a pan, pinch or autoscale. `autoScale` turns off when a price-axis zoom sets the range.
  */
-const DEFAULT_SCALE = { top: 160_000, paisePerPx: 50, height: 300, axisWidth: 64 };
+const DEFAULT_SCALE = { top: 160_000, paisePerPx: 50, height: 300, axisWidth: 64, autoScale: true };
 
 export const chartsMock = {
   charts: [] as FakeChart[],
@@ -77,13 +83,21 @@ export const chartsMock = {
 
 export const AreaSeries = { type: 'Area' as const };
 export const CandlestickSeries = { type: 'Candlestick' as const };
+export const LineSeries = { type: 'Line' as const };
+export const BarSeries = { type: 'Bar' as const };
 export const ColorType = { Solid: 'solid' };
-export const CrosshairMode = { Normal: 0, Magnet: 1 };
+export const CrosshairMode = { Normal: 0, Magnet: 1, Hidden: 2 };
 export const TickMarkType = { Year: 0, Month: 1, DayOfMonth: 2, Time: 3, TimeWithSeconds: 4 };
 
 export function createChart(_host: HTMLElement, options: unknown) {
   const chart: FakeChart = {
-    options,
+    // The library's defaults under what the caller passed, as `chart.options()` returns them.
+    options: {
+      crosshair: { mode: CrosshairMode.Normal },
+      handleScroll: true,
+      handleScale: true,
+      ...(options as Record<string, unknown>),
+    },
     series: [],
     resize: vi.fn(),
     remove: vi.fn(() => {
@@ -96,7 +110,7 @@ export function createChart(_host: HTMLElement, options: unknown) {
   };
   chartsMock.charts.push(chart);
   return {
-    addSeries(definition: { type: 'Area' | 'Candlestick' }) {
+    addSeries(definition: { type: MockSeriesType }) {
       const series: FakeSeries = {
         type: definition.type,
         setData: vi.fn(),
@@ -108,12 +122,18 @@ export function createChart(_host: HTMLElement, options: unknown) {
         createPriceLine: (options) => {
           const line: FakePriceLine = {
             options: { ...options },
-            applyOptions: (next) => Object.assign(line.options, next),
+            removed: false,
+            // The real library throws when a removed line is written to.
+            applyOptions: (next) => {
+              if (line.removed) throw new Error('Value is undefined');
+              Object.assign(line.options, next);
+            },
           };
           series.priceLines.push(line);
           return line;
         },
         removePriceLine: (line) => {
+          line.removed = true;
           series.priceLines = series.priceLines.filter((drawn) => drawn !== line);
         },
         attachPrimitive: (primitive) => {
@@ -131,6 +151,11 @@ export function createChart(_host: HTMLElement, options: unknown) {
     },
     resize: chart.resize,
     remove: chart.remove,
+    options: () => chart.options,
+    applyOptions: (next: Record<string, unknown>) => {
+      chart.options = { ...(chart.options as Record<string, unknown>), ...next };
+    },
+    clearCrosshairPosition: vi.fn(),
     subscribeCrosshairMove: (handler: (param: unknown) => void) => chart.crosshair.add(handler),
     unsubscribeCrosshairMove: (handler: (param: unknown) => void) =>
       chart.crosshair.delete(handler),
@@ -143,6 +168,21 @@ export function createChart(_host: HTMLElement, options: unknown) {
       },
     }),
     paneSize: () => ({ height: chartsMock.scale.height, width: 600 }),
-    priceScale: () => ({ width: () => chartsMock.scale.axisWidth }),
+    priceScale: () => ({
+      width: () => chartsMock.scale.axisWidth,
+      options: () => ({ autoScale: chartsMock.scale.autoScale }),
+      getVisibleRange: () => {
+        const { top, paisePerPx, height } = chartsMock.scale;
+        return { from: top - height * paisePerPx, to: top };
+      },
+      setVisibleRange: (range: { from: number; to: number }) => {
+        chartsMock.scale.top = range.to;
+        chartsMock.scale.paisePerPx = (range.to - range.from) / chartsMock.scale.height;
+        chartsMock.scale.autoScale = false;
+      },
+      setAutoScale: (on: boolean) => {
+        chartsMock.scale.autoScale = on;
+      },
+    }),
   };
 }

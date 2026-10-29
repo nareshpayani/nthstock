@@ -111,7 +111,13 @@ describe('sessionBarStart (NSTOCK-0343)', () => {
     expect(sessionBarStart(ms(11, 7), 5)).toBe(ms(11, 5));
   });
 
-  it('puts a tick before the open into the first bar', () => {
+  it('puts a pre-open tick into the first bar', () => {
     expect(sessionBarStart(ms(9, 8), 15)).toBe(ms(9, 15));
+  });
+
+  it('keeps the grid before the pre-open, for the demo market forced open (NSTOCK-0441)', () => {
+    expect(sessionBarStart(ms(6, 54), 1)).toBe(ms(6, 54));
+    expect(sessionBarStart(ms(6, 54), 5)).toBe(ms(6, 50));
+    expect(sessionBarStart(ms(6, 54), 60)).toBe(ms(6, 15));
   });
 });

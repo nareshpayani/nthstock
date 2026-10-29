@@ -15,7 +15,7 @@ export type TrailingParamsFieldsProps = {
 
 /**
  * A trailing stop's parameters (SPEC-TFC-1 §7): unit (₹ or %), trail value, optional activation
- * price, exit type with a limit offset, and the live preview. Shared by the Trailing SL order type
+ * price, exit type with a limit offset, and the live preview. Shared by the Trailing stop order type
  * (T13) and "Add trailing stop" on an entry (T14), so both read and check the same.
  */
 export function TrailingParamsFields({
@@ -27,7 +27,7 @@ export function TrailingParamsFields({
 }: TrailingParamsFieldsProps) {
   return (
     <>
-      <div className="grid gap-3 sm:grid-cols-2 [&>*]:min-w-0">
+      <div className="grid gap-3 @min-[440px]:grid-cols-2 [&>*]:min-w-0">
         <div className="grid content-start gap-1">
           <span className="text-label text-ink-muted" aria-hidden="true">
             {strings.trailing.unit}
@@ -85,7 +85,7 @@ export function TrailingParamsFields({
             />
           </Field>
 
-          <div className="grid gap-3 sm:grid-cols-2 [&>*]:min-w-0">
+          <div className="grid gap-3 @min-[440px]:grid-cols-2 [&>*]:min-w-0">
             <div className="grid content-start gap-1">
               <span className="text-label text-ink-muted" aria-hidden="true">
                 {strings.trailing.exitType}

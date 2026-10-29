@@ -5,6 +5,7 @@ import { act, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createMockServer } from '@/mocks/node';
 import { useOpenTicket } from '@/shared/hooks/useOpenTicket';
+import { useConnectivityStore } from '@/shared/lib/connectivity';
 import type { MarketSession } from '@/shared/lib/marketSessionContext';
 import { initialTicketIntentState, useTicketIntentStore } from '@/shared/lib/ticketIntentStore';
 import { createTestQuoteStore, testQuote } from '@/test/quotes';
@@ -87,6 +88,7 @@ beforeEach(() => {
 afterEach(() => {
   vi.unstubAllGlobals();
   resetSession();
+  useConnectivityStore.getState().setForced('live');
   useTicketIntentStore.setState(initialTicketIntentState);
   vi.restoreAllMocks();
 });
@@ -121,6 +123,49 @@ describe('order ticket with the market open', () => {
   );
 
   it(
+    'offline: the order button is disabled with the reason attached, and works again on reconnect (CR-1 §7)',
+    async () => {
+      await renderTicket(mock.session);
+      await openTicket();
+      const submit = () => within(screen.getByTestId('ticket-primary')).getByRole('button');
+      expect(submit()).toBeEnabled();
+
+      act(() => useConnectivityStore.getState().setForced('offline'));
+      const message = await screen.findByText("You're offline. Orders resume when you reconnect.");
+      expect(submit()).toBeDisabled();
+      expect(submit()).toHaveAccessibleDescription(message.textContent);
+
+      act(() => useConnectivityStore.getState().setForced('live'));
+      await waitFor(() => expect(submit()).toBeEnabled());
+      expect(screen.queryByText(/You're offline/)).not.toBeInTheDocument();
+    },
+    HEAVY,
+  );
+
+  it(
+    'offline: the review step Confirm is disabled with the reason attached, and works again on reconnect (CR-1 §7)',
+    async () => {
+      await renderTicket(mock.session);
+      await openTicket();
+      fireEvent.change(qtyInput(), { target: { value: '2' } });
+      fireEvent.click(screen.getByRole('button', { name: 'Buy INFY' }));
+      await screen.findByRole('heading', { name: 'Review your order' });
+      expect(screen.getByRole('button', { name: 'Confirm' })).toBeEnabled();
+
+      act(() => useConnectivityStore.getState().setForced('offline'));
+      const message = await screen.findByText("You're offline. Orders resume when you reconnect.");
+      const confirm = screen.getByRole('button', { name: 'Confirm' });
+      expect(confirm).toBeDisabled();
+      expect(confirm).toHaveAccessibleDescription(message.textContent);
+
+      act(() => useConnectivityStore.getState().setForced('live'));
+      await waitFor(() => expect(screen.getByRole('button', { name: 'Confirm' })).toBeEnabled());
+      expect(screen.queryByText(/You're offline/)).not.toBeInTheDocument();
+    },
+    HEAVY,
+  );
+
+  it(
     'a signed-out Buy keeps the intent and does not open until a session is held',
     async () => {
       const { router } = await renderTicket(mock.session, { signedIn: false });
@@ -142,6 +187,10 @@ describe('order ticket with the market open', () => {
       await waitFor(() => expect(priceInput()).toHaveValue((ltp / 100).toFixed(2)));
       expect(priceInput()).toBeDisabled();
       expect(screen.getByRole('radio', { name: 'Buy' })).toHaveAttribute('aria-checked', 'true');
+      // The selected Buy is solid brand blue, like the trade bar's Buy (SPEC-CR-1 §4.1).
+      expect(screen.getByRole('radio', { name: 'Buy' }).className).toContain(
+        'data-[state=checked]:bg-brand',
+      );
       expect(screen.getByRole('radio', { name: 'Market' })).toHaveAttribute('aria-checked', 'true');
       expect(screen.getByRole('radio', { name: 'Delivery' })).toHaveAttribute(
         'aria-checked',
@@ -368,6 +417,60 @@ describe('order ticket with the market open', () => {
     },
     HEAVY,
   );
+
+  describe('on a phone (CR-T11)', () => {
+    const stubViewport = (phone: boolean) =>
+      vi.stubGlobal('matchMedia', (query: string) => ({
+        matches: phone && query.includes('max-width'),
+        media: query,
+        addEventListener: () => undefined,
+        removeEventListener: () => undefined,
+      }));
+
+    it(
+      'hides product, depth and the stop behind More options, pinning the primary button',
+      async () => {
+        stubViewport(true);
+        await renderTicket(mock.session);
+        const { dialog } = await openTicket();
+        expect(within(dialog).queryByRole('radiogroup', { name: 'Product' })).toBeNull();
+        expect(within(dialog).queryByTestId('attach-trailing')).toBeNull();
+        expect(within(dialog).getByRole('radiogroup', { name: 'Order type' })).toBeInTheDocument();
+
+        const toggle = within(dialog).getByRole('button', { name: /More options/ });
+        expect(toggle).toHaveAttribute('aria-expanded', 'false');
+        expect(toggle).toHaveTextContent('Delivery');
+        fireEvent.click(toggle);
+        expect(toggle).toHaveAttribute('aria-expanded', 'true');
+        expect(within(dialog).getByRole('radiogroup', { name: 'Product' })).toBeInTheDocument();
+        expect(within(dialog).getByTestId('attach-trailing')).toBeInTheDocument();
+
+        // The submit button lives in the pinned footer, and its variant follows the side.
+        const submit = within(within(dialog).getByTestId('ticket-primary')).getByRole('button', {
+          name: /Buy INFY/,
+        });
+        const buyClass = submit.className;
+        fireEvent.click(within(dialog).getByRole('radio', { name: 'Sell' }));
+        const sell = within(within(dialog).getByTestId('ticket-primary')).getByRole('button', {
+          name: /Sell INFY/,
+        });
+        expect(sell.className).not.toBe(buyClass);
+      },
+      HEAVY,
+    );
+
+    it(
+      'shows product inline and no toggle on wider screens',
+      async () => {
+        stubViewport(false);
+        await renderTicket(mock.session);
+        const { dialog } = await openTicket();
+        expect(within(dialog).queryByRole('button', { name: /More options/ })).toBeNull();
+        expect(within(dialog).getByRole('radiogroup', { name: 'Product' })).toBeInTheDocument();
+      },
+      HEAVY,
+    );
+  });
 });
 
 describe('order ticket with the market closed (T-138)', () => {

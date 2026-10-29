@@ -103,7 +103,7 @@ describe('one price on every surface while an order line moves (T16, TFC-21)', (
 
     pointer(line, 'pointerup', 160);
     await waitFor(() =>
-      expect(screen.getByTestId('pending-price')).toHaveTextContent('Updating to ₹1,520.00'),
+      expect(screen.getByTestId('pending-price')).toHaveTextContent('Saving at ₹1,520.00'),
     );
     await act(async () => answer?.({ ...order, price: 152_000, seq: 2 }));
     await waitFor(() => expect(screen.queryByTestId('pending-price')).not.toBeInTheDocument());

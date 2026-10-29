@@ -1,6 +1,6 @@
 import { Faker, base, en, en_IN } from '@faker-js/faker';
 import type { Instrument } from '@nthstock/contracts';
-import { TICK_SIZE_PAISE } from '@nthstock/contracts';
+import { INDEX_ETFS, INDEX_ETF_POINTS_PER_RUPEE, TICK_SIZE_PAISE } from '@nthstock/contracts';
 import { LISTED_COMPANIES, NIFTY_50, NIFTY_BANK, NIFTY_IT, SENSEX_30 } from './largeCaps.js';
 import { roundToTick } from './price.js';
 import {
@@ -58,10 +58,20 @@ export type MasterIndex = {
   constituents: readonly string[];
 };
 
+/**
+ * A tracking ETF (NSTOCK-0440): traded like an equity, priced from its index (a hundredth of the
+ * level), so it never walks on its own. Kept out of `equities`, so lists and movers stay stocks.
+ */
+export type MasterEtf = MasterEquity & {
+  /** The index it tracks. */
+  tracks: string;
+};
+
 export type SymbolMaster = {
   seed: number;
   equities: readonly MasterEquity[];
   indices: readonly MasterIndex[];
+  etfs: readonly MasterEtf[];
   equityBySymbol: ReadonlyMap<string, MasterEquity>;
   indexBySymbol: ReadonlyMap<string, MasterIndex>;
 };
@@ -83,6 +93,18 @@ const INDEX_DEFS = [
 
 /** Tokens for indices start here so they never collide with equity tokens. */
 export const INDEX_TOKEN_BASE = 900_001;
+/** Tokens for the tracking ETFs start here, clear of equities and indices. */
+export const ETF_TOKEN_BASE = 950_001;
+/** Units of each ETF outstanding: sets its depth and day volume, not its price. */
+const ETF_UNITS = 200_000_000;
+
+/**
+ * ETF price in paise for an index level in hundredths of a point, on the 5-paise tick: level
+ * points ÷ points per rupee is rupees, so hundredths of a point ÷ points per rupee is paise.
+ */
+export function etfPriceOf(level: number): number {
+  return roundToTick(level / INDEX_ETF_POINTS_PER_RUPEE);
+}
 const MIDCAP_100_SIZE = 100;
 const GENERATED_MID_CAPS = 150;
 
@@ -249,19 +271,52 @@ export function generateSymbolMaster(options: SymbolMasterOptions = {}): SymbolM
     constituents: constituentsBySymbol[def.symbol],
   }));
 
+  const etfs: MasterEtf[] = indices.flatMap((index, i) => {
+    const fund = INDEX_ETFS[index.instrument.symbol];
+    if (!fund) return [];
+    const token = ETF_TOKEN_BASE + i;
+    return [
+      {
+        instrument: {
+          token,
+          symbol: fund.symbol,
+          exchange: fund.exchange,
+          name: fund.name,
+          type: 'EQUITY',
+          isin: mockIsin(token),
+          sector: 'ETF',
+          lotSize: 1,
+          tickSize: TICK_SIZE_PAISE,
+        },
+        tracks: index.instrument.symbol,
+        sector: 'Financial Services',
+        capBucket: 'LARGE',
+        basePrice: etfPriceOf(index.baseLevel),
+        sharesOutstanding: ETF_UNITS,
+        dividendYieldBp: 0,
+        peX100: null,
+        return1yBp: 0,
+        rank: equities.length + i,
+        listed: false,
+      },
+    ];
+  });
+
   return {
     seed,
     equities,
     indices,
+    etfs,
     equityBySymbol,
     indexBySymbol: new Map(indices.map((ix) => [ix.instrument.symbol, ix])),
   };
 }
 
-/** Every instrument in the master: indices first, then equities by market cap. */
+/** Every instrument in the master: indices first, then equities by market cap, then the ETFs. */
 export function allInstruments(master: SymbolMaster): Instrument[] {
   return [
     ...master.indices.map((ix) => ix.instrument),
     ...master.equities.map((e) => e.instrument),
+    ...master.etfs.map((e) => e.instrument),
   ];
 }

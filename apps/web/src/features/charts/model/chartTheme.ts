@@ -5,7 +5,9 @@ import {
   CrosshairMode,
   TickMarkType,
   type AreaSeriesPartialOptions,
+  type BarSeriesPartialOptions,
   type CandlestickSeriesPartialOptions,
+  type LineSeriesPartialOptions,
   type ChartOptions,
   type DeepPartial,
   type Time,
@@ -120,9 +122,9 @@ export function chartOptions({ format, intraday }: ChartThemeOptions): DeepParti
 
 /**
  * Gestures for a chart you trade from (SPEC-TFC-1 §10.5): horizontal touch drag pans and pinch
- * zooms, but vertical touch drag stays with the page so it still scrolls. The price axis belongs
- * to the trading gutter, so dragging or double-clicking it does nothing, and it is at least 64 px
- * wide to hold a thumb.
+ * zooms, but vertical touch drag stays with the page so it still scrolls. Dragging the price axis
+ * zooms prices (NSTOCK-0436); on a trading chart the gutter over the axis does that itself, since
+ * a tap there starts an order. The axis is at least 64 px wide to hold a thumb.
  */
 export const TRADING_INTERACTION = {
   handleScroll: {
@@ -134,10 +136,11 @@ export const TRADING_INTERACTION = {
   handleScale: {
     mouseWheel: true,
     pinch: true,
-    axisPressedMouseMove: { time: true, price: false },
+    axisPressedMouseMove: { time: true, price: true },
     axisDoubleClickReset: false,
   },
-  rightPriceScale: { minimumWidth: 64 },
+  // Major tick marks on the price axis; the overlay draws the minor ones (SPEC-CR-1 §4.2).
+  rightPriceScale: { minimumWidth: 64, ticksVisible: true },
 } as const satisfies DeepPartial<ChartOptions>;
 
 const toneColor = (direction: ChartDirection) =>
@@ -165,8 +168,53 @@ export function areaSeriesOptions(
   };
 }
 
-export function candleSeriesOptions(format: ChartValueFormat): CandlestickSeriesPartialOptions {
+/** A plain close line, coloured like the area series (NSTOCK-0430). */
+export function lineSeriesOptions(
+  direction: ChartDirection,
+  format: ChartValueFormat,
+): LineSeriesPartialOptions {
+  const line = toneColor(direction);
   return {
+    color: line,
+    lineWidth: 2,
+    priceLineVisible: false,
+    crosshairMarkerBorderColor: colors.surface,
+    crosshairMarkerBackgroundColor: line,
+    priceFormat: priceFormat(format),
+  };
+}
+
+/** OHLC bars: open tick left, close tick right (NSTOCK-0430). */
+export function barSeriesOptions(format: ChartValueFormat): BarSeriesPartialOptions {
+  return {
+    upColor: colors.up,
+    downColor: colors.down,
+    openVisible: true,
+    thinBars: false,
+    priceLineVisible: false,
+    priceFormat: priceFormat(format),
+  };
+}
+
+const priceFormat = (format: ChartValueFormat) =>
+  ({
+    type: 'custom',
+    minMove: 1,
+    formatter: (value: number) => formatChartValue(value, format),
+  }) as const;
+
+/**
+ * Candles (and Heikin-Ashi): up bars solid green, down bars solid red (owner's call, NSTOCK-0436;
+ * they were hollow up, filled down). Colour is not the only signal: a rising bar closes at its
+ * top and the tooltip shows ▲ or ▼ with the change (WCAG 1.4.1). Heikin-Ashi hides the
+ * last-value label: its close is smoothed, not a traded price.
+ */
+export function candleSeriesOptions(
+  format: ChartValueFormat,
+  { smoothed = false }: { smoothed?: boolean } = {},
+): CandlestickSeriesPartialOptions {
+  return {
+    lastValueVisible: !smoothed,
     upColor: colors.up,
     downColor: colors.down,
     borderUpColor: colors.up,

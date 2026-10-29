@@ -3,6 +3,7 @@ import type { AccountState, Order, Position, TrailingStop } from '@nthstock/cont
 import { act, fireEvent, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { ChartHandle } from '@/features/charts';
+import { useConnectivityStore } from '@/shared/lib/connectivity';
 import { initialOrderDraftState, useOrderDraftStore } from '@/shared/lib/orderDraftStore';
 import { initialTicketIntentState, useTicketIntentStore } from '@/shared/lib/ticketIntentStore';
 import { initialTrailingSheetState, useTrailingSheetStore } from '@/shared/lib/trailingSheetStore';
@@ -10,6 +11,9 @@ import { AreaSeries, chartsMock, createChart } from '@/test/chartsMock';
 import { createTestQuoteStore, testQuote } from '@/test/quotes';
 import { renderWithProviders } from '@/test/renderWithProviders';
 import { CANCEL_ARM_MS, ChartTrading } from './ChartTrading';
+
+const haptics = vi.hoisted(() => ({ haptic: vi.fn(() => true) }));
+vi.mock('@/shared/motion/haptics', () => haptics);
 
 // The fake scale: ₹1,600.00 at y = 0, 50 paise per px, a 300 px pane.
 const AT = '2026-09-28T04:30:00.000Z';
@@ -112,7 +116,53 @@ afterEach(() => {
   useOrderDraftStore.setState(initialOrderDraftState);
   useTicketIntentStore.setState(initialTicketIntentState);
   useTrailingSheetStore.setState(initialTrailingSheetState);
+  useConnectivityStore.getState().setForced('live');
   vi.useRealTimers();
+});
+
+describe('offline (SPEC-CR-1 §7)', () => {
+  const setForced = (state: 'offline' | 'live') =>
+    act(() => useConnectivityStore.getState().setForced(state));
+
+  it('locks the line, says why, and a gutter tap starts no ghost; going live restores it', async () => {
+    await setup([limit()]);
+    expect(screen.getByTestId('chart-handle-action')).toBeInTheDocument();
+    setForced('offline');
+    await waitFor(() =>
+      expect(screen.queryByTestId('chart-handle-action')).not.toBeInTheDocument(),
+    );
+    expect(handleFor('ord_1')).toHaveAccessibleDescription(/Locked/);
+    expect(screen.getByTestId('chart-tab-lock')).toBeInTheDocument();
+
+    const gutter = screen.getByTestId('chart-gutter');
+    pointer(gutter, 'pointerdown', 100);
+    pointer(gutter, 'pointerup', 100);
+    expect(screen.getAllByTestId('chart-handle')).toHaveLength(1);
+
+    setForced('live');
+    await waitFor(() => expect(screen.getByTestId('chart-handle-action')).toBeInTheDocument());
+    expect(screen.queryByTestId('chart-tab-lock')).not.toBeInTheDocument();
+  });
+
+  it('Delete or Backspace on a locked line cancels nothing', async () => {
+    const { calls } = await setup([limit()]);
+    setForced('offline');
+    await waitFor(() => expect(handleFor('ord_1')).toHaveAccessibleDescription(/Locked/));
+    fireEvent.keyDown(handleFor('ord_1'), { key: 'Delete' });
+    fireEvent.keyDown(handleFor('ord_1'), { key: 'Backspace' });
+    expect(calls).toEqual([]);
+  });
+
+  it('a drag in flight when the connection drops sends no modify', async () => {
+    const { calls } = await setup([limit()]);
+    const handle = handleFor('ord_1');
+    pointer(handle, 'pointerdown', 200);
+    pointer(handle, 'pointermove', 160);
+    setForced('offline');
+    pointer(handle, 'pointerup', 160);
+    expect(calls).toEqual([]);
+    expect(useOrderDraftStore.getState().draft).toBeNull();
+  });
 });
 
 describe('order lines (T16, SPEC-TFC-1 §8.1, §8.3)', () => {
@@ -151,15 +201,17 @@ describe('order lines (T16, SPEC-TFC-1 §8.1, §8.3)', () => {
     expect(useOrderDraftStore.getState().draft).toEqual({ orderId: 'ord_1', price: 152_000 });
     expect(handle).toHaveTextContent('Buy 10 @ ₹1,520.00');
     expect(calls).toEqual([]);
+    // The loupe prices the order's open quantity at the new price (CR-T07).
+    expect(screen.getByTestId('chart-loupe')).toHaveTextContent('10 × ₹1,520.00 = ₹15,200.00');
 
     pointer(handle, 'pointerup', 160);
     expect(useOrderDraftStore.getState().draft).toBeNull();
     expect(calls.map((call) => [call.route, call.args])).toEqual([
       ['orderModify', { params: { id: 'ord_1' }, body: { price: 152_000 } }],
     ]);
-    // Sent: dotted at the new price, "Updating…", until the engine answers.
+    // Sent: dotted at the new price, "Saving…", until the engine answers.
     await waitFor(() => expect(handleFor('ord_1')).toHaveAttribute('data-tone', 'pending'));
-    expect(handleFor('ord_1')).toHaveTextContent('Updating… ₹1,520.00');
+    expect(handleFor('ord_1')).toHaveTextContent('Saving… ₹1,520.00');
     expect(store.getState().pending).toMatchObject([{ kind: 'modify', price: 152_000 }]);
 
     await act(async () => calls[0]?.answer.resolve(limit({ price: 152_000, seq: 2 })));
@@ -177,6 +229,8 @@ describe('order lines (T16, SPEC-TFC-1 §8.1, §8.3)', () => {
     await act(async () => calls[0]?.answer.reject(new Error('refused')));
     await waitFor(() => expect(handleFor('ord_1')).toHaveTextContent('Buy 10 @ ₹1,500.00'));
     expect(await screen.findByText('Order not modified')).toBeInTheDocument();
+    // The error haptic says it too, where the phone has one (SPEC-CR-1 §5.4).
+    expect(haptics.haptic).toHaveBeenLastCalledWith('reject');
   });
 
   it('a fill during the drag ends it, puts nothing on the wire and says it filled first', async () => {
@@ -350,20 +404,22 @@ describe('trailing-stop line (T19, SPEC-TFC-1 §6.5, §6.6, §8.1)', () => {
     updatedAt: AT,
   };
 
-  it('a drag sends one modify with the new stop, shown as Updating… until the engine answers', async () => {
+  it('a drag sends one modify with the new stop, shown as Saving… until the engine answers', async () => {
     const { calls, quotes } = await setup([], [position], [trailing]);
     act(() => quotes.push(testQuote('INFY', 150_000)));
     const line = handleFor('stop:ts_1');
-    expect(line).toHaveTextContent('Trailing SL ₹1,485.00 · 1% · Trailing');
+    expect(line).toHaveTextContent('Trailing stop ₹1,485.00 · 1% · Trailing');
 
     // ₹1,485.00 is at y = 230, its label pushed to 244 by the position chip at 200; 10 px up
     // from wherever it is grabbed is ₹1,490.00.
     expect(line.dataset.y).toBe('244');
     pointer(line, 'pointerdown', 244);
     pointer(line, 'pointermove', 234);
-    expect(line).toHaveTextContent('Trailing SL ₹1,490.00');
+    expect(line).toHaveTextContent('Trailing stop ₹1,490.00');
+    // The loupe says what the stop would lose against the ₹1,500.00 average on 10 shares.
+    expect(screen.getByTestId('chart-loupe')).toHaveTextContent('Est. P&L −₹100.00');
     pointer(line, 'pointerup', 234);
-    expect(handleFor('stop:ts_1')).toHaveTextContent('Updating… ₹1,490.00');
+    expect(handleFor('stop:ts_1')).toHaveTextContent('Saving… ₹1,490.00');
     const sent = calls.filter((call) => call.route === 'trailingStopModify');
     expect(sent.map((call) => call.args)).toEqual([
       { params: { id: 'ts_1' }, body: { stopPrice: 149_000 } },
@@ -380,7 +436,9 @@ describe('trailing-stop line (T19, SPEC-TFC-1 §6.5, §6.6, §8.1)', () => {
     });
     expect(await screen.findByText('Stop now ₹1,490.00, trailing by ₹10.00.')).toBeInTheDocument();
     await waitFor(() =>
-      expect(handleFor('stop:ts_1')).toHaveTextContent('Trailing SL ₹1,490.00 · ₹10.00 · Trailing'),
+      expect(handleFor('stop:ts_1')).toHaveTextContent(
+        'Trailing stop ₹1,490.00 · ₹10.00 · Trailing',
+      ),
     );
   });
 
@@ -394,7 +452,8 @@ describe('trailing-stop line (T19, SPEC-TFC-1 §6.5, §6.6, §8.1)', () => {
     pointer(line, 'pointerup', 204);
     expect(await screen.findByText('That stop would trigger immediately.')).toBeInTheDocument();
     expect(calls.filter((call) => call.route === 'trailingStopModify')).toEqual([]);
-    expect(handleFor('stop:ts_1')).toHaveTextContent('Trailing SL ₹1,485.00');
+    expect(handleFor('stop:ts_1')).toHaveTextContent('Trailing stop ₹1,485.00');
+    expect(haptics.haptic).toHaveBeenLastCalledWith('reject');
   });
 
   it('an armed stop with an activation price draws it as a dotted line that opens the sheet', async () => {
@@ -414,7 +473,7 @@ describe('trailing-stop line (T19, SPEC-TFC-1 §6.5, §6.6, §8.1)', () => {
     const line = handleFor('activation:ts_1');
     expect(line).toHaveTextContent('Activates at ₹1,560.00');
     expect(line.dataset.tone).toBe('activation');
-    expect(screen.queryByText(/^Trailing SL ₹/)).toBeNull();
+    expect(screen.queryByText(/^Trailing stop ₹/)).toBeNull();
     pointer(line, 'pointerdown', 80);
     pointer(line, 'pointerup', 80);
     expect(useTrailingSheetStore.getState().target).toMatchObject({ product: 'INTRADAY' });

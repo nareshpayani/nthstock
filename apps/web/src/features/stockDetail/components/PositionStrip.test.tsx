@@ -5,7 +5,7 @@ import { act, fireEvent, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import { useTrailingSheetStore } from '@/shared/lib/trailingSheetStore';
 import { renderWithProviders } from '@/test/renderWithProviders';
-import { phoneChartHeight } from './PhoneStockDetail';
+import { phoneChartHeight } from '@/shared/lib/phoneChart';
 import { PositionStrip } from './PositionStrip';
 
 const AT = '2026-09-28T04:30:00.000Z';
@@ -84,7 +84,7 @@ describe('phone position strip (T12, SPEC-TFC-1 §9.4)', () => {
     const strip = await screen.findByRole('region', { name: 'Your INFY position' });
     expect(strip).toHaveTextContent(`+10@ ${formatInr(123_450)}`);
     expect(strip).toHaveTextContent(`+${formatInr(12_000)}`);
-    expect(strip).toHaveTextContent(`Trailing SL ${formatInr(122_840)}`);
+    expect(strip).toHaveTextContent(`Trailing stop ${formatInr(122_840)}`);
     store.dispose();
   });
 
@@ -109,7 +109,7 @@ describe('phone position strip (T12, SPEC-TFC-1 §9.4)', () => {
   });
 
   it('sizes the chart to the phone: about 40% of the height, within 220 to 480 px', () => {
-    expect(phoneChartHeight(844)).toBe(321);
+    expect(phoneChartHeight(844)).toBe(338);
     expect(phoneChartHeight(500)).toBe(220);
     expect(phoneChartHeight(1400)).toBe(480);
   });

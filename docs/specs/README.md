@@ -48,3 +48,10 @@ backend and paper engine, and ADR 0005, the web UI architecture).
 | [SPEC-TFC-1](trade-from-charts.md) | Product and technical specification | In review, 2026-10-22 |
 | [PLAN-TFC-1](trade-from-charts-tasks.md) | Delivery plan: epics TFC-A to TFC-G, tasks T01 to T30, milestones M0 to M5 | In review, 2026-10-22 |
 | [RCM-TFC-1](trade-from-charts-traceability.md) | Requirements compliance matrix | In review, 2026-10-22 |
+
+## Release CR-1: craft round for mobile Trade from Charts
+
+| Document | Content | Status |
+|---|---|---|
+| [SPEC-CR-1](craft-round.md) | Identity, interaction, layout across screen sizes, device and viewport matrix, states, acceptance criteria | In review, 2026-10-28 |
+| [PLAN-CR-1](craft-round-tasks.md) | Delivery plan: epics CR-A to CR-F, stories CR-T01 to CR-T24, milestones M0 to M4 | In review, 2026-10-28 |

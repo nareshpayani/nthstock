@@ -13,13 +13,17 @@ const MINUTE_MS = 60_000;
 /**
  * Start (epoch ms) of the `minutes`-long bar that holds `ms`, counted from that IST day's 9:15
  * open, as NSE charts count them: 30-minute bars start 9:15, 9:45, …; hourly bars 9:15, 10:15, …,
- * and the day's last bar is shorter (NSTOCK-0343). Times before 9:15 fall in the 9:15 bar.
+ * and the day's last bar is shorter (NSTOCK-0343). Pre-open times (9:00 to 9:15) fall in the 9:15
+ * bar. Earlier times keep the same grid back from the open (NSTOCK-0441): only the demo market,
+ * forced open at any hour, trades then, and its bars must keep starting on time.
  */
 export function sessionBarStart(ms: number, minutes: number): number {
   const { year, month, day } = toIstParts(new Date(ms));
   const open = fromIst(year, month, day, MARKET_OPEN).getTime();
+  const preOpen = fromIst(year, month, day, PRE_OPEN_START).getTime();
   const size = minutes * MINUTE_MS;
-  return open + Math.max(0, Math.floor((ms - open) / size)) * size;
+  if (ms >= preOpen && ms < open) return open;
+  return open + Math.floor((ms - open) / size) * size;
 }
 
 export type MarketState = 'preOpen' | 'open' | 'closed';

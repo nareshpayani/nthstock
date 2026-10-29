@@ -23,7 +23,7 @@ function renderRow() {
 const cardFor = (name: string) =>
   screen
     .getAllByRole('listitem')
-    .find((item) => item.firstElementChild?.textContent === name) as HTMLElement;
+    .find((item) => item.firstElementChild?.firstElementChild?.textContent === name) as HTMLElement;
 
 describe('IndicesRow (T-096)', () => {
   it('renders at least 5 index cards from the API with ▲▼ changes and sparklines', async () => {
@@ -40,6 +40,19 @@ describe('IndicesRow (T-096)', () => {
       expect(within(card).getByRole('img', { name: /intraday trend$/ })).toBeInTheDocument();
     }
     expect(api.requestsTo('/market/indices')).toHaveLength(1);
+  });
+
+  it('opens each index on its own chart page (NSTOCK-0437)', async () => {
+    renderRow();
+    await screen.findByRole('region', { name: 'Market indices' });
+    expect(within(cardFor('NIFTY 50')).getByRole('link')).toHaveAttribute(
+      'href',
+      '/stocks/NIFTY50?exchange=NSE',
+    );
+    expect(within(cardFor('SENSEX')).getByRole('link')).toHaveAttribute(
+      'href',
+      '/stocks/SENSEX?exchange=BSE',
+    );
   });
 
   it('ticks the level and change live from the quote store', async () => {

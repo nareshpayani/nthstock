@@ -7,7 +7,7 @@ export const Tabs = TabsPrimitive.Root;
 export function TabsList({ className, ...rest }: ComponentProps<typeof TabsPrimitive.List>) {
   return (
     <TabsPrimitive.List
-      className={cn('flex gap-4 overflow-x-auto border-b border-line', className)}
+      className={cn('relative flex gap-4 overflow-x-auto border-b border-line', className)}
       {...rest}
     />
   );

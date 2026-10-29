@@ -45,3 +45,18 @@ describe('IndexTicker compact', () => {
     expect(screen.getByText(/up 212.45 points/)).toBeInTheDocument();
   });
 });
+
+describe('IndexTicker stacked', () => {
+  it('puts the name above the level and percent, and speaks one phrase', () => {
+    const { container } = render(
+      <IndexTicker name="SENSEX" level={8309215} change={-9970} changeBasisPoints={-12} stacked />,
+    );
+    const ticker = container.firstChild as HTMLElement;
+    expect(ticker).toHaveClass('flex-col');
+    expect(ticker).toHaveTextContent('SENSEX83,092.15▼ 0.12%');
+    expect(ticker).not.toHaveTextContent('-99.70 (');
+    expect(screen.getByText('SENSEX 83,092.15, down 99.70 points, down 0.12 percent')).toHaveClass(
+      'sr-only',
+    );
+  });
+});

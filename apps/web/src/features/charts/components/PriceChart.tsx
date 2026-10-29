@@ -3,6 +3,7 @@ import { Skeleton, cn } from '@nthstock/ui';
 import { formatIstDate } from '@nthstock/utils';
 import { lazy, Suspense, type ReactNode } from 'react';
 import { seriesDirection } from '../model/chartData';
+import type { PriceChartType } from '../model/chartTypes';
 import { formatChartValue, type ChartDirection, type ChartValueFormat } from '../model/chartFormat';
 import { strings } from '../strings';
 import type { ChartHandle } from './PriceChartCanvas';
@@ -16,7 +17,7 @@ export type PriceChartProps = {
   candles: readonly Candle[];
   /** Accessible name, e.g. "NIFTY 50 area chart over 1 year". */
   label: string;
-  type?: 'area' | 'candle';
+  type?: PriceChartType;
   /** `inr` for prices in paise, `index` for levels in hundredths of a point. */
   format?: ChartValueFormat;
   /** Colour of an area series; defaults to the move across the candles. */
@@ -33,6 +34,8 @@ export type PriceChartProps = {
   onReady?: ((handle: ChartHandle | null) => void) | undefined;
   /** Drawn over the canvas, e.g. the trading overlay (T15). */
   overlay?: ReactNode;
+  /** What an empty range says, in place of the generic line. */
+  emptyText?: string | undefined;
   className?: string | undefined;
 };
 
@@ -52,6 +55,7 @@ export function PriceChart({
   interactive = false,
   onReady,
   overlay,
+  emptyText,
   className,
 }: PriceChartProps) {
   const first = candles[0];
@@ -91,7 +95,7 @@ export function PriceChart({
         </>
       ) : (
         <figcaption className="grid h-full place-items-center text-body text-ink-muted">
-          {strings.noData}
+          {emptyText ?? strings.noData}
         </figcaption>
       )}
     </figure>

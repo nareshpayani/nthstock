@@ -73,7 +73,7 @@ export function IndicesRow() {
           aria-describedby={hintId}
           tabIndex={0}
           onKeyDown={onKeyDown}
-          className="snap-x snap-mandatory overflow-x-auto scroll-smooth rounded-lg pb-1 motion-reduce:scroll-auto"
+          className="relative snap-x snap-mandatory overflow-x-auto scroll-smooth rounded-lg pb-1 motion-reduce:scroll-auto"
         >
           <ul className="flex gap-3">
             {indices.data.items.map((summary) => (

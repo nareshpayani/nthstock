@@ -41,8 +41,10 @@ describe('Button', () => {
   it('applies variant classes and defaults to type=button', () => {
     render(<Button variant="buy">Buy</Button>);
     const button = screen.getByRole('button', { name: 'Buy' });
-    expect(button).toHaveClass('bg-up', 'text-surface');
+    expect(button).toHaveClass('bg-brand', 'text-surface');
     expect(button).toHaveAttribute('type', 'button');
+    render(<Button variant="sell">Sell</Button>);
+    expect(screen.getByRole('button', { name: 'Sell' })).toHaveClass('border-down', 'text-down');
   });
 });
 

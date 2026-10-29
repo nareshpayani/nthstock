@@ -120,7 +120,7 @@ test('keyboard only: modify and cancel an order line, set a trailing stop (T24)'
   await press(sheet.getByRole('button', { name: 'Set trailing stop' }), 'Enter');
   await expect(sheet).toBeHidden();
   const stop = figure.locator('[data-testid="chart-handle"][data-tone="trailing"]');
-  await expect(stop).toHaveText(/Trailing SL ₹[\d,]+\.\d\d · 2% · Trailing$/);
+  await expect(stop).toHaveText(/Trailing stop ₹[\d,]+\.\d\d · 2% · Trailing$/);
   // Closing the sheet gives focus back to the chip.
   await expect(chip).toBeFocused();
 });

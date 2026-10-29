@@ -2,6 +2,7 @@ import type { Exchange, PlaceOrderRequest } from '@nthstock/contracts';
 import { Button } from '@nthstock/ui';
 import { formatInr } from '@nthstock/utils';
 import { useEffect, useId, useRef } from 'react';
+import { useOffline } from '@/shared/lib/connectivity';
 import { strings } from '../strings';
 
 export type ReviewStepProps = {
@@ -40,6 +41,8 @@ export function ReviewStep({
   onEdit,
   onConfirm,
 }: ReviewStepProps) {
+  const offline = useOffline();
+  const offlineId = useId();
   const heading = useRef<HTMLHeadingElement>(null);
   const headingId = useId();
   useEffect(() => {
@@ -96,7 +99,13 @@ export function ReviewStep({
         </p>
       ) : null}
       <p className="text-label text-ink-muted">{strings.form.paperNote}</p>
-      <div className="grid grid-cols-2 gap-2">
+      {/* Pinned to the sheet's foot like the form's button (SPEC-CR-1 §5.5). */}
+      <div className="sticky bottom-0 z-10 -mx-4 -mb-4 grid grid-cols-2 gap-2 border-t border-line bg-surface px-4 pt-3 pb-4">
+        {offline ? (
+          <p id={offlineId} role="status" className="col-span-2 text-center text-label text-ink">
+            {strings.form.offline}
+          </p>
+        ) : null}
         <Button variant="secondary" size="lg" onClick={onEdit} disabled={placing}>
           {strings.review.edit}
         </Button>
@@ -104,6 +113,8 @@ export function ReviewStep({
           variant={request.side === 'BUY' ? 'buy' : 'sell'}
           size="lg"
           loading={placing}
+          disabled={offline}
+          aria-describedby={offline ? offlineId : undefined}
           onClick={onConfirm}
         >
           {mode === 'modify'

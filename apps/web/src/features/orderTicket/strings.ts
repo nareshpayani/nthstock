@@ -16,6 +16,9 @@ export const strings = {
     listing: (symbol: string, exchange: string) => `${symbol} · ${exchange}`,
   },
   form: {
+    /** Offline (SPEC-CR-1 §7): the primary button is disabled and says why. */
+    offline: "You're offline. Orders resume when you reconnect.",
+    moreOptions: 'More options',
     fillsImmediately: 'This will fill immediately: the price crosses the market.',
     label: 'Order details',
     side: 'Order side',
@@ -117,7 +120,7 @@ export const strings = {
   trailing: {
     /** Names the trail's − and + buttons: "Decrease trail", in rupees or percent. */
     stepLabel: 'trail',
-    type: 'Trailing SL',
+    type: 'Trailing stop',
     notAvailable: 'Not available right now',
     notAvailableHint:
       'Trailing stops are not available until your account has loaded. Try again in a moment.',
@@ -190,7 +193,7 @@ export const strings = {
     description: 'Protect an open position. Paper trading with virtual cash.',
     position: (qty: string, avg: string) => `${qty} @ ${avg}`,
     pnl: 'P&L',
-    status: 'Trailing SL',
+    status: 'Trailing stop',
     none: 'No trailing stop',
     currentStop: (stop: string) => `stop ${stop}`,
     set: 'Set trailing stop',
@@ -216,11 +219,11 @@ export const strings = {
     tabStop: 'Trailing stop',
     tabExit: 'Exit',
     tabAdd: 'Add',
-    held: 'Executed qty',
-    avg: 'Avg price',
+    held: 'Shares held',
+    avg: 'Average price',
     pnl: 'P&L',
-    stop: 'Trailing SL',
-    protects: (qty: number) => `protects ${String(qty)} qty`,
+    stop: 'Trailing stop',
+    protects: (qty: number) => `protects ${String(qty)} shares`,
     openOrders: 'Open orders in this stock',
     orderLine: (side: string, type: string, filled: number, qty: number) =>
       `${side} ${type} · filled ${String(filled)} of ${String(qty)}`,

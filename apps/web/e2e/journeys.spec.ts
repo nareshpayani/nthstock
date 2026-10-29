@@ -104,6 +104,9 @@ test.describe(`journeys US-01 to US-05 (T26) ${JOURNEY_TAG}`, () => {
       await expect(ticket).toBeVisible({ timeout: 1500 });
     }).toPass({ timeout: 15_000 });
     await expect(ticket.getByRole('textbox', { name: 'Price (₹)' })).toHaveValue(limit.toFixed(2));
+    // On a phone the attached stop is behind "More options" (CR-T11).
+    const more = ticket.getByRole('button', { name: /^More options/ });
+    if (await more.isVisible()) await input.press(more);
     await input.press(ticket.getByRole('switch', { name: 'Add trailing stop' }));
     await ticket.getByRole('textbox', { name: 'Trail (%)' }).fill('1');
     await ticket.getByRole('textbox', { name: 'Quantity' }).fill('4');
@@ -121,7 +124,7 @@ test.describe(`journeys US-01 to US-05 (T26) ${JOURNEY_TAG}`, () => {
     await expect(chip).toHaveText(/\+4 @ ₹/, { timeout: 15_000 });
     await expect(line).toHaveCount(0);
     const stop = figure.locator('[data-testid="chart-handle"][data-tone="trailing"]');
-    await expect(stop).toHaveText(/Trailing SL ₹[\d,]+\.\d\d · 1% · Trailing$/, {
+    await expect(stop).toHaveText(/Trailing stop ₹[\d,]+\.\d\d · 1% · Trailing$/, {
       timeout: 15_000,
     });
     await input.press(chip);

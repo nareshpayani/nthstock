@@ -1,14 +1,13 @@
 import {
   CANDLE_INTERVALS,
-  INTRADAY_INTERVAL_MINUTES,
   type Candle,
   type CandleInterval,
   type CandleRange,
   type Instrument,
 } from '@nthstock/contracts';
-import { ErrorState, SegmentedControl, Skeleton } from '@nthstock/ui';
+import { ErrorState, SegmentedControl } from '@nthstock/ui';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
-import { useState } from 'react';
+import { useId, useState } from 'react';
 import { ChartTrading } from '@/features/chartTrading';
 import { AlertLines } from '@/features/notifications';
 import {
@@ -24,9 +23,13 @@ import {
   useLiveCandles,
 } from '@/features/charts';
 import { Card } from '@/shared/components/Card';
+import { ChartSkeleton } from '@/shared/components/ChartSkeleton';
 import { useMarketOpen } from '@/shared/hooks/useMarketOpen';
 import { useApiClient } from '@/shared/lib/apiClientContext';
-import { CHART_TYPES, type ChartType } from '../model/stockDetailSearch';
+import { useForcedState, useOffline } from '@/shared/lib/connectivity';
+import { DESKTOP_CHART_HEIGHT } from '@/shared/lib/phoneChart';
+import type { ChartType } from '../model/stockDetailSearch';
+import { ChartTypeMenu } from './ChartTypeMenu';
 import { strings } from '../strings';
 
 export type StockChartCardProps = {
@@ -40,20 +43,24 @@ export type StockChartCardProps = {
   onChartTypeChange: (type: ChartType) => void;
   /** Chart height in px; the phone layout sizes it to the screen (T12). */
   height?: number;
-  /** `touch` on phones: 44 px range and type segments in a row that scrolls sideways (T12). */
+  /**
+   * `touch` is the phone layout (T12, SPEC-CR-1 §6.1): no card chrome, an edge-to-edge plot, the
+   * chart type and bar size above it and 44 px range segments across the full width below it.
+   */
   controls?: 'sm' | 'touch';
   /** Trade from the chart: pan and pinch, and the trading overlay (T15). Equities only. */
   trading?: boolean;
 };
 
-export const CHART_HEIGHT = 320;
+export const CHART_HEIGHT = DESKTOP_CHART_HEIGHT;
 const NO_CANDLES: readonly Candle[] = [];
 
 /**
  * Stock price chart (T-107): 1D to 5Y range tabs, a bar size picker (1, 5, 15, 30 or 60-minute
- * bars on 1D; NSTOCK-0343) and an area/candle toggle, all kept in the URL by the page, and a crosshair tooltip with the hovered bar's IST time and ₹ values. The previous
- * range stays on screen, dimmed, while the next one loads. On 1D while the market is open, the
- * last bar moves with every live quote and a new bar starts each minute (T-108).
+ * bars on 1D; NSTOCK-0343) and a chart type menu, all kept in the URL by the page, and a crosshair tooltip with the hovered bar's IST time and ₹ values. The previous
+ * range stays on screen, dimmed, while the next one loads. While the market is open, on every
+ * range and bar size, the last bar moves with every live quote and a new bar starts when its
+ * interval begins (T-108, NSTOCK-0441).
  */
 export function StockChartCard({
   instrument,
@@ -68,6 +75,7 @@ export function StockChartCard({
   trading = false,
 }: StockChartCardProps) {
   const [chart, setChart] = useState<ChartHandle | null>(null);
+  const headingId = useId();
   const api = useApiClient();
   const marketOpen = useMarketOpen();
   const { symbol, exchange } = instrument;
@@ -77,45 +85,145 @@ export function StockChartCard({
     ...candlesQuery(api, { symbol, exchange, range, interval }),
     placeholderData: keepPreviousData,
   });
+  // A state forced from the demo "States" row (SPEC-CR-1 §7) stands in for what the query says.
+  const forced = useForcedState();
+  const offline = useOffline();
+  const failed = forced === 'error' || (candles.isError && !candles.data);
+  const loaded = forced === 'loading' ? false : candles.data !== undefined;
   const format = instrument.type === 'INDEX' ? 'index' : 'inr';
-  // T-108: while NSE is open, today's bars follow the quote store, whatever their size.
-  const barMinutes = INTRADAY_INTERVAL_MINUTES[interval];
-  const live =
-    marketOpen &&
-    range === '1D' &&
-    barMinutes !== null &&
-    candles.data?.interval === interval &&
-    !candles.isPlaceholderData;
+  // T-108, NSTOCK-0441: while NSE is open the last bar follows the quote store on every range and
+  // bar size, and a new bar starts when its interval begins.
+  const live = marketOpen && candles.data?.interval === interval && !candles.isPlaceholderData;
   const bars = useLiveCandles(
     symbol,
     exchange,
     candles.data?.candles ?? NO_CANDLES,
     live,
-    barMinutes ?? 1,
+    interval,
   );
+
+  const touch = controls === 'touch';
+  const liveBadge = marketOpen && !offline ? <LiveBadge /> : null;
+  const rangeControl = (
+    <SegmentedControl
+      label={strings.chart.rangeLabel}
+      size={controls}
+      value={range}
+      onValueChange={onRangeChange}
+      options={CHART_RANGES.map((value) => ({ value, label: value }))}
+      {...(touch ? { className: 'w-full' } : {})}
+    />
+  );
+  const typeControl = (
+    <ChartTypeMenu value={chartType} onValueChange={onChartTypeChange} touch={touch} />
+  );
+  const showIntervals = intervals.length > 1 && onIntervalChange !== undefined;
+  const plot = (
+    <div aria-busy={candles.isFetching} className="relative">
+      {failed ? (
+        <div style={{ height }} className="grid place-items-center">
+          <ErrorState
+            title={strings.chart.errorTitle}
+            description={strings.chart.errorBody}
+            retryLabel={strings.chart.retry}
+            onRetry={() => void candles.refetch()}
+          />
+        </div>
+      ) : loaded ? (
+        <PriceChart
+          candles={forced === 'empty' ? NO_CANDLES : bars}
+          emptyText={range === '1D' ? strings.chart.emptyToday : undefined}
+          label={strings.chart.label(
+            symbol,
+            strings.chart.typeNames[chartType],
+            rangeLabel(range),
+            interval === intervals[0] ? undefined : intervalLabel(interval),
+          )}
+          type={chartType}
+          format={format}
+          intraday={isIntraday(range)}
+          height={height}
+          tooltip
+          interactive
+          onReady={trading ? setChart : undefined}
+          overlay={
+            trading && chart ? (
+              <>
+                <ChartTrading handle={chart} instrument={instrument} />
+                <AlertLines handle={chart} symbol={symbol} exchange={exchange} />
+              </>
+            ) : null
+          }
+          className={candles.isPlaceholderData ? 'opacity-60' : undefined}
+        />
+      ) : (
+        <ChartSkeleton height={height} label={strings.chart.loading} />
+      )}
+      {offline && loaded && !failed ? (
+        <span
+          role="status"
+          data-testid="chart-paused"
+          className="pointer-events-none absolute top-2 left-1/2 z-10 -translate-x-1/2 rounded-pill bg-ink px-3 py-1 text-label font-medium whitespace-nowrap text-surface shadow-sm"
+        >
+          {strings.chart.paused}
+        </span>
+      ) : null}
+    </div>
+  );
+
+  if (touch) {
+    // The phone instrument page (SPEC-CR-1 §6.1): no card chrome, the plot edge to edge, the chart
+    // type and bar size in a slim row above it and the ranges in a full-width row under it, where
+    // the thumb is. The heading stays for screen readers, so the section is still "Price chart".
+    return (
+      <section
+        aria-labelledby={headingId}
+        className="grid grid-cols-[minmax(0,1fr)] gap-2"
+        data-part="phone-chart"
+      >
+        <div className="flex items-center gap-2">
+          <h2 id={headingId} className="sr-only">
+            {strings.chart.title}
+          </h2>
+          {liveBadge}
+          <div className="ml-auto flex items-center gap-2">
+            {typeControl}
+            {showIntervals ? (
+              // Five more segments would not fit beside the type, so the bar size is a native
+              // select: one row, and the OS picker.
+              <select
+                aria-label={strings.chart.intervalLabel}
+                value={interval}
+                onChange={(event) => {
+                  const next = intervals.find((value) => value === event.target.value);
+                  if (next) onIntervalChange(next);
+                }}
+                className="h-11 rounded-md border border-line bg-canvas px-3 text-body font-medium text-ink focus-visible:border-brand focus-visible:ring-3 focus-visible:ring-brand-soft focus-visible:outline-none"
+              >
+                {intervals.map((value) => (
+                  <option key={value} value={value}>
+                    {value}
+                  </option>
+                ))}
+              </select>
+            ) : null}
+          </div>
+        </div>
+        <div className="-mx-4">{plot}</div>
+        {rangeControl}
+      </section>
+    );
+  }
 
   return (
     <Card
       // The LIVE badge sits beside the heading, not in it, so the section is named "Price chart".
       title={strings.chart.title}
       aside={
-        // The controls wrap onto a second row on a narrow phone rather than scroll sideways, so
-        // "Candles" is never cut off at the card's edge. There the LIVE badge goes last, beside
-        // the chart type, so two rows hold everything down to 340 px.
         <div className="flex flex-wrap items-center gap-2">
-          {marketOpen && range === '1D' ? (
-            <span className={controls === 'touch' ? 'order-last' : undefined}>
-              <LiveBadge />
-            </span>
-          ) : null}
-          <SegmentedControl
-            label={strings.chart.rangeLabel}
-            size={controls}
-            value={range}
-            onValueChange={onRangeChange}
-            options={CHART_RANGES.map((value) => ({ value, label: value }))}
-          />
-          {intervals.length > 1 && onIntervalChange && controls !== 'touch' ? (
+          {liveBadge}
+          {rangeControl}
+          {showIntervals ? (
             <SegmentedControl
               label={strings.chart.intervalLabel}
               size={controls}
@@ -128,77 +236,11 @@ export function StockChartCard({
               }))}
             />
           ) : null}
-          <SegmentedControl
-            label={strings.chart.typeLabel}
-            size={controls}
-            value={chartType}
-            onValueChange={onChartTypeChange}
-            options={CHART_TYPES.map((value) => ({ value, label: strings.chart.types[value] }))}
-          />
-          {intervals.length > 1 && onIntervalChange && controls === 'touch' ? (
-            // On a phone five more segments would push the chart under the trade bar, so the bar
-            // size is a native select beside the chart type: one row, and the OS picker.
-            <select
-              aria-label={strings.chart.intervalLabel}
-              value={interval}
-              onChange={(event) => {
-                const next = intervals.find((value) => value === event.target.value);
-                if (next) onIntervalChange(next);
-              }}
-              className="h-11 rounded-md border border-line bg-canvas px-3 text-body font-medium text-ink focus-visible:border-brand focus-visible:ring-3 focus-visible:ring-brand-soft focus-visible:outline-none"
-            >
-              {intervals.map((value) => (
-                <option key={value} value={value}>
-                  {value}
-                </option>
-              ))}
-            </select>
-          ) : null}
+          {typeControl}
         </div>
       }
     >
-      <div aria-busy={candles.isFetching} className="relative">
-        {candles.isError && !candles.data ? (
-          <div style={{ height }} className="grid place-items-center">
-            <ErrorState
-              title={strings.chart.errorTitle}
-              description={strings.chart.errorBody}
-              retryLabel={strings.chart.retry}
-              onRetry={() => void candles.refetch()}
-            />
-          </div>
-        ) : candles.data ? (
-          <PriceChart
-            candles={bars}
-            label={strings.chart.label(
-              symbol,
-              strings.chart.typeNames[chartType],
-              rangeLabel(range),
-              interval === intervals[0] ? undefined : intervalLabel(interval),
-            )}
-            type={chartType}
-            format={format}
-            intraday={isIntraday(range)}
-            height={height}
-            tooltip
-            interactive={trading}
-            onReady={trading ? setChart : undefined}
-            overlay={
-              trading && chart ? (
-                <>
-                  <ChartTrading handle={chart} instrument={instrument} />
-                  <AlertLines handle={chart} symbol={symbol} exchange={exchange} />
-                </>
-              ) : null
-            }
-            className={candles.isPlaceholderData ? 'opacity-60' : undefined}
-          />
-        ) : (
-          <div role="status" aria-label={strings.chart.loading} style={{ height }}>
-            <Skeleton className="h-full w-full" />
-          </div>
-        )}
-      </div>
+      {plot}
     </Card>
   );
 }

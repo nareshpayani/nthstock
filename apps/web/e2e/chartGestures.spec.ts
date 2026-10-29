@@ -255,4 +255,49 @@ test.describe(`chart gestures by touch (T20, SPEC-TFC-1 §9.1) ${TOUCH_TAG}`, ()
     await page.waitForTimeout(500);
     expect(sent).toEqual([]);
   });
+  test('a press beside an order line, off its label, holds and drags the line; the crosshair, the chart and the page stay still (CR-T05, AC-01, AC-02)', async ({
+    page,
+  }) => {
+    const chart = await openChart(page);
+    const line = await placeBuyLimit(chart);
+    const placed = rupees(await line.innerText());
+    const id = await line.getAttribute('data-line');
+    const band = chart.figure.locator(`[data-testid="chart-grab-band"][data-line="${id ?? ''}"]`);
+    await chart.settle();
+    const axis = await chart.timeAxis();
+    const scrolled = await page.evaluate(() => window.scrollY);
+    const plot = await chart.host.boundingBox();
+    const reach = await band.boundingBox();
+    if (!plot || !reach) throw new Error('no chart');
+    // The audit's near miss: on the left of the plot, far from the label, 12 px off the line,
+    // held past the chart's long-press time before moving.
+    const from = { x: plot.x + 60, y: reach.y + reach.height / 2 + 12 };
+    const finger = await chart.touch.press(from);
+    await page.waitForTimeout(400);
+    await finger.move({ x: from.x + 40, y: from.y - 40 }, 8);
+    expect(rupees(await line.innerText())).toBeGreaterThan(placed);
+    // The loupe shows the price being set, whole on screen and clear of the finger (CR-T07, AC-03).
+    const loupe = chart.figure.getByTestId('chart-loupe');
+    await expect(loupe).toHaveAttribute('data-shown', 'true');
+    expect(rupees(await loupe.innerText())).toBe(rupees(await line.innerText()));
+    const card = await loupe.boundingBox();
+    const screen = page.viewportSize();
+    if (!card || !screen) throw new Error('no loupe');
+    expect(card.x).toBeGreaterThanOrEqual(0);
+    expect(card.x + card.width).toBeLessThanOrEqual(screen.width);
+    const thumb = { x: from.x + 40, y: from.y - 40 };
+    const covers =
+      thumb.x >= card.x &&
+      thumb.x <= card.x + card.width &&
+      thumb.y >= card.y &&
+      thumb.y <= card.y + card.height;
+    expect(covers).toBe(false);
+    // No crosshair date label, no pan and no page scroll while the line is held.
+    expect((await chart.timeAxis()).equals(axis)).toBe(true);
+    expect(await page.evaluate(() => window.scrollY)).toBe(scrolled);
+    await finger.release();
+    if (!chart.touch.multiTouch) await page.mouse.move(0, 0);
+    await expect.poll(async () => rupees(await line.innerText())).toBeGreaterThan(placed);
+    await expect.poll(async () => (await chart.timeAxis()).equals(axis)).toBe(true);
+  });
 });

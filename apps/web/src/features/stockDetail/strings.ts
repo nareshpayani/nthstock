@@ -21,19 +21,49 @@ export const strings = {
     pullBack: 'Pull back −1%',
     gap: 'Gap −3%',
     split: 'Split large fills',
+    /** The "States" row (SPEC-CR-1 §7, CR-11): shows each state of the page on demand. */
+    states: 'States',
+    statesLabel: 'Show the page in a state',
+    stateNames: {
+      live: 'Live',
+      loading: 'Loading',
+      empty: 'Empty',
+      error: 'Error',
+      offline: 'Offline',
+    },
   },
   chart: {
     title: 'Price chart',
     rangeLabel: 'Chart range',
     typeLabel: 'Chart type',
+    typeButton: (type: string) => `Chart type: ${type}`,
     intervalLabel: 'Bar size',
     intervalOption: (bars: string) => `${bars} bars`,
-    types: { area: 'Area', candle: 'Candles' },
+    types: { line: 'Line', area: 'Area', candle: 'Candles', bar: 'OHLC', heikin: 'Heikin-Ashi' },
+    /** Each type's tooltip and the menu's description line (NSTOCK-0430). */
+    typeHints: {
+      line: 'Closing prices joined by a line',
+      area: 'Closing prices with the area below shaded',
+      candle: 'Open, high, low and close; rising bars green, falling bars red',
+      bar: 'Open tick left, close tick right, high to low',
+      heikin:
+        'Smoothed candles that show the trend. Not traded prices; the tooltip shows the real ones',
+    },
     /** `bars` only when the reader picked a bar size other than the range's own. */
     label: (symbol: string, type: string, range: string, bars?: string) =>
       `${symbol} ${type} chart over ${range}${bars ? `, ${bars} bars` : ''}`,
-    typeNames: { area: 'area', candle: 'candlestick' },
+    typeNames: {
+      line: 'line',
+      area: 'area',
+      candle: 'candlestick',
+      bar: 'OHLC bar',
+      heikin: 'Heikin-Ashi (smoothed)',
+    },
     loading: 'Loading chart',
+    /** An empty day (SPEC-CR-1 §7). */
+    emptyToday: 'No trades yet today',
+    /** Over the last candles while offline (SPEC-CR-1 §7). */
+    paused: 'Paused: offline',
     errorTitle: 'Chart unavailable',
     errorBody: 'The price chart could not load.',
     retry: 'Retry',
@@ -101,8 +131,16 @@ export const strings = {
     retry: 'Retry',
   },
   header: {
+    /** Price block states (SPEC-CR-1 §7). */
+    unavailable: 'Price unavailable',
+    retry: 'Retry',
+    stale: (time: string) => `Stale · as of ${time}`,
     exchangeLabel: 'Exchange',
     notListed: (symbol: string, exchange: string) => `${symbol} is not listed on ${exchange}.`,
+    /** A disabled exchange segment's name on a phone, where the note has no room. */
+    notListedOption: (exchange: string) => `${exchange}, not listed`,
+    /** The phone symbol line's visible reason for a disabled exchange segment. */
+    listedOnly: (exchange: string) => `${exchange} only`,
     priceLabel: 'Last traded price',
     changeLabel: 'Day change',
     tradeLabel: (symbol: string) => `Trade ${symbol}`,
@@ -111,6 +149,20 @@ export const strings = {
     buyLabel: (symbol: string) => `Buy ${symbol}`,
     sellLabel: (symbol: string) => `Sell ${symbol}`,
     paperNote: 'Paper trading: virtual cash only.',
+  },
+  /** Trading an index through its tracking ETF (NSTOCK-0440). */
+  indexEtf: {
+    title: (index: string) => `Trade ${index}`,
+    body: (index: string, fund: string) =>
+      `An index cannot be bought or sold itself. ${fund} tracks ${index} tick for tick: one unit is priced at a hundredth of the index level.`,
+    phoneNote: (index: string, fund: string) =>
+      `An index cannot be traded. ${fund} tracks ${index}, so you buy or sell that instead.`,
+    view: (fund: string) => `View ${fund}`,
+    tradeLabel: (fund: string) => `Trade ${fund}`,
+    buy: 'Buy ETF',
+    sell: 'Sell ETF',
+    buyLabel: (fund: string) => `Buy ETF, ${fund}`,
+    sellLabel: (fund: string) => `Sell ETF, ${fund}`,
   },
   /** The phone layout (T12, SPEC-TFC-1 §9.4). */
   phone: {
@@ -123,13 +175,15 @@ export const strings = {
       label: (symbol: string) => `Your ${symbol} position`,
       qty: (netQty: number) => (netQty > 0 ? `+${String(netQty)}` : String(netQty)),
       at: (price: string) => `@ ${price}`,
-      trailing: (stop: string) => `Trailing SL ${stop}`,
+      trailing: (stop: string) => `Trailing stop ${stop}`,
       open: 'Opens the trailing stop for this position.',
     },
     orders: {
       label: (symbol: string) => `Today's ${symbol} orders`,
       empty: (symbol: string) => `No ${symbol} orders today.`,
       unavailable: 'Your orders are on the Orders page.',
+      loading: 'Loading orders',
+      failed: "Couldn't load your orders. Check the Orders page.",
       all: 'All orders',
       row: (side: string, filled: number, qty: number, type: string) =>
         `${side} ${String(filled)} / ${String(qty)} · ${type}`,

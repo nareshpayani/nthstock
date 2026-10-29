@@ -16,7 +16,7 @@ export const isWorkingLimit = (order: Order): order is Order & { price: number }
 
 /**
  * The line for a working limit order (T16, SPEC-TFC-1 §8.1, §8.3). It sits at the price under the
- * finger while dragged, and dotted at the new price with "Updating…" once sent, until the engine
+ * finger while dragged, and dotted at the new price with "Saving…" once sent, until the engine
  * answers. Its × asks "Cancel?" first; a second tap within 3 seconds cancels.
  */
 export function orderLine(
@@ -37,6 +37,7 @@ export function orderLine(
       : strings.order.label(side, open, formatInr(price)),
     description: strings.order.description(side, open, formatInr(price)),
     draggable: !sending,
+    loupe: { kind: 'value', qty: open },
     actions: sending
       ? undefined
       : [

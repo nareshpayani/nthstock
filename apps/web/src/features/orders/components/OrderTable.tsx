@@ -19,6 +19,7 @@ import type { ReactNode } from 'react';
 import { PendingPrice } from '@/shared/components/PendingPrice';
 import { TrailingStopBadge } from '@/shared/components/TrailingStopBadge';
 import type { PendingOrderPrice } from '@/shared/hooks/usePendingOrderPrices';
+import { usePhoneLayout } from '@/shared/hooks/usePhoneLayout';
 import { usePositionEditorStore } from '@/shared/lib/positionEditorStore';
 import { isLive, isPartlyFilled, orderName, orderTimeLabel, priceLabel } from '../model/orderBook';
 import { strings } from '../strings';
@@ -56,7 +57,7 @@ type Column = {
  * The order rows (T-144): time in IST, stock, side, type, product, filled/total quantity, price
  * and status, with Details on every row, Modify and Cancel on open orders (T-145), and Edit stop on
  * an order whose trailing stop is still active, which opens the position editor (NSTOCK-0395). Up to 50
- * rows render as a table; a longer book scrolls in a virtualised grid.
+ * rows render as a table (a list on a phone); a longer book scrolls in a virtualised grid.
  */
 export function OrderTable({
   orders,
@@ -69,6 +70,64 @@ export function OrderTable({
   pendingPrices,
 }: OrderTableProps) {
   const openEditor = usePositionEditorStore((s) => s.openEditor);
+  const phone = usePhoneLayout();
+  // Details on every row, Modify and Cancel on open orders, Edit stop while a trailing stop is active.
+  // On a phone the buttons wrap: an open order with a live stop has four, wider than a 320 px row.
+  const actions = (order: Order, wrap = false) => {
+    const name = orderName(order);
+    const stop = stops?.get(order.id);
+    const editable = stop !== undefined && !TERMINAL.has(stop.status);
+    return (
+      <div className={wrap ? 'flex flex-wrap gap-1' : 'flex gap-1'} data-testid="order-actions">
+        <Button
+          size="sm"
+          variant="ghost"
+          aria-label={strings.actions.detailsLabel(name)}
+          onClick={(event) => onDetails(order, event.currentTarget)}
+        >
+          {strings.actions.details}
+        </Button>
+        {isLive(order) ? (
+          <>
+            <Button
+              size="sm"
+              variant="secondary"
+              aria-label={strings.actions.modifyLabel(name)}
+              onClick={() => onModify(order)}
+            >
+              {strings.actions.modify}
+            </Button>
+            <Button
+              size="sm"
+              variant="secondary"
+              aria-label={strings.actions.cancelLabel(name)}
+              onClick={(event) => onCancel(order, event.currentTarget)}
+            >
+              {strings.actions.cancel}
+            </Button>
+          </>
+        ) : null}
+        {editable ? (
+          <Button
+            size="sm"
+            variant="secondary"
+            aria-label={strings.actions.editStopLabel(name)}
+            onClick={() =>
+              openEditor({
+                symbol: stop.symbol,
+                exchange: stop.exchange,
+                token: stop.token,
+                product: stop.product,
+                tab: 'stop',
+              })
+            }
+          >
+            {strings.actions.editStop}
+          </Button>
+        ) : null}
+      </div>
+    );
+  };
   const columns: Column[] = [
     {
       key: 'time',
@@ -135,90 +194,87 @@ export function OrderTable({
         );
       },
     },
-    {
-      key: 'actions',
-      header: strings.columns.actions,
-      render: (order) => {
-        const name = orderName(order);
-        const stop = stops?.get(order.id);
-        const editable = stop !== undefined && !TERMINAL.has(stop.status);
-        return (
-          <div className="flex gap-1">
-            <Button
-              size="sm"
-              variant="ghost"
-              aria-label={strings.actions.detailsLabel(name)}
-              onClick={(event) => onDetails(order, event.currentTarget)}
-            >
-              {strings.actions.details}
-            </Button>
-            {isLive(order) ? (
-              <>
-                <Button
-                  size="sm"
-                  variant="secondary"
-                  aria-label={strings.actions.modifyLabel(name)}
-                  onClick={() => onModify(order)}
-                >
-                  {strings.actions.modify}
-                </Button>
-                <Button
-                  size="sm"
-                  variant="secondary"
-                  aria-label={strings.actions.cancelLabel(name)}
-                  onClick={(event) => onCancel(order, event.currentTarget)}
-                >
-                  {strings.actions.cancel}
-                </Button>
-              </>
-            ) : null}
-            {editable ? (
-              <Button
-                size="sm"
-                variant="secondary"
-                aria-label={strings.actions.editStopLabel(name)}
-                onClick={() =>
-                  openEditor({
-                    symbol: stop.symbol,
-                    exchange: stop.exchange,
-                    token: stop.token,
-                    product: stop.product,
-                    tab: 'stop',
-                  })
-                }
-              >
-                {strings.actions.editStop}
-              </Button>
-            ) : null}
-          </div>
-        );
-      },
-    },
+    { key: 'actions', header: strings.columns.actions, render: (order) => actions(order) },
   ];
+
+  // On a phone each order is a two-line row with its actions under it, so nothing is cut off or
+  // scrolls sideways. A long book keeps the virtualised grid: its 960 px minimum would widen its
+  // own root, which is the vertical scroller, so a wrapper scrolls it sideways inside the card.
+  if (phone && orders.length <= VIRTUAL_ORDER_ROWS) {
+    return (
+      <ul
+        aria-label={label}
+        className="grid grid-cols-[minmax(0,1fr)] divide-y divide-line"
+        data-layout="phone"
+      >
+        {orders.map((order) => {
+          const stop = stops?.get(order.id);
+          return (
+            <li key={order.id} data-order-id={order.id} className="grid gap-1.5 px-4 py-3">
+              <div className="flex items-baseline justify-between gap-3">
+                <span className="min-w-0 truncate font-semibold">
+                  {order.symbol}
+                  <span className="ml-1 text-label font-normal text-ink-muted">
+                    {order.exchange}
+                  </span>
+                </span>
+                <span className="shrink-0 font-mono tabular-nums">
+                  {priceLabel(order)}
+                  <PendingPrice pending={pendingPrices?.get(order.id)} />
+                </span>
+              </div>
+              <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-label text-ink-muted">
+                <OrderSideLabel side={order.side} />
+                <span>{strings.types[order.type]}</span>
+                <span>{strings.products[order.product]}</span>
+                <span className="font-mono tabular-nums">
+                  {isPartlyFilled(order)
+                    ? strings.partQty(order.filledQty, order.qty)
+                    : strings.qty(order.filledQty, order.qty)}
+                </span>
+                <time dateTime={order.placedAt} className="ml-auto font-mono tabular-nums">
+                  {orderTimeLabel(order.placedAt, now)}
+                </time>
+              </div>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <span className="inline-flex flex-wrap items-center gap-1">
+                  <OrderStatusBadge status={order.status} partial={isPartlyFilled(order)} />
+                  {stop ? <TrailingStopBadge stop={stop} /> : null}
+                </span>
+                {actions(order, true)}
+              </div>
+            </li>
+          );
+        })}
+      </ul>
+    );
+  }
 
   if (orders.length > VIRTUAL_ORDER_ROWS) {
     return (
-      <VirtualList
-        items={orders}
-        label={label}
-        rowHeight={ROW_HEIGHT}
-        height="min(70dvh, 640px)"
-        columns={VIRTUAL_COLUMNS}
-        className="min-w-[960px]"
-        getKey={(order) => order.id}
-        header={columns.map((column) => (
-          <VirtualHeaderCell key={column.key} numeric={column.numeric ?? false}>
-            {column.header}
-          </VirtualHeaderCell>
-        ))}
-        renderRow={(order) =>
-          columns.map((column) => (
-            <VirtualCell key={column.key} numeric={column.numeric ?? false}>
-              {column.render(order)}
-            </VirtualCell>
-          ))
-        }
-      />
+      <div className="relative overflow-x-auto" data-testid="order-grid-scroller">
+        <VirtualList
+          items={orders}
+          label={label}
+          rowHeight={ROW_HEIGHT}
+          height="min(70dvh, 640px)"
+          columns={VIRTUAL_COLUMNS}
+          className="min-w-[960px]"
+          getKey={(order) => order.id}
+          header={columns.map((column) => (
+            <VirtualHeaderCell key={column.key} numeric={column.numeric ?? false}>
+              {column.header}
+            </VirtualHeaderCell>
+          ))}
+          renderRow={(order) =>
+            columns.map((column) => (
+              <VirtualCell key={column.key} numeric={column.numeric ?? false}>
+                {column.render(order)}
+              </VirtualCell>
+            ))
+          }
+        />
+      </div>
     );
   }
 

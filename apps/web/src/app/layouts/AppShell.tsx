@@ -1,6 +1,11 @@
 import { Sheet, cn } from '@nthstock/ui';
 import { Link } from '@tanstack/react-router';
-import { OrderTicketHost, PositionEditorHost, TrailingStopSheetHost } from '@/features/orderTicket';
+import {
+  OrderTicketHost,
+  PositionEditorHost,
+  TrailingStopSheetHost,
+  useDockedPanelOpen,
+} from '@/features/orderTicket';
 import { NotificationsBridge } from '@/features/notifications';
 import { OrderUpdatesBridge } from '@/features/orders';
 import { TradingIntentTimeouts } from '../live/TradingIntentTimeouts';
@@ -14,6 +19,7 @@ import { Header } from './Header';
 import { LeftRail } from './LeftRail';
 import { navItems } from './navItems';
 import { ShortcutHelpDialog } from './ShortcutHelpDialog';
+import { InShellContext } from './shellContext';
 
 export type AppShellProps = {
   children: ReactNode;
@@ -29,10 +35,13 @@ export type AppShellProps = {
  * that it lives in a left drawer together with the main tabs. "/" focuses search (as does "Search
  * stocks" on an empty list), "?" opens help.
  * The order ticket slide-over (T-135) is mounted here, so it opens over any page, and so is the
- * order-update listener (T-147), so fills refresh the book and toast on any page.
+ * order-update listener (T-147), so fills refresh the book and toast on any page. From 600 to
+ * 1023 px a docked trading panel takes the right of the screen and the page narrows beside it.
  */
 export function AppShell({ children, rail = true }: AppShellProps) {
   const drawerOpen = useShellStore((s) => s.drawerOpen);
+  // A trading panel docked on a tablet (SPEC-CR-1 §6.2) sits beside the page, not over it.
+  const docked = useDockedPanelOpen();
   const helpOpen = useShellStore((s) => s.helpOpen);
   const setDrawerOpen = useShellStore((s) => s.setDrawerOpen);
   const setHelpOpen = useShellStore((s) => s.setHelpOpen);
@@ -60,7 +69,7 @@ export function AppShell({ children, rail = true }: AppShellProps) {
   useShortcut('?', () => setHelpOpen(true), { enabled: !helpOpen });
 
   return (
-    <div className="min-h-dvh bg-canvas [--header-h:97px] min-[1360px]:[--header-h:57px]">
+    <div className="min-h-dvh bg-canvas">
       <a
         href="#main"
         className="sr-only z-(--nth-z-toast) rounded-md bg-surface px-3 py-2 text-body text-brand focus:not-sr-only focus:fixed focus:top-2 focus:left-2"
@@ -82,9 +91,14 @@ export function AppShell({ children, rail = true }: AppShellProps) {
         <main
           id="main"
           tabIndex={-1}
-          className={cn('min-w-0 flex-1 p-4 outline-none', rail ? 'lg:p-6' : 'lg:p-0')}
+          data-docked={docked || undefined}
+          className={cn(
+            'min-w-0 flex-1 p-4 outline-none',
+            rail ? 'lg:p-6' : 'lg:p-0',
+            docked && 'pr-[calc(var(--nth-dock-w)+1rem)]',
+          )}
         >
-          {children}
+          <InShellContext.Provider value={true}>{children}</InShellContext.Provider>
         </main>
       </div>
       <Sheet

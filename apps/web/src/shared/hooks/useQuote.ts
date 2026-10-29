@@ -18,3 +18,20 @@ export function useQuote(symbol: string, exchange: Exchange = 'NSE'): LiveQuote 
   const snapshot = useCallback(() => store.get(symbol, exchange), [store, symbol, exchange]);
   return useSyncExternalStore(subscribe, snapshot, snapshot);
 }
+
+/**
+ * Whether a live quote for the symbol has arrived. Re-renders only when that flips, not on every
+ * tick, so a parent can choose a state (CR-T18) without reading prices itself (ADR 0005).
+ */
+export function useHasQuote(symbol: string, exchange: Exchange = 'NSE'): boolean {
+  const store = useQuoteStore();
+  const subscribe = useCallback(
+    (onChange: () => void) => store.subscribe(symbol, exchange, onChange),
+    [store, symbol, exchange],
+  );
+  const snapshot = useCallback(
+    () => store.get(symbol, exchange) !== undefined,
+    [store, symbol, exchange],
+  );
+  return useSyncExternalStore(subscribe, snapshot, snapshot);
+}

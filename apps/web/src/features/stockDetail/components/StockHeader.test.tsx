@@ -25,6 +25,12 @@ afterEach(() => {
   useTicketIntentStore.setState(initialTicketIntentState);
 });
 
+// The header price rolls its digits (CR-T12), one span per character: match the element whose
+// whole text is the price.
+const wholeText = (text: string) => (_: string, element: Element | null) =>
+  element?.textContent === text &&
+  ![...element.children].some((child) => child.textContent === text);
+
 async function openStock(url: string) {
   const quotes = createTestQuoteStore();
   const view = renderApp(url, { apiClient: api.apiClient, quoteStore: quotes.store });
@@ -52,14 +58,14 @@ describe('stock detail header (T-106)', () => {
     const header = screen.getByRole('heading', { level: 1 }).closest('div.grid.gap-4');
     expect(header).not.toBeNull();
     expect(
-      await within(header as HTMLElement).findByText(formatInr(snapshot?.ltp ?? 0)),
+      await within(header as HTMLElement).findByText(wholeText(formatInr(snapshot?.ltp ?? 0))),
     ).toBeInTheDocument();
   });
 
   it('shows the live price and change from the quote store, with ▲▼ in the text', async () => {
     const { quotes } = await openStock('/stocks/INFY');
     act(() => quotes.push(testQuote('INFY', 151235, { prevClose: 150000 })));
-    expect(screen.getByText('₹1,512.35')).toBeInTheDocument();
+    expect(screen.getByText(wholeText('₹1,512.35'))).toBeInTheDocument();
     expect(screen.getByText('+₹12.35, up 0.82 percent')).toBeInTheDocument();
     expect(screen.getByText(/▲ 0\.82%/)).toBeInTheDocument();
     expect(quotes.subscribed.get('NSE:INFY')).toBe(1);
@@ -97,10 +103,42 @@ describe('stock detail header (T-106)', () => {
     });
   });
 
-  it('has no Buy or Sell for an index, and SENSEX opens on BSE', async () => {
+  it('has no Buy or Sell for an index itself, and SENSEX opens on BSE', async () => {
     await openStock('/stocks/SENSEX');
     expect(screen.getByRole('heading', { level: 1, name: 'SENSEX' })).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: /Buy/ })).not.toBeInTheDocument();
+    // Only the tracking fund trades (NSTOCK-0440), never the index.
+    expect(screen.queryByRole('button', { name: 'Buy SENSEX' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Buy ETF, SENSEX ETF' })).toBeInTheDocument();
     expect(screen.getByRole('radio', { name: 'BSE' })).toHaveAttribute('aria-checked', 'true');
+  });
+
+  it('packs into the phone price block (CR-T13): no card, trade bar below, BSE says why', async () => {
+    vi.stubGlobal('matchMedia', (query: string) => ({
+      matches: query.startsWith('(max-width: 767.98px)'),
+      media: query,
+      addEventListener: () => undefined,
+      removeEventListener: () => undefined,
+    }));
+    await openStock('/stocks/INFY');
+    const block = screen
+      .getByRole('heading', { level: 1, name: 'Infosys Ltd' })
+      .closest('[data-part="price-block"]');
+    expect(block).not.toBeNull();
+    expect(block).not.toHaveClass('border');
+    const exchange = screen.getByRole('radiogroup', { name: 'Exchange' });
+    await waitFor(() =>
+      expect(within(exchange).getByRole('radio', { name: 'BSE, not listed' })).toBeDisabled(),
+    );
+    await waitFor(() => expect(screen.getByText(/· NSE only/)).toBeInTheDocument());
+    // Buy and Sell live in the bottom bar only, not in the price block.
+    expect(within(block as HTMLElement).queryByRole('button', { name: 'Buy INFY' })).toBeNull();
+    expect(
+      within(screen.getByRole('group', { name: 'Trade INFY' })).getByRole('button', {
+        name: 'Buy INFY',
+      }),
+    ).toBeInTheDocument();
+    // The chart keeps its section name, with the ranges below the plot.
+    const chart = screen.getByRole('region', { name: 'Price chart' });
+    expect(within(chart).getByRole('radiogroup', { name: 'Chart range' })).toBeInTheDocument();
   });
 });

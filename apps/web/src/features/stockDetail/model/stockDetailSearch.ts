@@ -1,7 +1,8 @@
 import type { CandleInterval, CandleRange, Exchange } from '@nthstock/contracts';
+import { PRICE_CHART_TYPES, type PriceChartType } from '@/features/charts';
 
-export type ChartType = 'area' | 'candle';
-export const CHART_TYPES = ['area', 'candle'] as const satisfies readonly ChartType[];
+export type ChartType = PriceChartType;
+export const CHART_TYPES = PRICE_CHART_TYPES;
 export const DEFAULT_CHART_TYPE: ChartType = 'area';
 /** Stock detail opens on today's intraday chart, which updates live while NSE is open (T-108). */
 export const DEFAULT_STOCK_RANGE: CandleRange = '1D';
@@ -14,6 +15,6 @@ export type StockDetailSearch = {
   interval?: CandleInterval | undefined;
   /** Exchange to show; the instrument's own listing when absent. */
   exchange?: Exchange | undefined;
-  /** Area or candle chart. */
+  /** Line, area, candles, OHLC bars or Heikin-Ashi (NSTOCK-0430). */
   chart?: ChartType | undefined;
 };

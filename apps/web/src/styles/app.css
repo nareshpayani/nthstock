@@ -4,9 +4,53 @@
 @import '@nthstock/tokens/tailwind.css';
 @import '@nthstock/ui/styles.css';
 
+@theme {
+  /* A new order's tab arrives from the price axis (SPEC-CR-1 §5.7, CR-T12). */
+  --animate-line-in: nth-line-in 280ms var(--nth-ease-out);
+  /* The first-run hint's nudge: the tab rises and settles twice (SPEC-CR-1 §5.7, CR-T20). */
+  --animate-drag-hint: nth-drag-hint 700ms var(--nth-ease-out) 400ms 2;
+}
+
+@keyframes nth-line-in {
+  from {
+    transform: translateX(32px);
+    opacity: 0;
+  }
+}
+
+@keyframes nth-drag-hint {
+  30% {
+    transform: translateY(-5px);
+  }
+  60% {
+    transform: translateY(2px);
+  }
+}
+
 @layer base {
+  /* The app bar's height (with the index strip under 1360 px), and the width of a trading panel
+     docked beside the page from 600 to 1023 px (SPEC-CR-1 §6.2). */
+  :root {
+    --header-h: 97px;
+    --nth-dock-w: clamp(320px, 44vw, 420px);
+    --nth-dock-top: calc(var(--header-h) + env(safe-area-inset-top));
+  }
+
+  @media (min-width: 1360px) {
+    :root {
+      --header-h: 57px;
+    }
+  }
+
   html {
     @apply bg-canvas text-ink font-sans text-body antialiased;
+  }
+
+  /* viewport-fit=cover (CR-T19): keep content clear of the notch in landscape. The header pads
+     itself for the status bar when launched from the home screen. */
+  body {
+    padding-left: env(safe-area-inset-left);
+    padding-right: env(safe-area-inset-right);
   }
 
   :focus-visible {

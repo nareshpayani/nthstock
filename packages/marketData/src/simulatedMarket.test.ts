@@ -162,7 +162,9 @@ describe('catch-up replay (§6.7)', () => {
     };
     replay();
     expect(Math.min(replay(), replay(), replay())).toBeLessThan(100);
-  });
+    // Four setups (one warm-up, three timed) can exceed vitest's 5 s default on a loaded CI runner;
+    // only the CPU time inside fire() is held to 100 ms.
+  }, 30_000);
 
   it('replays the focused instrument at its 250 ms beat', () => {
     const { adapter, clock, scheduler, batches } = setup();

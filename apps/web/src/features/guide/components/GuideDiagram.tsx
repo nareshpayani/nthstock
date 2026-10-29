@@ -52,7 +52,7 @@ function DiagramFrame({
         role="region"
         aria-label={title}
         tabIndex={0}
-        className="overflow-x-auto rounded-md border border-line bg-canvas p-2 outline-none focus-visible:ring-2 focus-visible:ring-brand"
+        className="relative overflow-x-auto rounded-md border border-line bg-canvas p-2 outline-none focus-visible:ring-2 focus-visible:ring-brand"
       >
         <svg
           viewBox={`0 0 ${width} ${height}`}

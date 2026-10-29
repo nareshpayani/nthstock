@@ -15,7 +15,7 @@ const stockSearch = z.object({
   range: CandleRange.optional().catch(undefined),
   interval: CandleInterval.optional().catch(undefined),
   exchange: Exchange.optional().catch(undefined),
-  chart: z.enum(['area', 'candle']).optional().catch(undefined),
+  chart: z.enum(['line', 'area', 'candle', 'bar', 'heikin']).optional().catch(undefined),
 });
 
 export const Route = createFileRoute('/_app/stocks/$symbol')({

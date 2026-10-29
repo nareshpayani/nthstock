@@ -64,6 +64,8 @@ for (const viewport of VIEWPORTS) {
     const line = figure.locator('[data-testid="chart-handle"][data-tone="buy"]');
     await expect(line).toContainText(`Buy 3 @ ₹`);
     expect(rupees(await line.innerText())).toBe(placed);
+    // Let the new line finish arriving from the rail (SPEC-CR-1 §5.7) before pressing on it.
+    await expect(line.getByTestId('chart-tab')).not.toHaveAttribute('data-arrived', 'true');
 
     // Drag up: the label follows; one modify on release raises the price.
     const from = await box(line);
@@ -73,8 +75,9 @@ for (const viewport of VIEWPORTS) {
     await page.mouse.down();
     await page.mouse.move(x, y - 15, { steps: 3 });
     await page.mouse.move(x, y - 30, { steps: 3 });
+    // The label renders a frame after the move, so wait for it rather than read once.
+    await expect.poll(async () => rupees(await line.innerText())).toBeGreaterThan(placed);
     const dragged = rupees(await line.innerText());
-    expect(dragged).toBeGreaterThan(placed);
     await page.mouse.up();
     await expect(
       page.getByRole('status').filter({ hasText: 'Order modified' }).first(),

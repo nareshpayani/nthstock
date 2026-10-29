@@ -12,10 +12,11 @@ import { parseRuntimeConfig } from './app/config/runtimeConfig';
 import { writeTradingCommit } from './app/live/tradingCache';
 import { bindTradingSession } from './app/live/tradingSession';
 import { restSnapshot, startVisibilitySync } from './app/live/visibilitySync';
+import { startConnectivity } from './shared/lib/connectivity';
 import { installStaleBuildReload } from './app/staleBuild';
 import { wantsDemo, withoutDemoParam } from './mocks/demoParam';
 import { createSessionApiClient } from './shared/lib/sessionClient';
-import { useSessionStore } from './shared/lib/sessionStore';
+import { assumeSignedOutWithoutHint, useSessionStore } from './shared/lib/sessionStore';
 
 // Zod would otherwise probe `new Function` once, which the CSP (script-src 'self') reports as a
 // violation; its interpreter is plenty fast for this app's payloads.
@@ -76,6 +77,7 @@ function boot() {
   let mocksReady: Promise<unknown> | undefined;
   let beforeRequest: (() => Promise<unknown>) | undefined;
   if (import.meta.env.VITE_API_MODE === 'msw') {
+    if (!wantsDemo(window.location.search)) assumeSignedOutWithoutHint();
     const started = startMocks();
     mocksReady = started;
     beforeRequest = () => started.then((ensureActive) => ensureActive());
@@ -106,6 +108,8 @@ function boot() {
   if (tradingStore)
     bindTradingSession({ store: tradingStore, sessions: useSessionStore, document });
   // Background tabs keep only the active watchlist live; focus and reconnects resync (T-077).
+  // Offline (SPEC-CR-1 §7): the browser says so, or the socket has been down for over 3 s.
+  startConnectivity({ target: window, navigator: window.navigator, socket: wsClient });
   startVisibilitySync({
     document,
     quoteStore,

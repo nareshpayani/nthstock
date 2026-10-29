@@ -142,8 +142,10 @@ clip(
     for (const bar of ['5-minute', '15-minute', '30-minute', '1-hour', '1-minute']) {
       await act.click(bars.getByRole('radio', { name: `${bar} bars`, exact: true }), 1100);
     }
-    await act.click(page.getByRole('radio', { name: 'Candles' }), 1200);
-    await say(page, 'Candles or area, on any range.', 1600);
+    const chartType = page.getByRole('button', { name: /^Chart type: / });
+    await act.click(chartType, 900);
+    await say(page, 'Five chart types: line, area, candles, OHLC bars and Heikin-Ashi.', 1800);
+    await act.click(page.getByRole('menuitemradio', { name: /^Candles/ }), 1200);
     for (const range of ['1W', '1M', '1Y', '5Y']) {
       await act.click(ranges.getByRole('radio', { name: range, exact: true }), 1000);
       await say(page, `${range}${range === '1W' ? ': 5, 15, 30 and 60-minute bars' : ''}`, 900);
@@ -163,7 +165,8 @@ clip(
     await page.mouse.move(box.x + box.width * 0.7, box.y + box.height * 0.45, { steps: 30 });
     await say(page, 'The crosshair shows open, high, low and close in rupees.', 2200);
     await act.click(ranges.getByRole('radio', { name: '1D', exact: true }), 600);
-    await act.click(page.getByRole('radio', { name: 'Area' }), 600);
+    await act.click(chartType, 600);
+    await act.click(page.getByRole('menuitemradio', { name: /^Area/ }), 600);
     const stats = page.getByRole('region', { name: 'Key stats' });
     await stats.evaluate((element) =>
       element.scrollIntoView({ behavior: 'smooth', block: 'start' }),

@@ -26,3 +26,12 @@ export const InHeader: Story = {
     </div>
   ),
 };
+/** The phone header (SPEC-CR-1 §6.2): both indices fit beside the status dot from 320 px. */
+export const StackedOnPhone: Story = {
+  render: () => (
+    <div className="flex w-80 items-center gap-4 rounded-md border border-line bg-surface px-3 py-1">
+      <IndexTicker name="NIFTY 50" level={2541860} change={21245} changeBasisPoints={84} stacked />
+      <IndexTicker name="SENSEX" level={8309215} change={-9970} changeBasisPoints={-12} stacked />
+    </div>
+  ),
+};

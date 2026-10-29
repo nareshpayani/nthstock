@@ -1,5 +1,6 @@
 import type { Exchange, ProductType } from '@nthstock/contracts';
 import { create } from 'zustand';
+import { claimPanelSlot, registerPanel } from './panelSlot';
 
 /** The editor's sections: the trailing stop, an exit (full or partial), or adding to the position. */
 export type PositionEditorTab = 'stop' | 'exit' | 'add';
@@ -29,6 +30,11 @@ export const initialPositionEditorState = { target: null };
 
 export const usePositionEditorStore = create<PositionEditorState>()((set) => ({
   ...initialPositionEditorState,
-  openEditor: (target) => set({ target: { ...target } }),
+  openEditor: (target) => {
+    claimPanelSlot('editor');
+    set({ target: { ...target } });
+  },
   closeEditor: () => set({ target: null }),
 }));
+
+registerPanel('editor', () => usePositionEditorStore.getState().closeEditor());

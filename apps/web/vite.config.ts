@@ -9,7 +9,12 @@ import { devProxy } from './src/app/config/devProxy.ts';
 import { parseRuntimeConfig, type ApiMode } from './src/app/config/runtimeConfig.ts';
 import { webSecurityHeaders } from './src/app/config/securityHeaders.ts';
 
-/** Adds <link rel="preload"> for every self-hosted woff2 font in the production bundle (T-010). */
+/**
+ * Adds <link rel="preload"> for the body face, IBM Plex Sans 400, in the production bundle (T-010).
+ * The other weights and Plex Mono load on use: their metric-matched fallbacks (CR-T19) keep the
+ * swap from shifting text, and on a slow phone network they would otherwise compete with the
+ * entry script for the first second.
+ */
 function preloadFonts(): Plugin {
   return {
     name: 'nthstock:preload-fonts',
@@ -17,7 +22,9 @@ function preloadFonts(): Plugin {
     transformIndexHtml: {
       order: 'post',
       handler(_html, ctx) {
-        const fonts = Object.keys(ctx.bundle ?? {}).filter((file) => file.endsWith('.woff2'));
+        const fonts = Object.keys(ctx.bundle ?? {}).filter((file) =>
+          /ibm-plex-sans-latin-400-normal.*\.woff2$/.test(file),
+        );
         return fonts.map((file) => ({
           tag: 'link',
           attrs: {
@@ -58,8 +65,9 @@ function apiModeBuild(apiMode: ApiMode): Plugin {
 /**
  * The workspace packages the app imports, mapped to their TypeScript source. Their package.json
  * points at the built `dist`, which goes stale after a pull or while a package is edited, so the
- * dev server reads the source instead (NSTOCK-0361). `@nthstock/tokens` stays on `dist`: its CSS is
- * generated, and `predev` builds it.
+ * dev server reads the source instead (NSTOCK-0361). Only the `@nthstock/tokens` CSS stays on `dist`
+ * because it is generated (`predev` builds it); its TypeScript exports come from source, so a new token
+ * such as `spring` works without a rebuild (NSTOCK-0434).
  */
 const PACKAGE_SOURCES: Record<string, string> = {
   '@nthstock/apiClient': 'apiClient/src/index.ts',
@@ -68,6 +76,7 @@ const PACKAGE_SOURCES: Record<string, string> = {
   '@nthstock/marketData': 'marketData/src/index.ts',
   '@nthstock/marketData/testing': 'marketData/src/testing.ts',
   '@nthstock/paperEngine': 'paperEngine/src/index.ts',
+  '@nthstock/tokens': 'tokens/src/index.ts',
   '@nthstock/ui': 'ui/src/index.ts',
   '@nthstock/ui/allIcons': 'ui/src/icons/allIcons.ts',
   '@nthstock/utils': 'utils/src/index.ts',

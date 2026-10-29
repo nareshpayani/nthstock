@@ -4,10 +4,12 @@ import { describe, expect, it } from 'vitest';
 import { formatChartValue } from './chartFormat';
 import {
   areaSeriesOptions,
+  barSeriesOptions,
   candleSeriesOptions,
   chartOptions,
   formatCrosshairTime,
   formatTickMark,
+  lineSeriesOptions,
   withAlpha,
 } from './chartTheme';
 
@@ -57,7 +59,17 @@ describe('chart theme (T-094)', () => {
     expect(areaSeriesOptions('flat', 'inr').lineColor).toBe(colors.brand);
     expect(customFormat(areaSeriesOptions('up', 'index').priceFormat)(2541860)).toBe('25,418.60');
     const candles = candleSeriesOptions('inr');
-    expect([candles.upColor, candles.downColor]).toEqual([colors.up, colors.down]);
+    // Rising candles are solid green, falling ones solid red (NSTOCK-0436).
+    expect([candles.upColor, candles.borderUpColor]).toEqual([colors.up, colors.up]);
+    expect(candleSeriesOptions('inr', { smoothed: true }).lastValueVisible).toBe(false);
+    expect([candles.downColor, candles.borderDownColor]).toEqual([colors.down, colors.down]);
+    expect(lineSeriesOptions('down', 'inr').color).toBe(colors.down);
+    const bars = barSeriesOptions('inr');
+    expect([bars.upColor, bars.downColor, bars.openVisible]).toEqual([
+      colors.up,
+      colors.down,
+      true,
+    ]);
     expect(customFormat(candles.priceFormat)(100)).toBe('₹1.00');
   });
 });

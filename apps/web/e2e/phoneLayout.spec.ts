@@ -61,14 +61,16 @@ for (const viewport of PHONES) {
       tabs.getByRole('tab'),
       tradeBar(page).getByRole('button'),
       page.getByRole('radiogroup', { name: 'Chart range' }).getByRole('radio'),
-      page.getByRole('radiogroup', { name: 'Chart type' }).getByRole('radio'),
+      page.getByRole('button', { name: /^Chart type: / }),
       page.getByRole('radiogroup', { name: 'Exchange' }).getByRole('radio'),
     ]);
 
-    // The chart controls wrap rather than squeeze: in each group no segment overlaps the next,
-    // so "Candles" is never cut off (NSTOCK-0337). Each group ends within the chart's width.
+    // The chart controls wrap rather than squeeze: in each group no segment overlaps the next
+    // (NSTOCK-0337), and the type menu's button sits within the chart's width (NSTOCK-0430).
     const chart = await box(page.getByRole('figure', { name: 'INFY area chart over 1 day' }));
-    for (const name of ['Chart range', 'Chart type']) {
+    const typeButton = await box(page.getByRole('button', { name: /^Chart type: / }));
+    expect(typeButton.x + typeButton.width).toBeLessThanOrEqual(chart.x + chart.width);
+    for (const name of ['Chart range']) {
       let previousEnd = -Infinity;
       for (const segment of await page.getByRole('radiogroup', { name }).getByRole('radio').all()) {
         const rect = await box(segment);
@@ -115,6 +117,8 @@ test('on a phone the ticket is a bottom sheet and a fill shows in the position s
     })
     .toEqual([390, 844]);
   // Every control in the sheet is a thumb-sized target: steppers, segments, switch, depth prices.
+  // Depth and the attached stop are behind "More options" on a phone (CR-T11).
+  await ticket.getByRole('button', { name: /^More options/ }).click();
   await expect(ticket.getByRole('button', { name: /use as limit price$/ }).first()).toBeVisible();
   await expectTargets([
     ticket.getByRole('button'),
@@ -165,4 +169,35 @@ test('on a phone the ticket is a bottom sheet and a fill shows in the position s
   await expect(pad).toBeVisible();
   expect((await box(pad.getByTestId('scalp-buy'))).y).toBeGreaterThanOrEqual(844 * 0.6);
   await expectTargets([pad.getByRole('button'), pad.getByRole('radio'), pad.getByRole('switch')]);
+});
+
+// SPEC-CR-1 AC-07: the primary action stays on screen with the keyboard open. Chromium has no
+// on-screen keyboard, so a stand-in visual viewport (400 px tall, the rest covered) is installed
+// before the page loads and told to resize when an input takes focus.
+test('the ticket primary button stays in view with the keyboard open (CR-T11, AC-07)', async ({
+  page,
+}) => {
+  test.setTimeout(90_000);
+  await page.clock.setFixedTime(MONDAY_10_IST);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.addInitScript(() => {
+    const viewport = Object.assign(new EventTarget(), { height: window.innerHeight, offsetTop: 0 });
+    Object.defineProperty(window, 'visualViewport', { value: viewport, configurable: true });
+    document.addEventListener('focusin', (event) => {
+      if (event.target instanceof HTMLInputElement) {
+        viewport.height = 400;
+        viewport.dispatchEvent(new Event('resize'));
+      }
+    });
+  });
+  await page.goto('/login?redirect=%2Fstocks%2FINFY');
+  await logIn(page, uniqueMobile());
+  await tradeBar(page).getByRole('button', { name: 'Buy INFY' }).click();
+  const ticket = page.getByRole('dialog', { name: 'Trade INFY' });
+  await ticket.getByRole('textbox', { name: 'Quantity' }).focus();
+  await expect(ticket).toHaveAttribute('data-keyboard', 'open');
+  const submit = ticket.getByTestId('ticket-primary').getByRole('button', { name: 'Buy INFY' });
+  await expect(submit).toBeInViewport();
+  const rect = await box(submit);
+  expect(rect.y + rect.height).toBeLessThanOrEqual(400);
 });

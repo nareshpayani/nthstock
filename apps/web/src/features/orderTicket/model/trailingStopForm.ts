@@ -14,7 +14,7 @@ import { formatInr } from '@nthstock/utils';
 import { strings } from '../strings';
 
 /**
- * The Trailing SL order type (T13, SPEC-TFC-1 §6 and §7): an exit for an open position, so the
+ * The Trailing stop order type (T13, SPEC-TFC-1 §6 and §7): an exit for an open position, so the
  * quantity is the position's, never typed. The rules are the engine's own `validateTrailingStop`
  * and `previewTrailingStop`, so the ticket shows exactly what the engine will accept and set.
  *

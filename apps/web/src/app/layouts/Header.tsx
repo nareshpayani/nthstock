@@ -16,6 +16,7 @@ import { Link } from '@tanstack/react-router';
 import { ProfileMenu } from '@/features/auth';
 import { HeaderTickers, MarketStatusPill } from '@/features/marketTicker';
 import { NotificationBell } from '@/features/notifications';
+import { usePhoneLayout } from '@/shared/hooks/usePhoneLayout';
 import { strings } from '../strings';
 import { navItems } from './navItems';
 
@@ -27,11 +28,14 @@ export type HeaderProps = {
 /**
  * Top bar in the reference layout: logo, Nifty 50 and Sensex, main tabs, market status, support,
  * profile and More. Below 1360 px the tickers and status move to a strip under the bar; below
- * 1024 px the tabs move into the menu drawer.
+ * 1024 px the tabs move into the menu drawer. On a phone the strip packs tighter (SPEC-CR-1 §6.2):
+ * a status dot with one word, and each index with its name above the figures, so both fit from
+ * 320 px; anything narrower scrolls inside the strip, with a fade at the edge.
  */
 export function Header({ onOpenMenu, onOpenHelp }: HeaderProps) {
+  const phone = usePhoneLayout();
   return (
-    <header className="sticky top-0 z-(--nth-z-header) border-b border-line bg-surface">
+    <header className="sticky top-0 z-(--nth-z-header) border-b border-line bg-surface pt-[env(safe-area-inset-top)]">
       <div className="flex h-14 items-center gap-2 px-3 sm:gap-3 lg:gap-5 lg:px-6">
         <IconButton
           label={strings.header.openMenu}
@@ -40,7 +44,7 @@ export function Header({ onOpenMenu, onOpenHelp }: HeaderProps) {
           className="lg:hidden"
         />
         <Link to="/dashboard" className="shrink-0 rounded-md">
-          <Logo />
+          <Logo className="text-[28px] sm:text-[32px]" />
         </Link>
         <HeaderTickers
           compact
@@ -62,11 +66,13 @@ export function Header({ onOpenMenu, onOpenHelp }: HeaderProps) {
         </nav>
         <div className="ml-auto flex shrink-0 items-center gap-1">
           <MarketStatusPill compact className="mr-2 hidden min-[1360px]:inline-flex" />
+          {/* Under 360 px the bar has no room for it; More holds the same help. */}
           <Tooltip content={strings.header.support}>
             <IconButton
               label={strings.header.support}
               icon={<IconSupport />}
               onClick={onOpenHelp}
+              className="max-[359px]:hidden"
             />
           </Tooltip>
           <NotificationBell />
@@ -76,6 +82,10 @@ export function Header({ onOpenMenu, onOpenHelp }: HeaderProps) {
               <IconButton label={strings.header.more} icon={<IconMore />} />
             </DropdownMenuTrigger>
             <DropdownMenuContent>
+              {/* The support icon is hidden under 360 px, so help stays reachable by name here. */}
+              <DropdownMenuItem onSelect={onOpenHelp} className="min-[360px]:hidden">
+                <IconSupport size={16} /> {strings.header.support}
+              </DropdownMenuItem>
               <DropdownMenuItem onSelect={onOpenHelp}>
                 <IconKeyboard size={16} /> {strings.header.shortcuts}
                 <kbd className="ml-auto font-mono text-label text-ink-muted">?</kbd>
@@ -98,10 +108,10 @@ export function Header({ onOpenMenu, onOpenHelp }: HeaderProps) {
         role="region"
         aria-label={strings.header.statusStrip}
         tabIndex={0}
-        className="relative flex h-10 items-center gap-4 overflow-x-auto border-t border-line px-3 lg:px-6 min-[1360px]:hidden"
+        className="relative flex h-10 items-center gap-4 overflow-x-auto border-t border-line px-3 max-[359px]:mask-r-from-85% lg:px-6 min-[1360px]:hidden"
       >
-        <MarketStatusPill compact className="shrink-0" />
-        <HeaderTickers compact className="shrink-0" />
+        <MarketStatusPill compact={!phone} dot={phone} className="shrink-0" />
+        <HeaderTickers compact stacked={phone} className="shrink-0" />
       </div>
     </header>
   );

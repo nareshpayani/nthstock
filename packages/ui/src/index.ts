@@ -62,3 +62,4 @@ export {
 export { Sparkline, sparklinePath, type SparklineProps } from './components/Sparkline.js';
 export { IndexTicker, formatIndexLevel, type IndexTickerProps } from './components/IndexTicker.js';
 export { LivePrice, type LivePriceProps, type LivePriceTick } from './components/LivePrice.js';
+export { DigitRoll, type DigitRollProps } from './components/DigitRoll.js';
