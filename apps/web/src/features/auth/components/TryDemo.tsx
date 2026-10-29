@@ -1,10 +1,12 @@
 import { Button } from '@nthstock/ui';
 import { useNavigate } from '@tanstack/react-router';
 import { useEffect, useEffectEvent, useState } from 'react';
+import { useApiClient } from '@/shared/lib/apiClientContext';
 import { clearDemoPending, DEMO_PENDING_STORAGE_KEY, startDemo } from '@/shared/lib/demoSimulator';
 import { useRequestOtp, useVerifyOtp } from '../hooks/useAuthMutations';
 import { authFailure } from '../model/authError';
 import { DEMO_INSTRUMENT, DEMO_MOBILE } from '../model/demo';
+import { openDemoPosition } from '../model/demoPosition';
 import { strings } from '../strings';
 
 function isDemoPending(): boolean {
@@ -17,16 +19,18 @@ function isDemoPending(): boolean {
 
 /**
  * "Try demo" (REQ-DEL-02): one tap logs in as the seeded demo user with the mock OTP and opens the
- * instrument page in demo mode, with the Demo simulator (TFC-12). Rendered only where the mock OTP
- * is known (`devOtp` is not null).
+ * instrument page in demo mode, with the Demo simulator (TFC-12) and an open position guarded by a
+ * trailing stop, so the chart shows both lines at once. Rendered only where the mock OTP is known
+ * (`devOtp` is not null). `autoStart` (the reviewer link, `/login?try=1`) starts it without a tap.
  */
-export function TryDemo({ devOtp }: { devOtp: string }) {
+export function TryDemo({ devOtp, autoStart = false }: { devOtp: string; autoStart?: boolean }) {
   const navigate = useNavigate();
+  const api = useApiClient();
   const requestOtp = useRequestOtp();
   const verifyOtp = useVerifyOtp();
   // After the Try demo reload (outside demo mode), carry on without a second tap.
   const [resume] = useState(isDemoPending);
-  const [pending, setPending] = useState(resume);
+  const [pending, setPending] = useState(resume || autoStart);
   const [error, setError] = useState<string | null>(null);
 
   /** `resumed`: the page already reloaded once for the demo account, so never reload again. */
@@ -40,6 +44,7 @@ export function TryDemo({ devOtp }: { devOtp: string }) {
       }
       const sent = await requestOtp.mutateAsync({ mobile: DEMO_MOBILE, purpose: 'LOGIN' });
       await verifyOtp.mutateAsync({ requestId: sent.requestId, mobile: DEMO_MOBILE, otp: devOtp });
+      await openDemoPosition(api, DEMO_INSTRUMENT);
       await navigate({ to: '/stocks/$symbol', params: { symbol: DEMO_INSTRUMENT }, replace: true });
     } catch (failure) {
       setPending(false);
@@ -62,12 +67,15 @@ export function TryDemo({ devOtp }: { devOtp: string }) {
     }
     void run(true);
   });
+  const autoStartDemo = useEffectEvent(() => {
+    void run();
+  });
   useEffect(() => {
-    if (!resume) return undefined;
-    // A task later, so a remount (Strict Mode) starts it once.
-    const timer = window.setTimeout(resumeDemo, 0);
+    if (!resume && !autoStart) return undefined;
+    // A task later, so a remount (Strict Mode) starts it once. A pending reload resumes first.
+    const timer = window.setTimeout(resume ? resumeDemo : autoStartDemo, 0);
     return () => window.clearTimeout(timer);
-  }, [resume]);
+  }, [resume, autoStart]);
 
   return (
     <div className="grid gap-2">
