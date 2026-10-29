@@ -45,25 +45,31 @@ function SignedInBell() {
   const toast = useToast();
   const unread = notifications.data?.unread ?? 0;
 
-  const markAllRead = () =>
-    markRead.mutate(undefined, {
-      onError: () => toast.show({ title: strings.centre.markReadError, tone: 'error' }),
-    });
+  const markAllRead = async () => {
+    if (markRead.isPending) return;
+    try {
+      await markRead.mutateAsync(undefined);
+    } catch {
+      toast.show({ title: strings.centre.markReadError, tone: 'error' });
+    }
+  };
   const change = (next: boolean) => {
     setOpen(next);
-    if (next && unread > 0) markAllRead();
+    if (next && unread > 0) void markAllRead();
   };
-  const remove = (alert: PriceAlert) => {
+  const remove = async (alert: PriceAlert) => {
     setRemoving((ids) => new Set(ids).add(alert.id));
-    cancel.mutate(alert.id, {
-      onError: () => toast.show({ title: strings.alerts.removeError(alert.symbol), tone: 'error' }),
-      onSettled: () =>
-        setRemoving((ids) => {
-          const next = new Set(ids);
-          next.delete(alert.id);
-          return next;
-        }),
-    });
+    try {
+      await cancel.mutateAsync(alert.id);
+    } catch {
+      toast.show({ title: strings.alerts.removeError(alert.symbol), tone: 'error' });
+    } finally {
+      setRemoving((ids) => {
+        const next = new Set(ids);
+        next.delete(alert.id);
+        return next;
+      });
+    }
   };
 
   return (
@@ -111,14 +117,23 @@ function SignedInBell() {
             <ListSkeleton />
           )}
           {notifications.data?.items.some((n) => !n.read) ? (
-            <Button variant="secondary" size="sm" onClick={markAllRead}>
+            <Button
+              variant="secondary"
+              size="sm"
+              disabled={markRead.isPending}
+              onClick={() => void markAllRead()}
+            >
               {strings.centre.markAllRead}
             </Button>
           ) : null}
         </TabsContent>
         <TabsContent value="alerts">
           {alerts.data ? (
-            <AlertList items={alerts.data.items} onRemove={remove} removing={removing} />
+            <AlertList
+              items={alerts.data.items}
+              onRemove={(a) => void remove(a)}
+              removing={removing}
+            />
           ) : alerts.isError ? (
             <ErrorState
               title={strings.centre.alertsLoadError}
