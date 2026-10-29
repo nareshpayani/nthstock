@@ -28,7 +28,7 @@ describe('order cues (A17)', () => {
     expect(fillCue('SELL')).toBe('filledSell');
   });
 
-  it('holds the tick, then runs the close, even if unmounted meanwhile', () => {
+  it('holds the tick, then runs the close; an unmount runs it at once, once', () => {
     vi.useFakeTimers();
     const then = vi.fn();
     const { result, unmount } = renderHook(() => useSuccessHold());
@@ -43,6 +43,8 @@ describe('order cues (A17)', () => {
     const second = renderHook(() => useSuccessHold());
     act(() => second.result.current[1](later));
     second.unmount();
+    // Closes at once on unmount, and the cancelled timer cannot close a later ticket.
+    expect(later).toHaveBeenCalledOnce();
     act(() => vi.advanceTimersByTime(SUCCESS_HOLD_MS));
     expect(later).toHaveBeenCalledOnce();
     unmount();

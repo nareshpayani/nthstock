@@ -1,5 +1,5 @@
 import type { OrderSide } from '@nthstock/contracts';
-import { useCallback, useRef, useState, useSyncExternalStore } from 'react';
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { haptic } from './haptics';
 import {
   orderSoundsEnabled,
@@ -37,17 +37,36 @@ export function useOrderSounds(): [enabled: boolean, setEnabled: (enabled: boole
 
 /**
  * The tick's moment: `hold(then)` turns `done` on (the confirm button draws its tick) and runs
- * `then`, usually closing the sheet, `SUCCESS_HOLD_MS` later. It still runs if the caller unmounts
- * meanwhile: a partial exit changes the held quantity, which remounts the ticket (keyed on it) inside
- * the position editor, and the editor must still close.
+ * `then`, usually closing the sheet, `SUCCESS_HOLD_MS` later. If the caller unmounts meanwhile (a
+ * partial exit changes the held quantity, which remounts the ticket inside the position editor, and
+ * the editor must still close) `then` runs at once and the timer is cancelled, so a close can never
+ * fire later against whatever the user opened next.
  */
 export function useSuccessHold(): [done: boolean, hold: (then: () => void) => void] {
   const [done, setDone] = useState(false);
-  const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const pending = useRef<{ timer: ReturnType<typeof setTimeout>; then: () => void } | undefined>(
+    undefined,
+  );
+  useEffect(
+    () => () => {
+      const held = pending.current;
+      if (!held) return;
+      clearTimeout(held.timer);
+      pending.current = undefined;
+      held.then();
+    },
+    [],
+  );
   const hold = useCallback((then: () => void) => {
     setDone(true);
-    clearTimeout(timer.current);
-    timer.current = setTimeout(then, SUCCESS_HOLD_MS);
+    if (pending.current) clearTimeout(pending.current.timer);
+    pending.current = {
+      then,
+      timer: setTimeout(() => {
+        pending.current = undefined;
+        then();
+      }, SUCCESS_HOLD_MS),
+    };
   }, []);
   return [done, hold];
 }
