@@ -22,6 +22,7 @@ import { strings } from '../strings';
 import { DepthMiniPanel } from './DepthMiniPanel';
 import { OrderEstimate } from './OrderEstimate';
 import { TrailingParamsFields } from './TrailingParamsFields';
+import { TicketRuler, type RulerField } from './TicketRuler';
 
 export type TicketFormProps = {
   form: UseFormReturn<TicketFormValues>;
@@ -194,6 +195,9 @@ export function TicketForm({
   const forcedOpen = formState.errors.product !== undefined || attachNeedsAttention;
   const showMore = !phone || moreOpen || forcedOpen;
   const qtyBox = useRef<HTMLDivElement>(null);
+  // The ruler (A8) sets the field last focused.
+  const [rulerField, setRulerField] = useState<RulerField>('qty');
+  const [qty, price] = useWatch({ control, name: ['qty', 'price'] });
   const errorBox = useRef<HTMLDivElement>(null);
 
   // Quantity takes focus once the ticket has loaded (the sheet focused its close button first).
@@ -330,7 +334,7 @@ export function TicketForm({
           name="qty"
           render={({ field, fieldState }) => (
             <Field label={strings.form.qty} error={fieldState.error?.message} className="min-w-0">
-              <div ref={qtyBox} className="min-w-0">
+              <div ref={qtyBox} className="min-w-0" onFocusCapture={() => setRulerField('qty')}>
                 <NumberInput
                   className="w-full min-w-0"
                   mode="integer"
@@ -356,19 +360,39 @@ export function TicketForm({
                   : strings.form.marketPriceHint
               }
             >
-              <NumberInput
-                className="w-full min-w-0"
-                mode="price"
-                name={field.name}
-                step={instrument.tickSize}
-                value={field.value}
-                onChange={field.onChange}
-                disabled={type === 'MARKET'}
-              />
+              <div className="min-w-0" onFocusCapture={() => setRulerField('price')}>
+                <NumberInput
+                  className="w-full min-w-0"
+                  mode="price"
+                  name={field.name}
+                  step={instrument.tickSize}
+                  value={field.value}
+                  onChange={field.onChange}
+                  disabled={type === 'MARKET'}
+                />
+              </div>
             </Field>
           )}
         />
       </div>
+      {phone ? (
+        <TicketRuler
+          field={rulerField}
+          qty={qty}
+          onQty={(next) => {
+            setValue('qty', next, { shouldDirty: true });
+            void trigger('qty');
+          }}
+          price={price}
+          onPrice={(next) => {
+            setValue('price', next, { shouldDirty: true });
+            void trigger('price');
+          }}
+          fallbackPrice={snapshotLtp ?? null}
+          tickSize={instrument.tickSize}
+          priceEnabled={type === 'LIMIT'}
+        />
+      ) : null}
 
       {locked ? (
         <p className="text-label text-ink-muted">
