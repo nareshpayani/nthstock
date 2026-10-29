@@ -1,5 +1,5 @@
 import type { OrderSide, Watchlist, WatchlistItem } from '@nthstock/contracts';
-import { Button, EmptyState, IconPlus } from '@nthstock/ui';
+import { Button, EmptyState, IconPlus, useToast } from '@nthstock/ui';
 import { useCallback } from 'react';
 import { useKeepLive } from '@/shared/hooks/useKeepLive';
 import { useOpenTicket } from '@/shared/hooks/useOpenTicket';
@@ -33,6 +33,7 @@ export function WatchlistPanel({ list, onAddStock }: WatchlistPanelProps) {
   const { mutate: reorderItems } = useReorderWatchlistItems();
   const { mutate: removeItem } = useRemoveFromWatchlist();
   const openTicket = useOpenTicket();
+  const toast = useToast();
 
   useKeepLive(symbolsOn(list.items, 'NSE'), 'NSE');
   useKeepLive(symbolsOn(list.items, 'BSE'), 'BSE');
@@ -60,9 +61,15 @@ export function WatchlistPanel({ list, onAddStock }: WatchlistPanelProps) {
   const onTrade = useCallback(
     (item: WatchlistItem, side: OrderSide) => {
       // The order ticket slide-over (T-135) opens from the intent.
-      void openTicket({ symbol: item.symbol, exchange: item.exchange, side });
+      openTicket({ symbol: item.symbol, exchange: item.exchange, side }).catch(() => {
+        toast.show({
+          tone: 'error',
+          title: strings.ticketFailedTitle,
+          description: strings.ticketFailedBody(item.symbol),
+        });
+      });
     },
-    [openTicket],
+    [openTicket, toast],
   );
 
   if (list.items.length === 0) {

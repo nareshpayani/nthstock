@@ -55,7 +55,7 @@ export function BottomTabBar({ onTrade }: BottomTabBarProps) {
   return (
     <nav
       aria-label={strings.phone.tabs.label}
-      className="fixed inset-x-0 bottom-0 z-(--nth-z-header) border-t border-line bg-surface pb-[env(safe-area-inset-bottom)]"
+      className="fixed inset-x-0 bottom-0 z-(--nth-z-header) border-t border-line bg-surface pr-[env(safe-area-inset-right)] pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)]"
     >
       <ul className="grid h-(--nth-tabbar-h) grid-cols-5 items-center px-1">
         {LEFT.map((item) => (
@@ -65,8 +65,9 @@ export function BottomTabBar({ onTrade }: BottomTabBarProps) {
           <button
             type="button"
             aria-label={strings.phone.tabs.trade}
+            aria-haspopup="dialog"
             onClick={onTrade}
-            className="-mt-7 grid size-15 place-items-center rounded-pill border-4 border-canvas bg-brand text-surface shadow-raised transition-transform active:scale-95"
+            className="-mt-7 grid size-15 place-items-center rounded-pill border-4 border-surface bg-brand text-surface shadow-raised transition-transform active:scale-95"
           >
             <IconTrade size={26} strokeWidth={2.25} />
           </button>

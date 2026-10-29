@@ -61,13 +61,16 @@ export function useVerifyTotp() {
   });
 }
 
-/** Logs out (T-090): ends the session, clears the Query cache and lands on /login. */
+/**
+ * Logs out (T-090): ends the session, clears the Query cache and lands on /login. When the server
+ * could not be reached the session is still live, so it stays put and the mutation reports the error.
+ */
 export function useLogout() {
   const apiClient = useApiClient();
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   return useMutation({
     mutationFn: () => endSession(apiClient, queryClient),
-    onSettled: () => navigate({ to: '/login', replace: true }),
+    onSuccess: () => navigate({ to: '/login', replace: true }),
   });
 }

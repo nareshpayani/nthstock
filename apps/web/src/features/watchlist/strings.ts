@@ -60,6 +60,8 @@ export const strings = {
     dragLabel: (symbol: string) => `Drag to reorder ${symbol}`,
     keyHint: 'On a stock: B buy, S sell, Alt+↑/↓ move, Delete remove.',
   },
+  ticketFailedTitle: 'The order ticket did not open',
+  ticketFailedBody: (symbol: string) => `Tap Buy or Sell on ${symbol} to try again.`,
   /** Live-region announcements. */
   announce: {
     moved: (name: string, position: number, total: number) =>

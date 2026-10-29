@@ -19,6 +19,7 @@ export const strings = {
     guide: { label: 'Help and documentation', hint: 'How nthstock works and how to trade' },
   },
   logOut: 'Log out',
+  logOutFailed: 'Could not log out. You are still logged in; check your connection and try again.',
   defaultName: 'nthstock investor',
   paperNote: 'Paper trading only: ₹10,00,000 of virtual cash, no real money moves.',
   signedOut: {

@@ -39,7 +39,7 @@ function PageSwitch({ value, pathname }: { value: PhoneSwitch; pathname: string 
               to={option.to}
               replace
               aria-current={pathname === option.to ? 'page' : undefined}
-              className="flex h-11 items-center rounded-pill px-3.5 text-body font-medium whitespace-nowrap text-ink-muted aria-[current=page]:bg-surface aria-[current=page]:font-semibold aria-[current=page]:text-ink aria-[current=page]:shadow-raised min-[360px]:px-4"
+              className="flex h-11 items-center rounded-pill px-3 text-body font-medium whitespace-nowrap text-ink-muted aria-[current=page]:bg-surface aria-[current=page]:font-semibold aria-[current=page]:text-ink aria-[current=page]:shadow-raised min-[360px]:px-4"
             >
               {option.label}
             </Link>
@@ -176,7 +176,7 @@ export function Header({ onOpenMenu, onOpenHelp }: HeaderProps) {
         role="region"
         aria-label={strings.header.statusStrip}
         tabIndex={0}
-        className="relative flex h-10 items-center gap-4 overflow-x-auto border-t border-line px-3 max-[767px]:mask-r-from-85% lg:px-6 min-[1360px]:hidden"
+        className="relative flex h-10 items-center gap-4 overflow-x-auto border-t border-line px-3 max-[767px]:mask-r-from-85% lg:px-6 min-[1360px]:hidden [@media(orientation:landscape)_and_(max-height:500px)]:hidden"
       >
         <MarketStatusPill compact={!phone} dot={phone} className="shrink-0" />
         <HeaderTickers compact stacked={phone} all={phone} className="shrink-0" />

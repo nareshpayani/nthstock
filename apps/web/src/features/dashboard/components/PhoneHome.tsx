@@ -40,11 +40,12 @@ function HeroFrame({
   label?: string;
   children: ReactNode;
 }) {
-  // A fixed minimum height, so loading, the figure and an error take the same room (no jump).
+  // A fixed minimum height sized to the error state (the tallest), so loading, the figure and an
+  // error take the same room (no jump).
   return (
     <section
       aria-labelledby="home-value"
-      className="grid min-h-28 content-start justify-items-center gap-1 pt-2 text-center"
+      className="grid min-h-44content-start justify-items-center gap-1 pt-2 text-center"
     >
       <h1 id="home-value" className="text-body font-normal text-ink-muted">
         {label}
@@ -98,6 +99,11 @@ function PortfolioValue() {
     return (
       <HeroFrame>
         <LiveValue holdings={holdings.data.items} cash={funds.data.balance} />
+        {holdings.isError || funds.isError ? (
+          <p role="status" className="text-label text-ink-muted">
+            {strings.phone.valueStale}
+          </p>
+        ) : null}
       </HeroFrame>
     );
   }

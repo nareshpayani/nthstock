@@ -58,7 +58,7 @@ function AvailableCash() {
         <span className="text-label text-ink-muted">{strings.available}</span>
         {figure}
       </span>
-      <Link to="/funds" className={buttonVariants({ variant: 'primary', size: 'sm' })}>
+      <Link to="/funds" className={cn(buttonVariants({ variant: 'primary' }), 'min-h-11')}>
         {strings.fundsCta}
       </Link>
     </div>
@@ -120,7 +120,7 @@ export function AccountPage() {
       >
         <span
           aria-hidden="true"
-          className="grid size-13 shrink-0 place-items-center rounded-pill bg-brand text-lg font-semibold text-surface"
+          className="grid size-13 shrink-0 place-items-center rounded-pill bg-brand-soft text-lg font-semibold text-ink"
         >
           {initials(name)}
         </span>
@@ -142,6 +142,11 @@ export function AccountPage() {
       >
         {strings.logOut}
       </Button>
+      {logout.isError ? (
+        <p role="alert" className="text-center text-label text-down">
+          {strings.logOutFailed}
+        </p>
+      ) : null}
 
       <p className="text-center text-label text-ink-muted">{strings.paperNote}</p>
     </div>

@@ -13,16 +13,19 @@ export type OpenTicketResult = 'opened' | 'login';
  * /login?redirect=<this page>; the intent stays in memory across that client-side navigation, so
  * the ticket opens when the user is back.
  */
-export function useOpenTicket(): (intent: TicketIntent) => Promise<OpenTicketResult> {
+export function useOpenTicket(): (
+  intent: TicketIntent,
+  redirect?: string,
+) => Promise<OpenTicketResult> {
   const api = useApiClient();
   const navigate = useNavigate();
   const here = useRouterState({ select: (s) => s.location.href });
   const openTicket = useTicketIntentStore((s) => s.openTicket);
   return useCallback(
-    async (intent) => {
+    async (intent, redirect) => {
       openTicket(intent);
       if (await ensureSession(api)) return 'opened';
-      await navigate({ to: '/login', search: { redirect: here } });
+      await navigate({ to: '/login', search: { redirect: redirect ?? here } });
       return 'login';
     },
     [api, navigate, here, openTicket],

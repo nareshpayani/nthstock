@@ -1,5 +1,5 @@
 import type * as PhoneLayout from '@/shared/hooks/usePhoneLayout';
-import { act, cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createApiClient } from '@nthstock/apiClient';
 import type { FundsSummary, Holding } from '@nthstock/contracts';
@@ -54,7 +54,9 @@ const portfolioApi = createApiClient({
         ? fundsSummaryFixture
         : path === '/v1/holdings'
           ? { items: [holdingFixture] }
-          : null;
+          : path === '/v1/auth/logout'
+            ? { ok: true }
+            : null;
     if (!body) return Promise.reject(new TypeError('offline'));
     return Promise.resolve(
       new Response(JSON.stringify(body), { headers: { 'content-type': 'application/json' } }),
@@ -144,19 +146,39 @@ describe('phone app shell (NSTOCK-0466)', () => {
     await waitFor(() => expect(router.state.location.pathname).toBe('/orders'));
   });
 
-  it('shows the portfolio value and the cash available once they load', async () => {
+  it('shows the portfolio value (cash plus holdings) and the day P&L', async () => {
     renderPhone('/dashboard', { data: true });
     expect(await screen.findByText('today')).toBeInTheDocument();
+    // Cash 8,60,000 plus the INFY holding; the day's P&L carries ▼ as text, not colour alone.
+    const hero = screen.getByRole('region', { name: 'Portfolio value' });
+    await waitFor(() => expect(hero).toHaveTextContent('₹8,75,234.50'));
+    expect(hero).toHaveTextContent('▼');
     expect(screen.queryByText('Virtual cash to practise with')).not.toBeInTheDocument();
-    cleanup();
+  });
+
+  it('shows the cash available on Account once it loads', async () => {
     renderPhone('/account', { data: true });
     expect(await screen.findByText('₹8,44,765.50')).toBeInTheDocument();
   });
 
+  it('says the portfolio value could not load, with a Retry', async () => {
+    renderPhone('/dashboard');
+    expect(await screen.findByText('Your portfolio value could not load')).toBeInTheDocument();
+    expect(screen.getAllByRole('button', { name: 'Try again' }).length).toBeGreaterThan(0);
+  });
+
   it('logs out from Account', async () => {
-    const { router } = renderPhone('/account');
+    const { router } = renderPhone('/account', { data: true });
     fireEvent.click(await screen.findByRole('button', { name: 'Log out' }));
     await waitFor(() => expect(router.state.location.pathname).toBe('/login'));
+  });
+
+  it('stays logged in and says so when the logout request fails', async () => {
+    // The default client is offline, so the request cannot reach the server.
+    const { router } = renderPhone('/account');
+    fireEvent.click(await screen.findByRole('button', { name: 'Log out' }));
+    expect(await screen.findByText(/You are still logged in/)).toBeInTheDocument();
+    expect(router.state.location.pathname).toBe('/account');
   });
 
   it('switches Home feed tabs and the movers index through the URL', async () => {

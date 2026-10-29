@@ -85,7 +85,7 @@ export function WatchlistTabs({
   const full = lists.length >= WATCHLIST_MAX_LISTS;
   const only = lists.length <= 1;
   return (
-    <div className="flex items-center gap-1 border-b border-line pr-2">
+    <div className="flex items-center gap-2 border-b border-line pr-2">
       <TabsList
         ref={listRef}
         aria-label={strings.tabsLabel}
@@ -122,7 +122,7 @@ export function WatchlistTabs({
         })}
       </TabsList>
       <IconButton
-        size="sm"
+        size="md"
         label={full ? strings.lists.createDisabled : strings.lists.create}
         title={full ? strings.lists.createDisabled : strings.lists.create}
         icon={<IconPlus size={18} />}
@@ -133,7 +133,7 @@ export function WatchlistTabs({
       <DropdownMenu modal={false}>
         <DropdownMenuTrigger asChild>
           <IconButton
-            size="sm"
+            size="md"
             label={strings.lists.actions(active.name)}
             icon={<IconMore size={18} />}
           />

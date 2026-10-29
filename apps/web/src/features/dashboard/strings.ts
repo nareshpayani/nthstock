@@ -24,6 +24,7 @@ export const strings = {
     signedOutLabel: 'Virtual cash',
     valueLoading: 'Loading your portfolio value',
     valueErrorBody: 'Your holdings and cash are safe. Try again.',
+    valueStale: 'Could not refresh. Showing the last value.',
     feedSection: 'Your stocks and market movers',
     today: 'today',
     signedOutNote: 'Virtual cash to practise with',
