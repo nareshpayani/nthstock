@@ -51,7 +51,13 @@ export type GuideBlock =
   | { kind: 'cards'; items: readonly { name: string; body: string }[] }
   | { kind: 'videos'; label: string; items: readonly GuideVideo[] }
   | { kind: 'diagram'; id: DiagramId }
-  | { kind: 'compare'; label: string; items: readonly GuideComparison[] }
+  | {
+      kind: 'compare';
+      label: string;
+      items: readonly GuideComparison[];
+      /** Captions over each frame of a pair; the round 1 against Demo 2 wording when left out. */
+      captions?: { before: string; after: string };
+    }
   | {
       kind: 'figures';
       label: string;
@@ -59,7 +65,8 @@ export type GuideBlock =
     }
   | { kind: 'links'; label: string; items: readonly GuideLink[] }
   | { kind: 'note'; text: string }
-  | { kind: 'loginCta'; label: string };
+  /** A button to the login page; `href` adds a query, e.g. the reviewer link `/login?try=1`. */
+  | { kind: 'loginCta'; label: string; href?: string };
 
 export type GuideTab = {
   /** The `?tab=` value; stable, because reviewers share these links. */

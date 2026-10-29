@@ -216,8 +216,8 @@ function Block({ block }: { block: GuideBlock }) {
                   item.after.height > item.after.width ? 'grid-cols-2' : 'sm:grid-cols-2',
                 )}
               >
-                <GuideStill image={item.before} label={strings.before} />
-                <GuideStill image={item.after} label={strings.after} />
+                <GuideStill image={item.before} label={block.captions?.before ?? strings.before} />
+                <GuideStill image={item.after} label={block.captions?.after ?? strings.after} />
               </div>
               <p className="text-body text-ink-muted">{item.body}</p>
             </li>
@@ -264,9 +264,16 @@ function Block({ block }: { block: GuideBlock }) {
     case 'loginCta':
       return (
         <div>
-          <Link to="/login" className={buttonVariants({ variant: 'primary' })}>
-            {block.label}
-          </Link>
+          {block.href ? (
+            // A plain link: the query is the login route's own (`?try=1` starts the demo).
+            <a href={block.href} className={buttonVariants({ variant: 'primary' })}>
+              {block.label}
+            </a>
+          ) : (
+            <Link to="/login" className={buttonVariants({ variant: 'primary' })}>
+              {block.label}
+            </Link>
+          )}
         </div>
       );
   }

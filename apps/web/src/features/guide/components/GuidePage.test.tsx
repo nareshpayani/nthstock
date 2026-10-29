@@ -196,10 +196,15 @@ describe('GuidePage', () => {
         const still = within(panel).getByRole('img', { name: image.alt });
         expect(still).toHaveAttribute('src', imageFile(image.file));
         expect(still).toHaveAttribute('width', String(image.width));
+        expect(still).toHaveAttribute('height', String(image.height));
         expect(still).toHaveAttribute('loading', 'lazy');
         expect(still.closest('a')).toHaveAttribute('rel', 'noopener noreferrer');
       }
     }
     expect(within(panel).getAllByText(/Claude Code/).length).toBeGreaterThan(0);
+    expect(within(panel).getByRole('link', { name: 'Open the demo' })).toHaveAttribute(
+      'href',
+      '/login?try=1',
+    );
   });
 });
