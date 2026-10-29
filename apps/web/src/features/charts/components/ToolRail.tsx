@@ -85,7 +85,8 @@ function RailButton({
       disabled={disabled}
       onClick={onClick}
       className={cn(
-        'grid place-items-center rounded-md text-ink hover:bg-canvas focus-visible:ring-3 focus-visible:ring-brand-soft focus-visible:outline-none disabled:opacity-40 aria-pressed:bg-brand-soft aria-pressed:text-brand',
+        // shrink-0: in a rail shorter than its buttons, they scroll rather than squash.
+        'grid shrink-0 place-items-center rounded-md text-ink hover:bg-canvas focus-visible:ring-3 focus-visible:ring-brand-soft focus-visible:outline-none disabled:opacity-40 aria-pressed:bg-brand-soft aria-pressed:text-brand',
         touch ? 'size-11' : 'size-9',
       )}
     >

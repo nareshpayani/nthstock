@@ -61,7 +61,11 @@ export function DrawingLayer({ handle, candles, symbol, format }: DrawingLayerPr
   const startRef = useRef<ChartPoint | null>(null);
   const armedRef = useRef(false);
 
+  // With nothing drawn, no tool picked and no read-out, the layer does not follow the chart, so a
+  // chart without drawings costs no extra render per pan or crosshair move.
+  const active = tool !== null || drawings.length > 0 || note !== null || measured !== null;
   useEffect(() => {
+    if (!active) return undefined;
     const timeScale = chart.timeScale();
     timeScale.subscribeVisibleLogicalRangeChange(repaint);
     chart.subscribeCrosshairMove(repaint);
@@ -73,7 +77,7 @@ export function DrawingLayer({ handle, candles, symbol, format }: DrawingLayerPr
       chart.unsubscribeCrosshairMove(repaint);
       observer?.disconnect();
     };
-  }, [chart, host]);
+  }, [chart, host, active]);
 
   // A new tool, or none, drops a half-made drawing.
   const [toolSeen, setToolSeen] = useState(tool);
@@ -100,8 +104,16 @@ export function DrawingLayer({ handle, candles, symbol, format }: DrawingLayerPr
     return () => window.removeEventListener('keydown', onKey);
   }, [tool, setTool]);
 
+  // The measure read-out stays mounted, so a new one is announced.
+  const readout = (
+    <p role="status" data-testid="measure-readout" className="sr-only">
+      {measured && !(start && end && (tool === 'measure' || tool === 'zoom'))
+        ? measureReadout(measured.from, measured.to, candles, format).text
+        : ''}
+    </p>
+  );
   const size = plotSize(handle);
-  if (!size) return null;
+  if (!size) return readout;
   const { width, height } = size;
   const x = (time: number) =>
     chart.timeScale().logicalToCoordinate(timeToLogical(candles, time) as never) ?? -1;
@@ -232,13 +244,7 @@ export function DrawingLayer({ handle, candles, symbol, format }: DrawingLayerPr
           <MeasureBox {...measured} candles={candles} x={x} y={y} format={format} zoom={false} />
         ) : null}
       </svg>
-      {/* The SVG is hidden from screen readers, so the numbers are read from here. Always there,
-          so a new read-out is announced. */}
-      <p role="status" data-testid="measure-readout" className="sr-only">
-        {measured && !liveMeasure
-          ? measureReadout(measured.from, measured.to, candles, format).text
-          : ''}
-      </p>
+      {readout}
       {measured && !liveMeasure ? (
         <button
           type="button"
