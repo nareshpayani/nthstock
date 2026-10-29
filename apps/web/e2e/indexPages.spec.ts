@@ -36,9 +36,9 @@ test('index cards, header tickers and the dashboard chart open the index pages',
   await page.getByRole('button', { name: 'Zoom in' }).click();
   await page.getByRole('button', { name: 'Reset zoom' }).click();
   await expect(page).toHaveURL(/\/dashboard/);
-  // A tap opens the full NIFTY 50 page on the same range.
+  // A tap opens the full NIFTY 50 page on the same range and chart type (a line by default).
   await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
-  await expect(page).toHaveURL(/\/stocks\/NIFTY50\?exchange=NSE&range=1D$/);
+  await expect(page).toHaveURL(/\/stocks\/NIFTY50\?exchange=NSE&range=1D&chart=line$/);
   await expect(page.getByRole('heading', { level: 1, name: 'NIFTY 50' })).toBeVisible();
 });
 

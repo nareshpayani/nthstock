@@ -1,4 +1,9 @@
-import type { Candle, CandleRange } from '@nthstock/contracts';
+import {
+  CANDLE_INTERVALS,
+  type Candle,
+  type CandleInterval,
+  type CandleRange,
+} from '@nthstock/contracts';
 import {
   ErrorState,
   IconButton,
@@ -17,11 +22,21 @@ import { LiveChange } from '@/shared/components/LiveChange';
 import { PriceCell } from '@/shared/components/PriceCell';
 import { useMarketOpen } from '@/shared/hooks/useMarketOpen';
 import { useDayDirection } from '@/shared/hooks/useQuote';
+import { usePhoneLayout } from '@/shared/hooks/usePhoneLayout';
 import { useApiClient } from '@/shared/lib/apiClientContext';
 import { candlesQuery } from '../api/candlesQuery';
 import { useLiveCandles } from '../hooks/useLiveCandles';
-import { CHART_RANGES, NIFTY, isIntraday } from '../model/ranges';
+import { DEFAULT_INDEX_CHART_TYPE, chartTypeName, type PriceChartType } from '../model/chartTypes';
+import {
+  CHART_RANGES,
+  NIFTY,
+  intervalLabel,
+  isIntraday,
+  rangeLabel,
+  resolveInterval,
+} from '../model/ranges';
 import { strings } from '../strings';
+import { ChartTypeMenu } from './ChartTypeMenu';
 import { LiveBadge } from './LiveBadge';
 import { PriceChart } from './PriceChart';
 import type { ChartHandle } from './PriceChartCanvas';
@@ -29,7 +44,13 @@ import { zoomedLogicalRange } from '../model/chartZoom';
 
 export type IndexChartCardProps = {
   range: CandleRange;
+  /** Bar size from the URL (NSTOCK-0443); the range's own when absent or not offered. */
+  interval?: CandleInterval | undefined;
+  /** Line by default (NSTOCK-0443). */
+  chartType?: PriceChartType;
   onRangeChange: (range: CandleRange) => void;
+  onIntervalChange?: (interval: CandleInterval) => void;
+  onChartTypeChange?: (type: PriceChartType) => void;
 };
 
 const CHART_HEIGHT = 260;
@@ -39,25 +60,46 @@ const TAP_SLOP = 6;
 const TAP_MAX_MS = 300;
 
 const NO_CANDLES: readonly Candle[] = [];
+/** When a press started or ended; read in pointer handlers only, never while rendering. */
+const pressTime = () => performance.now();
 
 /**
- * NIFTY 50 chart card (T-095): the live level and day change, an area chart of the chosen range
+ * NIFTY 50 chart card (T-095): the live level and day change, a chart of the chosen range
  * and a LIVE badge while NSE is open. The range lives in the URL (the dashboard owns it).
  * NSTOCK-0437: the chart pans (drag), zooms (wheel, pinch, or the − + buttons) and shows the
  * crosshair; a tap on it, or the title, opens the full NIFTY 50 page on the same range.
+ * NSTOCK-0443: it has the instrument page's chart type menu and bar size picker, opens as a line
+ * of 1-minute bars on 1D, and the tap carries the type and bar size to the NIFTY 50 page too.
  */
-export function IndexChartCard({ range, onRangeChange }: IndexChartCardProps) {
+export function IndexChartCard({
+  range,
+  interval: requestedInterval,
+  chartType = DEFAULT_INDEX_CHART_TYPE,
+  onRangeChange,
+  onIntervalChange,
+  onChartTypeChange,
+}: IndexChartCardProps) {
   const api = useApiClient();
   const navigate = useNavigate();
   const [chart, setChart] = useState<ChartHandle | null>(null);
   const pressRef = useRef<{ id: number; x: number; y: number; at: number } | null>(null);
   // Fingers down on the plot: a second one makes it a pinch, never a tap.
   const pointersRef = useRef(new Set<number>());
+  const phone = usePhoneLayout();
+  const interval = resolveInterval(range, requestedInterval);
+  const intervals = CANDLE_INTERVALS[range];
+  // The NIFTY 50 page opens on what this card shows.
+  const pageSearch = {
+    exchange: NIFTY.exchange,
+    range,
+    chart: chartType,
+    ...(interval === intervals[0] ? {} : { interval }),
+  };
   const openChart = () =>
     navigate({
       to: '/stocks/$symbol',
       params: { symbol: NIFTY.symbol },
-      search: { exchange: NIFTY.exchange, range },
+      search: pageSearch,
     }).catch((error: unknown) => {
       console.error('Opening the NIFTY 50 page failed', error);
     });
@@ -73,7 +115,7 @@ export function IndexChartCard({ range, onRangeChange }: IndexChartCardProps) {
     pointersRef.current.add(event.pointerId);
     pressRef.current =
       event.button === 0 && pointersRef.current.size === 1 && !onPriceAxis(event)
-        ? { id: event.pointerId, x: event.clientX, y: event.clientY, at: performance.now() }
+        ? { id: event.pointerId, x: event.clientX, y: event.clientY, at: pressTime() }
         : null;
   };
   const onPointerUp = (event: PointerEvent<HTMLDivElement>) => {
@@ -82,7 +124,7 @@ export function IndexChartCard({ range, onRangeChange }: IndexChartCardProps) {
     pressRef.current = null;
     if (!press || press.id !== event.pointerId) return;
     const moved = Math.hypot(event.clientX - press.x, event.clientY - press.y);
-    if (moved <= TAP_SLOP && performance.now() - press.at <= TAP_MAX_MS) void openChart();
+    if (moved <= TAP_SLOP && pressTime() - press.at <= TAP_MAX_MS) void openChart();
   };
   const onPointerCancel = (event: PointerEvent<HTMLDivElement>) => {
     pointersRef.current.delete(event.pointerId);
@@ -96,7 +138,7 @@ export function IndexChartCard({ range, onRangeChange }: IndexChartCardProps) {
   };
   const marketOpen = useMarketOpen();
   const candles = useQuery({
-    ...candlesQuery(api, { ...NIFTY, range }),
+    ...candlesQuery(api, { ...NIFTY, range, interval }),
     // Keep the old range on screen while the new one loads, so the card does not jump.
     placeholderData: keepPreviousData,
   });
@@ -105,13 +147,14 @@ export function IndexChartCard({ range, onRangeChange }: IndexChartCardProps) {
     NIFTY.symbol,
     NIFTY.exchange,
     candles.data?.candles ?? NO_CANDLES,
-    marketOpen && candles.data !== undefined && !candles.isPlaceholderData,
-    candles.data?.interval ?? '1m',
+    marketOpen && candles.data?.interval === interval && !candles.isPlaceholderData,
+    interval,
   );
   // NSTOCK-0446: on 1D the line's colour is the day's change, the same as the change badge. The
   // series alone can't say it: in the first hour it leads with the previous session.
   const today = useDayDirection(NIFTY.symbol, NIFTY.exchange);
   const direction = range === '1D' ? today : undefined;
+  const showIntervals = intervals.length > 1 && onIntervalChange !== undefined;
 
   return (
     <Card
@@ -121,7 +164,7 @@ export function IndexChartCard({ range, onRangeChange }: IndexChartCardProps) {
         <Link
           to="/stocks/$symbol"
           params={{ symbol: NIFTY.symbol }}
-          search={{ exchange: NIFTY.exchange, range }}
+          search={pageSearch}
           className="-mx-1 inline-flex items-center gap-1 rounded-sm px-1 hover:text-brand focus-visible:ring-2 focus-visible:ring-brand focus-visible:outline-none"
         >
           {strings.niftyTitle}
@@ -138,6 +181,42 @@ export function IndexChartCard({ range, onRangeChange }: IndexChartCardProps) {
             onValueChange={onRangeChange}
             options={CHART_RANGES.map((value) => ({ value, label: value }))}
           />
+          {showIntervals ? (
+            phone ? (
+              // Five more segments would wrap on a phone, so the bar size is a native select there,
+              // 44 px tall like the chart type button beside it.
+              <select
+                aria-label={strings.intervalLabel}
+                value={interval}
+                onChange={(event) => {
+                  const next = intervals.find((value) => value === event.target.value);
+                  if (next) onIntervalChange(next);
+                }}
+                className="h-11 rounded-md border border-line bg-canvas px-3 text-body font-medium text-ink focus-visible:border-brand focus-visible:ring-3 focus-visible:ring-brand-soft focus-visible:outline-none"
+              >
+                {intervals.map((value) => (
+                  <option key={value} value={value}>
+                    {value}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <SegmentedControl
+                label={strings.intervalLabel}
+                size="sm"
+                value={interval}
+                onValueChange={onIntervalChange}
+                options={intervals.map((value) => ({
+                  value,
+                  label: value,
+                  ariaLabel: strings.intervalOption(intervalLabel(value)),
+                }))}
+              />
+            )
+          ) : null}
+          {onChartTypeChange ? (
+            <ChartTypeMenu value={chartType} onValueChange={onChartTypeChange} touch={phone} />
+          ) : null}
         </div>
       }
     >
@@ -193,7 +272,12 @@ export function IndexChartCard({ range, onRangeChange }: IndexChartCardProps) {
             <PriceChart
               candles={bars}
               direction={direction}
-              label={strings.niftyChartLabel(strings.ranges[range])}
+              label={strings.niftyChartLabel(
+                chartTypeName(chartType),
+                rangeLabel(range),
+                interval === intervals[0] ? undefined : intervalLabel(interval),
+              )}
+              type={chartType}
               format="index"
               intraday={isIntraday(range)}
               height={CHART_HEIGHT}

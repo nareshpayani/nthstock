@@ -1,3 +1,4 @@
+import { demoTwoTab } from './demoTwo';
 import { defineTabs, repoLink } from './model/guideContent';
 
 /**
@@ -23,6 +24,8 @@ export const strings = {
     `${title}, ${device.toLowerCase()} walkthrough video`,
   videoFallback: (title: string) => `Download the ${title} video`,
   captionsLabel: 'English',
+  before: 'Before: the round 1 demo',
+  after: 'After: Demo 2',
 
   tabs: defineTabs([
     {
@@ -168,6 +171,7 @@ export const strings = {
         },
       ],
     },
+    demoTwoTab,
     {
       id: 'features',
       label: 'Features',
@@ -179,7 +183,7 @@ export const strings = {
           items: [
             {
               name: 'Dashboard',
-              body: 'NIFTY 50 chart that opens on today (1D) and goes to 5 years: drag to pan, wheel, pinch or the − + buttons to zoom, tap to open its full page. Market index cards and the header tickers open each index’s own chart page, where Buy ETF and Sell ETF trade the fund that tracks the index. Curated stock lists, and top gainers and losers by index.',
+              body: 'NIFTY 50 chart that opens as a live line of 1-minute bars on today (1D) and goes to 5 years, with the same five chart types (line, area, candles, OHLC bars, Heikin-Ashi) and bar sizes (1, 5, 15, 30 and 60 minutes on 1D) as the instrument page: drag to pan, wheel, pinch or the − + buttons to zoom, tap to open its full page on the same range, type and bar size. Market index cards and the header tickers open each index’s own chart page, where Buy ETF and Sell ETF trade the fund that tracks the index. Curated stock lists, and top gainers and losers by index.',
             },
             {
               name: 'Live prices',
@@ -311,7 +315,7 @@ export const strings = {
               title: 'Dashboard and live prices',
               device: 'Desktop',
               length: '0:36',
-              body: 'Header tickers and market status, the NIFTY 50 chart from 1 day to 5 years with its crosshair, market indices, stock lists and the top gainers and losers.',
+              body: 'Header tickers and market status, the NIFTY 50 chart from 1 day to 5 years with its crosshair, chart types and bar sizes, market indices, stock lists and the top gainers and losers.',
             },
             {
               id: 'search',

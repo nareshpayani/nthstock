@@ -560,7 +560,10 @@ and the candle store. Tests override any part; the app disposes only what it cre
   `useLiveCandles` folds each quote into the last bar of whatever range and bar size is on screen,
   on the instrument page and the dashboard NIFTY 50 chart alike, and starts the next bar when its
   interval begins (NSTOCK-0441). The hosted demo is forced open at any hour, so bars keep the same
-  grid outside 09:00 to 15:30 instead of piling into the 09:15 bar.
+  grid outside 09:00 to 15:30 instead of piling into the 09:15 bar. The dashboard NIFTY 50 chart
+  shares the instrument page's chart type menu and bar size picker (`ChartTypeMenu` in
+  `features/charts`), keeps both in the dashboard URL (`?interval=&chart=`) and opens as a line of
+  1-minute bars on 1D (NSTOCK-0443).
 - **Index ETFs** (`symbolMaster.ts`, `INDEX_ETFS` in `packages/contracts`, NSTOCK-0440): an index
   cannot be traded, so each major index has a mock tracking ETF (NIFTYETF, SENSEXETF, BANKETF,
   ITETF, MIDCAPETF; tokens from 950001) priced at a hundredth of the index level on every tick, with

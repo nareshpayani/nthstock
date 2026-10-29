@@ -8,7 +8,7 @@ import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { useState } from 'react';
 import { beforeAll, describe, expect, it, vi } from 'vitest';
-import { videoFile } from '../model/guideContent';
+import { imageFile, videoFile } from '../model/guideContent';
 import { strings } from '../strings';
 import { GuidePage } from './GuidePage';
 
@@ -109,7 +109,17 @@ describe('GuidePage', () => {
       const panel = screen.getByRole('tabpanel');
       expect(within(panel).getByRole('heading', { level: 2, name: tab.title })).toBeVisible();
       const diagrams = tab.blocks.filter((block) => block.kind === 'diagram');
-      expect(within(panel).queryAllByRole('img')).toHaveLength(diagrams.length);
+      const stills = tab.blocks.reduce(
+        (count, block) =>
+          count +
+          (block.kind === 'compare'
+            ? block.items.length * 2
+            : block.kind === 'figures'
+              ? block.items.length
+              : 0),
+        0,
+      );
+      expect(within(panel).queryAllByRole('img')).toHaveLength(diagrams.length + stills);
       expect(within(panel).queryAllByText(strings.inWords)).toHaveLength(diagrams.length);
     }
   });
@@ -169,6 +179,27 @@ describe('GuidePage', () => {
   it('names Claude Code on the AI agent tab', async () => {
     renderGuide('agents');
     const panel = await screen.findByRole('tabpanel');
+    expect(within(panel).getAllByText(/Claude Code/).length).toBeGreaterThan(0);
+  });
+
+  it('shows Demo 2 with the brief, and every before and after frame described and sized', async () => {
+    renderGuide('demo-two');
+    const panel = await screen.findByRole('tabpanel');
+    expect(
+      within(panel).getByRole('table', { name: 'The round 2 brief, line by line' }),
+    ).toBeVisible();
+    const block = tabOf('demo-two').blocks.find((item) => item.kind === 'compare');
+    if (block?.kind !== 'compare') throw new Error('Demo 2 has no compare block');
+    expect(block.items.length).toBeGreaterThan(4);
+    for (const item of block.items) {
+      for (const image of [item.before, item.after]) {
+        const still = within(panel).getByRole('img', { name: image.alt });
+        expect(still).toHaveAttribute('src', imageFile(image.file));
+        expect(still).toHaveAttribute('width', String(image.width));
+        expect(still).toHaveAttribute('loading', 'lazy');
+        expect(still.closest('a')).toHaveAttribute('rel', 'noopener noreferrer');
+      }
+    }
     expect(within(panel).getAllByText(/Claude Code/).length).toBeGreaterThan(0);
   });
 });

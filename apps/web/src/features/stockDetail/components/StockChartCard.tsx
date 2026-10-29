@@ -13,9 +13,11 @@ import { AlertLines } from '@/features/notifications';
 import {
   CHART_RANGES,
   type ChartHandle,
+  ChartTypeMenu,
   LiveBadge,
   PriceChart,
   candlesQuery,
+  chartTypeName,
   intervalLabel,
   isIntraday,
   rangeLabel,
@@ -30,7 +32,6 @@ import { useApiClient } from '@/shared/lib/apiClientContext';
 import { useForcedState, useOffline } from '@/shared/lib/connectivity';
 import { DESKTOP_CHART_HEIGHT } from '@/shared/lib/phoneChart';
 import type { ChartType } from '../model/stockDetailSearch';
-import { ChartTypeMenu } from './ChartTypeMenu';
 import { strings } from '../strings';
 
 export type StockChartCardProps = {
@@ -141,7 +142,7 @@ export function StockChartCard({
           emptyText={range === '1D' ? strings.chart.emptyToday : undefined}
           label={strings.chart.label(
             symbol,
-            strings.chart.typeNames[chartType],
+            chartTypeName(chartType),
             rangeLabel(range),
             interval === intervals[0] ? undefined : intervalLabel(interval),
           )}

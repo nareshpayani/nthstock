@@ -1,13 +1,14 @@
 import { fixedClock, fromIst } from '@nthstock/utils';
-import { act, fireEvent, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { useState } from 'react';
-import type { CandleRange } from '@nthstock/contracts';
+import type { CandleInterval, CandleRange } from '@nthstock/contracts';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { chartsMock } from '@/test/chartsMock';
 import { createMockApi } from '@/test/mockApi';
 import { createTestQuoteStore, testQuote } from '@/test/quotes';
 import { renderWithProviders } from '@/test/renderWithProviders';
 import { installResizeObserver } from '@/test/resizeObserver';
+import type { PriceChartType } from '../model/chartTypes';
 import { IndexChartCard } from './IndexChartCard';
 
 vi.mock('lightweight-charts', () => import('@/test/chartsMock'));
@@ -30,12 +31,26 @@ const holidayClock = fixedClock(fromIst(2026, 10, 2, 11 * 60));
 
 function Harness({ initial = '1Y' as CandleRange }) {
   const [range, setRange] = useState<CandleRange>(initial);
-  return <IndexChartCard range={range} onRangeChange={setRange} />;
+  const [interval, setInterval] = useState<CandleInterval | undefined>();
+  const [chartType, setChartType] = useState<PriceChartType | undefined>();
+  return (
+    <IndexChartCard
+      range={range}
+      interval={interval}
+      {...(chartType ? { chartType } : {})}
+      onRangeChange={(next) => {
+        setRange(next);
+        setInterval(undefined);
+      }}
+      onIntervalChange={setInterval}
+      onChartTypeChange={setChartType}
+    />
+  );
 }
 
-function renderCard(clock = tradingClock) {
+function renderCard(clock = tradingClock, initial?: CandleRange) {
   const quotes = createTestQuoteStore();
-  const view = renderWithProviders(<Harness />, {
+  const view = renderWithProviders(<Harness {...(initial ? { initial } : {})} />, {
     apiClient: api.apiClient,
     quoteStore: quotes.store,
     marketSession: { clock, alwaysOpen: false },
@@ -44,11 +59,11 @@ function renderCard(clock = tradingClock) {
 }
 
 describe('IndexChartCard (T-095)', () => {
-  it('draws the NIFTY 50 area chart for the range and shows the live level and change', async () => {
+  it('draws the NIFTY 50 line chart for the range and shows the live level and change', async () => {
     const { quotes } = renderCard();
     expect(await screen.findByRole('heading', { name: /NIFTY 50/ })).toBeInTheDocument();
     await screen.findByTestId('chart-host');
-    expect(screen.getByRole('figure', { name: 'NIFTY 50 area chart over 1 year' })).toBeVisible();
+    expect(screen.getByRole('figure', { name: 'NIFTY 50 line chart over 1 year' })).toBeVisible();
     expect(chartsMock.charts[0]?.series[0]?.setData).toHaveBeenCalled();
     expect(api.requestsTo('/NIFTY50/candles').map((u) => u.searchParams.get('range'))).toEqual([
       '1Y',
@@ -82,7 +97,7 @@ describe('IndexChartCard (T-095)', () => {
       ]),
     );
     expect(
-      await screen.findByRole('figure', { name: 'NIFTY 50 area chart over 1 day' }),
+      await screen.findByRole('figure', { name: 'NIFTY 50 line chart over 1 day' }),
     ).toBeInTheDocument();
     await waitFor(() => expect(chartsMock.charts.at(-1)?.series[0]?.setData).toHaveBeenCalled());
   });
@@ -172,7 +187,52 @@ describe('IndexChartCard (T-095)', () => {
     await screen.findByTestId('chart-host');
     press(plotOf(), { x: 100, at: 0 }, { x: 102, at: 120 });
     expect(await screen.findByRole('heading', { name: 'Stock NIFTY50' })).toBeInTheDocument();
-    expect(router.state.location.search).toEqual({ exchange: 'NSE', range: '1Y' });
+    expect(router.state.location.search).toEqual({ exchange: 'NSE', range: '1Y', chart: 'line' });
+  });
+
+  it('opens as a line of 1-minute bars on 1D and offers every 1D bar size (NSTOCK-0443)', async () => {
+    renderCard(tradingClock, '1D');
+    expect(
+      await screen.findByRole('figure', { name: 'NIFTY 50 line chart over 1 day' }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Chart type: Line' })).toBeInTheDocument();
+    await waitFor(() => expect(chartsMock.active()[0]?.series[0]?.type).toBe('Line'));
+    const sizes = screen.getByRole('radiogroup', { name: 'Bar size' });
+    expect(
+      within(sizes)
+        .getAllByRole('radio')
+        .map((radio) => radio.textContent),
+    ).toEqual(['1m', '5m', '15m', '30m', '1h']);
+    expect(within(sizes).getByRole('radio', { name: '1-minute bars' })).toBeChecked();
+  });
+
+  it('a bar size refetches those bars and the tap carries it and the type (NSTOCK-0443)', async () => {
+    const { router } = renderCard(tradingClock, '1D');
+    await screen.findByTestId('chart-host');
+    fireEvent.click(screen.getByRole('radio', { name: '5-minute bars' }));
+    expect(
+      await screen.findByRole('figure', { name: 'NIFTY 50 line chart over 1 day, 5-minute bars' }),
+    ).toBeInTheDocument();
+    expect(api.requestsTo('/NIFTY50/candles').map((u) => u.searchParams.get('interval'))).toEqual([
+      '1m',
+      '5m',
+    ]);
+    fireEvent.keyDown(screen.getByRole('button', { name: 'Chart type: Line' }), { key: 'Enter' });
+    fireEvent.click(await screen.findByRole('menuitemradio', { name: /^Candles/ }));
+    expect(
+      await screen.findByRole('figure', {
+        name: 'NIFTY 50 candlestick chart over 1 day, 5-minute bars',
+      }),
+    ).toBeInTheDocument();
+    await waitFor(() => expect(chartsMock.active()[0]?.series[0]?.type).toBe('Candlestick'));
+    press(plotOf(), { x: 100 });
+    await screen.findByRole('heading', { name: 'Stock NIFTY50' });
+    expect(router.state.location.search).toEqual({
+      exchange: 'NSE',
+      range: '1D',
+      chart: 'candle',
+      interval: '5m',
+    });
   });
 
   it('a drag, a long press, another button or a cancelled press does not open it (NSTOCK-0437)', async () => {
@@ -225,8 +285,60 @@ describe('IndexChartCard (T-095)', () => {
     renderCard();
     expect(await screen.findByRole('link', { name: 'NIFTY 50' })).toHaveAttribute(
       'href',
-      '/stocks/NIFTY50?exchange=NSE&range=1Y',
+      '/stocks/NIFTY50?exchange=NSE&range=1Y&chart=line',
     );
+  });
+
+  it('the title link carries a picked bar size and type (NSTOCK-0443)', async () => {
+    renderCard(tradingClock, '1D');
+    await screen.findByTestId('chart-host');
+    fireEvent.click(screen.getByRole('radio', { name: '30-minute bars' }));
+    await screen.findByRole('figure', { name: /30-minute bars/ });
+    expect(screen.getByRole('link', { name: 'NIFTY 50' })).toHaveAttribute(
+      'href',
+      '/stocks/NIFTY50?exchange=NSE&range=1D&chart=line&interval=30m',
+    );
+  });
+
+  it('hides the bar size on a one-size range or without a handler (NSTOCK-0443)', async () => {
+    renderCard(tradingClock, '5Y');
+    await screen.findByTestId('chart-host');
+    expect(screen.queryByRole('radiogroup', { name: 'Bar size' })).not.toBeInTheDocument();
+    renderWithProviders(<IndexChartCard range="1D" onRangeChange={() => undefined} />, {
+      apiClient: api.apiClient,
+      quoteStore: createTestQuoteStore().store,
+      marketSession: { clock: tradingClock, alwaysOpen: false },
+    });
+    await waitFor(() => expect(screen.getAllByTestId('chart-host')).toHaveLength(2));
+    expect(screen.queryByRole('radiogroup', { name: 'Bar size' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('combobox', { name: 'Bar size' })).not.toBeInTheDocument();
+    expect(screen.getAllByRole('button', { name: /^Chart type: / })).toHaveLength(1);
+  });
+
+  it('on a phone the bar size is a 44 px select beside a 44 px type button (NSTOCK-0443)', async () => {
+    vi.stubGlobal('matchMedia', (query: string) => ({
+      matches: query.includes('max-width: 767.98px'),
+      media: query,
+      addEventListener: () => undefined,
+      removeEventListener: () => undefined,
+    }));
+    renderCard(tradingClock, '1D');
+    await screen.findByTestId('chart-host');
+    expect(screen.queryByRole('radiogroup', { name: 'Bar size' })).not.toBeInTheDocument();
+    const select = screen.getByRole('combobox', { name: 'Bar size' });
+    expect(select).toHaveValue('1m');
+    expect(select).toHaveClass('h-11');
+    expect(
+      within(select)
+        .getAllByRole('option')
+        .map((option) => option.textContent),
+    ).toEqual(['1m', '5m', '15m', '30m', '1h']);
+    expect(screen.getByRole('button', { name: 'Chart type: Line' })).toHaveClass('h-11');
+    fireEvent.change(select, { target: { value: '15m' } });
+    expect(
+      await screen.findByRole('figure', { name: 'NIFTY 50 line chart over 1 day, 15-minute bars' }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('combobox', { name: 'Bar size' })).toHaveValue('15m');
   });
 
   it('moves the last bar with the live level, and starts a new one on time (NSTOCK-0441)', async () => {
