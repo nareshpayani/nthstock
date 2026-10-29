@@ -110,6 +110,8 @@ export function PriceChartCanvas({
   const realRef = useRef<ReadonlyMap<number, Candle>>(new Map());
   // The type last drawn, so a switch (not the first draw) cross-fades in.
   const builtTypeRef = useRef<PriceChartType | null>(null);
+  // The tick labels last drawn and which of them show (NSTOCK-0446), to rebuild only on a change.
+  const ticksRef = useRef<{ prices: readonly number[]; show: readonly boolean[] } | null>(null);
   const [hover, setHover] = useState<ChartTooltipState | null>(null);
   // Kept in a ref so a new callback identity never rebuilds the chart.
   const onReadyRef = useRef(onReady);
@@ -145,6 +147,7 @@ export function PriceChartCanvas({
             (price) => tagged.priceToCoordinate(price),
             axisTagRows(tagged),
           );
+          ticksRef.current = { prices, show };
           return prices.map((price: number, i: number) =>
             show[i] ? formatChartValue(price, format) : '',
           );
@@ -210,10 +213,21 @@ export function PriceChartCanvas({
       for (const point of points.slice(points.length - changes.length)) {
         target.update(point as BarData & LineData);
       }
-      // The live tag moved: build the tick labels again so none hides under it. Setting the
-      // formatter is what tells the library its cached labels are stale.
-      const localization = chartRef.current?.options().localization;
-      if (localization) chartRef.current?.applyOptions({ localization });
+      // The live tag moved. Only when that changes which tick labels it covers, build them again
+      // (setting the formatter tells the library its cached labels are stale): a rebuild on every
+      // tick costs a long frame on a slow phone (T25).
+      const ticks = ticksRef.current;
+      if (ticks) {
+        const show = visibleTickLabels(
+          ticks.prices,
+          (price) => series.priceToCoordinate(price),
+          axisTagRows(series),
+        );
+        if (show.some((shown, i) => shown !== ticks.show[i])) {
+          const localization = chartRef.current?.options().localization;
+          if (localization) chartRef.current?.applyOptions({ localization });
+        }
+      }
       return;
     }
     target.setData(points as (BarData & LineData)[]);
