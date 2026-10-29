@@ -28,7 +28,7 @@ describe('order cues (A17)', () => {
     expect(fillCue('SELL')).toBe('filledSell');
   });
 
-  it('holds the tick, then runs the close; unmounting first cancels it', () => {
+  it('holds the tick, then runs the close, even if unmounted meanwhile', () => {
     vi.useFakeTimers();
     const then = vi.fn();
     const { result, unmount } = renderHook(() => useSuccessHold());
@@ -44,7 +44,7 @@ describe('order cues (A17)', () => {
     act(() => second.result.current[1](later));
     second.unmount();
     act(() => vi.advanceTimersByTime(SUCCESS_HOLD_MS));
-    expect(later).not.toHaveBeenCalled();
+    expect(later).toHaveBeenCalledOnce();
     unmount();
   });
 });

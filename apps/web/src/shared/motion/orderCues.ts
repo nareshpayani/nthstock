@@ -1,5 +1,5 @@
 import type { OrderSide } from '@nthstock/contracts';
-import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
+import { useCallback, useRef, useState, useSyncExternalStore } from 'react';
 import { haptic } from './haptics';
 import {
   orderSoundsEnabled,
@@ -37,12 +37,13 @@ export function useOrderSounds(): [enabled: boolean, setEnabled: (enabled: boole
 
 /**
  * The tick's moment: `hold(then)` turns `done` on (the confirm button draws its tick) and runs
- * `then`, usually closing the sheet, `SUCCESS_HOLD_MS` later. Unmounting first cancels it.
+ * `then`, usually closing the sheet, `SUCCESS_HOLD_MS` later. It still runs if the caller unmounts
+ * meanwhile: a partial exit changes the held quantity, which remounts the ticket (keyed on it) inside
+ * the position editor, and the editor must still close.
  */
 export function useSuccessHold(): [done: boolean, hold: (then: () => void) => void] {
   const [done, setDone] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-  useEffect(() => () => clearTimeout(timer.current), []);
   const hold = useCallback((then: () => void) => {
     setDone(true);
     clearTimeout(timer.current);
