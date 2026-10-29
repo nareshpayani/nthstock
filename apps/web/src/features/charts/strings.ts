@@ -118,7 +118,7 @@ export const strings = {
     failed: 'Could not make the chart image. Try again.',
     brand: 'nthstock',
   },
-  clock: { suffix: 'IST' },
+  clock: { suffix: 'IST', label: (time: string) => `Time ${time} IST` },
   /** Each indicator line's short name in the legend. */
   studyShort: {
     sma20: 'SMA 20',

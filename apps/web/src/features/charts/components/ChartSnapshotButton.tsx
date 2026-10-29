@@ -1,4 +1,4 @@
-import { cn, IconButton } from '@nthstock/ui';
+import { cn, IconButton, useOptionalToast, type ToastTone } from '@nthstock/ui';
 import { useState } from 'react';
 import {
   chartSnapshot,
@@ -33,6 +33,13 @@ export function ChartSnapshotButton({
 }: ChartSnapshotButtonProps) {
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState('');
+  const toast = useOptionalToast();
+
+  // The toast is itself a live region, so the hidden status line speaks only where no toast can.
+  const tell = (title: string, tone: ToastTone) => {
+    if (toast) toast.show({ title, tone });
+    else setStatus(title);
+  };
 
   const onClick = async () => {
     if (!handle || busy) return;
@@ -44,10 +51,11 @@ export function ChartSnapshotButton({
       if (!blob) throw new Error('empty canvas');
       const outcome = await deliverSnapshot(blob, snapshotFileName(name, at), { share: touch });
       if (outcome !== 'cancelled') {
-        setStatus(outcome === 'shared' ? strings.snapshot.shared : strings.snapshot.saved);
+        tell(outcome === 'shared' ? strings.snapshot.shared : strings.snapshot.saved, 'success');
       }
-    } catch {
-      setStatus(strings.snapshot.failed);
+    } catch (error) {
+      console.warn('[chart snapshot] failed', error);
+      tell(strings.snapshot.failed, 'error');
     } finally {
       setBusy(false);
     }

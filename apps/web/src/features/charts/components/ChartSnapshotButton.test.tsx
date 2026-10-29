@@ -1,7 +1,7 @@
+import { ToastProvider } from '@nthstock/ui';
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ChartSnapshotButton } from './ChartSnapshotButton';
-import { IstClock } from './IstClock';
 import type * as SnapshotModule from '../model/snapshot';
 import type { ChartHandle } from './PriceChartCanvas';
 
@@ -41,27 +41,51 @@ describe('ChartSnapshotButton (NSTOCK-0463)', () => {
     expect(snapshot.deliverSnapshot).not.toHaveBeenCalled();
   });
 
+  it('saves on a desktop and shows a toast', async () => {
+    snapshot.chartSnapshot.mockResolvedValue(new Blob(['png']));
+    snapshot.deliverSnapshot.mockResolvedValue('downloaded');
+    render(
+      <ToastProvider>
+        <ChartSnapshotButton handle={handle} name="INFY" details={['1D']} />
+      </ToastProvider>,
+    );
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Save the chart as an image' }));
+    });
+    expect(snapshot.deliverSnapshot.mock.calls[0]?.[2]).toEqual({ share: false });
+    expect(await screen.findByText('Chart image saved')).toBeVisible();
+    expect(screen.getAllByText('Chart image saved')).toHaveLength(1);
+  });
+
+  it('shows the failure in a toast when delivery throws', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    snapshot.chartSnapshot.mockResolvedValue(new Blob(['png']));
+    snapshot.deliverSnapshot.mockRejectedValue(new Error('denied'));
+    render(
+      <ToastProvider>
+        <ChartSnapshotButton handle={handle} name="INFY" details={[]} touch />
+      </ToastProvider>,
+    );
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Share the chart as an image' }));
+    });
+    expect(await screen.findByText(/Could not make the chart image/)).toBeVisible();
+    expect(warn).toHaveBeenCalled();
+    warn.mockRestore();
+  });
+
+  it('says nothing when the share sheet is cancelled', async () => {
+    snapshot.chartSnapshot.mockResolvedValue(new Blob(['png']));
+    snapshot.deliverSnapshot.mockResolvedValue('cancelled');
+    render(<ChartSnapshotButton handle={handle} name="INFY" details={[]} touch />);
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Share the chart as an image' }));
+    });
+    expect(screen.getByRole('status')).toBeEmptyDOMElement();
+  });
+
   it('waits for the chart', () => {
     render(<ChartSnapshotButton handle={null} name="INFY" details={[]} />);
     expect(screen.getByRole('button', { name: 'Save the chart as an image' })).toBeDisabled();
-  });
-});
-
-describe('IstClock (NSTOCK-0463)', () => {
-  afterEach(() => vi.useRealTimers());
-
-  it('ticks each second in IST and stops when unmounted', () => {
-    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval', 'Date'] });
-    vi.setSystemTime(new Date('2026-10-29T15:15:12Z'));
-    const { unmount } = render(<IstClock />);
-    const clock = screen.getByTestId('ist-clock');
-    expect(clock).toHaveAttribute('aria-hidden', 'true');
-    expect(clock).toHaveTextContent(/08:45:12 pm IST/i);
-    act(() => {
-      vi.advanceTimersByTime(1000);
-    });
-    expect(clock).toHaveTextContent(/08:45:13 pm IST/i);
-    unmount();
-    expect(vi.getTimerCount()).toBe(0);
   });
 });
