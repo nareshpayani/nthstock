@@ -260,7 +260,10 @@ describe('live chart (T-108, NSTOCK-0441)', () => {
     const setDataCalls = series?.setData.mock.calls.length;
     const inMinute = new Date(last.time * 1000 + 30_000).toISOString();
     act(() => quotes.push(testQuote('INFY', 151235, { ts: inMinute })));
-    expect(series?.update).toHaveBeenLastCalledWith({ time: last.time, value: 151235 });
+    // A tick on the same bar glides there over a few frames (A16).
+    await waitFor(() =>
+      expect(series?.update).toHaveBeenLastCalledWith({ time: last.time, value: 151235 }),
+    );
 
     const nextMinute = new Date(last.time * 1000 + 65_000).toISOString();
     act(() => quotes.push(testQuote('INFY', 151300, { ts: nextMinute })));
@@ -321,7 +324,7 @@ describe('live chart (T-108, NSTOCK-0441)', () => {
         testQuote('INFY', 151235, { ts: new Date(last.time * 1000 + 1_000).toISOString() }),
       ),
     );
-    expect(series?.update).toHaveBeenCalled();
+    await waitFor(() => expect(series?.update).toHaveBeenCalled());
   });
 
   it('does not follow ticks on 1D when the market is closed', async () => {

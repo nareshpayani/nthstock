@@ -382,7 +382,10 @@ describe('IndexChartCard (T-095)', () => {
     // 1Y draws daily bars: a tick on the last bar's day moves it, the next trading day adds one.
     const sameDay = new Date(last.time * 1000 + 60_000).toISOString();
     act(() => quotes.push(testQuote('NIFTY50', 2541860, { ts: sameDay })));
-    expect(series?.update).toHaveBeenLastCalledWith({ time: last.time, value: 2541860 });
+    // A tick on the same bar glides there over a few frames (A16).
+    await waitFor(() =>
+      expect(series?.update).toHaveBeenLastCalledWith({ time: last.time, value: 2541860 }),
+    );
     const nextDay = new Date(last.time * 1000 + 86_400_000).toISOString();
     act(() => quotes.push(testQuote('NIFTY50', 2542000, { ts: nextDay })));
     expect(series?.update).toHaveBeenLastCalledWith({
