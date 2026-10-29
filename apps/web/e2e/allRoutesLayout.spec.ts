@@ -32,6 +32,7 @@ const ROUTES = [
 const GUIDE_TABS = [
   'overview',
   'demo',
+  'demo-two',
   'features',
   'walkthroughs',
   'trade-from-charts',

@@ -3,7 +3,7 @@ import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { strings } from '../strings';
 import { FLOW_DIAGRAMS, logFraction } from './diagrams';
-import { neighboursOf, repoLink, resolveTab, videoFile } from './guideContent';
+import { imageFile, neighboursOf, repoLink, resolveTab, videoFile } from './guideContent';
 
 const TABS = strings.tabs;
 
@@ -36,6 +36,25 @@ describe('guide tabs', () => {
         if (block.kind !== 'links') continue;
         for (const link of block.items) expect(link.href).toMatch(/^https:\/\/github\.com\//);
       }
+    }
+  });
+});
+
+describe('Demo 2 stills', () => {
+  it('each exist in public/round2', () => {
+    const files = TABS.flatMap((tab) =>
+      tab.blocks.flatMap((block) =>
+        block.kind === 'compare'
+          ? block.items.flatMap((item) => [item.before.file, item.after.file])
+          : block.kind === 'figures'
+            ? block.items.map((item) => item.image.file)
+            : [],
+      ),
+    );
+    expect(files.length).toBeGreaterThan(0);
+    expect(new Set(files).size).toBe(files.length);
+    for (const file of files) {
+      expect(existsSync(resolve(process.cwd(), `public${imageFile(file)}`)), file).toBe(true);
     }
   });
 });

@@ -1,3 +1,4 @@
+import { demoTwoTab } from './demoTwo';
 import { defineTabs, repoLink } from './model/guideContent';
 
 /**
@@ -23,6 +24,8 @@ export const strings = {
     `${title}, ${device.toLowerCase()} walkthrough video`,
   videoFallback: (title: string) => `Download the ${title} video`,
   captionsLabel: 'English',
+  before: 'Before: the round 1 demo',
+  after: 'After: Demo 2',
 
   tabs: defineTabs([
     {
@@ -168,6 +171,7 @@ export const strings = {
         },
       ],
     },
+    demoTwoTab,
     {
       id: 'features',
       label: 'Features',

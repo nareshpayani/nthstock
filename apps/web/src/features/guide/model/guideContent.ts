@@ -21,6 +21,20 @@ export type GuideVideo = {
   length: string;
 };
 
+/**
+ * A still frame the site serves from apps/web/public/round2 (the Demo 2 tab): `file` names
+ * `<file>.jpg`; width and height are its CSS pixels, so the page reserves its space.
+ */
+export type GuideImage = { file: string; alt: string; width: number; height: number };
+
+/** One before and after pair, captured with the same script at the same screen size. */
+export type GuideComparison = {
+  title: string;
+  body: string;
+  before: GuideImage;
+  after: GuideImage;
+};
+
 export type GuideBlock =
   | { kind: 'text'; text: string }
   | { kind: 'heading'; text: string }
@@ -37,6 +51,12 @@ export type GuideBlock =
   | { kind: 'cards'; items: readonly { name: string; body: string }[] }
   | { kind: 'videos'; label: string; items: readonly GuideVideo[] }
   | { kind: 'diagram'; id: DiagramId }
+  | { kind: 'compare'; label: string; items: readonly GuideComparison[] }
+  | {
+      kind: 'figures';
+      label: string;
+      items: readonly { image: GuideImage; caption: string }[];
+    }
   | { kind: 'links'; label: string; items: readonly GuideLink[] }
   | { kind: 'note'; text: string }
   | { kind: 'loginCta'; label: string };
@@ -76,6 +96,9 @@ export function neighboursOf<T extends { id: string }>(
 /** Where the site serves a walkthrough clip's files (apps/web/public/demo). */
 export const videoFile = (id: string, extension: 'mp4' | 'vtt' | 'jpg') =>
   `/demo/${id}.${extension}`;
+
+/** Where the site serves a Demo 2 still (apps/web/public/round2). */
+export const imageFile = (file: string) => `/round2/${file}.jpg`;
 
 /** A link to a file or folder in the public repository, on the default branch. */
 export const repoLink = (path: string) =>

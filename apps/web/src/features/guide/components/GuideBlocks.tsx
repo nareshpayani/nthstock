@@ -1,6 +1,6 @@
 import { buttonVariants, cn } from '@nthstock/ui';
 import { Link } from '@tanstack/react-router';
-import { videoFile, type GuideBlock } from '../model/guideContent';
+import { imageFile, videoFile, type GuideBlock, type GuideImage } from '../model/guideContent';
 import { strings } from '../strings';
 import { GuideDiagram } from './GuideDiagram';
 
@@ -53,6 +53,39 @@ function GuideTable({ block }: { block: Extract<GuideBlock, { kind: 'table' }> }
         </tbody>
       </table>
     </div>
+  );
+}
+
+/**
+ * A captured frame, linked to its full-size file. Phone frames are portrait and capped in height,
+ * so a pair sits side by side even on a 320 px screen; wide frames fill their column.
+ */
+function GuideStill({ image, label }: { image: GuideImage; label: string }) {
+  const portrait = image.height > image.width;
+  return (
+    <figure className="grid content-start gap-1.5">
+      <figcaption className="text-label font-semibold text-ink-muted">{label}</figcaption>
+      <a
+        href={imageFile(image.file)}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="block rounded-sm outline-none focus-visible:ring-2 focus-visible:ring-brand"
+      >
+        <img
+          src={imageFile(image.file)}
+          alt={image.alt}
+          width={image.width}
+          height={image.height}
+          loading="lazy"
+          decoding="async"
+          className={cn(
+            'h-auto rounded-sm border border-line bg-canvas',
+            portrait ? 'mx-auto max-h-[36rem] w-auto max-w-full' : 'w-full',
+          )}
+        />
+        <span className="sr-only"> {strings.opensInNewTab}</span>
+      </a>
+    </figure>
   );
 }
 
@@ -171,6 +204,36 @@ function Block({ block }: { block: GuideBlock }) {
       );
     case 'diagram':
       return <GuideDiagram id={block.id} />;
+    case 'compare':
+      return (
+        <ul aria-label={block.label} className="grid gap-4">
+          {block.items.map((item) => (
+            <li key={item.title} className="grid gap-3 rounded-md border border-line p-3">
+              <h3 className="text-body font-semibold text-ink">{item.title}</h3>
+              <div
+                className={cn(
+                  'grid gap-3',
+                  item.after.height > item.after.width ? 'grid-cols-2' : 'sm:grid-cols-2',
+                )}
+              >
+                <GuideStill image={item.before} label={strings.before} />
+                <GuideStill image={item.after} label={strings.after} />
+              </div>
+              <p className="text-body text-ink-muted">{item.body}</p>
+            </li>
+          ))}
+        </ul>
+      );
+    case 'figures':
+      return (
+        <ul aria-label={block.label} className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+          {block.items.map((item) => (
+            <li key={item.image.file} className="grid content-start">
+              <GuideStill image={item.image} label={item.caption} />
+            </li>
+          ))}
+        </ul>
+      );
     case 'links':
       return (
         <div className="grid gap-2 border-t border-line pt-4">
