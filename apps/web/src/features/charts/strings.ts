@@ -49,8 +49,9 @@ export const strings = {
   /** Indicators menu (NSTOCK-0460). */
   studies: {
     button: 'Indicators',
+    // Starts with the visible text ("Indicators 2"), so voice control can name it (WCAG 2.5.3).
     buttonLabel: (count: number) =>
-      count === 0 ? 'Indicators: none on' : `Indicators: ${String(count)} on`,
+      count === 0 ? 'Indicators, none on' : `Indicators ${String(count)} on`,
     heading: 'Show on the chart',
     names: {
       volume: 'Volume',

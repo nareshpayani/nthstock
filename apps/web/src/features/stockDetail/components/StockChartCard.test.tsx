@@ -176,7 +176,7 @@ describe('stock price chart (T-107)', () => {
       chartsMock.active()[0]?.series.filter((s) => s.type === type).length ?? 0;
     await waitFor(() => expect(count('Histogram')).toBe(1));
     const lines = count('Line');
-    fireEvent.keyDown(screen.getByRole('button', { name: /^Indicators: / }), { key: 'Enter' });
+    fireEvent.keyDown(screen.getByRole('button', { name: /^Indicators/ }), { key: 'Enter' });
     fireEvent.click(await screen.findByRole('menuitemcheckbox', { name: /Moving average 20/ }));
     await waitFor(() => expect(count('Line')).toBe(lines + 1));
   });

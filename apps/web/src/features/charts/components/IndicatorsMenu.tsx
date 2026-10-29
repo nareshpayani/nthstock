@@ -55,6 +55,7 @@ export function IndicatorsMenu({ touch: touchProp = false }: IndicatorsMenuProps
       >
         <IndicatorsGlyph />
         <span className="max-[359px]:sr-only">{strings.studies.button}</span>
+        {/* A real space, so the visible text reads "Indicators 2", as the name starts. */}{' '}
         {studies.length > 0 ? (
           <span className="rounded-pill bg-brand-soft px-1.5 text-label text-brand">
             {studies.length}

@@ -89,7 +89,7 @@ describe('IndexChartCard (T-095)', () => {
     expect(legend).toHaveTextContent(/[+-]?\d+(\.\d+)?%/);
     const lines = () => chartsMock.active()[0]?.series.filter((s) => s.type === 'Line').length;
     const before = lines();
-    fireEvent.keyDown(screen.getByRole('button', { name: /^Indicators: / }), { key: 'Enter' });
+    fireEvent.keyDown(screen.getByRole('button', { name: /^Indicators/ }), { key: 'Enter' });
     fireEvent.click(screen.getByRole('menuitemcheckbox', { name: /Moving average 20/ }));
     await waitFor(() => expect(lines()).toBe((before ?? 0) + 1));
   });
