@@ -496,6 +496,29 @@ describe('saved drawings (NSTOCK-0461)', () => {
     expect(screen.getByTestId('drawings-not-saved')).toHaveTextContent("can't be saved");
   });
 
+  it('saves over an unreadable value that is the copy already set aside', () => {
+    window.localStorage.setItem(unreadableDrawingsKey('MARUTI'), '{not json');
+    window.localStorage.setItem(drawingsStorageKey('MARUTI'), '{not json');
+    const at = { time: T0, price: 150_000 };
+    act(() => useDrawings.getState().add('MARUTI', { id: 'a', kind: 'horizontal', at }));
+    const saved = JSON.parse(window.localStorage.getItem(drawingsStorageKey('MARUTI')) ?? '');
+    expect(saved).toHaveLength(1);
+    expect(useDrawings.getState().unsaved.MARUTI).toBe(false);
+  });
+
+  it('warns with the symbol when a second unreadable value is kept, not the value', () => {
+    window.localStorage.setItem(unreadableDrawingsKey('SBIN'), 'first');
+    window.localStorage.setItem(drawingsStorageKey('SBIN'), '{secret');
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    try {
+      useDrawings.getState().drawingsFor('SBIN');
+      expect(warn).toHaveBeenCalledWith(expect.stringContaining('SBIN'));
+      expect(warn).not.toHaveBeenCalledWith(expect.stringContaining('secret'));
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
   it('puts a picked tool down when the chart goes', () => {
     const { handle } = fakeHandle();
     const view = render(

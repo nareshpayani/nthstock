@@ -32,7 +32,14 @@ function readDrawings(symbol: string): Drawing[] {
   // stay in memory and the rail says they are not saved.
   const kept = safeStorage.get(unreadableDrawingsKey(symbol));
   const safe = kept === null ? safeStorage.set(unreadableDrawingsKey(symbol), raw) : kept === raw;
-  if (!safe) unprotected.add(symbol);
+  if (!safe) {
+    unprotected.add(symbol);
+    console.warn(
+      `Chart drawings for ${symbol} are not saved: the stored value cannot be read and ${
+        kept === null ? 'setting it aside failed' : 'a different copy is already set aside'
+      }.`,
+    );
+  }
   return drawings;
 }
 
