@@ -6,6 +6,8 @@ export const AUTO_SCROLL_SPEED = 40;
 export const AUTO_SCROLL_REST_MS = 2500;
 /** Out and back this many times, then it rests at the start for good. */
 export const AUTO_SCROLL_CYCLES = 3;
+/** A gap between frames longer than this means the page was hidden; that time does not count. */
+export const AUTO_SCROLL_HIDDEN_GAP_MS = 250;
 
 type Phase = 'rest' | 'out' | 'back';
 
@@ -40,7 +42,7 @@ export function driftAt(elapsedMs: number, overflowPx: number): number | null {
 
 /**
  * A strip too wide for the screen drifts gently to its end and back so every item gets seen (A21),
- * a few times and then no more. A touch, a wheel or keyboard focus on it stops the drift for good,
+ * a few times and then no more. A touch, a wheel, a key or keyboard focus on it stops the drift for good,
  * so the user is never fighting it (WCAG 2.2.2). Nothing moves under reduced motion, while the
  * page is hidden, or when everything already fits.
  */
@@ -58,13 +60,21 @@ export function useAutoScroll<T extends HTMLElement>() {
       element.removeEventListener('pointerdown', stop);
       element.removeEventListener('wheel', stop);
       element.removeEventListener('focusin', stop);
+      element.removeEventListener('keydown', stop);
     };
     const tick = (now: number) => {
       // Time while the page is hidden does not count, so it picks up where it was.
-      if (last !== undefined && start !== undefined && now - last > 250) start += now - last;
+      if (last !== undefined && start !== undefined && now - last > AUTO_SCROLL_HIDDEN_GAP_MS)
+        start += now - last;
       last = now;
       start ??= now;
       const overflow = element.scrollWidth - element.clientWidth;
+      // Nothing to show yet (skeletons, or a layout that changes later): wait, do not give up.
+      if (overflow <= 0) {
+        start = undefined;
+        frame = requestAnimationFrame(tick);
+        return;
+      }
       const at = driftAt(now - start, overflow);
       if (at === null) {
         stop();
@@ -76,6 +86,7 @@ export function useAutoScroll<T extends HTMLElement>() {
     element.addEventListener('pointerdown', stop);
     element.addEventListener('wheel', stop, { passive: true });
     element.addEventListener('focusin', stop);
+    element.addEventListener('keydown', stop);
     frame = requestAnimationFrame(tick);
     return stop;
   }, []);
