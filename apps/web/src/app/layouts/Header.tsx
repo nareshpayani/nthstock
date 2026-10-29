@@ -32,7 +32,7 @@ export type HeaderProps = {
 function PageSwitch({ value, pathname }: { value: PhoneSwitch; pathname: string }) {
   return (
     <nav aria-label={value.label} className="min-w-0">
-      <ul className="flex gap-0.5 rounded-pill bg-canvas p-0.5">
+      <ul className="flex gap-2 rounded-pill bg-canvas p-0.5">
         {value.options.map((option) => (
           <li key={option.to}>
             <Link
@@ -101,7 +101,7 @@ export function Header({ onOpenMenu, onOpenHelp }: HeaderProps) {
   // The strip drifts so every index gets seen on a narrow phone (A21).
   const stripRef = useAutoScroll<HTMLDivElement>(phone);
   return (
-    <header className="sticky top-0 z-(--nth-z-header) border-b border-line bg-surface pt-[env(safe-area-inset-top)]">
+    <header className="sticky top-0 z-(--nth-z-header) border-b border-line bg-surface pt-[env(safe-area-inset-top)] pr-[env(safe-area-inset-right)] pl-[env(safe-area-inset-left)]">
       {phoneShell ? (
         <PhoneTopBar />
       ) : (

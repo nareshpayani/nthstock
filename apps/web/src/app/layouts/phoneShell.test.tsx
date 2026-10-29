@@ -56,11 +56,15 @@ const popularFixture = {
  * A client that answers funds, holdings and popular searches from the fixtures and fails
  * everything else; `failFunds` fails funds too, for the error states.
  */
+/** Every path the fixture client was asked for, in order. */
+const fetched: string[] = [];
+
 function portfolioApi({ failFunds = false } = {}) {
   return createApiClient({
     baseUrl: 'http://portfolio.test',
     fetch: (input) => {
       const path = new URL(String(input)).pathname;
+      fetched.push(path);
       const body =
         path === '/v1/funds' && !failFunds
           ? fundsSummaryFixture
@@ -203,7 +207,13 @@ describe('phone app shell (NSTOCK-0466)', () => {
     expect(await within(hero).findByRole('alert')).toHaveTextContent(
       'Your portfolio value could not load',
     );
-    expect(within(hero).getByRole('button', { name: 'Try again' })).toBeInTheDocument();
+    // Try again asks for the failed figure again, and only that one.
+    const fundsCalls = () => fetched.filter((path) => path === '/v1/funds').length;
+    const holdingsCalls = () => fetched.filter((path) => path === '/v1/holdings').length;
+    const [funds, holdings] = [fundsCalls(), holdingsCalls()];
+    fireEvent.click(within(hero).getByRole('button', { name: 'Try again' }));
+    await waitFor(() => expect(fundsCalls()).toBe(funds + 1));
+    expect(holdingsCalls()).toBe(holdings);
   });
 
   it('opens the stock with the ticket from the Trade sheet', async () => {
@@ -268,6 +278,21 @@ describe('phone app shell (NSTOCK-0466)', () => {
     expect(screen.getByRole('button', { name: 'Log out' })).toBeInTheDocument();
     expect(await screen.findByText('Balance unavailable')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Try again' })).toBeInTheDocument();
+  });
+
+  it('retries the cash on Account after it fails', async () => {
+    renderPhone('/account', { failFunds: true });
+    const retry = await screen.findByRole('button', { name: 'Try again' });
+    const fundsCalls = () => fetched.filter((path) => path === '/v1/funds').length;
+    const before = fundsCalls();
+    fireEvent.click(retry);
+    await waitFor(() => expect(fundsCalls()).toBe(before + 1));
+  });
+
+  it('shows the watchlist bare on Home: no second Watchlists heading inside the tab', async () => {
+    renderPhone('/dashboard?feed=watchlist');
+    const feed = await screen.findByRole('region', { name: 'Your stocks and market movers' });
+    expect(within(feed).queryByRole('button', { name: /^Watchlists/ })).toBeNull();
   });
 
   it('asks to log in on Account when signed out', async () => {
