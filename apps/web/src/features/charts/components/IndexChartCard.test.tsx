@@ -462,9 +462,9 @@ describe('IndexChartCard (T-095)', () => {
     );
     const nextDay = new Date(last.time * 1000 + 86_400_000).toISOString();
     act(() => quotes.push(testQuote('NIFTY50', 2542000, { ts: nextDay })));
-    expect(series?.update).toHaveBeenLastCalledWith({
-      time: last.time + 86_400,
-      value: 2542000,
-    });
+    // Waited for like the first tick: on a busy runner a frame of that glide can still land first.
+    await waitFor(() =>
+      expect(series?.update).toHaveBeenLastCalledWith({ time: last.time + 86_400, value: 2542000 }),
+    );
   });
 });
