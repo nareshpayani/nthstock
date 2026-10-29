@@ -66,7 +66,10 @@ export function OrderTicketHost() {
           <OrderTicket
             key={`${intent.exchange}:${intent.symbol}:${intent.side}:${intent.modify?.id ?? ''}:${String(intent.qty ?? '')}:${intent.product ?? ''}:${String(intent.price ?? '')}`}
             intent={intent}
-            onClose={closeTicket}
+            onClose={() => {
+              // A close held over a tick can land after a newer ticket opened: only close our own.
+              if (useTicketIntentStore.getState().intent === intent) closeTicket();
+            }}
           />
         </Suspense>
       ) : null}

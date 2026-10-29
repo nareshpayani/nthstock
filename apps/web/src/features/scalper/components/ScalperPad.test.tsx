@@ -13,6 +13,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } 
 import { createMockServer } from '@/mocks/node';
 import { resetFillToasts } from '@/shared/lib/fillToasts';
 import type { MarketSession } from '@/shared/lib/marketSessionContext';
+import { orderCue } from '@/shared/motion/orderCues';
 import { createTestQuoteStore } from '@/test/quotes';
 import { renderWithProviders } from '@/test/renderWithProviders';
 import { resetSession } from '@/test/session';
@@ -21,6 +22,12 @@ import { IDLE_DISARM_MS } from '../hooks/useArming';
 import { resetScalperPrefs, useScalperPrefs } from '../model/scalperPrefs';
 import { HOLD_MS } from './HoldButton';
 import { ScalperPad } from './ScalperPad';
+
+// The cue itself is tested in orderCues.test.tsx; here we check which one fires.
+vi.mock('@/shared/motion/orderCues', async (importOriginal) => ({
+  ...(await importOriginal<Record<string, unknown>>()),
+  orderCue: vi.fn(),
+}));
 
 /** Monday 28 Sep 2026, 10:00 IST: NSE is open. */
 const OPEN_MS = fromIst(2026, 9, 28, 10 * 60).getTime();
@@ -130,6 +137,7 @@ const ordersOf = async (api: Awaited<ReturnType<typeof loginOnMock>>) =>
 
 beforeAll(() => mock.server.listen({ onUnhandledFrame: 'error' }));
 beforeEach(() => {
+  vi.mocked(orderCue).mockClear();
   resetScalperPrefs();
   resetFillToasts();
 });
@@ -180,6 +188,7 @@ describe('scalper pad (T21, SPEC-TFC-1 §11)', () => {
         expect(within(pad).getByTestId('scalp-ack')).toHaveTextContent(/^Bought 10 @ ₹/),
       );
       expect(await screen.findByText('Scalp filled')).toBeInTheDocument();
+      expect(orderCue).toHaveBeenCalledExactlyOnceWith('filledBuy');
       const [order] = await ordersOf(api);
       expect(order).toMatchObject({
         side: 'BUY',
@@ -190,6 +199,44 @@ describe('scalper pad (T21, SPEC-TFC-1 §11)', () => {
         price: ask,
         status: 'EXECUTED',
       });
+    },
+    HEAVY,
+  );
+
+  it(
+    'armed, Sell at bid fills with the falling cue',
+    async () => {
+      const { holdLong, pad } = await renderPad();
+      await holdLong(10);
+      fireEvent.click(within(pad).getByRole('radio', { name: '10 shares' }));
+      fireEvent.click(within(pad).getByRole('switch', { name: 'Arm' }));
+      fireEvent.click(within(pad).getByTestId('scalp-sell'));
+      await waitFor(() =>
+        expect(within(pad).getByTestId('scalp-ack')).toHaveTextContent(/^Sold 10 @ ₹/),
+      );
+      expect(orderCue).toHaveBeenCalledExactlyOnceWith('filledSell');
+    },
+    HEAVY,
+  );
+
+  it(
+    'a refused scalp cues a rejection and plays no fill cue',
+    async () => {
+      const { pad } = await renderPad();
+      mock.server.use(
+        http.post('http://scalper.test/v1/orders', () =>
+          HttpResponse.json(
+            { error: { code: 'VALIDATION_ERROR', message: 'Not enough funds' } },
+            { status: 422 },
+          ),
+        ),
+      );
+      fireEvent.click(within(pad).getByRole('switch', { name: 'Arm' }));
+      fireEvent.click(within(pad).getByTestId('scalp-buy'));
+      await waitFor(() =>
+        expect(within(pad).getByTestId('scalp-ack')).toHaveAttribute('data-tone', 'rejected'),
+      );
+      expect(orderCue).toHaveBeenCalledExactlyOnceWith('rejected');
     },
     HEAVY,
   );

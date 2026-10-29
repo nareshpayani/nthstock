@@ -23,6 +23,7 @@ import { useMarketOpen } from '@/shared/hooks/useMarketOpen';
 import { useQuote } from '@/shared/hooks/useQuote';
 import { useApiClient } from '@/shared/lib/apiClientContext';
 import { claimFillToast } from '@/shared/lib/fillToasts';
+import { fillCue, orderCue, useSuccessHold } from '@/shared/motion/orderCues';
 import { MarketSessionContext } from '@/shared/lib/marketSessionContext';
 import { useQuoteStore } from '@/shared/lib/quoteStoreContext';
 import type { TicketIntent } from '@/shared/lib/ticketIntentStore';
@@ -122,6 +123,8 @@ function TicketFlow({
   const modifyOrder = useModifyOrder();
   const modifying = intent.modify;
   const [review, setReview] = useState<Review | null>(null);
+  // Confirm draws its tick before the sheet closes (A17).
+  const [placed, holdThenClose] = useSuccessHold();
   // Review slides in from the right and Edit slides the form back from the left (A14).
   const [steppedBack, setSteppedBack] = useState(false);
   const [error, setError] = useState<TicketError | null>(null);
@@ -255,9 +258,11 @@ function TicketFlow({
   const onPlaced = (order: Order) => {
     // An immediate fill may already have been toasted from its orderUpdate (T-147).
     if (order.status === 'EXECUTED' && !claimFillToast(order.id)) {
-      onClose();
+      // The live fill already toasted and played its cue.
+      holdThenClose(onClose);
       return;
     }
+    orderCue(order.status === 'EXECUTED' ? fillCue(order.side) : 'placed');
     toast.show({
       ...successToast(order),
       tone: 'success',
@@ -270,15 +275,16 @@ function TicketFlow({
         ),
       },
     });
-    onClose();
+    holdThenClose(onClose);
   };
 
   const onModified = (order: Order) => {
     const filled = order.status === 'EXECUTED';
     if (!filled || claimFillToast(order.id)) {
+      orderCue(filled ? fillCue(order.side) : 'placed');
       toast.show({ ...(filled ? successToast(order) : modifiedToast(order)), tone: 'success' });
     }
-    onClose();
+    holdThenClose(onClose);
   };
 
   const onConfirm = () => {
@@ -289,6 +295,7 @@ function TicketFlow({
         {
           onSuccess: onModified,
           onError: (failure) => {
+            orderCue('rejected');
             setReview(null);
             setError(describeOrderError(failure, 'modify'));
           },
@@ -300,6 +307,7 @@ function TicketFlow({
       onSuccess: onPlaced,
       onError: (failure) => {
         // Back to the form with every value kept and the reason above the button.
+        orderCue('rejected');
         setReview(null);
         setError(describeOrderError(failure));
       },
@@ -374,6 +382,7 @@ function TicketFlow({
             mode={modifying ? 'modify' : 'place'}
             {...(review.attached ? { attached: review.attached } : {})}
             placing={placeOrder.isPending || modifyOrder.isPending}
+            placed={placed}
             onEdit={() => {
               setSteppedBack(true);
               setReview(null);

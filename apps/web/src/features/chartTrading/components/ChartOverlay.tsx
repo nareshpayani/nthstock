@@ -33,6 +33,7 @@ import {
   type HandleGesture,
 } from '../model/handleGesture';
 import { byPriority, type LineAction, type OverlayLine } from '../model/overlayLine';
+import { FINE_SHOWN_BELOW, edgeScroll, fineFactor, fineY } from '../model/dragPrecision';
 import { loupeText, placeLoupe } from '../model/loupe';
 import { layoutHandles, snapToTick } from '../model/overlayLayout';
 import { railStep, railTicks } from '../model/priceRail';
@@ -187,6 +188,11 @@ export function ChartOverlay({
   const dragOffsetRef = useRef(0);
   // A press on a band that never moves is not a tap on the line: the plot has nothing to open.
   const fromBandRef = useRef(false);
+  // Fine control (A10): where the thumb started sideways, and the slowed drag position it leaves.
+  const fineRef = useRef<{ startX: number; lastY: number; effY: number } | null>(null);
+  // The last pointer of a drag and the frame that scrolls prices while it rests near an edge.
+  const pointerAtRef = useRef<{ pointerId: number; clientX: number; clientY: number } | null>(null);
+  const edgeFrameRef = useRef<number | null>(null);
   // Puts the chart's crosshair, scroll and scale back once the gesture ends (SPEC-CR-1 §5.1).
   const unlockRef = useRef<(() => void) | null>(null);
   // The line being held, for the lift (SPEC-CR-1 §5.2), and where its last drag left it, so a
@@ -388,7 +394,13 @@ export function ChartOverlay({
   const apply = (step: { gesture: HandleGesture; effect: GestureEffect }) => {
     feedback(gestureRef.current, step);
     gestureRef.current = step.gesture;
-    if (step.gesture.phase === 'idle') unlock();
+    if (step.gesture.phase === 'idle') {
+      unlock();
+      if (edgeFrameRef.current !== null) cancelAnimationFrame(edgeFrameRef.current);
+      edgeFrameRef.current = null;
+      fineRef.current = null;
+      pointerAtRef.current = null;
+    }
     hold(step.gesture.phase === 'idle' ? null : step.gesture.id);
     const { effect } = step;
     const { on } = latestRef.current;
@@ -408,6 +420,12 @@ export function ChartOverlay({
   };
   // The latest `apply`, for the document listeners that are added once.
   const applyRef = useRef(apply);
+  useEffect(
+    () => () => {
+      if (edgeFrameRef.current !== null) cancelAnimationFrame(edgeFrameRef.current);
+    },
+    [],
+  );
 
   // One primitive per chart: its repaint hook is the only per-frame work the overlay does.
   useLayoutEffect(() => {
@@ -587,11 +605,18 @@ export function ChartOverlay({
       pressChip(id);
       return;
     }
-    if (line) pressLine(line, event.pointerId, paneY(event.clientY), false);
+    if (line) pressLine(line, event.pointerId, event.clientX, paneY(event.clientY), false);
   };
   // A press on a draggable line, from its handle or its band: the drag owns the gesture from here.
-  const pressLine = (line: OverlayLine, pointerId: number, y: number, fromBand: boolean) => {
+  const pressLine = (
+    line: OverlayLine,
+    pointerId: number,
+    clientX: number,
+    y: number,
+    fromBand: boolean,
+  ) => {
     if (gestureRef.current.phase === 'idle') {
+      fineRef.current = { startX: clientX, lastY: y, effY: y };
       stopSettling(line.id);
       const lineY = handle.series.priceToCoordinate(line.price);
       dragOffsetRef.current = lineY !== null && Number.isFinite(lineY) ? lineY - y : 0;
@@ -611,7 +636,7 @@ export function ChartOverlay({
     event.stopPropagation();
     event.preventDefault();
     event.currentTarget.setPointerCapture?.(event.pointerId);
-    pressLine(line, event.pointerId, y, true);
+    pressLine(line, event.pointerId, event.clientX, y, true);
   };
   const onHandlePointerMove = (event: ReactPointerEvent<HTMLElement>) => {
     const chip = chipRef.current;
@@ -629,27 +654,59 @@ export function ChartOverlay({
       chip.x = event.clientX;
       return;
     }
-    const offset = dragOffsetRef.current;
-    apply(
-      move(gestureRef.current, event.pointerId, paneY(event.clientY), (y) => priceAt(y + offset)),
-    );
-    const active = gestureRef.current;
-    if (active.phase === 'dragging' && active.pointerId === event.pointerId) {
-      showLoupe(active.id, active.price, event.clientX, event.clientY);
+    dragTo(event.pointerId, event.clientX, event.clientY);
+  };
+  // Sliding the thumb sideways while dragging slows the line for single-tick moves, and resting
+  // near the top or bottom scrolls prices so the line can go past what is on screen (A10).
+  const dragTo = (pointerId: number, clientX: number, clientY: number) => {
+    const y = paneY(clientY);
+    const fine = fineRef.current;
+    const factor = fine ? fineFactor(clientX - fine.startX) : 1;
+    const at = fine ? fineY(fine.effY, fine.lastY, y, factor) : y;
+    if (fine) {
+      fine.lastY = y;
+      fine.effY = at;
     }
+    const offset = dragOffsetRef.current;
+    apply(move(gestureRef.current, pointerId, at, (atY) => priceAt(atY + offset)));
+    const active = gestureRef.current;
+    if (active.phase !== 'dragging' || active.pointerId !== pointerId) return;
+    showLoupe(active.id, active.price, clientX, clientY, factor < FINE_SHOWN_BELOW);
+    pointerAtRef.current = { pointerId, clientX, clientY };
+    if (edgeScroll(y, handle.chart.paneSize(0).height) !== 0 && edgeFrameRef.current === null) {
+      edgeFrameRef.current = requestAnimationFrame(edgeStep);
+    }
+  };
+  const edgeStep = () => {
+    edgeFrameRef.current = null;
+    const at = pointerAtRef.current;
+    const scale = handle.chart.priceScale('right');
+    const range = scale.getVisibleRange();
+    if (!at || !range || gestureRef.current.phase !== 'dragging') return;
+    const speed = edgeScroll(paneY(at.clientY), handle.chart.paneSize(0).height);
+    if (speed === 0) return;
+    const shift = speed * (range.to - range.from);
+    // Never below zero: there is no price to drag a line to there.
+    if (range.from + shift < tickSize) return;
+    scale.setVisibleRange({ from: range.from + shift, to: range.to + shift });
+    primitiveRef.current?.requestUpdate();
+    dragTo(at.pointerId, at.clientX, at.clientY);
   };
 
   // The loupe (SPEC-CR-1 §4.2, CR-T07): a card beside the finger with the price being set, its
   // distance from the LTP and what it is worth. Written straight to the DOM on each move.
-  const showLoupe = (id: string, price: number, clientX: number, clientY: number) => {
+  const showLoupe = (id: string, price: number, clientX: number, clientY: number, fine = false) => {
     const { loupe, root } = elementsRef.current;
     const line = latestRef.current.lines.find((candidate) => candidate.id === id);
     if (!loupe || !root || !line) return;
     const { ltp: last } = latestRef.current;
     const text = loupeText(price, last, line.loupe);
     loupe.price.textContent = text.price;
-    loupe.distance.textContent = text.distance ?? '';
-    loupe.distance.hidden = text.distance === null;
+    const distance = fine
+      ? [text.distance, strings.drag.fine].filter(Boolean).join(' · ')
+      : text.distance;
+    loupe.distance.textContent = distance ?? '';
+    loupe.distance.hidden = !distance;
     loupe.detail.textContent = text.detail ?? '';
     loupe.detail.hidden = text.detail === null;
     const box = root.getBoundingClientRect();
@@ -675,7 +732,9 @@ export function ChartOverlay({
       if (!chip.panning) latestRef.current.on.onHandleTap?.(chip.id);
       return;
     }
-    apply(release(gestureRef.current, event.pointerId, paneY(event.clientY)));
+    apply(
+      release(gestureRef.current, event.pointerId, fineRef.current?.effY ?? paneY(event.clientY)),
+    );
   };
   const onHandlePointerCancel = (event: ReactPointerEvent<HTMLElement>) => {
     if (chipRef.current?.pointerId === event.pointerId) {
@@ -852,7 +911,14 @@ export function ChartOverlay({
               onPointerCancel={onHandlePointerCancel}
               onLostPointerCapture={onHandlePointerCancel}
               onContextMenu={preventDefault}
-            />
+            >
+              {/* A grip at the left edge says the line can be held there too, in left-thumb reach (A9). */}
+              <span className="absolute top-1/2 left-1 flex h-6 w-3 -translate-y-1/2 flex-col items-center justify-center gap-0.5 rounded-sm bg-surface/80 ring-1 ring-line">
+                <span className="h-px w-1.5 bg-ink-muted" />
+                <span className="h-px w-1.5 bg-ink-muted" />
+                <span className="h-px w-1.5 bg-ink-muted" />
+              </span>
+            </span>
           ))}
         {ordered.map((line) => (
           <div key={line.id}>

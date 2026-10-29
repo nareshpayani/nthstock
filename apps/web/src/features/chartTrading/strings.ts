@@ -12,6 +12,8 @@ export const strings = {
     /** The save's outcome is the toast's to say; nothing is sent for an unchanged price. */
     released: (price: string) => `Moved to ${price}.`,
     cancelled: 'Move cancelled. The line is back where it was.',
+    /** In the loupe while the thumb has slid sideways to slow the drag (A10). */
+    fine: 'Fine',
   },
   loupe: {
     atLtp: 'At LTP',

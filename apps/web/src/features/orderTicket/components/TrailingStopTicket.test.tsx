@@ -2,10 +2,12 @@ import { createTradingStore, type ApiClient, type TradingStore } from '@nthstock
 import type { OrderSide, ProductType } from '@nthstock/contracts';
 import { fixedClock, fromIst } from '@nthstock/utils';
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { http, HttpResponse } from 'msw';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createMockServer } from '@/mocks/node';
 import { useOpenTicket } from '@/shared/hooks/useOpenTicket';
 import type { MarketSession } from '@/shared/lib/marketSessionContext';
+import { orderCue } from '@/shared/motion/orderCues';
 import { initialTicketIntentState, useTicketIntentStore } from '@/shared/lib/ticketIntentStore';
 import { createTestQuoteStore } from '@/test/quotes';
 import { renderWithProviders } from '@/test/renderWithProviders';
@@ -13,6 +15,12 @@ import { installResizeObserver } from '@/test/resizeObserver';
 import { resetSession } from '@/test/session';
 import { loginOnMock } from '@/test/watchlists';
 import { OrderTicketHost } from './OrderTicketHost';
+
+// The cue itself is tested in orderCues.test.tsx; here we check which one fires.
+vi.mock('@/shared/motion/orderCues', async (importOriginal) => ({
+  ...(await importOriginal<Record<string, unknown>>()),
+  orderCue: vi.fn(),
+}));
 
 /** Monday 28 Sep 2026, 10:00 IST: NSE is open, so Delivery and Intraday both trade. */
 const OPEN_MS = fromIst(2026, 9, 28, 10 * 60).getTime();
@@ -82,9 +90,11 @@ const typeGroup = () => screen.getByRole('radiogroup', { name: 'Order type' });
 
 beforeAll(() => mock.server.listen({ onUnhandledFrame: 'error' }));
 beforeEach(() => {
+  vi.mocked(orderCue).mockClear();
   installResizeObserver();
 });
 afterEach(() => {
+  mock.server.resetHandlers();
   resetSession();
   useTicketIntentStore.setState(initialTicketIntentState);
 });
@@ -137,6 +147,10 @@ describe('Trailing stop order type (T13, SPEC-TFC-1 §7)', () => {
         ),
       ).toBeInTheDocument();
       fireEvent.click(screen.getByRole('button', { name: 'Place trailing stop' }));
+      // The confirm button draws its tick and the dialog stays up for the hold, then closes (A17).
+      expect(await screen.findByTestId('success-check')).toBeInTheDocument();
+      expect(screen.getByRole('dialog', { name: 'Trade INFY' })).toBeInTheDocument();
+      expect(orderCue).toHaveBeenCalledExactlyOnceWith('stopSet');
       await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
       await waitFor(() =>
         expect(tradingStore?.getState().trailingStops[0]).toMatchObject({
@@ -146,6 +160,30 @@ describe('Trailing stop order type (T13, SPEC-TFC-1 §7)', () => {
         }),
       );
       expect(tradingStore?.getState().pending).toEqual([]);
+    },
+    HEAVY,
+  );
+
+  it(
+    'a refused stop cues a rejection, draws no tick and keeps the dialog open',
+    async () => {
+      await renderWithPositions([['DELIVERY', 10]], liveStore);
+      mock.server.use(
+        http.post('*/v1/trailing-stops', () =>
+          HttpResponse.json({ error: { code: 'INTERNAL_ERROR', message: 'x' } }, { status: 500 }),
+        ),
+      );
+      fireEvent.click(await within(typeGroup()).findByRole('radio', { name: 'Trailing stop' }));
+      fireEvent.change(await screen.findByRole('textbox', { name: 'Trail (%)' }), {
+        target: { value: '1.5' },
+      });
+      fireEvent.click(screen.getByRole('button', { name: 'Review trailing stop' }));
+      fireEvent.click(await screen.findByRole('button', { name: 'Place trailing stop' }));
+
+      expect(await screen.findByRole('alert')).toBeInTheDocument();
+      expect(orderCue).toHaveBeenCalledExactlyOnceWith('rejected');
+      expect(screen.queryByTestId('success-check')).not.toBeInTheDocument();
+      expect(screen.getByRole('dialog', { name: 'Trade INFY' })).toBeInTheDocument();
     },
     HEAVY,
   );
