@@ -1,6 +1,14 @@
-import { cn, useTouchTargets } from '@nthstock/ui';
-import type { ReactNode } from 'react';
-import { DRAWING_TOOLS, type DrawingTool } from '../model/drawings';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+  cn,
+  useTouchTargets,
+} from '@nthstock/ui';
+import { forwardRef, useState, type ComponentPropsWithoutRef, type ReactNode } from 'react';
+import { formatChartValue, type ChartValueFormat } from '../model/chartFormat';
+import { DRAWING_TOOLS, drawingPrices, type Drawing, type DrawingTool } from '../model/drawings';
 import { isUnprotected, useDrawings, useSymbolDrawings } from '../model/drawingsStore';
 import { strings } from '../strings';
 
@@ -21,7 +29,7 @@ const svg = (children: ReactNode) => (
 );
 
 /** 20 px line drawings of each tool, in the text colour. */
-const GLYPHS: Record<DrawingTool | 'cursor' | 'magnet' | 'undo' | 'clear', ReactNode> = {
+const GLYPHS: Record<DrawingTool | 'cursor' | 'magnet' | 'undo' | 'clear' | 'list', ReactNode> = {
   cursor: svg(<path d="M10 3v5M10 12v5M3 10h5M12 10h5" />),
   trend: svg(
     <>
@@ -59,25 +67,33 @@ const GLYPHS: Record<DrawingTool | 'cursor' | 'magnet' | 'undo' | 'clear', React
   magnet: svg(<path d="M5 3v7a5 5 0 0 0 10 0V3M5 6h3M12 6h3M8 3v7a2 2 0 0 0 4 0V3" />),
   undo: svg(<path d="M7 5 3.5 8.5 7 12M4 8.5h8a4.5 4.5 0 0 1 0 9H9" />),
   clear: svg(<path d="M4 6h12M8 6V4h4v2M6 6l1 11h6l1-11M9 9v5M11 9v5" />),
+  list: svg(<path d="M7 5h10M7 10h10M7 15h10M3 5h.5M3 10h.5M3 15h.5" />),
 };
 
-function RailButton({
-  label,
-  pressed,
-  disabled,
-  touch,
-  onClick,
-  children,
-}: {
+/** A drawing's name in the list: its tool and the prices it sits on. */
+function drawingName(drawing: Drawing, format: ChartValueFormat): string {
+  const prices = drawingPrices(drawing).map((price) => formatChartValue(price, format));
+  if (drawing.kind === 'text') {
+    return strings.drawing.list.note(drawing.text, prices[0] ?? '');
+  }
+  return strings.drawing.list.line(strings.drawing.tools[drawing.kind], prices.join(' to '));
+}
+
+type RailButtonProps = Omit<ComponentPropsWithoutRef<'button'>, 'aria-pressed'> & {
   label: string;
   pressed?: boolean;
-  disabled?: boolean;
   touch: boolean;
-  onClick: () => void;
   children: ReactNode;
-}) {
+};
+
+const RailButton = forwardRef<HTMLButtonElement, RailButtonProps>(function RailButton(
+  { label, pressed, disabled, touch, onClick, children, className, ...rest },
+  ref,
+) {
   return (
     <button
+      {...rest}
+      ref={ref}
       type="button"
       aria-label={label}
       title={label}
@@ -88,12 +104,13 @@ function RailButton({
         // shrink-0: in a rail shorter than its buttons, they scroll rather than squash.
         'grid shrink-0 place-items-center rounded-md text-ink hover:bg-canvas focus-visible:ring-3 focus-visible:ring-brand-soft focus-visible:outline-none disabled:opacity-40 aria-pressed:bg-brand-soft aria-pressed:text-brand',
         touch ? 'size-11' : 'size-9',
+        className,
       )}
     >
       {children}
     </button>
   );
-}
+});
 
 export type ToolRailProps = {
   symbol: string;
@@ -101,6 +118,8 @@ export type ToolRailProps = {
   touch?: boolean;
   /** The plot's height: the rail scrolls past it rather than growing the card. */
   height?: number;
+  /** How the drawings list names prices: rupees, or index points. */
+  format?: ChartValueFormat;
   className?: string;
 };
 
@@ -108,7 +127,13 @@ export type ToolRailProps = {
  * The drawing tool rail beside the chart (NSTOCK-0461), as on a trading terminal: the crosshair,
  * the drawing tools, the magnet, undo and clear. Picking a tool says what to tap next.
  */
-export function ToolRail({ symbol, touch: touchProp = false, height, className }: ToolRailProps) {
+export function ToolRail({
+  symbol,
+  touch: touchProp = false,
+  height,
+  format = 'inr',
+  className,
+}: ToolRailProps) {
   const touch = useTouchTargets() || touchProp;
   const tool = useDrawings((state) => state.tool);
   const magnet = useDrawings((state) => state.magnet);
@@ -116,7 +141,10 @@ export function ToolRail({ symbol, touch: touchProp = false, height, className }
   const toggleMagnet = useDrawings((state) => state.toggleMagnet);
   const undo = useDrawings((state) => state.undo);
   const clear = useDrawings((state) => state.clear);
-  const count = useSymbolDrawings(symbol).length;
+  const remove = useDrawings((state) => state.remove);
+  const drawings = useSymbolDrawings(symbol);
+  const count = drawings.length;
+  const [removed, setRemoved] = useState('');
   const canRestore = useDrawings((state) => state.cleared[symbol] !== undefined);
   // Shown from the first read when the stored value can't be kept safe, before any edit.
   const unsaved = useDrawings((state) => state.unsaved[symbol] === true) || isUnprotected(symbol);
@@ -175,7 +203,39 @@ export function ToolRail({ symbol, touch: touchProp = false, height, className }
         >
           {GLYPHS.clear}
         </RailButton>
+        {/* Every drawing by name, each removable from the keyboard (NSTOCK-0468). */}
+        <DropdownMenu modal={false}>
+          <DropdownMenuTrigger asChild disabled={count === 0}>
+            <RailButton
+              label={strings.drawing.list.button(count)}
+              disabled={count === 0}
+              touch={touch}
+              data-testid="drawings-list"
+            >
+              {GLYPHS.list}
+            </RailButton>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent side="right" align="end">
+            {drawings.map((drawing) => {
+              const name = drawingName(drawing, format);
+              return (
+                <DropdownMenuItem
+                  key={drawing.id}
+                  onSelect={() => {
+                    remove(symbol, drawing.id);
+                    setRemoved(strings.drawing.list.removed(name));
+                  }}
+                >
+                  {strings.drawing.list.remove(name)}
+                </DropdownMenuItem>
+              );
+            })}
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
+      <p role="status" className="sr-only">
+        {removed}
+      </p>
       <p role="status" className="sr-only">
         {tool ? `${strings.drawing.tools[tool]}: ${strings.drawing.hints[tool]}` : ''}
       </p>
