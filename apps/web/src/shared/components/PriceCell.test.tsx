@@ -43,14 +43,19 @@ describe('PriceCell + quote store (T-056, T-057)', () => {
     expect(screen.getByTestId('INFY')).toHaveTextContent('₹1,505.00▲');
   });
 
-  it('shows a skeleton until the first quote, then the price with ▲ or ▼', () => {
+  it('shows a skeleton until the first quote, then the price with the day\'s ▲ or ▼', () => {
     const { push } = renderCells(['INFY']);
     const cell = screen.getByTestId('INFY');
     expect(cell.querySelector('[data-skeleton]')).not.toBeNull();
     act(() => push(testQuote('INFY', 151235)));
     expect(cell).toHaveTextContent('₹1,512.35');
     expect(cell.querySelector('[data-tick]')).toHaveAttribute('data-tick', 'flat');
-    act(() => push(testQuote('INFY', 151230)));
+    act(() => push(testQuote('INFY', 151230, { prevClose: 150000 })));
+    expect(cell.querySelector('[data-tick]')).toHaveAttribute('data-tick', 'up');
+    // A tick down on a day that is still up keeps ▲, so it agrees with the change badge (NSTOCK-0446).
+    act(() => push(testQuote('INFY', 151225, { prevClose: 150000 })));
+    expect(cell.querySelector('[data-tick]')).toHaveAttribute('data-tick', 'up');
+    act(() => push(testQuote('INFY', 149990, { prevClose: 150000 })));
     expect(cell.querySelector('[data-tick]')).toHaveAttribute('data-tick', 'down');
     expect(cell.querySelector('[data-tick]')?.className).not.toMatch(/animate-/);
   });

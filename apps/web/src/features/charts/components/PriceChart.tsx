@@ -21,7 +21,7 @@ export type PriceChartProps = {
   /** `inr` for prices in paise, `index` for levels in hundredths of a point. */
   format?: ChartValueFormat;
   /** Colour of an area series; defaults to the move across the candles. */
-  direction?: ChartDirection;
+  direction?: ChartDirection | undefined;
   /** Show times on the axis (1D and 1W). */
   intraday?: boolean;
   /** Height in px; the width follows the container. */

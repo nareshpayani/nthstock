@@ -8,7 +8,7 @@ export type LivePriceTick = 'up' | 'down' | 'flat';
 export type LivePriceProps = {
   /** Price in paise, or an index level in hundredths of a point (see `format`). */
   value: number;
-  /** Direction of the last change. Drives the ▲▼ marker. */
+  /** Direction to mark with ▲ or ▼ (apps/web passes the day's change). */
   tick: LivePriceTick;
   /** `inr` → "₹1,512.35"; `index` → "25,418.60". */
   format?: 'inr' | 'index';
@@ -23,7 +23,7 @@ const sizeClass = { sm: 'text-label', md: 'text-body', lg: 'text-title' } as con
 /**
  * A live price (T-057). Presentational: the value comes in as props (apps/web's PriceCell reads
  * the quote store). The value updates in place with no background flash (the owner asked for none,
- * 2026-09-28); ▲ or ▼ in green or red shows the last direction, so colour is never the only signal.
+ * 2026-09-28); ▲ or ▼ in green or red shows the direction, so colour is never the only signal.
  */
 export function LivePrice({
   value,

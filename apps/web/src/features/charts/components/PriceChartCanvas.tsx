@@ -17,7 +17,8 @@ import { cn } from '@nthstock/ui';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { toAreaData, toCandleData, toChartTime, toHeikinAshi } from '../model/chartData';
 import { trailingChanges } from '../model/liveCandles';
-import type { ChartDirection, ChartValueFormat } from '../model/chartFormat';
+import { visibleTickLabels } from '../model/axisTags';
+import { formatChartValue, type ChartDirection, type ChartValueFormat } from '../model/chartFormat';
 import {
   TRADING_INTERACTION,
   areaSeriesOptions,
@@ -133,6 +134,23 @@ export function PriceChartCanvas({
     });
     chartRef.current = chart;
     seriesRef.current = addSeries(chart, type, format);
+    // NSTOCK-0446: a tick label the live price tag or a line's tag would half cover is left out.
+    const tagged = seriesRef.current;
+    chart.applyOptions({
+      localization: {
+        ...base.localization,
+        tickmarksPriceFormatter: (prices: number[]) => {
+          const show = visibleTickLabels(
+            prices,
+            (price) => tagged.priceToCoordinate(price),
+            axisTagRows(tagged),
+          );
+          return prices.map((price: number, i: number) =>
+            show[i] ? formatChartValue(price, format) : '',
+          );
+        },
+      },
+    });
     // A new chart type fades in over 160 ms (NSTOCK-0430); the overlay above it does not move.
     const switched = builtTypeRef.current !== null && builtTypeRef.current !== type;
     builtTypeRef.current = type;
@@ -192,6 +210,10 @@ export function PriceChartCanvas({
       for (const point of points.slice(points.length - changes.length)) {
         target.update(point as BarData & LineData);
       }
+      // The live tag moved: build the tick labels again so none hides under it. Setting the
+      // formatter is what tells the library its cached labels are stale.
+      const localization = chartRef.current?.options().localization;
+      if (localization) chartRef.current?.applyOptions({ localization });
       return;
     }
     target.setData(points as (BarData & LineData)[]);
@@ -216,4 +238,20 @@ export function PriceChartCanvas({
       {hover ? <ChartTooltip {...hover} /> : null}
     </div>
   );
+}
+
+/** Pixel rows of the tags on the price axis: the live price (when shown) and each line's label. */
+function axisTagRows(series: AnySeries): number[] {
+  const rows: number[] = [];
+  const last = series.lastValueData(false);
+  if (!last.noData && series.options().lastValueVisible) {
+    const row = series.priceToCoordinate(last.price);
+    if (row !== null) rows.push(row);
+  }
+  for (const line of series.priceLines()) {
+    const { price, axisLabelVisible } = line.options();
+    const row = axisLabelVisible ? series.priceToCoordinate(price) : null;
+    if (row !== null) rows.push(row);
+  }
+  return rows;
 }

@@ -23,7 +23,7 @@ const skeletonWidth = { sm: 'w-16', md: 'w-20', lg: 'w-36' } as const;
 
 /**
  * The only component that reads live prices (ADR 0005): subscribes one symbol and renders
- * LivePrice. Memoised, so a parent re-render does not touch it and a tick re-renders only it.
+ * LivePrice, with ▲ or ▼ for the day's direction (NSTOCK-0446). Memoised, so a parent re-render does not touch it and a tick re-renders only it.
  */
 export const PriceCell = memo(function PriceCell({
   symbol,
@@ -59,10 +59,12 @@ export const PriceCell = memo(function PriceCell({
       />
     );
   }
+  // The marker follows the day's change, so it always agrees with the change badge beside it.
+  const { change } = live.quote;
   return (
     <LivePrice
       value={live.quote.ltp}
-      tick={live.tick}
+      tick={change > 0 ? 'up' : change < 0 ? 'down' : 'flat'}
       format={format}
       size={size}
       roll={roll}
