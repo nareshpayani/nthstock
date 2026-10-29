@@ -6,6 +6,7 @@ export { Logo, type LogoProps } from './icons/Logo.js';
 export { Button, buttonVariants, type ButtonProps } from './components/Button.js';
 export { IconButton, iconButtonVariants, type IconButtonProps } from './components/IconButton.js';
 export { Spinner } from './components/Spinner.js';
+export { SuccessCheck } from './components/SuccessCheck.js';
 export {
   Field,
   useFieldControl,

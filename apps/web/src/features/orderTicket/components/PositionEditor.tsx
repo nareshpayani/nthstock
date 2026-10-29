@@ -21,6 +21,7 @@ import { useTradingStore } from '@/shared/lib/tradingStoreContext';
 import type { PositionEditorTab, PositionEditorTarget } from '@/shared/lib/positionEditorStore';
 import { useTicketIntentStore, type TicketIntent } from '@/shared/lib/ticketIntentStore';
 import { trailingStopSummary } from '@/shared/lib/trailingStopView';
+import { orderCue } from '@/shared/motion/orderCues';
 import { isActiveStop } from '../model/trailingSheet';
 import { strings } from '../strings';
 import { OrderTicket } from './OrderTicket';
@@ -230,8 +231,12 @@ function OpenOrderLine({ order, onClose }: { order: Order; onClose: () => void }
       return;
     }
     cancel.mutate(order.id, {
-      onSuccess: () => toast.show({ title: strings.editor.cancelled, tone: 'success' }),
+      onSuccess: () => {
+        orderCue('cancelled');
+        toast.show({ title: strings.editor.cancelled, tone: 'success' });
+      },
       onError: () => {
+        orderCue('rejected');
         setConfirming(false);
         toast.show({ title: strings.editor.cancelFailed, tone: 'error' });
       },

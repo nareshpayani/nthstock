@@ -2,6 +2,7 @@ import type { Exchange, PlaceOrderRequest } from '@nthstock/contracts';
 import { Button } from '@nthstock/ui';
 import { formatInr } from '@nthstock/utils';
 import { useEffect, useId, useRef } from 'react';
+import { SoundToggle } from '@/shared/components/SoundToggle';
 import { useOffline } from '@/shared/lib/connectivity';
 import { strings } from '../strings';
 
@@ -20,6 +21,8 @@ export type ReviewStepProps = {
   /** `modify` (T-145): the heading and Confirm speak of changing an open order. */
   mode?: 'place' | 'modify';
   placing: boolean;
+  /** The order went through: Confirm shows its tick until the sheet closes (A17). */
+  placed?: boolean;
   onEdit: () => void;
   onConfirm: () => void;
 };
@@ -38,6 +41,7 @@ export function ReviewStep({
   attached,
   mode = 'place',
   placing,
+  placed = false,
   onEdit,
   onConfirm,
 }: ReviewStepProps) {
@@ -98,7 +102,10 @@ export function ReviewStep({
           {strings.amo.reviewNote(amoDate)}
         </p>
       ) : null}
-      <p className="text-label text-ink-muted">{strings.form.paperNote}</p>
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-label text-ink-muted">{strings.form.paperNote}</p>
+        <SoundToggle className="-my-2 -mr-2" />
+      </div>
       {/* Pinned to the sheet's foot like the form's button (SPEC-CR-1 §5.5). */}
       <div className="sticky bottom-0 z-10 -mx-4 -mb-4 grid grid-cols-2 gap-2 border-t border-line bg-surface px-4 pt-3 pb-4">
         {offline ? (
@@ -106,13 +113,14 @@ export function ReviewStep({
             {strings.form.offline}
           </p>
         ) : null}
-        <Button variant="secondary" size="lg" onClick={onEdit} disabled={placing}>
+        <Button variant="secondary" size="lg" onClick={onEdit} disabled={placing || placed}>
           {strings.review.edit}
         </Button>
         <Button
           variant={request.side === 'BUY' ? 'buy' : 'sell'}
           size="lg"
           loading={placing}
+          success={placed}
           disabled={offline}
           aria-describedby={offline ? offlineId : undefined}
           onClick={onConfirm}

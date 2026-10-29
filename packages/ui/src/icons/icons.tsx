@@ -199,3 +199,17 @@ export const IconEdit = /* @__PURE__ */ createIcon('edit', () => (
 export const IconTrash = /* @__PURE__ */ createIcon('trash', () => (
   <path d="M4.5 7h15M9.5 7V4.5h5V7m-8 0 .8 12.5h9.4L17.5 7M10 11v5M14 11v5" />
 ));
+
+export const IconSound = /* @__PURE__ */ createIcon('sound', () => (
+  <>
+    <path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4Z" />
+    <path d="M15.5 9a4.2 4.2 0 0 1 0 6M18 6.5a7.8 7.8 0 0 1 0 11" />
+  </>
+));
+
+export const IconSoundOff = /* @__PURE__ */ createIcon('sound-off', () => (
+  <>
+    <path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4Z" />
+    <path d="m16 9.5 5 5M21 9.5l-5 5" />
+  </>
+));

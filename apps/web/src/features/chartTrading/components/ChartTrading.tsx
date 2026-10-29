@@ -11,7 +11,8 @@ import { formatInr } from '@nthstock/utils';
 import { useEffect, useRef, useState } from 'react';
 import type { ChartHandle } from '@/features/charts';
 import { livePosition } from '@/features/positions';
-import { haptic } from '@/shared/motion/haptics';
+import { orderCue } from '@/shared/motion/orderCues';
+import { playOrderSound } from '@/shared/motion/orderSounds';
 import { useOpenTicket } from '@/shared/hooks/useOpenTicket';
 import { useQuote } from '@/shared/hooks/useQuote';
 import { usePendingOrderPrices } from '@/shared/hooks/usePendingOrderPrices';
@@ -167,14 +168,16 @@ export function ChartTrading({ handle, instrument }: ChartTradingProps) {
 
   const modify = (order: Order, price: number) => {
     actions.modify(order, price).then(
-      (modified) =>
+      (modified) => {
+        playOrderSound('placed');
         toast.show({
           title: strings.order.modified,
           description: strings.order.modifiedBody(...describe(modified, modified.price ?? price)),
           tone: 'success',
-        }),
+        });
+      },
       (error: unknown) => {
-        haptic('reject');
+        orderCue('rejected');
         toast.show({
           title: strings.order.modifyFailed,
           description: actionErrorText(error),
@@ -186,14 +189,16 @@ export function ChartTrading({ handle, instrument }: ChartTradingProps) {
 
   const cancel = (order: Order) => {
     actions.cancel(order).then(
-      (cancelled) =>
+      (cancelled) => {
+        orderCue('cancelled');
         toast.show({
           title: strings.order.cancelled,
           description: strings.order.cancelledBody(...describe(order, cancelled.price ?? 0)),
           tone: 'success',
-        }),
+        });
+      },
       (error: unknown) => {
-        haptic('reject');
+        orderCue('rejected');
         toast.show({
           title: strings.order.cancelFailed,
           description: actionErrorText(error),
@@ -227,7 +232,7 @@ export function ChartTrading({ handle, instrument }: ChartTradingProps) {
     }
     if (stopTriggersNow(stop.direction, ltp, price)) {
       setStopMove(null);
-      haptic('reject');
+      orderCue('rejected');
       toast.show({
         title: strings.stop.moveFailed,
         description: TRAILING_STOP_MESSAGES.stopWouldTrigger,
@@ -239,7 +244,8 @@ export function ChartTrading({ handle, instrument }: ChartTradingProps) {
     actions
       .modifyStop(stop, price)
       .then(
-        (moved) =>
+        (moved) => {
+          playOrderSound('stopSet');
           toast.show({
             title: strings.stop.moved,
             description: strings.stop.movedBody(
@@ -247,9 +253,10 @@ export function ChartTrading({ handle, instrument }: ChartTradingProps) {
               trailWords(moved.trail),
             ),
             tone: 'success',
-          }),
+          });
+        },
         (error: unknown) => {
-          haptic('reject');
+          orderCue('rejected');
           toast.show({
             title: strings.stop.moveFailed,
             description: actionErrorText(error),
