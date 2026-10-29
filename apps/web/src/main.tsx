@@ -17,6 +17,7 @@ import { startConnectivity } from './shared/lib/connectivity';
 import { installOrderSoundUnlock } from './shared/motion/orderSounds';
 import { installStaleBuildReload } from './app/staleBuild';
 import { wantsDemo, withoutDemoParam } from './mocks/demoParam';
+import { setMockBackendStart } from './shared/lib/demoSimulator';
 import { createSessionApiClient } from './shared/lib/sessionClient';
 import {
   assumeSignedOutWithoutHint,
@@ -97,6 +98,7 @@ function boot() {
     });
     const started = firstPage.then(() => startMocks(demo));
     mocksReady = started;
+    setMockBackendStart(started);
     beforeRequest = () => started.then((ensureActive) => ensureActive());
     started.catch((error: unknown) => {
       console.error('The mock worker did not start; requests go to the network.', error);

@@ -51,6 +51,25 @@ export type DemoStart = 'ready' | 'reloading';
  */
 let demoStarter: (() => DemoStart) | null = null;
 
+/** msw mode: the mock worker's start, which sets the demo starter. Nothing to wait for otherwise. */
+let backendStart: Promise<unknown> = Promise.resolve();
+
+/**
+ * msw mode: the mock worker starts after the first page paints (NSTOCK-0469), so a Try demo tap
+ * can come before the demo starter is set. Try demo waits for this first.
+ */
+export function setMockBackendStart(start: Promise<unknown>): void {
+  backendStart = start;
+}
+
+/** Resolves once the mock worker has started or failed to (at once in api mode). */
+export function mockBackendStarted(): Promise<void> {
+  return backendStart.then(
+    () => undefined,
+    () => undefined,
+  );
+}
+
 export function setDemoStarter(start: (() => DemoStart) | null): void {
   demoStarter = start;
 }
