@@ -12,6 +12,7 @@ export * from './icons/icons.js';
 export { Logo, type LogoProps } from './icons/Logo.js';
 export { Button, buttonVariants, type ButtonProps } from './components/Button.js';
 export { IconButton, iconButtonVariants, type IconButtonProps } from './components/IconButton.js';
+export { RulerSlider, type RulerSliderProps } from './components/RulerSlider.js';
 export { Spinner } from './components/Spinner.js';
 export {
   Field,

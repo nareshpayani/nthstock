@@ -85,6 +85,7 @@ export const AreaSeries = { type: 'Area' as const };
 export const CandlestickSeries = { type: 'Candlestick' as const };
 export const LineSeries = { type: 'Line' as const };
 export const BarSeries = { type: 'Bar' as const };
+export const LastPriceAnimationMode = { Disabled: 0, Continuous: 1, OnDataUpdate: 2 };
 export const ColorType = { Solid: 'solid' };
 export const CrosshairMode = { Normal: 0, Magnet: 1, Hidden: 2 };
 export const TickMarkType = { Year: 0, Month: 1, DayOfMonth: 2, Time: 3, TimeWithSeconds: 4 };

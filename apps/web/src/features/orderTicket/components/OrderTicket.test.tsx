@@ -460,6 +460,57 @@ describe('order ticket with the market open', () => {
     );
 
     it(
+      'has a ruler that follows focus between quantity and price',
+      async () => {
+        stubViewport(true);
+        await renderTicket(mock.session);
+        const { dialog } = await openTicket();
+        const qtyRuler = within(dialog).getByRole('slider', { name: 'Adjust quantity' });
+        const qtyBefore = Number(qtyRuler.getAttribute('aria-valuenow'));
+        fireEvent.keyDown(qtyRuler, { key: 'ArrowRight' });
+        await waitFor(() =>
+          expect(within(dialog).getByRole('slider', { name: 'Adjust quantity' })).toHaveAttribute(
+            'aria-valuenow',
+            String(qtyBefore + 1),
+          ),
+        );
+
+        fireEvent.click(within(dialog).getByRole('radio', { name: 'Limit' }));
+        fireEvent.focusIn(priceInput());
+        const priceRuler = await within(dialog).findByRole('slider', { name: 'Adjust price' });
+        const priceBefore = priceRuler.getAttribute('aria-valuenow');
+        fireEvent.keyDown(priceRuler, { key: 'ArrowRight' });
+        await waitFor(() =>
+          expect(
+            within(dialog)
+              .getByRole('slider', { name: 'Adjust price' })
+              .getAttribute('aria-valuenow'),
+          ).not.toBe(priceBefore),
+        );
+
+        fireEvent.focusIn(qtyInput());
+        expect(
+          await within(dialog).findByRole('slider', { name: 'Adjust quantity' }),
+        ).toBeInTheDocument();
+      },
+      HEAVY,
+    );
+
+    it(
+      'keeps the ruler on quantity for a market order with price focused',
+      async () => {
+        stubViewport(true);
+        await renderTicket(mock.session);
+        const { dialog } = await openTicket();
+        fireEvent.click(within(dialog).getByRole('radio', { name: 'Market' }));
+        fireEvent.focusIn(priceInput());
+        expect(within(dialog).getByRole('slider', { name: 'Adjust quantity' })).toBeInTheDocument();
+        expect(within(dialog).queryByRole('slider', { name: 'Adjust price' })).toBeNull();
+      },
+      HEAVY,
+    );
+
+    it(
       'shows product inline and no toggle on wider screens',
       async () => {
         stubViewport(false);
@@ -467,6 +518,7 @@ describe('order ticket with the market open', () => {
         const { dialog } = await openTicket();
         expect(within(dialog).queryByRole('button', { name: /More options/ })).toBeNull();
         expect(within(dialog).getByRole('radiogroup', { name: 'Product' })).toBeInTheDocument();
+        expect(within(dialog).queryByTestId('ticket-ruler')).toBeNull();
       },
       HEAVY,
     );
