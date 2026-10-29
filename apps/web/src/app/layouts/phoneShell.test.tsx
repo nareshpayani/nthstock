@@ -7,6 +7,7 @@ import { createTestQuoteStore, testQuote } from '@/test/quotes';
 import { renderApp } from '@/test/renderApp';
 import { resetSession, signIn, signOut, testSession } from '@/test/session';
 import { useSearchFocusStore } from '@/shared/lib/searchFocusStore';
+import { initialTicketIntentState, useTicketIntentStore } from '@/shared/lib/ticketIntentStore';
 import { phoneTabFor, phoneTopBarCentre } from './phoneNav';
 
 // jsdom has no matchMedia: switch the phone shell on here (NSTOCK-0466).
@@ -17,7 +18,10 @@ vi.mock('@/shared/hooks/usePhoneLayout', async (importOriginal) => ({
 }));
 
 afterEach(() => {
-  act(() => resetSession());
+  act(() => {
+    resetSession();
+    useTicketIntentStore.setState(initialTicketIntentState);
+  });
 });
 
 const AS_OF = '2026-09-28T04:30:00.000Z';
@@ -44,32 +48,59 @@ const holdingFixture: Holding = {
   dayChangeBp: -82,
 };
 
-/** A client that answers funds and holdings from the fixtures and fails everything else. */
-const portfolioApi = createApiClient({
-  baseUrl: 'http://portfolio.test',
-  fetch: (input) => {
-    const path = new URL(String(input)).pathname;
-    const body =
-      path === '/v1/funds'
-        ? fundsSummaryFixture
-        : path === '/v1/holdings'
-          ? { items: [holdingFixture] }
-          : path === '/v1/auth/logout'
-            ? { ok: true }
-            : null;
-    if (!body) return Promise.reject(new TypeError('offline'));
-    return Promise.resolve(
-      new Response(JSON.stringify(body), { headers: { 'content-type': 'application/json' } }),
-    );
-  },
-});
+const popularFixture = {
+  items: [{ token: 408065, symbol: 'INFY', exchange: 'NSE', name: 'Infosys Ltd', type: 'EQUITY' }],
+};
 
-function renderPhone(url: string, { signedIn = true, data = false } = {}) {
-  if (signedIn) signIn(testSession({ name: 'Demo Investor' }));
-  else signOut();
+/**
+ * A client that answers funds, holdings and popular searches from the fixtures and fails
+ * everything else; `failFunds` fails funds too, for the error states.
+ */
+function portfolioApi({ failFunds = false } = {}) {
+  return createApiClient({
+    baseUrl: 'http://portfolio.test',
+    fetch: (input) => {
+      const path = new URL(String(input)).pathname;
+      const body =
+        path === '/v1/funds' && !failFunds
+          ? fundsSummaryFixture
+          : path === '/v1/holdings'
+            ? { items: [holdingFixture] }
+            : path === '/v1/market/search/popular'
+              ? popularFixture
+              : null;
+      if (!body) return Promise.reject(new TypeError('offline'));
+      return Promise.resolve(
+        new Response(JSON.stringify(body), { headers: { 'content-type': 'application/json' } }),
+      );
+    },
+  });
+}
+
+function renderPhone(
+  url: string,
+  {
+    signedIn = true,
+    data = false,
+    failFunds = false,
+  }: { signedIn?: boolean | 'unknown'; data?: boolean; failFunds?: boolean } = {},
+) {
+  if (signedIn === true) signIn(testSession({ name: 'Demo Investor' }));
+  else if (signedIn === false) signOut();
   const quotes = createTestQuoteStore();
   quotes.push(testQuote('NIFTY50', 2541860, { prevClose: 2520615 }));
-  return renderApp(url, { quoteStore: quotes.store, ...(data ? { apiClient: portfolioApi } : {}) });
+  return renderApp(url, {
+    quoteStore: quotes.store,
+    ...(data || failFunds ? { apiClient: portfolioApi({ failFunds }) } : {}),
+  });
+}
+
+/** Opens the Trade sheet and picks INFY from the popular searches. */
+async function pickInfyFromTradeSheet() {
+  fireEvent.click(await screen.findByRole('button', { name: /^Trade:/ }));
+  const sheet = await screen.findByRole('dialog', { name: 'Trade' });
+  fireEvent.focus(within(sheet).getByRole('combobox', { name: 'Search stocks' }));
+  fireEvent.click(await within(sheet).findByRole('option', { name: /INFY/ }));
 }
 
 const tabBar = () => screen.getAllByRole('navigation', { name: 'Main' }).at(-1) as HTMLElement;
@@ -93,6 +124,11 @@ describe('phone navigation map (NSTOCK-0466)', () => {
     expect(phoneTopBarCentre('/settings/security')).toEqual({ kind: 'title', value: 'Security' });
     expect(phoneTopBarCentre('/stocks/INFY')).toEqual({ kind: 'title', value: 'INFY' });
     expect(phoneTopBarCentre('/nowhere')).toEqual({ kind: 'title', value: '' });
+  });
+
+  it('titles a stock page with the raw segment when it is not valid percent-encoding', () => {
+    expect(phoneTopBarCentre('/stocks/M%26M')).toEqual({ kind: 'title', value: 'M&M' });
+    expect(phoneTopBarCentre('/stocks/%E0')).toEqual({ kind: 'title', value: '%E0' });
   });
 });
 
@@ -146,39 +182,52 @@ describe('phone app shell (NSTOCK-0466)', () => {
     await waitFor(() => expect(router.state.location.pathname).toBe('/orders'));
   });
 
-  it('shows the portfolio value (cash plus holdings) and the day P&L', async () => {
+  it('shows the portfolio value, cash plus holdings, and the day’s P&L once they load', async () => {
     renderPhone('/dashboard', { data: true });
-    expect(await screen.findByText('today')).toBeInTheDocument();
-    // Cash 8,60,000 plus the INFY holding; the day's P&L carries ▼ as text, not colour alone.
-    const hero = screen.getByRole('region', { name: 'Portfolio value' });
+    const hero = await screen.findByRole('region', { name: 'Portfolio value' });
+    // Cash ₹8,60,000.00 plus INFY's current value ₹15,234.50; the day moved ₹125.50 down.
     await waitFor(() => expect(hero).toHaveTextContent('₹8,75,234.50'));
-    expect(hero).toHaveTextContent('▼');
+    expect(hero).toHaveTextContent(/▼.*125\.50/);
+    expect(hero).toHaveTextContent('today');
     expect(screen.queryByText('Virtual cash to practise with')).not.toBeInTheDocument();
   });
 
-  it('shows the cash available on Account once it loads', async () => {
+  it('shows the cash available to trade on Account once it loads', async () => {
     renderPhone('/account', { data: true });
     expect(await screen.findByText('₹8,44,765.50')).toBeInTheDocument();
   });
 
-  it('says the portfolio value could not load, with a Retry', async () => {
-    renderPhone('/dashboard');
-    expect(await screen.findByText('Your portfolio value could not load')).toBeInTheDocument();
-    expect(screen.getAllByRole('button', { name: 'Try again' }).length).toBeGreaterThan(0);
+  it('says when the portfolio value could not load, with a retry', async () => {
+    renderPhone('/dashboard', { failFunds: true });
+    const hero = await screen.findByRole('region', { name: 'Portfolio value' });
+    expect(await within(hero).findByRole('alert')).toHaveTextContent(
+      'Your portfolio value could not load',
+    );
+    expect(within(hero).getByRole('button', { name: 'Try again' })).toBeInTheDocument();
+  });
+
+  it('opens the stock with the ticket from the Trade sheet', async () => {
+    const { router } = renderPhone('/dashboard', { data: true });
+    await pickInfyFromTradeSheet();
+    await waitFor(() => expect(router.state.location.pathname).toBe('/stocks/INFY'));
+    expect(useTicketIntentStore.getState().intent).toMatchObject({
+      symbol: 'INFY',
+      exchange: 'NSE',
+      side: 'BUY',
+    });
+  });
+
+  it('signed out, the Trade sheet sends login back to the picked stock', async () => {
+    const { router } = renderPhone('/dashboard', { signedIn: false, data: true });
+    await pickInfyFromTradeSheet();
+    await waitFor(() => expect(router.state.location.pathname).toBe('/login'));
+    expect(router.state.location.search).toHaveProperty('redirect', '/stocks/INFY');
   });
 
   it('logs out from Account', async () => {
-    const { router } = renderPhone('/account', { data: true });
-    fireEvent.click(await screen.findByRole('button', { name: 'Log out' }));
-    await waitFor(() => expect(router.state.location.pathname).toBe('/login'));
-  });
-
-  it('stays logged in and says so when the logout request fails', async () => {
-    // The default client is offline, so the request cannot reach the server.
     const { router } = renderPhone('/account');
     fireEvent.click(await screen.findByRole('button', { name: 'Log out' }));
-    expect(await screen.findByText(/You are still logged in/)).toBeInTheDocument();
-    expect(router.state.location.pathname).toBe('/account');
+    await waitFor(() => expect(router.state.location.pathname).toBe('/login'));
   });
 
   it('switches Home feed tabs and the movers index through the URL', async () => {
@@ -218,6 +267,7 @@ describe('phone app shell (NSTOCK-0466)', () => {
       expect(within(menu).getByRole('link', { name })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Log out' })).toBeInTheDocument();
     expect(await screen.findByText('Balance unavailable')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Try again' })).toBeInTheDocument();
   });
 
   it('asks to log in on Account when signed out', async () => {

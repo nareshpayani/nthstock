@@ -86,16 +86,15 @@ export function createSessionApiClient({
 }
 
 /**
- * Logs out: revokes the session on the server, forgets it in memory and drops every cached query
- * so no user data outlives the session. A 401 means it is already gone, so that ends it locally;
- * any other failure (offline, 5xx) rejects and keeps the session, since it is still live.
+ * Logs out: revokes the session on the server (best effort; the local session ends either way),
+ * forgets it in memory and drops every cached query so no user data outlives the session.
  * The trusted-device cookie stays, so the next login on this browser can use the PIN.
  */
 export async function endSession(apiClient: ApiClient, queryClient: QueryClient): Promise<void> {
   try {
     await apiClient.request('logout');
-  } catch (error) {
-    if (!(isApiError(error) && error.status === 401)) throw error;
+  } catch {
+    // Already logged out, offline or expired: nothing more to revoke from here.
   }
   useSessionStore.getState().clearSession();
   queryClient.clear();

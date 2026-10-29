@@ -75,7 +75,7 @@ export function AccountAvatar() {
       <span
         className={cn(
           'grid size-9 place-items-center rounded-pill text-label font-semibold',
-          session ? 'bg-brand text-surface' : 'bg-canvas text-ink-muted',
+          session ? 'bg-brand-soft text-ink' : 'bg-canvas text-ink-muted',
         )}
       >
         {shown ?? <IconUser size={18} />}

@@ -122,7 +122,7 @@ export function WatchlistTabs({
         })}
       </TabsList>
       <IconButton
-        size="md"
+        size="sm"
         label={full ? strings.lists.createDisabled : strings.lists.create}
         title={full ? strings.lists.createDisabled : strings.lists.create}
         icon={<IconPlus size={18} />}
@@ -133,7 +133,7 @@ export function WatchlistTabs({
       <DropdownMenu modal={false}>
         <DropdownMenuTrigger asChild>
           <IconButton
-            size="md"
+            size="sm"
             label={strings.lists.actions(active.name)}
             icon={<IconMore size={18} />}
           />

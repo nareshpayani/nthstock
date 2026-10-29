@@ -2,7 +2,6 @@ import type { Holding, MoverDirection } from '@nthstock/contracts';
 import {
   Button,
   DigitRoll,
-  ErrorState,
   IconPlus,
   IconTrade,
   Tabs,
@@ -40,12 +39,11 @@ function HeroFrame({
   label?: string;
   children: ReactNode;
 }) {
-  // A fixed minimum height sized to the error state (the tallest), so loading, the figure and an
-  // error take the same room (no jump).
+  // A fixed minimum height, so loading, the figure and an error take the same room (no jump).
   return (
     <section
       aria-labelledby="home-value"
-      className="grid min-h-44content-start justify-items-center gap-1 pt-2 text-center"
+      className="grid min-h-28 content-start justify-items-center gap-1 pt-2 text-center"
     >
       <h1 id="home-value" className="text-body font-normal text-ink-muted">
         {label}
@@ -95,13 +93,22 @@ function PortfolioValue() {
       </HeroFrame>
     );
   }
+  const retry = () => {
+    if (holdings.isError) void holdings.refetch();
+    if (funds.isError) void funds.refetch();
+  };
   if (holdings.data && funds.data) {
+    // A failed refresh keeps the last figures, marked as such (DESIGN.md decision 9).
+    const stale = holdings.isError || funds.isError;
     return (
       <HeroFrame>
         <LiveValue holdings={holdings.data.items} cash={funds.data.balance} />
-        {holdings.isError || funds.isError ? (
-          <p role="status" className="text-label text-ink-muted">
-            {strings.phone.valueStale}
+        {stale ? (
+          <p className="flex items-center gap-2 text-label text-ink-muted">
+            {strings.phone.stale}
+            <button type="button" onClick={retry} className="min-h-11 font-medium text-brand">
+              {strings.sectionError.retry}
+            </button>
           </p>
         ) : null}
       </HeroFrame>
@@ -110,16 +117,13 @@ function PortfolioValue() {
   if (holdings.isError || funds.isError) {
     return (
       <HeroFrame>
-        <ErrorState
-          title={strings.phone.valueError}
-          description={strings.phone.valueErrorBody}
-          retryLabel={strings.sectionError.retry}
-          onRetry={() => {
-            if (holdings.isError) void holdings.refetch();
-            if (funds.isError) void funds.refetch();
-          }}
-          className="py-2"
-        />
+        {/* One line and a small button, not the full ErrorState: the hero keeps its height. */}
+        <p role="alert" className="text-body text-ink">
+          {strings.phone.valueError}
+        </p>
+        <Button size="sm" variant="secondary" onClick={retry}>
+          {strings.sectionError.retry}
+        </Button>
       </HeroFrame>
     );
   }

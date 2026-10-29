@@ -18,7 +18,7 @@ import { AccountAvatar, ProfileMenu } from '@/features/auth';
 import { HeaderTickers, MarketStatusPill } from '@/features/marketTicker';
 import { NotificationBell } from '@/features/notifications';
 import { useAutoScroll } from '@/shared/hooks/useAutoScroll';
-import { usePhoneLayout, usePhoneShell } from '@/shared/hooks/usePhoneLayout';
+import { useLandscapePhone, usePhoneLayout, usePhoneShell } from '@/shared/hooks/usePhoneLayout';
 import { strings } from '../strings';
 import { navItems } from './navItems';
 import { phoneTabFor, phoneTopBarCentre, type PhoneSwitch } from './phoneNav';
@@ -39,7 +39,7 @@ function PageSwitch({ value, pathname }: { value: PhoneSwitch; pathname: string 
               to={option.to}
               replace
               aria-current={pathname === option.to ? 'page' : undefined}
-              className="flex h-11 items-center rounded-pill px-3 text-body font-medium whitespace-nowrap text-ink-muted aria-[current=page]:bg-surface aria-[current=page]:font-semibold aria-[current=page]:text-ink aria-[current=page]:shadow-raised min-[360px]:px-4"
+              className="flex h-11 items-center rounded-pill px-3.5 text-body font-medium whitespace-nowrap text-ink-muted aria-[current=page]:bg-surface aria-[current=page]:font-semibold aria-[current=page]:text-ink aria-[current=page]:shadow-raised max-[359px]:px-3 min-[360px]:px-4"
             >
               {option.label}
             </Link>
@@ -95,6 +95,9 @@ function PhoneTopBar() {
 export function Header({ onOpenMenu, onOpenHelp }: HeaderProps) {
   const phone = usePhoneLayout();
   const phoneShell = usePhoneShell();
+  // A phone on its side has about 375 px of height: the top bar and the tab bar take enough of it,
+  // so the index strip steps aside there (the indices are on Home).
+  const landscape = useLandscapePhone();
   // The strip drifts so every index gets seen on a narrow phone (A21).
   const stripRef = useAutoScroll<HTMLDivElement>(phone);
   return (
@@ -171,16 +174,18 @@ export function Header({ onOpenMenu, onOpenHelp }: HeaderProps) {
       )}
       {/* Scrolls sideways on narrow screens, so it takes focus for keyboard scrolling (WCAG 2.1.1,
           axe scrollable-region-focusable). */}
-      <div
-        ref={stripRef}
-        role="region"
-        aria-label={strings.header.statusStrip}
-        tabIndex={0}
-        className="relative flex h-10 items-center gap-4 overflow-x-auto border-t border-line px-3 max-[767px]:mask-r-from-85% lg:px-6 min-[1360px]:hidden [@media(orientation:landscape)_and_(max-height:500px)]:hidden"
-      >
-        <MarketStatusPill compact={!phone} dot={phone} className="shrink-0" />
-        <HeaderTickers compact stacked={phone} all={phone} className="shrink-0" />
-      </div>
+      {phoneShell && landscape ? null : (
+        <div
+          ref={stripRef}
+          role="region"
+          aria-label={strings.header.statusStrip}
+          tabIndex={0}
+          className="relative flex h-10 items-center gap-4 overflow-x-auto border-t border-line px-3 max-[767px]:mask-r-from-85% lg:px-6 min-[1360px]:hidden"
+        >
+          <MarketStatusPill compact={!phone} dot={phone} className="shrink-0" />
+          <HeaderTickers compact stacked={phone} all={phone} className="shrink-0" />
+        </div>
+      )}
     </header>
   );
 }

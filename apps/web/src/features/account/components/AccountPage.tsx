@@ -58,7 +58,10 @@ function AvailableCash() {
         <span className="text-label text-ink-muted">{strings.available}</span>
         {figure}
       </span>
-      <Link to="/funds" className={cn(buttonVariants({ variant: 'primary' }), 'min-h-11')}>
+      <Link
+        to="/funds"
+        className={cn(buttonVariants({ variant: 'primary', size: 'md' }), 'min-h-11 min-w-11')}
+      >
         {strings.fundsCta}
       </Link>
     </div>
@@ -142,11 +145,6 @@ export function AccountPage() {
       >
         {strings.logOut}
       </Button>
-      {logout.isError ? (
-        <p role="alert" className="text-center text-label text-down">
-          {strings.logOutFailed}
-        </p>
-      ) : null}
 
       <p className="text-center text-label text-ink-muted">{strings.paperNote}</p>
     </div>

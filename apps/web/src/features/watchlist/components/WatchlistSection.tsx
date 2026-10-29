@@ -83,7 +83,7 @@ export function WatchlistSection({ onAddStock, bare = false }: WatchlistSectionP
             to="/login"
             search={{ redirect: here }}
             aria-label={strings.signedOut.loginLabel}
-            className={cn(buttonVariants(), 'min-h-11')}
+            className={cn(buttonVariants({ size: 'sm' }), 'max-md:min-h-11')}
           >
             {strings.signedOut.login}
           </Link>

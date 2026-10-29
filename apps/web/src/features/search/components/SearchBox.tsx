@@ -131,9 +131,8 @@ export function SearchBox({ ref, onNavigate, onChoose, addTo, inline = false }: 
     setQuery('');
     setActive(-1);
     setDismissed(true);
-    // A caller that handles the pick owns the navigation (it may need to log in first).
-    if (onChoose) onChoose(hit);
-    else void navigate({ to: '/stocks/$symbol', params: { symbol: hit.symbol } });
+    onChoose?.(hit);
+    void navigate({ to: '/stocks/$symbol', params: { symbol: hit.symbol } });
     onNavigate?.();
   };
 

@@ -1,6 +1,5 @@
 import type { SearchHit } from '@nthstock/contracts';
-import { Sheet, useToast } from '@nthstock/ui';
-import { useNavigate } from '@tanstack/react-router';
+import { Sheet } from '@nthstock/ui';
 import { useRef } from 'react';
 import { SearchBox } from '@/features/search';
 import { useOpenTicket } from '@/shared/hooks/useOpenTicket';
@@ -19,26 +18,14 @@ export type TradeSheetProps = {
 export function TradeSheet({ open, onOpenChange }: TradeSheetProps) {
   const searchRef = useRef<HTMLInputElement>(null);
   const openTicket = useOpenTicket();
-  const toast = useToast();
-  const navigate = useNavigate();
   const choose = (hit: SearchHit) => {
     onOpenChange(false);
-    const toStock = () => navigate({ to: '/stocks/$symbol', params: { symbol: hit.symbol } });
-    // Signed out, the login redirect is the stock's page, so the user lands where they picked.
-    openTicket(
+    // The search box opens the stock's page; signed out, login returns there, not to this tab.
+    // A failure clears the intent and toasts inside useOpenTicket.
+    void openTicket(
       { symbol: hit.symbol, exchange: hit.exchange, side: 'BUY' },
-      `/stocks/${encodeURIComponent(hit.symbol)}`,
-    )
-      .then((result) => (result === 'opened' ? toStock() : undefined))
-      .catch(() => {
-        // The stock's page still opens; only the ticket did not, so say so and how to open it.
-        void toStock();
-        toast.show({
-          tone: 'error',
-          title: strings.phone.tradeFailedTitle,
-          description: strings.phone.tradeFailedBody(hit.symbol),
-        });
-      });
+      { redirect: `/stocks/${encodeURIComponent(hit.symbol)}` },
+    );
   };
   return (
     <Sheet
