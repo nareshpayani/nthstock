@@ -371,6 +371,61 @@ describe('PriceChart disposal (T-113)', () => {
     expect(next).toHaveBeenCalledExactlyOnceWith(null);
   });
 
+  describe('one direction per swipe (NSTOCK-0452)', () => {
+    function touch(host: HTMLElement, type: string, x: number, y: number): TouchEvent {
+      const event = new Event(type, { bubbles: true, cancelable: true }) as TouchEvent;
+      const points = type === 'touchend' ? [] : [{ clientX: x, clientY: y }];
+      Object.defineProperty(event, 'touches', { value: points });
+      Object.defineProperty(event, 'changedTouches', { value: [{ clientX: x, clientY: y }] });
+      host.dispatchEvent(event);
+      return event;
+    }
+
+    it('an interactive chart locks its pan on a vertical swipe and gives it back on lift', async () => {
+      render(<PriceChart candles={makeCandles({ count: 3 })} label="c" interactive />);
+      await chartMounted();
+      const host = screen.getByTestId('chart-host');
+      const chart = chartsMock.charts[0];
+      touch(host, 'touchstart', 100, 100);
+      touch(host, 'touchmove', 102, 130);
+      expect(chart?.options).toMatchObject({ handleScroll: false, handleScale: false });
+      touch(host, 'touchend', 102, 130);
+      expect(chart?.options).toMatchObject({
+        handleScroll: { horzTouchDrag: true, vertTouchDrag: false },
+        handleScale: { pinch: true },
+      });
+    });
+
+    it('a sideways swipe on an interactive chart keeps the page from scrolling', async () => {
+      render(<PriceChart candles={makeCandles({ count: 3 })} label="c" interactive />);
+      await chartMounted();
+      const host = screen.getByTestId('chart-host');
+      touch(host, 'touchstart', 100, 100);
+      expect(touch(host, 'touchmove', 130, 102).defaultPrevented).toBe(true);
+    });
+
+    it('a plain chart installs no touch handling', async () => {
+      render(<PriceChart candles={makeCandles({ count: 3 })} label="c" />);
+      await chartMounted();
+      const host = screen.getByTestId('chart-host');
+      touch(host, 'touchstart', 100, 100);
+      expect(touch(host, 'touchmove', 130, 102).defaultPrevented).toBe(false);
+    });
+
+    it('unhooks on unmount: a later touch does nothing', async () => {
+      const view = render(<PriceChart candles={makeCandles({ count: 3 })} label="c" interactive />);
+      await chartMounted();
+      const host = screen.getByTestId('chart-host');
+      const chart = chartsMock.charts[0];
+      view.unmount();
+      const before = chart?.options;
+      touch(host, 'touchstart', 100, 100);
+      expect(touch(host, 'touchmove', 130, 102).defaultPrevented).toBe(false);
+      touch(host, 'touchmove', 102, 140);
+      expect(chart?.options).toBe(before);
+    });
+  });
+
   it('keeps the plain chart static', async () => {
     render(<PriceChart candles={makeCandles({ count: 3 })} label="INFY chart" />);
     await chartMounted();
