@@ -44,6 +44,11 @@ export function loupeText(price: number, ltp: number | undefined, spec?: LoupeSp
 export const LOUPE_GAP = 56;
 /** The loupe keeps this far inside the chart's edges. */
 export const LOUPE_INSET = 8;
+/**
+ * Its lifted shadow reaches this far below the card (4 px offset plus 12 px blur): at the bottom
+ * the card keeps that far up, so the shadow stays off the time axis labels.
+ */
+export const LOUPE_SHADOW = 16;
 
 export type LoupePlacement = { left: number; top: number; side: 'left' | 'right' };
 
@@ -86,7 +91,7 @@ export function placeLoupe({
   const top = clamp(
     above >= LOUPE_INSET ? above : y + LOUPE_GAP,
     LOUPE_INSET,
-    height - LOUPE_INSET - cardHeight,
+    height - LOUPE_SHADOW - cardHeight,
   );
   return { left, top, side };
 }
