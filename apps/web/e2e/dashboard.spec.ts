@@ -59,8 +59,9 @@ function dashboardReady(page: Page, skipChart = false): Promise<boolean> {
         main.querySelectorAll('[aria-busy="true"]').length === 0 &&
         banner.querySelectorAll('[aria-busy="true"]').length === 0 &&
         stockLinks('Stocks lists') === 5 &&
-        // A phone's Home lists movers only under the Gainers and Losers tabs.
-        (window.innerWidth < 768 || stockLinks('Market movers') > 0)
+        // A phone's Home (NSTOCK-0466) has the movers in its own Stocks card, not this section.
+        (stockLinks('Market movers') > 0 ||
+          main.querySelector('section[aria-label="Your stocks and market movers"]') !== null)
       );
     }, skipChart)
     .catch(() => false); // the page is still navigating

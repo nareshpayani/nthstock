@@ -1,4 +1,4 @@
-import { IconChevronRight, buttonVariants, cn, Button } from '@nthstock/ui';
+import { Button, IconChevronRight, buttonVariants, cn } from '@nthstock/ui';
 import { formatInr } from '@nthstock/utils';
 import { useQuery } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
@@ -29,38 +29,39 @@ function AvailableCash() {
   const api = useApiClient();
   const funds = useQuery(fundsSummaryQuery(api));
   let figure;
-  if (funds.data) figure = formatInr(funds.data.available);
-  else if (funds.isError) {
-    return (
-      <div
-        role="alert"
-        className="flex items-center justify-between gap-3 rounded-lg border border-line bg-surface p-4"
-      >
-        <span className="text-body text-ink-muted">{strings.fundsError}</span>
-        <Button variant="secondary" size="sm" onClick={() => void funds.refetch()}>
+  if (funds.data) {
+    figure = (
+      <span className="font-mono text-xl font-semibold text-ink tabular-nums">
+        {formatInr(funds.data.available)}
+      </span>
+    );
+  } else if (funds.isError) {
+    figure = (
+      <span role="alert" className="flex flex-wrap items-center gap-2 text-body text-ink">
+        {strings.fundsError}
+        <Button variant="ghost" size="sm" onClick={() => void funds.refetch()}>
           {strings.retry}
         </Button>
-      </div>
+      </span>
     );
-  } else
+  } else {
     figure = (
-      <span
-        role="status"
-        aria-label={strings.fundsLoading}
-        className="inline-block h-6 w-36 animate-pulse rounded-sm bg-canvas"
-      />
+      <span role="status" className="inline-flex h-7 items-center">
+        <span className="sr-only">{strings.fundsLoading}</span>
+        <span aria-hidden="true" className="h-6 w-36 animate-pulse rounded-sm bg-canvas" />
+      </span>
     );
+  }
   return (
-    <Link
-      to="/funds"
-      className="flex items-center justify-between gap-3 rounded-lg border border-line bg-surface p-4"
-    >
+    <div className="flex items-center justify-between gap-3 rounded-lg border border-line bg-surface p-4">
       <span className="grid gap-0.5">
         <span className="text-label text-ink-muted">{strings.available}</span>
-        <span className="font-mono text-xl font-semibold text-ink tabular-nums">{figure}</span>
+        {figure}
       </span>
-      <span className={buttonVariants({ variant: 'primary', size: 'sm' })}>{strings.fundsCta}</span>
-    </Link>
+      <Link to="/funds" className={buttonVariants({ variant: 'primary', size: 'sm' })}>
+        {strings.fundsCta}
+      </Link>
+    </div>
   );
 }
 
@@ -78,15 +79,17 @@ export function AccountPage() {
     return (
       <div className="mx-auto grid w-full max-w-xl gap-3">
         <h1 className="sr-only">{strings.title}</h1>
-        <div
-          role="status"
-          aria-label={strings.loading}
-          className="h-24 animate-pulse rounded-lg border border-line bg-surface"
-        />
+        <p role="status" className="sr-only">
+          {strings.sessionLoading}
+        </p>
+        <span aria-hidden="true" className="h-24 animate-pulse rounded-lg bg-surface" />
+        <span aria-hidden="true" className="h-20 animate-pulse rounded-lg bg-surface" />
+        <AccountMenu />
       </div>
     );
   }
-  if (status !== 'authenticated' || !session) {
+
+  if (!session) {
     return (
       <div className="mx-auto grid w-full max-w-xl gap-4">
         <h1 className="sr-only">{strings.title}</h1>
@@ -139,11 +142,7 @@ export function AccountPage() {
       >
         {strings.logOut}
       </Button>
-      {logout.isError ? (
-        <p role="alert" className="text-center text-label text-ink-muted">
-          {strings.logOutError}
-        </p>
-      ) : null}
+
       <p className="text-center text-label text-ink-muted">{strings.paperNote}</p>
     </div>
   );

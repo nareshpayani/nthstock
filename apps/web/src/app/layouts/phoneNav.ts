@@ -44,7 +44,7 @@ const PORTFOLIO_SWITCH: PhoneSwitch = {
 export type PhoneTopBarCentre =
   { kind: 'switch'; value: PhoneSwitch } | { kind: 'title'; value: string };
 
-/** A malformed escape such as `%E0` makes decodeURIComponent throw; show the raw segment then. */
+/** A path segment decoded, or as it is when it is not valid percent-encoding (`/stocks/%E0`). */
 function safeDecode(segment: string): string {
   try {
     return decodeURIComponent(segment);

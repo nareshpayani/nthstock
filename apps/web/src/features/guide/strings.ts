@@ -1,5 +1,13 @@
 import { demoTwoTab } from './demoTwo';
-import { defineTabs, repoLink } from './model/guideContent';
+import { defineTabs, repoLink, type GuideImage } from './model/guideContent';
+
+/** A 390 × 844 still of the phone app (NSTOCK-0466) in public/round2, before or after the shell. */
+const phoneShot = (screen: string, when: 'before' | 'after' | null, alt: string): GuideImage => ({
+  file: when ? `shell-390x844-${screen}-${when}` : `shell-390x844-${screen}`,
+  alt,
+  width: 390,
+  height: 844,
+});
 
 /**
  * UI copy for the reviewer guide (NSTOCK-0280, tabbed in NSTOCK-0341): from what nthstock is down
@@ -260,6 +268,112 @@ export const strings = {
             {
               name: 'Documentation',
               body: 'This page: public, deep-linkable tabs, also linked from the login page.',
+            },
+          ],
+        },
+        { kind: 'heading', text: 'The phone app, before and after' },
+        {
+          kind: 'text',
+          text: 'Below 768 px the same features sit in a native-app shell: tabs at the bottom, in thumb reach, and a top bar with the account, a page switch and the bell. Each pair was captured at 390 × 844 (iPhone 12 to 16) with the same demo account: before is the responsive web layout with its menu drawer, after is the phone app. Tap a frame to open it full size.',
+        },
+        {
+          kind: 'compare',
+          label: 'Phone app before and after frames',
+          captions: { before: 'Before: responsive web', after: 'After: phone app' },
+          items: [
+            {
+              title: 'Home',
+              body: 'The portfolio value and the day’s P&L lead, then the NIFTY 50 chart, Add funds and Place order, and Watchlist, Gainers and Losers under one switch.',
+              before: phoneShot(
+                'home',
+                'before',
+                'Home on a 390 px phone before: the dashboard cards stacked under a header with a menu button',
+              ),
+              after: phoneShot(
+                'home',
+                'after',
+                'Home in the phone app: portfolio value with the day’s P&L, the NIFTY 50 chart, Add funds and Place order, and the tab bar',
+              ),
+            },
+            {
+              title: 'Portfolio',
+              body: 'Holdings and Positions are one switch in the top bar, so both are a tap from the Portfolio tab.',
+              before: phoneShot(
+                'portfolio',
+                'before',
+                'Portfolio on a 390 px phone before: holdings under the web header',
+              ),
+              after: phoneShot(
+                'portfolio',
+                'after',
+                'Portfolio in the phone app: a Holdings and Positions switch in the top bar over the holdings, with Portfolio lit in the tab bar',
+              ),
+            },
+            {
+              title: 'Orders',
+              body: 'Open, executed and cancelled orders keep their tabs in the page; the top bar names the screen.',
+              before: phoneShot(
+                'orders',
+                'before',
+                'Orders on a 390 px phone before: the order tabs under the web header',
+              ),
+              after: phoneShot(
+                'orders',
+                'after',
+                'Orders in the phone app: Orders title in the top bar, the Open, Executed and Cancelled tabs, and the tab bar',
+              ),
+            },
+            {
+              title: 'Account',
+              body: 'A new screen that gathers what the menu drawer held: profile and KYC, cash to trade, funds, positions, watchlists, security and privacy, this guide and Log out.',
+              before: phoneShot(
+                'account',
+                'before',
+                'Before, on a 390 px phone, the account items lived in the menu drawer and profile menu',
+              ),
+              after: phoneShot(
+                'account',
+                'after',
+                'Account in the phone app: profile with KYC, available cash with a Funds button, a menu of account pages and Log out',
+              ),
+            },
+          ],
+        },
+        {
+          kind: 'figures',
+          label: 'Trading in the phone app, 390 × 844',
+          items: [
+            {
+              image: phoneShot(
+                'trade',
+                null,
+                'The Trade sheet from the raised centre button: stock search with popular stocks listed',
+              ),
+              caption: 'Trade: search a stock from any tab',
+            },
+            {
+              image: phoneShot(
+                'ticket',
+                null,
+                'The order ticket open on INFY: Buy or Sell, market or limit, quantity and Place AMO pinned at the bottom',
+              ),
+              caption: 'The order ticket opens on the stock',
+            },
+            {
+              image: phoneShot(
+                'stock',
+                null,
+                'The INFY page pushed over the tabs: a back button, the chart and the Sell, Buy and Scalp bar',
+              ),
+              caption: 'A stock’s page, with a back button',
+            },
+            {
+              image: phoneShot(
+                'watchlist',
+                null,
+                'The Watchlist side of the Home switch: lists with live prices and the tab bar',
+              ),
+              caption: 'Watchlist, beside Market on Home',
             },
           ],
         },

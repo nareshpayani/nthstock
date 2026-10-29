@@ -56,6 +56,8 @@ export function AppShell({ children, rail = true }: AppShellProps) {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const tabBar = phoneShell && phoneTabFor(pathname) !== null;
   const [tradeOpen, setTradeOpen] = useState(false);
+  // Only a phone has the trade sheet: one left open closes when the window grows past 767 px.
+  const tradeSheetOpen = phoneShell && tradeOpen;
   const railSearch = useRef<HTMLInputElement>(null);
   const drawerSearch = useRef<HTMLInputElement>(null);
 
@@ -80,7 +82,7 @@ export function AppShell({ children, rail = true }: AppShellProps) {
     focusSearch();
   });
 
-  useShortcut('/', focusSearch, { enabled: !helpOpen && !tradeOpen });
+  useShortcut('/', focusSearch, { enabled: !helpOpen && !tradeSheetOpen });
   useShortcut('?', () => setHelpOpen(true), { enabled: !helpOpen });
 
   return (
@@ -150,7 +152,7 @@ export function AppShell({ children, rail = true }: AppShellProps) {
         </Sheet>
       )}
       {tabBar ? <BottomTabBar onTrade={() => setTradeOpen(true)} /> : null}
-      {phoneShell ? <TradeSheet open={tradeOpen} onOpenChange={setTradeOpen} /> : null}
+      {phoneShell ? <TradeSheet open={tradeSheetOpen} onOpenChange={setTradeOpen} /> : null}
       <ShortcutHelpDialog open={helpOpen} onOpenChange={setHelpOpen} />
       <OrderTicketHost />
       <TrailingStopSheetHost />

@@ -32,14 +32,14 @@ export type HeaderProps = {
 function PageSwitch({ value, pathname }: { value: PhoneSwitch; pathname: string }) {
   return (
     <nav aria-label={value.label} className="min-w-0">
-      <ul className="flex gap-0.5 rounded-pill bg-canvas p-1">
+      <ul className="flex gap-0.5 rounded-pill bg-canvas p-0.5">
         {value.options.map((option) => (
           <li key={option.to}>
             <Link
               to={option.to}
               replace
               aria-current={pathname === option.to ? 'page' : undefined}
-              className="flex h-9 items-center rounded-pill px-3.5 text-body font-medium whitespace-nowrap text-ink-muted aria-[current=page]:bg-surface aria-[current=page]:font-semibold aria-[current=page]:text-ink aria-[current=page]:shadow-raised min-[360px]:px-4"
+              className="flex h-11 items-center rounded-pill px-3.5 text-body font-medium whitespace-nowrap text-ink-muted aria-[current=page]:bg-surface aria-[current=page]:font-semibold aria-[current=page]:text-ink aria-[current=page]:shadow-raised min-[360px]:px-4"
             >
               {option.label}
             </Link>
@@ -61,7 +61,9 @@ function PhoneTopBar() {
   const centre = phoneTopBarCentre(pathname);
   const pushed = phoneTabFor(pathname) === null;
   const back = () => {
-    if (window.history.length > 1) router.history.back();
+    // Back within the app when it has an entry to go back to; a page opened from a link (or a new
+    // tab) goes to Home rather than off the site.
+    if (router.history.canGoBack()) router.history.back();
     else void router.navigate({ to: '/dashboard' });
   };
   return (

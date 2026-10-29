@@ -30,7 +30,7 @@ function Tab({ item, active }: { item: TabLink; active: boolean }) {
         to={item.to}
         aria-current={active ? 'page' : undefined}
         className={cn(
-          'flex min-h-11 min-w-14 flex-col items-center justify-center gap-0.5 rounded-md text-[11px] font-medium text-ink-muted',
+          'flex min-h-11 min-w-14 flex-col items-center justify-center gap-0.5 rounded-md text-label font-medium text-ink-muted',
           active && 'font-semibold text-brand',
         )}
       >

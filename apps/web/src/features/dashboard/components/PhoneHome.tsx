@@ -2,6 +2,7 @@ import type { Holding, MoverDirection } from '@nthstock/contracts';
 import {
   Button,
   DigitRoll,
+  ErrorState,
   IconPlus,
   IconTrade,
   Tabs,
@@ -32,14 +33,21 @@ const OPENING_CASH = 10_00_000_00;
 export type HomeFeed = NonNullable<DashboardSearch['feed']>;
 const FEEDS = ['watchlist', 'gainers', 'losers'] as const satisfies readonly HomeFeed[];
 
-function HeroFrame({ children }: { children: ReactNode }) {
+function HeroFrame({
+  label = strings.phone.valueLabel,
+  children,
+}: {
+  label?: string;
+  children: ReactNode;
+}) {
+  // A fixed minimum height, so loading, the figure and an error take the same room (no jump).
   return (
     <section
       aria-labelledby="home-value"
-      className="grid justify-items-center gap-1 pt-2 text-center"
+      className="grid min-h-28 content-start justify-items-center gap-1 pt-2 text-center"
     >
       <h1 id="home-value" className="text-body font-normal text-ink-muted">
-        {strings.phone.valueLabel}
+        {label}
       </h1>
       {children}
     </section>
@@ -49,7 +57,7 @@ function HeroFrame({ children }: { children: ReactNode }) {
 function Value({ paise }: { paise: number }) {
   const shown = useCountedValue(paise);
   return (
-    <p className="font-mono text-[34px] leading-tight font-semibold tracking-tight text-ink tabular-nums">
+    <p className="font-mono text-display leading-tight font-semibold tracking-tight text-ink tabular-nums">
       <DigitRoll value={formatInr(shown)} />
     </p>
   );
@@ -76,43 +84,44 @@ function PortfolioValue() {
   const holdings = useQuery({ ...holdingsQuery(api), enabled: signedIn });
   const funds = useQuery({ ...fundsSummaryQuery(api), enabled: signedIn });
 
+  // Only a known signed-out visitor sees the virtual cash; while the session is restored the hero
+  // waits in its skeleton, so a signed-in user never sees someone else's figure first.
   if (status === 'anonymous') {
     return (
-      <HeroFrame>
+      <HeroFrame label={strings.phone.signedOutLabel}>
         <Value paise={OPENING_CASH} />
         <p className="text-body text-ink-muted">{strings.phone.signedOutNote}</p>
       </HeroFrame>
     );
   }
-  if (signedIn && holdings.data && funds.data) {
+  if (holdings.data && funds.data) {
     return (
       <HeroFrame>
         <LiveValue holdings={holdings.data.items} cash={funds.data.balance} />
       </HeroFrame>
     );
   }
-  if (signedIn && (holdings.isError || funds.isError)) {
+  if (holdings.isError || funds.isError) {
     return (
       <HeroFrame>
-        <p role="alert" className="text-body text-ink-muted">
-          {strings.phone.valueError}
-        </p>
-        <Button
-          variant="secondary"
-          size="sm"
-          onClick={() => {
-            void holdings.refetch();
-            void funds.refetch();
+        <ErrorState
+          title={strings.phone.valueError}
+          description={strings.phone.valueErrorBody}
+          retryLabel={strings.sectionError.retry}
+          onRetry={() => {
+            if (holdings.isError) void holdings.refetch();
+            if (funds.isError) void funds.refetch();
           }}
-        >
-          {strings.phone.retry}
-        </Button>
+          className="py-2"
+        />
       </HeroFrame>
     );
   }
-  // Session still unknown, or data on its way: a skeleton, never the signed-out figure.
   return (
     <HeroFrame>
+      <span role="status" className="sr-only">
+        {strings.phone.valueLoading}
+      </span>
       <span aria-hidden="true" className="mt-1 h-10 w-56 animate-pulse rounded-md bg-surface" />
       <span aria-hidden="true" className="h-5 w-40 animate-pulse rounded-sm bg-surface" />
     </HeroFrame>
@@ -133,8 +142,7 @@ export type PhoneHomeProps = {
  * Home on a phone (NSTOCK-0466), laid out like a native trading app: the portfolio value with the
  * day's P&L, the NIFTY 50 chart with its range chips, Add funds and Place order side by side, then
  * Watchlist, Gainers and Losers as list rows (movers of any of the indices), the indices and the
- * curated lists. Place order opens the trade
- * sheet, the same as the tab bar's centre button.
+ * curated lists. Place order opens the trade sheet, the same as the tab bar's centre button.
  */
 export function PhoneHome({
   chart,
@@ -168,7 +176,7 @@ export function PhoneHome({
         </Button>
       </div>
       <section
-        aria-label={strings.phone.feedLabel}
+        aria-label={strings.phone.feedSection}
         className="rounded-lg border border-line bg-surface px-4 pt-1 pb-2"
       >
         <Tabs

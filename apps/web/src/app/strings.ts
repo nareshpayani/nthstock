@@ -50,8 +50,9 @@ export const strings = {
       stock: 'Stock',
     },
     tradeTitle: 'Trade',
-    tradeError: 'The order ticket could not open. Try again.',
     tradeHint: 'Pick a stock: its page opens with the order ticket up.',
+    tradeFailedTitle: 'The order ticket did not open',
+    tradeFailedBody: (symbol: string) => `Tap Buy or Sell on ${symbol} to try again.`,
   },
   shortcuts: {
     title: 'Keyboard shortcuts',

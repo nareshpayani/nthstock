@@ -21,9 +21,14 @@ export function TradeSheet({ open, onOpenChange }: TradeSheetProps) {
   const toast = useToast();
   const choose = (hit: SearchHit) => {
     onOpenChange(false);
-    openTicket({ symbol: hit.symbol, exchange: hit.exchange, side: 'BUY' }).catch(() =>
-      toast.show({ title: strings.phone.tradeError, tone: 'error' }),
-    );
+    // The stock's page still opens; only the ticket did not, so say so and how to open it.
+    openTicket({ symbol: hit.symbol, exchange: hit.exchange, side: 'BUY' }).catch(() => {
+      toast.show({
+        tone: 'error',
+        title: strings.phone.tradeFailedTitle,
+        description: strings.phone.tradeFailedBody(hit.symbol),
+      });
+    });
   };
   return (
     <Sheet

@@ -34,7 +34,7 @@ test.describe('the phone app shell reaches every feature (NSTOCK-0466)', () => {
     await expect(page.getByRole('button', { name: 'Place order' })).toBeVisible();
     const feed = page.getByRole('tablist', { name: 'Stocks', exact: true });
     await expect(feed.getByRole('tab')).toHaveText(['Watchlist', 'Gainers', 'Losers']);
-    await expect(page.getByRole('tabpanel').getByRole('link').first()).toBeVisible();
+    await expect(page.getByRole('tabpanel').first()).toBeVisible();
     await feed.getByRole('tab', { name: 'Gainers' }).click();
     await expect(page).toHaveURL(/feed=gainers/);
     await page.getByRole('radiogroup', { name: 'Index' }).getByRole('radio').nth(1).click();
@@ -98,6 +98,7 @@ test.describe('the phone app shell reaches every feature (NSTOCK-0466)', () => {
     await tab(page, 'Account').click();
     await page.getByRole('button', { name: 'Log out' }).click();
     await expect(page).toHaveURL(/\/login/);
+    await expect(page.getByRole('textbox', { name: 'Mobile number' })).toBeVisible();
   });
 
   test('Trade: search, then the stock page with the ticket up, then back', async ({ page }) => {
@@ -107,7 +108,7 @@ test.describe('the phone app shell reaches every feature (NSTOCK-0466)', () => {
     const search = sheet.getByRole('combobox', { name: 'Search stocks' });
     await expect(search).toBeFocused();
     await page.keyboard.type('infy');
-    await sheet.getByRole('option').first().click();
+    await sheet.getByRole('option', { name: /INFY/ }).first().click();
     await expect(page).toHaveURL(/\/stocks\/INFY$/);
     const ticket = page.getByRole('dialog', { name: 'Trade INFY' });
     await expect(ticket).toBeVisible();

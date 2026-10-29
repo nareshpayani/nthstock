@@ -21,10 +21,13 @@ export const strings = {
   /** Home on a phone (NSTOCK-0466). */
   phone: {
     valueLabel: 'Portfolio value',
+    signedOutLabel: 'Virtual cash',
+    valueLoading: 'Loading your portfolio value',
+    valueErrorBody: 'Your holdings and cash are safe. Try again.',
+    feedSection: 'Your stocks and market movers',
     today: 'today',
     signedOutNote: 'Virtual cash to practise with',
-    valueError: 'Your portfolio value could not load.',
-    retry: 'Try again',
+    valueError: 'Your portfolio value could not load',
     logIn: 'Log in',
     addFunds: 'Add funds',
     placeOrder: 'Place order',
