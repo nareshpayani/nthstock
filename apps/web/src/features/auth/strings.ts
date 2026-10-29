@@ -150,6 +150,8 @@ export const strings = {
     kycNote: 'Mock KYC for paper trading',
     security: 'Security',
     logOut: 'Log out',
+    logOutFailedTitle: 'You are still logged in',
+    logOutFailedBody: 'Log out could not reach the server. Check your connection and try again.',
     logIn: 'Log in',
     accountSignedOut: 'Account',
     loading: 'Checking your session',

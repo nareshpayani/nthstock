@@ -4,11 +4,13 @@ import type {
   Session,
   TotpVerifyRequest,
 } from '@nthstock/contracts';
+import { useOptionalToast } from '@nthstock/ui';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
 import { useApiClient } from '@/shared/lib/apiClientContext';
 import { endSession } from '@/shared/lib/sessionClient';
 import { useSessionStore } from '@/shared/lib/sessionStore';
+import { strings } from '../strings';
 import { rememberTrustedDevice } from '../store/trustedDevice';
 
 function startSession(session: Session) {
@@ -66,8 +68,16 @@ export function useLogout() {
   const apiClient = useApiClient();
   const queryClient = useQueryClient();
   const navigate = useNavigate();
+  const toast = useOptionalToast();
   return useMutation({
     mutationFn: () => endSession(apiClient, queryClient),
-    onSettled: () => navigate({ to: '/login', replace: true }),
+    // Only once the server has ended it: a failed revoke keeps the session, and says so.
+    onSuccess: () => navigate({ to: '/login', replace: true }),
+    onError: () =>
+      toast?.show({
+        tone: 'error',
+        title: strings.profile.logOutFailedTitle,
+        description: strings.profile.logOutFailedBody,
+      }),
   });
 }

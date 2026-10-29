@@ -105,7 +105,7 @@ function PortfolioValue() {
         <LiveValue holdings={holdings.data.items} cash={funds.data.balance} />
         {stale ? (
           <p className="flex items-center gap-2 text-label text-ink-muted">
-            {strings.phone.stale}
+            <span role="status">{strings.phone.stale}</span>
             <button type="button" onClick={retry} className="min-h-11 font-medium text-brand">
               {strings.sectionError.retry}
             </button>

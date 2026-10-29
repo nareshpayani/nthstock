@@ -7,6 +7,7 @@ import { createTestQuoteStore, testQuote } from '@/test/quotes';
 import { renderApp } from '@/test/renderApp';
 import { resetSession, signIn, signOut, testSession } from '@/test/session';
 import { useSearchFocusStore } from '@/shared/lib/searchFocusStore';
+import { useSessionStore } from '@/shared/lib/sessionStore';
 import { initialTicketIntentState, useTicketIntentStore } from '@/shared/lib/ticketIntentStore';
 import { phoneTabFor, phoneTopBarCentre } from './phoneNav';
 
@@ -49,7 +50,16 @@ const holdingFixture: Holding = {
 };
 
 const popularFixture = {
-  items: [{ token: 408065, symbol: 'INFY', exchange: 'NSE', name: 'Infosys Ltd', type: 'EQUITY' }],
+  items: [
+    { token: 408065, symbol: 'INFY', exchange: 'NSE', name: 'Infosys Ltd', type: 'EQUITY' },
+    {
+      token: 519937,
+      symbol: 'M&M',
+      exchange: 'NSE',
+      name: 'Mahindra & Mahindra Ltd',
+      type: 'EQUITY',
+    },
+  ],
 };
 
 /**
@@ -59,20 +69,24 @@ const popularFixture = {
 /** Every path the fixture client was asked for, in order. */
 const fetched: string[] = [];
 
-function portfolioApi({ failFunds = false } = {}) {
+function portfolioApi({ failFunds = false, hangRefresh = false } = {}) {
   return createApiClient({
     baseUrl: 'http://portfolio.test',
     fetch: (input) => {
       const path = new URL(String(input)).pathname;
       fetched.push(path);
+      // The session check still in flight: the page stays in its "unknown" state.
+      if (hangRefresh && path === '/v1/auth/refresh') return new Promise<Response>(() => undefined);
       const body =
-        path === '/v1/funds' && !failFunds
-          ? fundsSummaryFixture
-          : path === '/v1/holdings'
-            ? { items: [holdingFixture] }
-            : path === '/v1/market/search/popular'
-              ? popularFixture
-              : null;
+        path === '/v1/auth/logout'
+          ? { ok: true }
+          : path === '/v1/funds' && !failFunds
+            ? fundsSummaryFixture
+            : path === '/v1/holdings'
+              ? { items: [holdingFixture] }
+              : path === '/v1/market/search/popular'
+                ? popularFixture
+                : null;
       if (!body) return Promise.reject(new TypeError('offline'));
       return Promise.resolve(
         new Response(JSON.stringify(body), { headers: { 'content-type': 'application/json' } }),
@@ -93,18 +107,21 @@ function renderPhone(
   else if (signedIn === false) signOut();
   const quotes = createTestQuoteStore();
   quotes.push(testQuote('NIFTY50', 2541860, { prevClose: 2520615 }));
+  const hangRefresh = signedIn === 'unknown';
   return renderApp(url, {
     quoteStore: quotes.store,
-    ...(data || failFunds ? { apiClient: portfolioApi({ failFunds }) } : {}),
+    ...(data || failFunds || hangRefresh
+      ? { apiClient: portfolioApi({ failFunds, hangRefresh }) }
+      : {}),
   });
 }
 
-/** Opens the Trade sheet and picks INFY from the popular searches. */
-async function pickInfyFromTradeSheet() {
+/** Opens the Trade sheet and picks a stock (INFY unless told) from the popular searches. */
+async function pickFromTradeSheet(symbol = 'INFY') {
   fireEvent.click(await screen.findByRole('button', { name: /^Trade:/ }));
   const sheet = await screen.findByRole('dialog', { name: 'Trade' });
   fireEvent.focus(within(sheet).getByRole('combobox', { name: 'Search stocks' }));
-  fireEvent.click(await within(sheet).findByRole('option', { name: /INFY/ }));
+  fireEvent.click(await within(sheet).findByRole('option', { name: new RegExp(`^${symbol}`) }));
 }
 
 const tabBar = () => screen.getAllByRole('navigation', { name: 'Main' }).at(-1) as HTMLElement;
@@ -218,7 +235,7 @@ describe('phone app shell (NSTOCK-0466)', () => {
 
   it('opens the stock with the ticket from the Trade sheet', async () => {
     const { router } = renderPhone('/dashboard', { data: true });
-    await pickInfyFromTradeSheet();
+    await pickFromTradeSheet();
     await waitFor(() => expect(router.state.location.pathname).toBe('/stocks/INFY'));
     expect(useTicketIntentStore.getState().intent).toMatchObject({
       symbol: 'INFY',
@@ -229,15 +246,49 @@ describe('phone app shell (NSTOCK-0466)', () => {
 
   it('signed out, the Trade sheet sends login back to the picked stock', async () => {
     const { router } = renderPhone('/dashboard', { signedIn: false, data: true });
-    await pickInfyFromTradeSheet();
+    await pickFromTradeSheet();
     await waitFor(() => expect(router.state.location.pathname).toBe('/login'));
     expect(router.state.location.search).toHaveProperty('redirect', '/stocks/INFY');
   });
 
-  it('logs out from Account', async () => {
-    const { router } = renderPhone('/account');
+  it('logs out from Account once the server has ended the session', async () => {
+    const { router } = renderPhone('/account', { data: true });
     fireEvent.click(await screen.findByRole('button', { name: 'Log out' }));
     await waitFor(() => expect(router.state.location.pathname).toBe('/login'));
+    expect(useSessionStore.getState().session).toBeNull();
+  });
+
+  it('stays logged in, and says so, when log out cannot reach the server', async () => {
+    const { router } = renderPhone('/account');
+    fireEvent.click(await screen.findByRole('button', { name: 'Log out' }));
+    expect(await screen.findByText('You are still logged in')).toBeInTheDocument();
+    expect(router.state.location.pathname).toBe('/account');
+    expect(useSessionStore.getState().session).not.toBeNull();
+  });
+
+  it('waits in a skeleton, not the virtual cash, while the session is being checked', async () => {
+    renderPhone('/dashboard', { signedIn: 'unknown' });
+    const hero = await screen.findByRole('region', { name: 'Portfolio value' });
+    expect(within(hero).getByRole('status')).toHaveTextContent('Loading your portfolio value');
+    expect(screen.queryByText('Virtual cash to practise with')).not.toBeInTheDocument();
+  });
+
+  it('waits on Account too, without the log-in card, while the session is being checked', async () => {
+    renderPhone('/account', { signedIn: 'unknown' });
+    expect(await screen.findByText('Checking your session')).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Log in to your account' })).toBeNull();
+  });
+
+  it('encodes the picked stock in the login redirect (M&M)', async () => {
+    const { router } = renderPhone('/dashboard', { signedIn: false, data: true });
+    await pickFromTradeSheet('M&M');
+    await waitFor(() => expect(router.state.location.pathname).toBe('/login'));
+    expect(router.state.location.search).toHaveProperty('redirect', '/stocks/M%26M');
+    expect(useTicketIntentStore.getState().intent).toMatchObject({
+      symbol: 'M&M',
+      exchange: 'NSE',
+      side: 'BUY',
+    });
   });
 
   it('switches Home feed tabs and the movers index through the URL', async () => {

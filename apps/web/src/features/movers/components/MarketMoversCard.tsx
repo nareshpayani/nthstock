@@ -117,15 +117,7 @@ export function MarketMoversCard({
   return (
     <Card
       title={strings.title}
-      aside={
-        <SegmentedControl
-          label={strings.indexLabel}
-          size="sm"
-          value={active.value}
-          onValueChange={onIndexChange}
-          options={MOVERS_INDICES.map(({ value, label }) => ({ value, label }))}
-        />
-      }
+      aside={<MoversIndexPicker index={active.value} onIndexChange={onIndexChange} />}
     >
       <Tabs
         value={direction}
