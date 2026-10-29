@@ -28,3 +28,5 @@ export {
   chartTypeName,
   type PriceChartType,
 } from './model/chartTypes';
+export { ChartSnapshotButton } from './components/ChartSnapshotButton';
+export { IstClock } from './components/IstClock';

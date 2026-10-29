@@ -206,6 +206,16 @@ describe('PriceChart live tick glide (A16)', () => {
     expect(frames.size).toBe(0);
   });
 
+  it('finishes the glide when frame timestamps trail performance.now()', async () => {
+    const { view, series } = await mounted();
+    view.rerender(<PriceChart candles={moved(4000)} label="c" />);
+    // jsdom's frame clock runs behind performance.now(); the glide still ends on time.
+    vi.spyOn(performance, 'now').mockReturnValue(START + 200);
+    runFrame(-5_000);
+    expect(series.update.mock.lastCall?.[0]).toMatchObject({ value: from + 4000 });
+    expect(frames.size).toBe(0);
+  });
+
   it('pulses the line end on a live update, and not on bars or under reduced motion', async () => {
     const { series } = await mounted();
     expect(series.applyOptions).toHaveBeenCalledWith({ lastPriceAnimation: 2 });

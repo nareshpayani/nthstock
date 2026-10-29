@@ -109,6 +109,16 @@ export const strings = {
     close: 'Close full screen',
     title: (name: string) => `${name} chart`,
   },
+  /** Chart image and the clock (NSTOCK-0463). */
+  snapshot: {
+    save: 'Save the chart as an image',
+    share: 'Share the chart as an image',
+    saved: 'Chart image saved',
+    shared: 'Chart image shared',
+    failed: 'Could not make the chart image. Try again.',
+    brand: 'nthstock',
+  },
+  clock: { suffix: 'IST', label: (time: string) => `Time ${time} IST` },
   /** Each indicator line's short name in the legend. */
   studyShort: {
     sma20: 'SMA 20',
