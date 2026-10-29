@@ -7,7 +7,7 @@ import {
 import { ErrorState, IconChevronRight, SegmentedControl, Skeleton } from '@nthstock/ui';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { Link, useNavigate } from '@tanstack/react-router';
-import { useRef, useState, type PointerEvent } from 'react';
+import { useEffect, useRef, useState, type PointerEvent } from 'react';
 import { Card } from '@/shared/components/Card';
 import { LiveChange } from '@/shared/components/LiveChange';
 import { PriceCell } from '@/shared/components/PriceCell';
@@ -18,6 +18,7 @@ import { useApiClient } from '@/shared/lib/apiClientContext';
 import { candlesQuery } from '../api/candlesQuery';
 import { useLiveCandles } from '../hooks/useLiveCandles';
 import { DEFAULT_INDEX_CHART_TYPE, chartTypeName, type PriceChartType } from '../model/chartTypes';
+import { DOUBLE_TAP_MS } from '../model/directionLock';
 import {
   CHART_RANGES,
   NIFTY,
@@ -76,6 +77,18 @@ export function IndexChartCard({
   const pressRef = useRef<{ id: number; x: number; y: number; at: number } | null>(null);
   // Fingers down on the plot: a second one makes it a pinch, never a tap.
   const pointersRef = useRef(new Set<number>());
+  // A touch tap waits out the double-tap window, so a second press can start the one-thumb zoom.
+  const openTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const cancelOpen = () => {
+    if (openTimerRef.current !== null) clearTimeout(openTimerRef.current);
+    openTimerRef.current = null;
+  };
+  useEffect(
+    () => () => {
+      if (openTimerRef.current !== null) clearTimeout(openTimerRef.current);
+    },
+    [],
+  );
   const phone = usePhoneLayout();
   const interval = resolveInterval(range, requestedInterval);
   const intervals = CANDLE_INTERVALS[range];
@@ -100,6 +113,7 @@ export function IndexChartCard({
     return event.clientX >= event.currentTarget.getBoundingClientRect().right - axis;
   };
   const onPointerDown = (event: PointerEvent<HTMLDivElement>) => {
+    cancelOpen();
     // A primary pointer is the first one down, so any id still held is stale (a press that ended
     // off the plot).
     if (event.isPrimary) pointersRef.current.clear();
@@ -115,9 +129,18 @@ export function IndexChartCard({
     pressRef.current = null;
     if (!press || press.id !== event.pointerId) return;
     const moved = Math.hypot(event.clientX - press.x, event.clientY - press.y);
-    if (moved <= TAP_SLOP && pressTime() - press.at <= TAP_MAX_MS) void openChart();
+    if (moved > TAP_SLOP || pressTime() - press.at > TAP_MAX_MS) return;
+    if (event.pointerType === 'touch') {
+      openTimerRef.current = setTimeout(() => {
+        openTimerRef.current = null;
+        void openChart();
+      }, DOUBLE_TAP_MS);
+    } else {
+      void openChart();
+    }
   };
   const onPointerCancel = (event: PointerEvent<HTMLDivElement>) => {
+    cancelOpen();
     pointersRef.current.delete(event.pointerId);
     pressRef.current = null;
   };
