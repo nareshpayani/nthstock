@@ -1,3 +1,4 @@
+import type { AnyRouter } from '@tanstack/react-router';
 import { render } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -9,26 +10,45 @@ afterEach(() => {
 /** A fresh copy of the module: its painted signal is once per page load. */
 const load = () => import('./firstPaint');
 
+/** A router whose URL matches one route, whose code loads when `chunk` settles. */
+function routerWith(chunk: Promise<void>) {
+  const route = { id: '/page' };
+  return {
+    latestLocation: { pathname: '/page' },
+    matchRoutes: () => [{ routeId: '/page' }],
+    routesById: { '/page': route },
+    loadRouteChunk: (loaded: unknown) => (loaded === route ? chunk : undefined),
+  } as unknown as AnyRouter;
+}
+
+function Page({ mark }: { mark: () => void }) {
+  mark();
+  return null;
+}
+
 describe('afterFirstPaint (NSTOCK-0469)', () => {
-  it('resolves the frame after the first page commits, before the cap', async () => {
+  it('waits for the first screen to paint and the route code to load, then a paint', async () => {
     vi.useFakeTimers({ toFake: ['setTimeout', 'requestAnimationFrame'] });
     const { afterFirstPaint, useMarkFirstPaint } = await load();
+    let loadChunk: () => void = () => undefined;
+    const chunk = new Promise<void>((resolve) => {
+      loadChunk = resolve;
+    });
     const done = vi.fn();
-    void afterFirstPaint(1000).then(done);
-    function Page() {
-      useMarkFirstPaint();
-      return null;
-    }
-    render(<Page />);
-    await vi.advanceTimersByTimeAsync(50);
+    void afterFirstPaint(routerWith(chunk), 1000).then(done);
+    render(<Page mark={useMarkFirstPaint} />);
+    await vi.advanceTimersByTimeAsync(100);
+    expect(done).not.toHaveBeenCalled();
+    loadChunk();
+    await vi.advanceTimersByTimeAsync(100);
     expect(done).toHaveBeenCalledTimes(1);
   });
 
-  it('resolves at the cap when no page marks itself painted', async () => {
+  it('resolves at the cap when the first screen never marks itself painted', async () => {
     vi.useFakeTimers({ toFake: ['setTimeout', 'requestAnimationFrame'] });
     const { afterFirstPaint } = await load();
     const done = vi.fn();
-    void afterFirstPaint(1000).then(done);
+    void afterFirstPaint(routerWith(Promise.resolve()), 1000).then(done);
     await vi.advanceTimersByTimeAsync(999);
     expect(done).not.toHaveBeenCalled();
     await vi.advanceTimersByTimeAsync(1);

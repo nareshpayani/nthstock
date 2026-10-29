@@ -79,6 +79,7 @@ function boot() {
   // VITE_API_MODE is a build-time constant (vite.config.ts), so in an api-mode build this branch
   // and the MSW chunk it imports are removed entirely (T-050), and nothing is gated.
   let mocksReady: Promise<unknown> | undefined;
+  let startAfter: ((ready: Promise<void>) => void) | undefined;
   let beforeRequest: (() => Promise<unknown>) | undefined;
   if (import.meta.env.VITE_API_MODE === 'msw') {
     // `?demo=1` is read and dropped here, before the router starts (T-174).
@@ -90,7 +91,10 @@ function boot() {
     }
     // A signed-out visitor's first page paints without mock data, so the mock market is built after
     // it; a signed-in one needs the worker at once for the session refresh.
-    const firstPage = knownSignedOut() ? afterFirstPaint() : Promise.resolve();
+    const firstPage = new Promise<void>((resolve) => {
+      if (knownSignedOut()) startAfter = (ready) => void ready.then(resolve);
+      else resolve();
+    });
     const started = firstPage.then(() => startMocks(demo));
     mocksReady = started;
     beforeRequest = () => started.then((ensureActive) => ensureActive());
@@ -106,6 +110,7 @@ function boot() {
     ...(beforeRequest ? { ready: beforeRequest } : {}),
   });
   const router = createAppRouter({ queryClient, apiClient });
+  startAfter?.(afterFirstPaint(router));
   // The trading store (ADR 0012): both backends send account frames (NSTOCK-0368).
   const { wsClient, quoteStore, orderUpdates, tradingStore } = createLiveQuotes(
     config,
