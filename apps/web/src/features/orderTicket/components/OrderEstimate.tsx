@@ -3,6 +3,7 @@ import { DigitRoll, Skeleton } from '@nthstock/ui';
 import { formatInr } from '@nthstock/utils';
 import { useWatch, type Control } from 'react-hook-form';
 import { useQuote } from '@/shared/hooks/useQuote';
+import { useCountedValue } from '@/shared/motion/useCountedValue';
 import { orderValue, type TicketFormValues } from '../model/ticketForm';
 import { strings } from '../strings';
 
@@ -16,6 +17,11 @@ export type OrderEstimateProps = {
   available: number | undefined;
   fundsLoading: boolean;
 };
+
+/** The amount counts to each new value as the quantity or price changes (A15). */
+function CountedAmount({ value }: { value: number }) {
+  return <DigitRoll value={formatInr(useCountedValue(value))} />;
+}
 
 /**
  * Required amount (buy) or estimated value (sell) and available cash, live (T-136): a market
@@ -44,7 +50,7 @@ export function OrderEstimate({
             className="font-mono text-body font-semibold text-ink tabular-nums"
             data-testid="order-value"
           >
-            {value === null ? strings.form.unknownAmount : <DigitRoll value={formatInr(value)} />}
+            {value === null ? strings.form.unknownAmount : <CountedAmount value={value} />}
           </dd>
         </div>
         <div className="grid gap-0.5 text-right">
