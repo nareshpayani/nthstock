@@ -93,6 +93,14 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
+// jsdom has no AnimationEvent, so the init's animationName is dropped; set it on the event.
+function animationEnd(target: Element, animationName: string) {
+  // React listens on the vendor-prefixed name when jsdom's style object exposes WebkitAnimation.
+  const type = 'WebkitAnimation' in document.body.style ? 'webkitAnimationEnd' : 'animationend';
+  const event = Object.assign(new Event(type, { bubbles: true }), { animationName });
+  fireEvent(target, event);
+}
+
 describe('order ticket with the market open', () => {
   const mock = mockAt(OPEN_MS);
   beforeAll(() => mock.server.listen({ onUnhandledFrame: 'error' }));
@@ -298,6 +306,15 @@ describe('order ticket with the market open', () => {
       // Edit goes back with the values kept.
       fireEvent.click(within(summary).getByRole('button', { name: 'Edit' }));
       await waitFor(() => expect(qtyInput()).toHaveValue('2'));
+
+      // The step-back slide survives a child's animation end and clears on its own.
+      const slide = qtyInput().closest('.animate-step-back') as HTMLElement;
+      expect(slide).not.toBeNull();
+      animationEnd(qtyInput(), 'nth-digit-up');
+      expect(slide).toHaveClass('animate-step-back');
+      animationEnd(slide, 'nth-step-back');
+      expect(slide).not.toHaveClass('animate-step-back');
+
       fireEvent.click(screen.getByRole('button', { name: 'Buy INFY' }));
       const confirm = await screen.findByRole('button', { name: 'Confirm' });
       fireEvent.click(confirm);
