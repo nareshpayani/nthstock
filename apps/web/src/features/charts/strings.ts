@@ -44,6 +44,91 @@ export const strings = {
   errorTitle: 'Chart unavailable',
   errorBody: 'The NIFTY 50 chart could not load.',
   retry: 'Retry',
+  /** The legend above the plot (NSTOCK-0460): TradingView-style one-letter labels. */
+  legend: { open: 'O', high: 'H', low: 'L', close: 'C', volume: 'Vol' },
+  /** Indicators menu (NSTOCK-0460). */
+  studies: {
+    button: 'Indicators',
+    // Starts with the visible text ("Indicators 2"), so voice control can name it (WCAG 2.5.3).
+    buttonLabel: (count: number) =>
+      count === 0 ? 'Indicators, none on' : `Indicators ${String(count)} on`,
+    heading: 'Show on the chart',
+    noVolume: 'An index trades no shares, so it has no volume',
+    names: {
+      volume: 'Volume',
+      sma20: 'Moving average 20',
+      sma50: 'Moving average 50',
+      ema20: 'Exponential average 20',
+      vwap: 'VWAP',
+      bollinger: 'Bollinger bands 20, 2',
+    },
+    hints: {
+      volume: 'Shares traded in each bar, under the price',
+      sma20: 'Average close of the last 20 bars; solid dark line',
+      sma50: 'Average close of the last 50 bars; dashed grey line',
+      ema20: 'Like the 20 average, but recent bars count more; dashed dark line',
+      vwap: 'Average price weighted by volume since the open; dotted dark line',
+      bollinger: 'A band two deviations around the 20 average; dotted grey lines',
+    },
+  },
+  /** The tool rail and drawings (NSTOCK-0461). */
+  drawing: {
+    rail: 'Drawing tools',
+    cursor: 'Crosshair: pan and zoom the chart',
+    tools: {
+      trend: 'Trend line',
+      horizontal: 'Horizontal line',
+      ray: 'Ray',
+      fib: 'Fibonacci retracement',
+      text: 'Text note',
+      measure: 'Measure',
+      zoom: 'Zoom to an area',
+    },
+    hints: {
+      trend: 'Tap the start, then the end, or drag between them',
+      horizontal: 'Tap a price to draw a line across',
+      ray: 'Tap the start, then a point it runs through',
+      fib: 'Tap the start of the move, then its end',
+      text: 'Tap where the note goes, then type it',
+      measure: 'Tap two points to measure between them',
+      zoom: 'Drag across the bars to zoom in on them',
+    },
+    magnet: 'Magnet: snap to open, high, low or close',
+    undo: 'Undo last drawing',
+    clear: 'Clear all drawings',
+    clearMeasure: 'Clear measure',
+    notSaved: "Drawings can't be saved on this device, so they last until you leave the page",
+    noteLabel: 'Note text',
+    bars: 'bars',
+    draw: 'Draw',
+  },
+  /** The full-screen chart (NSTOCK-0461). */
+  fullscreen: {
+    open: 'Open the chart full screen',
+    draw: 'Draw: open the chart full screen with the drawing tools',
+    close: 'Close full screen',
+    title: (name: string) => `${name} chart`,
+  },
+  /** Chart image and the clock (NSTOCK-0463). */
+  snapshot: {
+    save: 'Save the chart as an image',
+    share: 'Share the chart as an image',
+    saved: 'Chart image saved',
+    shared: 'Chart image shared',
+    failed: 'Could not make the chart image. Try again.',
+    brand: 'nthstock',
+  },
+  clock: { suffix: 'IST', label: (time: string) => `Time ${time} IST` },
+  /** Each indicator line's short name in the legend. */
+  studyShort: {
+    sma20: 'SMA 20',
+    sma50: 'SMA 50',
+    ema20: 'EMA 20',
+    vwap: 'VWAP',
+    'bollinger-upper': 'BB U',
+    'bollinger-middle': 'BB 20',
+    'bollinger-lower': 'BB L',
+  } as Record<string, string>,
   tooltip: {
     price: 'Price',
     level: 'Level',

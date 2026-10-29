@@ -85,7 +85,7 @@ export function WatchlistTabs({
   const full = lists.length >= WATCHLIST_MAX_LISTS;
   const only = lists.length <= 1;
   return (
-    <div className="flex items-center gap-1 border-b border-line pr-2">
+    <div className="flex items-center gap-2 border-b border-line pr-2">
       <TabsList
         ref={listRef}
         aria-label={strings.tabsLabel}

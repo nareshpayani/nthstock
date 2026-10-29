@@ -2,7 +2,12 @@ import { Button, useToast } from '@nthstock/ui';
 import { useNavigate } from '@tanstack/react-router';
 import { useEffect, useEffectEvent, useState } from 'react';
 import { useApiClient } from '@/shared/lib/apiClientContext';
-import { clearDemoPending, DEMO_PENDING_STORAGE_KEY, startDemo } from '@/shared/lib/demoSimulator';
+import {
+  clearDemoPending,
+  DEMO_PENDING_STORAGE_KEY,
+  mockBackendStarted,
+  startDemo,
+} from '@/shared/lib/demoSimulator';
 import { useRequestOtp, useVerifyOtp } from '../hooks/useAuthMutations';
 import { authFailure } from '../model/authError';
 import { DEMO_INSTRUMENT, DEMO_MOBILE } from '../model/demo';
@@ -38,7 +43,9 @@ export function TryDemo({ devOtp, autoStart = false }: { devOtp: string; autoSta
   const run = async (resumed = false) => {
     try {
       // Outside demo mode the page reloads with the demo account first, then carries on in
-      // `resume`. A second reload would loop, so after a resume it counts as a failure.
+      // `resume`. A second reload would loop, so after a resume it counts as a failure. The mock
+      // worker sets up demo mode, and on a cold load it may still be starting (NSTOCK-0469).
+      await mockBackendStarted();
       if (startDemo() === 'reloading') {
         if (!resumed) return;
         throw new Error('demo mode did not start after the reload');

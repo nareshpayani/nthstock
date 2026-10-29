@@ -1,5 +1,6 @@
 import { DigitRoll, cn } from '@nthstock/ui';
 import { formatChange, formatInr, formatPct } from '@nthstock/utils';
+import { useCountedValue } from '@/shared/motion/useCountedValue';
 
 export type PnlAmountProps = {
   /** Profit (positive) or loss (negative) in paise. */
@@ -18,6 +19,11 @@ const tones = { up: 'text-up', down: 'text-down', flat: 'text-ink-muted' } as co
 /** "+₹1,234.50" / "-₹12.30" / "₹0.00": the sign is always in the text. */
 export function signedInr(paise: number): string {
   return paise > 0 ? `+${formatInr(paise)}` : formatInr(paise);
+}
+
+/** A live amount that counts to each new value as its digits roll (A15). */
+function CountedInr({ value }: { value: number }) {
+  return <DigitRoll value={signedInr(useCountedValue(value))} />;
 }
 
 /**
@@ -55,7 +61,7 @@ export function PnlAmount({
         {roll ? (
           <>
             {`${arrow} `}
-            <DigitRoll value={signedInr(value)} />
+            <CountedInr value={value} />
             {percent}
           </>
         ) : (

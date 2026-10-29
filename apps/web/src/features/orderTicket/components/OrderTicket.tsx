@@ -6,7 +6,7 @@ import type {
   PlaceOrderRequest,
   TrailingStop,
 } from '@nthstock/contracts';
-import { ErrorState, useToast } from '@nthstock/ui';
+import { ErrorState, cn, useToast } from '@nthstock/ui';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
@@ -23,6 +23,7 @@ import { useMarketOpen } from '@/shared/hooks/useMarketOpen';
 import { useQuote } from '@/shared/hooks/useQuote';
 import { useApiClient } from '@/shared/lib/apiClientContext';
 import { claimFillToast } from '@/shared/lib/fillToasts';
+import { fillCue, orderCue, useSuccessHold } from '@/shared/motion/orderCues';
 import { MarketSessionContext } from '@/shared/lib/marketSessionContext';
 import { useQuoteStore } from '@/shared/lib/quoteStoreContext';
 import type { TicketIntent } from '@/shared/lib/ticketIntentStore';
@@ -122,6 +123,10 @@ function TicketFlow({
   const modifyOrder = useModifyOrder();
   const modifying = intent.modify;
   const [review, setReview] = useState<Review | null>(null);
+  // Confirm draws its tick before the sheet closes (A17).
+  const [placed, holdThenClose] = useSuccessHold();
+  // Review slides in from the right and Edit slides the form back from the left (A14).
+  const [steppedBack, setSteppedBack] = useState(false);
   const [error, setError] = useState<TicketError | null>(null);
   const [trailingMode, setTrailingMode] = useState(false);
   const [attach, setAttach] = useState<AttachState>(initialAttachState);
@@ -253,9 +258,11 @@ function TicketFlow({
   const onPlaced = (order: Order) => {
     // An immediate fill may already have been toasted from its orderUpdate (T-147).
     if (order.status === 'EXECUTED' && !claimFillToast(order.id)) {
-      onClose();
+      // The live fill already toasted and played its cue.
+      holdThenClose(onClose);
       return;
     }
+    orderCue(order.status === 'EXECUTED' ? fillCue(order.side) : 'placed');
     toast.show({
       ...successToast(order),
       tone: 'success',
@@ -268,15 +275,16 @@ function TicketFlow({
         ),
       },
     });
-    onClose();
+    holdThenClose(onClose);
   };
 
   const onModified = (order: Order) => {
     const filled = order.status === 'EXECUTED';
     if (!filled || claimFillToast(order.id)) {
+      orderCue(filled ? fillCue(order.side) : 'placed');
       toast.show({ ...(filled ? successToast(order) : modifiedToast(order)), tone: 'success' });
     }
-    onClose();
+    holdThenClose(onClose);
   };
 
   const onConfirm = () => {
@@ -287,6 +295,7 @@ function TicketFlow({
         {
           onSuccess: onModified,
           onError: (failure) => {
+            orderCue('rejected');
             setReview(null);
             setError(describeOrderError(failure, 'modify'));
           },
@@ -298,6 +307,7 @@ function TicketFlow({
       onSuccess: onPlaced,
       onError: (failure) => {
         // Back to the form with every value kept and the reason above the button.
+        orderCue('rejected');
         setReview(null);
         setError(describeOrderError(failure));
       },
@@ -305,7 +315,7 @@ function TicketFlow({
   };
 
   return (
-    <div className="grid">
+    <div className="grid overflow-x-clip">
       <div className="grid gap-1 border-b border-line px-4 py-3">
         {/* The sheet's title already names the stock, so a phone keeps this to one line. */}
         <p className="truncate text-body text-ink-muted max-md:hidden">{instrument.name}</p>
@@ -361,49 +371,65 @@ function TicketFlow({
           }
         />
       ) : review ? (
-        <ReviewStep
-          request={review.request}
-          symbol={instrument.symbol}
-          exchange={instrument.exchange}
-          ltp={review.ltp}
-          value={review.value}
-          amoDate={amoDate}
-          mode={modifying ? 'modify' : 'place'}
-          {...(review.attached ? { attached: review.attached } : {})}
-          placing={placeOrder.isPending || modifyOrder.isPending}
-          onEdit={() => setReview(null)}
-          onConfirm={onConfirm}
-        />
+        <div className="animate-step-forward">
+          <ReviewStep
+            request={review.request}
+            symbol={instrument.symbol}
+            exchange={instrument.exchange}
+            ltp={review.ltp}
+            value={review.value}
+            amoDate={amoDate}
+            mode={modifying ? 'modify' : 'place'}
+            {...(review.attached ? { attached: review.attached } : {})}
+            placing={placeOrder.isPending || modifyOrder.isPending}
+            placed={placed}
+            onEdit={() => {
+              setSteppedBack(true);
+              setReview(null);
+            }}
+            onConfirm={onConfirm}
+          />
+        </div>
       ) : (
-        <TicketForm
-          form={form}
-          instrument={instrument}
-          marketOpen={marketOpen}
-          amoDate={amoDate}
-          modifying={modifying}
-          snapshotLtp={snapshot.data?.ltp}
-          available={funds.data?.available}
-          fundsLoading={funds.isPending}
-          error={error}
-          onSubmit={(event) => void onSubmit(event)}
-          trailing={trailingOffer}
-          compact={intent.compact === true && !modifying}
-          attachNeedsAttention={!modifying && attach.enabled && attach.touched}
-          attach={
-            modifying ? undefined : (
-              <AttachedStop
-                control={control}
-                symbol={intent.symbol}
-                exchange={intent.exchange}
-                snapshotLtp={snapshot.data?.ltp}
-                trailingAvailable={trailingAvailable}
-                activeStops={activeStops}
-                state={attach}
-                onState={setAttach}
-              />
-            )
-          }
-        />
+        <div
+          className={cn(steppedBack && 'animate-step-back')}
+          onAnimationEnd={(e) => {
+            // Child animations (digit rolls, content-in) bubble here and end first; only the
+            // wrapper's own slide resets. Played once for the user's Edit; remounts stay still.
+            if (e.target !== e.currentTarget || e.animationName !== 'nth-step-back') return;
+            setSteppedBack(false);
+          }}
+        >
+          <TicketForm
+            form={form}
+            instrument={instrument}
+            marketOpen={marketOpen}
+            amoDate={amoDate}
+            modifying={modifying}
+            snapshotLtp={snapshot.data?.ltp}
+            available={funds.data?.available}
+            fundsLoading={funds.isPending}
+            error={error}
+            onSubmit={(event) => void onSubmit(event)}
+            trailing={trailingOffer}
+            compact={intent.compact === true && !modifying}
+            attachNeedsAttention={!modifying && attach.enabled && attach.touched}
+            attach={
+              modifying ? undefined : (
+                <AttachedStop
+                  control={control}
+                  symbol={intent.symbol}
+                  exchange={intent.exchange}
+                  snapshotLtp={snapshot.data?.ltp}
+                  trailingAvailable={trailingAvailable}
+                  activeStops={activeStops}
+                  state={attach}
+                  onState={setAttach}
+                />
+              )
+            }
+          />
+        </div>
       )}
     </div>
   );

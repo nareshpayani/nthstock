@@ -1,6 +1,6 @@
 import { vi } from 'vitest';
 
-type MockSeriesType = 'Area' | 'Candlestick' | 'Line' | 'Bar';
+type MockSeriesType = 'Area' | 'Candlestick' | 'Line' | 'Bar' | 'Histogram';
 
 /**
  * A stand-in for `lightweight-charts` in jsdom (no canvas). Use it with
@@ -27,6 +27,9 @@ type FakeSeries = {
   detachPrimitive: (primitive: FakePrimitive) => void;
   priceToCoordinate: (price: number) => number | null;
   coordinateToPrice: (y: number) => number | null;
+  priceScale: () => { applyOptions: ReturnType<typeof vi.fn> };
+  /** Options the series was added with (studies are told apart by these). */
+  addedWith: Record<string, unknown> | undefined;
 };
 type FakeChart = {
   options: unknown;
@@ -85,6 +88,8 @@ export const AreaSeries = { type: 'Area' as const };
 export const CandlestickSeries = { type: 'Candlestick' as const };
 export const LineSeries = { type: 'Line' as const };
 export const BarSeries = { type: 'Bar' as const };
+export const HistogramSeries = { type: 'Histogram' as const };
+export const LastPriceAnimationMode = { Disabled: 0, Continuous: 1, OnDataUpdate: 2 };
 export const ColorType = { Solid: 'solid' };
 export const CrosshairMode = { Normal: 0, Magnet: 1, Hidden: 2 };
 export const TickMarkType = { Year: 0, Month: 1, DayOfMonth: 2, Time: 3, TimeWithSeconds: 4 };
@@ -110,9 +115,11 @@ export function createChart(_host: HTMLElement, options: unknown) {
   };
   chartsMock.charts.push(chart);
   return {
-    addSeries(definition: { type: MockSeriesType }) {
+    addSeries(definition: { type: MockSeriesType }, addedWith?: Record<string, unknown>) {
       const series: FakeSeries = {
         type: definition.type,
+        addedWith,
+        priceScale: () => ({ applyOptions: vi.fn() }),
         setData: vi.fn(),
         update: vi.fn(),
         applyOptions: vi.fn(),
@@ -149,6 +156,9 @@ export function createChart(_host: HTMLElement, options: unknown) {
       chart.series.push(series);
       return series;
     },
+    removeSeries: (series: FakeSeries) => {
+      chart.series = chart.series.filter((drawn) => drawn !== series);
+    },
     resize: chart.resize,
     remove: chart.remove,
     options: () => chart.options,
@@ -161,6 +171,11 @@ export function createChart(_host: HTMLElement, options: unknown) {
       chart.crosshair.delete(handler),
     timeScale: () => ({
       fitContent: chart.fitContent,
+      subscribeVisibleLogicalRangeChange: vi.fn(),
+      unsubscribeVisibleLogicalRangeChange: vi.fn(),
+      // Bar i at x = 10 i, the fake's 10 px bar spacing.
+      logicalToCoordinate: (logical: number) => logical * 10,
+      coordinateToLogical: (x: number) => x / 10,
       options: () => ({ barSpacing: 10 }),
       getVisibleLogicalRange: () => ({ ...chart.logicalRange }),
       setVisibleLogicalRange: (range: { from: number; to: number }) => {
@@ -183,6 +198,7 @@ export function createChart(_host: HTMLElement, options: unknown) {
       setAutoScale: (on: boolean) => {
         chartsMock.scale.autoScale = on;
       },
+      applyOptions: vi.fn(),
     }),
   };
 }

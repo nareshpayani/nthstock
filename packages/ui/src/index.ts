@@ -1,11 +1,21 @@
 export { cn, type ClassValue } from './lib/cn.js';
+export {
+  animateSpring,
+  isAtRest,
+  stepSpring,
+  type SpringOptions,
+  type SpringState,
+} from './lib/spring.js';
 export { TouchTargets, useTouchTargets } from './lib/touchTargets.js';
 export { createIcon, type IconComponent, type IconProps } from './icons/createIcon.js';
 export * from './icons/icons.js';
 export { Logo, type LogoProps } from './icons/Logo.js';
 export { Button, buttonVariants, type ButtonProps } from './components/Button.js';
 export { IconButton, iconButtonVariants, type IconButtonProps } from './components/IconButton.js';
+export { RulerSlider, type RulerSliderProps } from './components/RulerSlider.js';
+export { PulseDot, type PulseDotProps } from './components/PulseDot.js';
 export { Spinner } from './components/Spinner.js';
+export { SuccessCheck } from './components/SuccessCheck.js';
 export {
   Field,
   useFieldControl,
@@ -30,7 +40,13 @@ export {
   DropdownMenuTrigger,
 } from './components/DropdownMenu.js';
 export { Tooltip, TooltipProvider, type TooltipProps } from './components/Tooltip.js';
-export { ToastProvider, useToast, type ToastMessage, type ToastTone } from './components/Toast.js';
+export {
+  ToastProvider,
+  useOptionalToast,
+  useToast,
+  type ToastMessage,
+  type ToastTone,
+} from './components/Toast.js';
 export {
   SegmentedControl,
   type SegmentOption,

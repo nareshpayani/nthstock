@@ -100,6 +100,9 @@ test('the guide fits a phone screen without sideways scrolling', async ({ page }
       page.getByRole('heading', { level: 1, name: 'nthstock documentation' }),
     ).toBeVisible();
     await expect(page.getByRole('tabpanel')).toBeVisible();
+    // The mock worker starts after the first paint. Let it take control before the next load: a
+    // load that lands while it is still installing is reloaded by MSW, mid-check.
+    await page.waitForFunction(() => navigator.serviceWorker.controller !== null);
     const overflow = await page.evaluate(
       () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
     );

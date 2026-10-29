@@ -1,6 +1,7 @@
 import { ErrorState, Skeleton, buttonVariants } from '@nthstock/ui';
 import { Link, useRouter, useRouterState, type ErrorComponentProps } from '@tanstack/react-router';
 import { useContext, useEffect } from 'react';
+import { useMarkFirstPaint } from '../firstPaint';
 import { isChunkLoadError, reloadForNewBuild, reloadWhenOnline } from '../staleBuild';
 import { strings } from '../strings';
 import { InstrumentSkeleton, ShellSkeleton } from './PageSkeletons';
@@ -16,6 +17,7 @@ const CENTERED = 'grid min-h-[calc(100dvh-10rem)] w-full place-items-center';
  */
 export function RouteError({ error, reset }: ErrorComponentProps) {
   const router = useRouter();
+  useMarkFirstPaint();
   const staleBuild = isChunkLoadError(error);
   useEffect(() => {
     if (staleBuild) reloadForNewBuild();
@@ -47,6 +49,7 @@ export function RouteError({ error, reset }: ErrorComponentProps) {
  * load) the skeleton draws the shell too.
  */
 export function RoutePending() {
+  useMarkFirstPaint();
   const inShell = useContext(InShellContext);
   const instrument = useRouterState({
     select: (state) => state.location.pathname.startsWith('/stocks/'),
@@ -68,6 +71,7 @@ export function RoutePending() {
 }
 
 export function NotFound() {
+  useMarkFirstPaint();
   return (
     <div className={CENTERED}>
       <div className="grid w-full max-w-lg justify-items-center gap-3 rounded-lg border border-line bg-surface px-4 py-10 text-center">

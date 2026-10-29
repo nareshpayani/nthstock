@@ -4,6 +4,7 @@ import { Button, IconAlert, SegmentedControl, useToast } from '@nthstock/ui';
 import { formatInr } from '@nthstock/utils';
 import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import { useQuote } from '@/shared/hooks/useQuote';
+import { orderCue, useSuccessHold } from '@/shared/motion/orderCues';
 import { usePlaceTrailingStop } from '../hooks/usePlaceTrailingStop';
 import {
   checkTrailing,
@@ -54,6 +55,7 @@ export function TrailingStopForm({
   );
   const [touched, setTouched] = useState(false);
   const [reviewing, setReviewing] = useState(false);
+  const [placed, holdThenClose] = useSuccessHold();
   const [failure, setFailure] = useState<string | null>(null);
   const heading = useRef<HTMLHeadingElement>(null);
   const headingId = useId();
@@ -96,9 +98,11 @@ export function TrailingStopForm({
           ),
           tone: 'success',
         });
-        onPlaced();
+        orderCue('stopSet');
+        holdThenClose(onPlaced);
       },
       onError: (error) => {
+        orderCue('rejected');
         setReviewing(false);
         setFailure(
           isApiError(error) && error.kind !== 'network' && error.status < 500
@@ -131,11 +135,11 @@ export function TrailingStopForm({
             variant="secondary"
             size="lg"
             onClick={() => setReviewing(false)}
-            disabled={place.isPending}
+            disabled={place.isPending || placed}
           >
             {strings.review.edit}
           </Button>
-          <Button size="lg" loading={place.isPending} onClick={onConfirm}>
+          <Button size="lg" loading={place.isPending} success={placed} onClick={onConfirm}>
             {strings.trailing.confirm}
           </Button>
         </div>

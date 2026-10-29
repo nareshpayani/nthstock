@@ -1,5 +1,25 @@
 import { useCallback, useRef } from 'react';
 
+/** The full detent leaves this much (px) of the page showing above the sheet. */
+const FULL_GAP = 12;
+
+/**
+ * The one place a sheet's `max-height` is written. It reads the sheet's `data-detent` (set by the
+ * drag) and `data-keyboard-viewport` (the visible height in px while the keyboard is up), so the
+ * full detent and the keyboard cap never overwrite each other.
+ */
+export function syncSheetMaxHeight(element: HTMLElement): void {
+  const full = element.dataset.detent === 'full';
+  const visible = Number(element.dataset.keyboardViewport ?? 0);
+  if (visible > 0) {
+    element.style.maxHeight = `${String(Math.round(full ? visible - FULL_GAP : visible * 0.9))}px`;
+  } else {
+    element.style.maxHeight = full
+      ? `calc(100dvh - env(safe-area-inset-top) - ${String(FULL_GAP)}px)`
+      : '';
+  }
+}
+
 /**
  * Keeps a bottom sheet above the on-screen keyboard (SPEC-CR-1 §5.5). iPhone Safari lays fixed
  * elements out against the full screen and lets the keyboard cover them, so the sheet reads the
@@ -21,8 +41,10 @@ export function useKeyboardInset(enabled: boolean): (element: HTMLElement | null
         frame = 0;
         const inset = Math.max(0, window.innerHeight - viewport.height - viewport.offsetTop);
         element.style.bottom = inset > 0 ? `${String(Math.round(inset))}px` : '';
-        element.style.maxHeight = inset > 0 ? `${String(Math.round(viewport.height * 0.9))}px` : '';
         element.dataset.keyboard = inset > 0 ? 'open' : 'closed';
+        if (inset > 0) element.dataset.keyboardViewport = String(viewport.height);
+        else delete element.dataset.keyboardViewport;
+        syncSheetMaxHeight(element);
       };
       // A keyboard animation fires many resize events: place once per frame.
       const place = () => {
@@ -39,8 +61,9 @@ export function useKeyboardInset(enabled: boolean): (element: HTMLElement | null
         viewport.removeEventListener('scroll', place);
         cancelAnimationFrame(frame);
         element.style.bottom = '';
-        element.style.maxHeight = '';
         delete element.dataset.keyboard;
+        delete element.dataset.keyboardViewport;
+        syncSheetMaxHeight(element);
       };
     },
     [enabled],

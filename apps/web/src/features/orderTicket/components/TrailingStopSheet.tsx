@@ -9,6 +9,7 @@ import { PnlAmount } from '@/shared/components/PnlAmount';
 import { useOpenTicket } from '@/shared/hooks/useOpenTicket';
 import { useApiClient } from '@/shared/lib/apiClientContext';
 import { useQuote } from '@/shared/hooks/useQuote';
+import { orderCue, useSuccessHold } from '@/shared/motion/orderCues';
 import { usePositionTrailingStop } from '@/shared/hooks/useTrailingStops';
 import { useTradingSelector } from '@/shared/hooks/useTradingSelector';
 import type { TrailingSheetTarget } from '@/shared/lib/trailingSheetStore';
@@ -142,6 +143,7 @@ function SheetBody({
   );
   const [touched, setTouched] = useState(false);
   const [failure, setFailure] = useState<string | null>(null);
+  const [placed, holdThenClose] = useSuccessHold();
   // A switch to rupees before the first price leaves the field empty; it fills, once, when the price
   // lands (state adjusted during render, so there is no effect and no extra paint).
   const [awaitingDefault, setAwaitingDefault] = useState(false);
@@ -197,9 +199,13 @@ function SheetBody({
                 : strings.editor.setNoPrice,
           tone: 'success',
         });
-        onClose();
+        orderCue('stopSet');
+        holdThenClose(onClose);
       },
-      onError: (error) => setFailure(failureText(error)),
+      onError: (error) => {
+        orderCue('rejected');
+        setFailure(failureText(error));
+      },
     });
   };
 
@@ -220,9 +226,13 @@ function SheetBody({
               : strings.sheet.updatedDescription(trailText(updated.trail)),
             tone: 'success',
           });
+          orderCue('stopSet');
           onClose();
         },
-        onError: (error) => setFailure(failureText(error)),
+        onError: (error) => {
+          orderCue('rejected');
+          setFailure(failureText(error));
+        },
       },
     );
   };
@@ -241,9 +251,13 @@ function SheetBody({
                 : strings.editor.movedDescription(formatInr(updated.stopPrice)),
             tone: 'success',
           });
+          orderCue('stopSet');
           onClose();
         },
-        onError: (error) => setFailure(failureText(error)),
+        onError: (error) => {
+          orderCue('rejected');
+          setFailure(failureText(error));
+        },
       },
     );
   };
@@ -257,9 +271,13 @@ function SheetBody({
           description: strings.sheet.cancelledDescription(target.symbol),
           tone: 'success',
         });
+        orderCue('cancelled');
         onClose();
       },
-      onError: (error) => setFailure(failureText(error)),
+      onError: (error) => {
+        orderCue('rejected');
+        setFailure(failureText(error));
+      },
     });
   };
 
@@ -344,7 +362,7 @@ function SheetBody({
         </div>
       ) : null}
 
-      {active ? (
+      {active && !placed ? (
         changeable ? (
           <div className="grid gap-2">
             <Button
@@ -374,7 +392,14 @@ function SheetBody({
           </div>
         ) : null
       ) : (
-        <Button size="lg" block loading={place.isPending} disabled={busy} onClick={onSet}>
+        <Button
+          size="lg"
+          block
+          loading={place.isPending}
+          success={placed}
+          disabled={busy || placed}
+          onClick={onSet}
+        >
           {strings.sheet.set}
         </Button>
       )}

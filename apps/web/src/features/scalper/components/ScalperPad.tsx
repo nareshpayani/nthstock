@@ -5,7 +5,9 @@ import { formatInr } from '@nthstock/utils';
 import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { useFocusedDepth } from '@/shared/hooks/useFocusedDepth';
 import { useTradingSelector } from '@/shared/hooks/useTradingSelector';
+import { SoundToggle } from '@/shared/components/SoundToggle';
 import { claimFillToast, fillEventKey } from '@/shared/lib/fillToasts';
+import { fillCue, orderCue } from '@/shared/motion/orderCues';
 import { useArming, type DisarmReason } from '../hooks/useArming';
 import { useClosePosition } from '../hooks/useClosePosition';
 import { useScalpOrder } from '../hooks/useScalpOrder';
@@ -88,6 +90,7 @@ export function ScalperPad({ instrument }: ScalperPadProps) {
     const description = strings.toast.description(order.side, order.filledQty, symbol, price);
     if (next.tone === 'filled' || next.tone === 'partial') {
       if (!claimFillToast(fillEventKey(order))) return;
+      orderCue(fillCue(order.side));
       const title = closing
         ? next.tone === 'filled'
           ? strings.toast.closed
@@ -97,6 +100,7 @@ export function ScalperPad({ instrument }: ScalperPadProps) {
           : strings.toast.partial;
       toast.show({ title, description: closing ? next.text : description, tone: 'success' });
     } else {
+      if (next.tone === 'rejected') orderCue('rejected');
       const title = next.tone === 'rejected' ? strings.toast.rejected : strings.toast.unfilled;
       toast.show({
         title,
@@ -110,6 +114,7 @@ export function ScalperPad({ instrument }: ScalperPadProps) {
     const refused = isApiError(error) && error.kind !== 'network' && error.status < 500;
     const text = refused ? strings.ack.rejected(error.message) : strings.ack.failed;
     setAck({ tone: 'rejected', text });
+    orderCue('rejected');
     toast.show({ title: strings.toast.rejected, description: text, tone: 'error' });
   };
 
@@ -218,24 +223,27 @@ export function ScalperPad({ instrument }: ScalperPadProps) {
             )}
           />
         </div>
-        <button
-          type="button"
-          role="switch"
-          aria-checked={armed}
-          aria-describedby={armDescription}
-          onClick={() => setArmed(!armed)}
-          className={cn(
-            TARGET,
-            'flex items-center gap-2 rounded-pill border px-3 text-body font-semibold',
-            armed ? 'border-down bg-down text-surface' : 'border-line bg-surface text-ink',
-          )}
-        >
-          <span
-            aria-hidden="true"
-            className={cn('size-2.5 rounded-pill', armed ? 'bg-surface' : 'bg-ink-muted')}
-          />
-          {strings.arm.label}
-        </button>
+        <div className="flex shrink-0 items-center gap-2">
+          <SoundToggle />
+          <button
+            type="button"
+            role="switch"
+            aria-checked={armed}
+            aria-describedby={armDescription}
+            onClick={() => setArmed(!armed)}
+            className={cn(
+              TARGET,
+              'flex items-center gap-2 rounded-pill border px-3 text-body font-semibold',
+              armed ? 'border-down bg-down text-surface' : 'border-line bg-surface text-ink',
+            )}
+          >
+            <span
+              aria-hidden="true"
+              className={cn('size-2.5 rounded-pill', armed ? 'bg-surface' : 'bg-ink-muted')}
+            />
+            {strings.arm.label}
+          </button>
+        </div>
         <span id={armDescription} hidden>
           {strings.arm.description}
         </span>

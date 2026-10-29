@@ -37,6 +37,9 @@ export const strings = {
   },
   chart: {
     title: 'Price chart',
+    /** NSTOCK-0461: the full-screen chart, and the phone's way in with the drawing tools. */
+    fullscreen: 'Open the chart full screen',
+    draw: 'Draw: open the chart full screen with the drawing tools',
     rangeLabel: 'Chart range',
     intervalLabel: 'Bar size',
     intervalOption: (bars: string) => `${bars} bars`,

@@ -8,6 +8,7 @@ import {
   IconClock,
   IconClose,
   IconUser,
+  PulseDot,
   cn,
   type IconComponent,
 } from '@nthstock/ui';
@@ -72,7 +73,7 @@ export function NotificationList({ items, onNavigate }: NotificationListProps) {
             )}
             {item.read ? null : (
               <span className="mt-2 flex items-start">
-                <span aria-hidden="true" className="size-2 rounded-pill bg-brand" />
+                <PulseDot />
                 <span className="sr-only">{strings.centre.unread}</span>
               </span>
             )}

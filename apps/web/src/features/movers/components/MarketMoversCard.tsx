@@ -62,6 +62,39 @@ function MoversRows({ index, direction }: { index: MoversIndex; direction: Mover
   );
 }
 
+/**
+ * The top movers of an index (the Nifty 50 by default) as plain rows, for a page that brings its own tabs: the phone
+ * Home's Gainers and Losers (NSTOCK-0466).
+ */
+export function MoversList({
+  index,
+  direction,
+}: {
+  index: string | undefined;
+  direction: MoverDirection;
+}) {
+  return <MoversRows index={resolveMoversIndex(index)} direction={direction} />;
+}
+
+/** The index whose movers are listed, as the card's own switch draws it. */
+export function MoversIndexPicker({
+  index,
+  onIndexChange,
+}: {
+  index: string | undefined;
+  onIndexChange: (index: string) => void;
+}) {
+  return (
+    <SegmentedControl
+      label={strings.indexLabel}
+      size="sm"
+      value={resolveMoversIndex(index).value}
+      onValueChange={onIndexChange}
+      options={MOVERS_INDICES.map(({ value, label }) => ({ value, label }))}
+    />
+  );
+}
+
 export type MarketMoversCardProps = {
   /** Index symbol from the URL; unknown values show the Nifty 50. */
   index: string | undefined;
@@ -84,15 +117,7 @@ export function MarketMoversCard({
   return (
     <Card
       title={strings.title}
-      aside={
-        <SegmentedControl
-          label={strings.indexLabel}
-          size="sm"
-          value={active.value}
-          onValueChange={onIndexChange}
-          options={MOVERS_INDICES.map(({ value, label }) => ({ value, label }))}
-        />
-      }
+      aside={<MoversIndexPicker index={active.value} onIndexChange={onIndexChange} />}
     >
       <Tabs
         value={direction}

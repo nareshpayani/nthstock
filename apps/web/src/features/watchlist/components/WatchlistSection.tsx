@@ -33,6 +33,11 @@ const WatchlistDialogs = lazy(() =>
 export type WatchlistSectionProps = {
   /** Called by "Add stock"; the shell focuses the search box. */
   onAddStock: () => void;
+  /**
+   * Inside a card that already names it (the phone Home's Watchlist tab, NSTOCK-0466): no border
+   * and no collapsible title row, only the list tabs and rows.
+   */
+  bare?: boolean;
 };
 
 /**
@@ -41,7 +46,7 @@ export type WatchlistSectionProps = {
  * the rail still renders when storage throws (T-027). Changes are announced in a polite live
  * region (T-122).
  */
-export function WatchlistSection({ onAddStock }: WatchlistSectionProps) {
+export function WatchlistSection({ onAddStock, bare = false }: WatchlistSectionProps) {
   const [collapsed, setCollapsed] = useState(() => safeStorage.get(COLLAPSED_KEY) === '1');
   const [dialog, setDialog] = useState<WatchlistDialogState | null>(null);
   const panelId = useId();
@@ -78,7 +83,7 @@ export function WatchlistSection({ onAddStock }: WatchlistSectionProps) {
             to="/login"
             search={{ redirect: here }}
             aria-label={strings.signedOut.loginLabel}
-            className={buttonVariants({ size: 'sm' })}
+            className={cn(buttonVariants({ size: 'sm' }), 'max-md:min-h-11')}
           >
             {strings.signedOut.login}
           </Link>
@@ -127,8 +132,11 @@ export function WatchlistSection({ onAddStock }: WatchlistSectionProps) {
   }
 
   return (
-    <section aria-label={strings.title} className="rounded-lg border border-line bg-surface">
-      <h2>
+    <section
+      aria-label={strings.title}
+      className={bare ? undefined : 'rounded-lg border border-line bg-surface'}
+    >
+      <h2 hidden={bare}>
         <button
           type="button"
           aria-expanded={!collapsed}
@@ -147,7 +155,11 @@ export function WatchlistSection({ onAddStock }: WatchlistSectionProps) {
           />
         </button>
       </h2>
-      <div id={panelId} hidden={collapsed} className="border-t border-line">
+      <div
+        id={panelId}
+        hidden={collapsed && !bare}
+        className={bare ? undefined : 'border-t border-line'}
+      >
         {body}
       </div>
       <p role="status" className="sr-only">

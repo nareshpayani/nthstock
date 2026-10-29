@@ -13,6 +13,9 @@ export const routeDefaults = {
   defaultPendingComponent: RoutePending,
   defaultNotFoundComponent: NotFound,
   defaultPendingMs: 150,
+  // Deliberately short: the old 500 ms hold delayed every page that loaded just after the 150 ms
+  // mark; about one `motion.base` stops the skeleton flashing for a few frames instead.
+  defaultPendingMinMs: 180,
 } as const;
 
 export type AppRouterOptions = {

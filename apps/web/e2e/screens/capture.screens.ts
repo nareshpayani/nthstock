@@ -142,14 +142,17 @@ async function capture(
     // ?demo=1 seeds the demo user's watchlists and holdings (sessionStorage, so not in the saved
     // login state); the app drops the parameter at once.
     await page.goto(screen.authed ? `${screen.path}?demo=1` : screen.path, { waitUntil: 'commit' });
-    // The mock market takes its starting prices from the page clock as MSW starts, so page time
-    // stays put until the MSW worker controls the page (it starts in real time, no timers needed).
+    // A signed-out page starts the MSW worker after its first paint, capped by a page timer
+    // (NSTOCK-0469), and the paused clock freezes both the frames and that timer. So page time
+    // advances in small steps until the worker controls the page; the frozen clock alone would
+    // leave the two waiting on each other.
     const mswDeadline = Date.now() + 15_000;
     while (
       !(await page.evaluate(() => navigator.serviceWorker.controller !== null).catch(() => false))
     ) {
       if (Date.now() > mswDeadline) throw new Error('the mock service worker did not start');
-      await page.waitForTimeout(50);
+      await page.clock.runFor(FAKE_TIME_STEP_MS);
+      await page.waitForTimeout(STEP_PAUSE_MS);
     }
     // Small steps with a pause of real time after each, so mock replies (which travel through the
     // service worker in real time) land at the same page time on both sides.

@@ -18,6 +18,14 @@ export const strings = {
   form: {
     /** Offline (SPEC-CR-1 §7): the primary button is disabled and says why. */
     offline: "You're offline. Orders resume when you reconnect.",
+    /** The ruler under quantity and price on a phone (A8). */
+    ruler: {
+      qty: 'Adjust quantity',
+      price: 'Adjust price',
+      shares: (qty: number) => `${qty} ${qty === 1 ? 'share' : 'shares'}`,
+      qtyBadge: 'Qty',
+      priceBadge: 'Price',
+    },
     moreOptions: 'More options',
     fillsImmediately: 'This will fill immediately: the price crosses the market.',
     label: 'Order details',

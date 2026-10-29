@@ -5,10 +5,12 @@ import {
   IconBell,
   IconButton,
   Sheet,
+  Skeleton,
   Tabs,
   TabsContent,
   TabsList,
   TabsTrigger,
+  useToast,
 } from '@nthstock/ui';
 import { useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
@@ -40,22 +42,34 @@ function SignedInBell() {
   const markRead = useMarkNotificationsRead();
   const cancel = useCancelAlert();
   const [removing, setRemoving] = useState<ReadonlySet<string>>(new Set());
+  const toast = useToast();
   const unread = notifications.data?.unread ?? 0;
 
+  const markAllRead = async () => {
+    if (markRead.isPending) return;
+    try {
+      await markRead.mutateAsync(undefined);
+    } catch {
+      toast.show({ title: strings.centre.markReadError, tone: 'error' });
+    }
+  };
   const change = (next: boolean) => {
     setOpen(next);
-    if (next && unread > 0) markRead.mutate(undefined);
+    if (next && unread > 0) void markAllRead();
   };
-  const remove = (alert: PriceAlert) => {
+  const remove = async (alert: PriceAlert) => {
     setRemoving((ids) => new Set(ids).add(alert.id));
-    cancel.mutate(alert.id, {
-      onSettled: () =>
-        setRemoving((ids) => {
-          const next = new Set(ids);
-          next.delete(alert.id);
-          return next;
-        }),
-    });
+    try {
+      await cancel.mutateAsync(alert.id);
+    } catch {
+      toast.show({ title: strings.alerts.removeError(alert.symbol), tone: 'error' });
+    } finally {
+      setRemoving((ids) => {
+        const next = new Set(ids);
+        next.delete(alert.id);
+        return next;
+      });
+    }
   };
 
   return (
@@ -75,8 +89,14 @@ function SignedInBell() {
                 <span
                   aria-hidden="true"
                   data-testid="notification-badge"
-                  className="pointer-events-none absolute top-0.5 right-0.5 flex h-4 min-w-4 items-center justify-center rounded-pill bg-down px-1 text-[10px] leading-none font-semibold text-surface"
+                  className="pointer-events-none absolute top-0.5 right-0.5 isolate flex h-4 min-w-4 items-center justify-center rounded-pill bg-down px-1 text-[10px] leading-none font-semibold text-surface"
                 >
+                  {/* A ring pings out of the badge while anything is unread (NSTOCK-0462).
+                      The -z-10 ring sits behind the text only because the badge is `isolate`. */}
+                  <span
+                    data-part="ripple"
+                    className="absolute inset-0 -z-10 animate-ripple rounded-pill bg-down opacity-0 motion-reduce:hidden"
+                  />
                   {strings.bell.badge(unread)}
                 </span>
               ) : null}
@@ -91,28 +111,56 @@ function SignedInBell() {
           <TabsTrigger value="alerts">{strings.centre.tabs.alerts}</TabsTrigger>
         </TabsList>
         <TabsContent value="notifications">
-          {notifications.isError && !notifications.data ? (
+          {notifications.data ? (
+            <NotificationList items={notifications.data.items} onNavigate={() => setOpen(false)} />
+          ) : notifications.isError ? (
             <ErrorState
               title={strings.centre.loadError}
               retryLabel={strings.centre.retry}
               onRetry={() => void notifications.refetch()}
             />
           ) : (
-            <NotificationList
-              items={notifications.data?.items ?? []}
-              onNavigate={() => setOpen(false)}
-            />
+            <ListSkeleton />
           )}
           {notifications.data?.items.some((n) => !n.read) ? (
-            <Button variant="secondary" size="sm" onClick={() => markRead.mutate(undefined)}>
+            <Button
+              variant="secondary"
+              size="sm"
+              disabled={markRead.isPending}
+              onClick={() => void markAllRead()}
+            >
               {strings.centre.markAllRead}
             </Button>
           ) : null}
         </TabsContent>
         <TabsContent value="alerts">
-          <AlertList items={alerts.data?.items ?? []} onRemove={remove} removing={removing} />
+          {alerts.data ? (
+            <AlertList
+              items={alerts.data.items}
+              onRemove={(a) => void remove(a)}
+              removing={removing}
+            />
+          ) : alerts.isError ? (
+            <ErrorState
+              title={strings.centre.alertsLoadError}
+              retryLabel={strings.centre.retry}
+              onRetry={() => void alerts.refetch()}
+            />
+          ) : (
+            <ListSkeleton />
+          )}
         </TabsContent>
       </Tabs>
     </Sheet>
+  );
+}
+
+function ListSkeleton() {
+  return (
+    <div role="status" aria-label={strings.centre.loading} className="grid gap-3 py-2">
+      <Skeleton className="h-12 w-full" />
+      <Skeleton className="h-12 w-full" />
+      <Skeleton className="h-12 w-full" />
+    </div>
   );
 }

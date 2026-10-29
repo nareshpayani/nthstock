@@ -199,3 +199,43 @@ export const IconEdit = /* @__PURE__ */ createIcon('edit', () => (
 export const IconTrash = /* @__PURE__ */ createIcon('trash', () => (
   <path d="M4.5 7h15M9.5 7V4.5h5V7m-8 0 .8 12.5h9.4L17.5 7M10 11v5M14 11v5" />
 ));
+
+export const IconSound = /* @__PURE__ */ createIcon('sound', () => (
+  <>
+    <path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4Z" />
+    <path d="M15.5 9a4.2 4.2 0 0 1 0 6M18 6.5a7.8 7.8 0 0 1 0 11" />
+  </>
+));
+
+export const IconSoundOff = /* @__PURE__ */ createIcon('sound-off', () => (
+  <>
+    <path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4Z" />
+    <path d="m16 9.5 5 5M21 9.5l-5 5" />
+  </>
+));
+
+// The phone tab bar (NSTOCK-0466): Home, Portfolio, Trade, Orders. Account uses IconUser.
+export const IconHome = /* @__PURE__ */ createIcon('home', () => (
+  <path d="M4 10.5 12 4l8 6.5V19a1 1 0 0 1-1 1h-4.5v-5.5h-5V20H5a1 1 0 0 1-1-1Z" />
+));
+
+export const IconPie = /* @__PURE__ */ createIcon('pie', () => (
+  <>
+    <path d="M20 13.5A8 8 0 1 1 10.5 4v9.5Z" />
+    <path d="M14 3.5a7 7 0 0 1 6.5 6.5H14Z" />
+  </>
+));
+
+export const IconOrders = /* @__PURE__ */ createIcon('orders', () => (
+  <>
+    <rect x="5" y="3.5" width="14" height="17" rx="2" />
+    <path d="M9 8.5h6M9 12h6M9 15.5h3.5" />
+  </>
+));
+
+export const IconTrade = /* @__PURE__ */ createIcon('trade', () => (
+  <>
+    <path d="M8 19.5v-15M4.5 8 8 4.5 11.5 8" />
+    <path d="M16 4.5v15M12.5 16l3.5 3.5 3.5-3.5" />
+  </>
+));

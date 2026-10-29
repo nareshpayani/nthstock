@@ -3,6 +3,8 @@ import { WATCHLIST_MAX_LISTS, WATCHLIST_MESSAGES, WATCHLIST_NAME_MAX } from '@nt
 const plural = (n: number, one: string, many: string) => `${String(n)} ${n === 1 ? one : many}`;
 
 export const strings = {
+  /** The phone Watchlist page's title (NSTOCK-0466). */
+  pageTitle: 'Watchlist',
   title: 'Watchlists',
   count: (n: number) => plural(n, 'stock', 'stocks'),
   tabsLabel: 'Your watchlists',
