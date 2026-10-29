@@ -22,6 +22,19 @@ function useBoxHeight<T extends HTMLElement>(): [RefObject<T | null>, number] {
   return [ref, height];
 }
 
+/**
+ * Everything outside the keepers, taken as high up the tree as it goes: making these inert leaves
+ * the keepers (the dialog, the toasts) usable while the rest of the page is not. Elements that are
+ * inert already are left out, so closing does not wake them.
+ */
+function outside(keepers: readonly Element[], parent: Element): HTMLElement[] {
+  return [...parent.children].flatMap((element) => {
+    if (keepers.includes(element)) return [];
+    if (keepers.some((keeper) => element.contains(keeper))) return outside(keepers, element);
+    return element instanceof HTMLElement && !element.hasAttribute('inert') ? [element] : [];
+  });
+}
+
 export type ChartWorkspaceProps = {
   /** "INFY" or "NIFTY 50": named in the dialog title. */
   name: string;
@@ -44,7 +57,7 @@ export type ChartWorkspaceProps = {
 /**
  * The full-screen chart (NSTOCK-0461): the whole window for the plot, the tool rail down its left
  * side, the controls along the top and the ranges along the bottom. A modal dialog over the page,
- * so it works the same on a phone (landscape too) and on a desktop. The page behind is inert while
+ * so it works the same on a phone (landscape too) and on a desktop. The page behind (all but the toasts) is inert while
  * it is open; Escape or Close leave it, and focus goes back to the button that opened it. It sits
  * on the overlay layer, so its menus (popover), toasts and an order ticket opened from it show above.
  */
@@ -72,13 +85,10 @@ export function ChartWorkspace({
     const overflow = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
     // Modal: the page behind can't be tabbed to, clicked or read while the chart is full screen.
-    const dialog = dialogRef.current;
-    const behind = [...document.body.children].filter(
-      (element): element is HTMLElement =>
-        element instanceof HTMLElement &&
-        !element.contains(dialog) &&
-        !element.hasAttribute('inert'),
+    const keepers = [dialogRef.current, ...document.querySelectorAll('[data-nth-toasts]')].filter(
+      (element): element is Element => element !== null,
     );
+    const behind = outside(keepers, document.body);
     for (const element of behind) element.setAttribute('inert', '');
     closeRef.current?.focus();
     const onKey = (event: KeyboardEvent) => {

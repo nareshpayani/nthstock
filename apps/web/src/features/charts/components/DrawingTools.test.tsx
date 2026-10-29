@@ -342,6 +342,25 @@ describe('full-screen chart (NSTOCK-0461)', () => {
     already.remove();
   });
 
+  it('leaves the toasts usable while the page behind is inert', () => {
+    const app = document.createElement('div');
+    const page = document.createElement('main');
+    const toasts = document.createElement('ol');
+    toasts.setAttribute('data-nth-toasts', '');
+    app.append(page, toasts);
+    document.body.append(app);
+    const view = render(
+      <ChartWorkspace name="INFY" symbol="INFY" controls={null} footer={null} onClose={vi.fn()}>
+        {() => null}
+      </ChartWorkspace>,
+    );
+    expect(page).toHaveAttribute('inert');
+    expect(toasts.closest('[inert]')).toBeNull();
+    view.unmount();
+    expect(page).not.toHaveAttribute('inert');
+    app.remove();
+  });
+
   it('makes the page behind inert while open, and gives it back on close', () => {
     const page = document.createElement('main');
     document.body.append(page);
@@ -426,6 +445,30 @@ describe('saved drawings (NSTOCK-0461)', () => {
       expect(useDrawings.getState().unsaved).toEqual({ INFY: true, TCS: false });
     } finally {
       setItem.mockRestore();
+    }
+  });
+
+  it('when the unreadable value cannot be set aside, keeps it and does not save over it', () => {
+    // Its own symbol: the store remembers per symbol which values it could not protect.
+    window.localStorage.setItem(drawingsStorageKey('WIPRO'), '{not json');
+    const setItem = Storage.prototype.setItem;
+    const spy = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(function (
+      this: Storage,
+      key: string,
+      value: string,
+    ) {
+      if (key === unreadableDrawingsKey('WIPRO'))
+        throw new DOMException('full', 'QuotaExceededError');
+      setItem.call(this, key, value);
+    });
+    try {
+      const at = { time: T0, price: 150_000 };
+      act(() => useDrawings.getState().add('WIPRO', { id: 'a', kind: 'horizontal', at }));
+      expect(window.localStorage.getItem(drawingsStorageKey('WIPRO'))).toBe('{not json');
+      expect(useDrawings.getState().unsaved.WIPRO).toBe(true);
+      expect(useDrawings.getState().drawingsFor('WIPRO')).toHaveLength(1);
+    } finally {
+      spy.mockRestore();
     }
   });
 

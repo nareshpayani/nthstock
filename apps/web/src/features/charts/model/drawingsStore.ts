@@ -23,7 +23,11 @@ function readDrawings(symbol: string): Drawing[] {
   const drawings = parseDrawings(stored);
   // Anything dropped as unreadable is kept aside before the next save overwrites the value.
   const dropped = !Array.isArray(stored) || drawings.length !== stored.length;
-  if (dropped && !safeStorage.set(unreadableDrawingsKey(symbol), raw)) unprotected.add(symbol);
+  // The first copy set aside is kept: a later incident does not overwrite it.
+  const keptAlready = safeStorage.get(unreadableDrawingsKey(symbol)) !== null;
+  if (dropped && !keptAlready && !safeStorage.set(unreadableDrawingsKey(symbol), raw)) {
+    unprotected.add(symbol);
+  }
   return drawings;
 }
 
