@@ -1,6 +1,7 @@
 import { fixedClock, formatInr, fromIst } from '@nthstock/utils';
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { useChartStudies } from '@/features/charts';
 import { chartsMock } from '@/test/chartsMock';
 import { createMockApi } from '@/test/mockApi';
 import { createTestQuoteStore, testQuote } from '@/test/quotes';
@@ -22,6 +23,7 @@ afterEach(() => {
   vi.unstubAllGlobals();
   resetSession();
   window.localStorage.clear();
+  useChartStudies.setState({ studies: ['volume'] });
 });
 
 const candleRanges = () =>
@@ -134,6 +136,18 @@ describe('stock price chart (T-107)', () => {
     const legend = screen.getByTestId('chart-legend');
     expect(legend).toHaveTextContent('H');
     expect(legend).not.toHaveTextContent('9,999.00');
+  });
+
+  it('draws volume by default and a picked indicator adds a line (NSTOCK-0460)', async () => {
+    renderApp('/stocks/INFY?range=1Y', { apiClient: api.apiClient });
+    await screen.findByTestId('chart-host');
+    const count = (type: string) =>
+      chartsMock.active()[0]?.series.filter((s) => s.type === type).length ?? 0;
+    await waitFor(() => expect(count('Histogram')).toBe(1));
+    const lines = count('Line');
+    fireEvent.keyDown(screen.getByRole('button', { name: /^Indicators: / }), { key: 'Enter' });
+    fireEvent.click(await screen.findByRole('menuitemcheckbox', { name: /Moving average 20/ }));
+    await waitFor(() => expect(count('Line')).toBe(lines + 1));
   });
 
   it('offers 1m to 1h bars on 1D, keeps the choice in the URL and fetches those bars (NSTOCK-0343)', async () => {

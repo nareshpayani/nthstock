@@ -9,6 +9,7 @@ import { createTestQuoteStore, testQuote } from '@/test/quotes';
 import { renderWithProviders } from '@/test/renderWithProviders';
 import { installResizeObserver } from '@/test/resizeObserver';
 import type { PriceChartType } from '../model/chartTypes';
+import { useChartStudies } from '../model/studiesStore';
 import { IndexChartCard } from './IndexChartCard';
 
 vi.mock('lightweight-charts', () => import('@/test/chartsMock'));
@@ -23,6 +24,8 @@ beforeEach(() => {
 });
 afterEach(() => {
   vi.unstubAllGlobals();
+  window.localStorage.clear();
+  useChartStudies.setState({ studies: ['volume'] });
 });
 
 // Friday 25 Sep 2026, 11:00 IST (open) and Friday 2 Oct 2026, 11:00 IST (Gandhi Jayanti).
@@ -89,7 +92,6 @@ describe('IndexChartCard (T-095)', () => {
     fireEvent.keyDown(screen.getByRole('button', { name: /^Indicators: / }), { key: 'Enter' });
     fireEvent.click(screen.getByRole('menuitemcheckbox', { name: /Moving average 20/ }));
     await waitFor(() => expect(lines()).toBe((before ?? 0) + 1));
-    window.localStorage.clear();
   });
 
   it('shows the LIVE badge beside the heading while NSE is open', async () => {
