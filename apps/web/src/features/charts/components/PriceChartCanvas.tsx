@@ -216,8 +216,9 @@ export function PriceChartCanvas({
         target.update(point as BarData & LineData);
       }
       // The live tag moved. Only when that changes which tick labels it covers, build them again
-      // (setting the formatter tells the library its cached labels are stale): a rebuild on every
-      // tick costs a long frame on a slow phone (T25).
+      // (applying price scale options tells the library its cached labels are stale): a rebuild on
+      // every tick costs a long frame on a slow phone (T25). The chart's own localization is not
+      // reapplied, since that also rebuilds the time axis labels under a held finger.
       const ticks = ticksRef.current;
       if (ticks) {
         const show = visibleTickLabels(
@@ -225,10 +226,7 @@ export function PriceChartCanvas({
           (price) => series.priceToCoordinate(price),
           axisTagRows(series),
         );
-        if (show.some((shown, i) => shown !== ticks.show[i])) {
-          const localization = chartRef.current?.options().localization;
-          if (localization) chartRef.current?.applyOptions({ localization });
-        }
+        if (show.some((shown, i) => shown !== ticks.show[i])) series.priceScale().applyOptions({});
       }
       return;
     }
