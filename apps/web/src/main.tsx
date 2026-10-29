@@ -5,6 +5,7 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { z } from 'zod';
 import { createLiveQuotes } from './app/live/liveQuotes';
+import { afterFirstPaint } from './app/firstPaint';
 import { AppProviders } from './app/providers/AppProviders';
 import { createQueryClient } from './app/queryClient';
 import { createAppRouter } from './app/router/router';
@@ -17,7 +18,11 @@ import { installOrderSoundUnlock } from './shared/motion/orderSounds';
 import { installStaleBuildReload } from './app/staleBuild';
 import { wantsDemo, withoutDemoParam } from './mocks/demoParam';
 import { createSessionApiClient } from './shared/lib/sessionClient';
-import { assumeSignedOutWithoutHint, useSessionStore } from './shared/lib/sessionStore';
+import {
+  assumeSignedOutWithoutHint,
+  knownSignedOut,
+  useSessionStore,
+} from './shared/lib/sessionStore';
 
 // Zod would otherwise probe `new Function` once, which the CSP (script-src 'self') reports as a
 // violation; its interpreter is plenty fast for this app's payloads.
@@ -27,18 +32,14 @@ z.config({ jitless: true });
 const config = parseRuntimeConfig(import.meta.env);
 
 /**
- * msw mode: loads the lazy MSW + mock-market chunk and starts the worker, beside the first render
- * (T-169). The REST client and the quote socket wait for the returned promise; the shell, header
- * and hero do not. It resolves to `ensureActive`, which the REST client runs before each request
- * so a service worker Chrome stopped while the tab sat idle is mocking again. After a hard reload
- * the worker does not control the page at all, so the page reloads once instead. `?demo=1` is read
- * and dropped here, before the router starts (T-174).
+ * msw mode: loads the lazy MSW + mock-market chunk and starts the worker, once the first page has
+ * painted (T-169, NSTOCK-0469). The REST client and the quote socket wait for the returned promise;
+ * the shell, header and hero do not. It resolves to `ensureActive`, which the REST client runs
+ * before each request so a service worker Chrome stopped while the tab sat idle is mocking again.
+ * After a hard reload the worker does not control the page at all, so the page reloads once
+ * instead.
  */
-async function startMocks(): Promise<() => Promise<void>> {
-  const demo = wantsDemo(window.location.search);
-  if (demo) {
-    window.history.replaceState(window.history.state, '', withoutDemoParam(window.location.href));
-  }
+async function startMocks(demo: boolean): Promise<() => Promise<void>> {
   const { startMockWorker, ensureWorkerControl } = await import('./mocks/browser');
   // E2E builds only (T-162): VITE_TEST_CONTROLS is a build-time constant too, so every other
   // build drops this import and has no /v1/__test handler (scripts/checkBuild.mjs checks).
@@ -80,8 +81,17 @@ function boot() {
   let mocksReady: Promise<unknown> | undefined;
   let beforeRequest: (() => Promise<unknown>) | undefined;
   if (import.meta.env.VITE_API_MODE === 'msw') {
-    if (!wantsDemo(window.location.search)) assumeSignedOutWithoutHint();
-    const started = startMocks();
+    // `?demo=1` is read and dropped here, before the router starts (T-174).
+    const demo = wantsDemo(window.location.search);
+    if (demo) {
+      window.history.replaceState(window.history.state, '', withoutDemoParam(window.location.href));
+    } else {
+      assumeSignedOutWithoutHint();
+    }
+    // A signed-out visitor's first page paints without mock data, so the mock market is built after
+    // it; a signed-in one needs the worker at once for the session refresh.
+    const firstPage = knownSignedOut() ? afterFirstPaint() : Promise.resolve();
+    const started = firstPage.then(() => startMocks(demo));
     mocksReady = started;
     beforeRequest = () => started.then((ensureActive) => ensureActive());
     started.catch((error: unknown) => {

@@ -8,6 +8,7 @@ import {
 } from '@/features/orderTicket';
 import { NotificationsBridge } from '@/features/notifications';
 import { OrderUpdatesBridge } from '@/features/orders';
+import { useMarkFirstPaint } from '../firstPaint';
 import { TradingIntentTimeouts } from '../live/TradingIntentTimeouts';
 import { TrailingStopAnnouncer } from '../live/TrailingStopAnnouncer';
 import { useEffect, useRef, type ReactNode } from 'react';
@@ -40,6 +41,7 @@ export type AppShellProps = {
  * 1023 px a docked trading panel takes the right of the screen and the page narrows beside it.
  */
 export function AppShell({ children, rail = true }: AppShellProps) {
+  useMarkFirstPaint();
   const drawerOpen = useShellStore((s) => s.drawerOpen);
   // A trading panel docked on a tablet (SPEC-CR-1 §6.2) sits beside the page, not over it.
   const docked = useDockedPanelOpen();

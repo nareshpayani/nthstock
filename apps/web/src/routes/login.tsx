@@ -1,6 +1,7 @@
 import { createFileRoute, redirect } from '@tanstack/react-router';
 import { IsoUtc } from '@nthstock/contracts';
 import { z } from 'zod';
+import { useMarkFirstPaint } from '@/app/firstPaint';
 import { LoginPage } from '@/features/auth';
 import { safeRedirect } from '@/shared/lib/safeRedirect';
 import { ensureSession } from '@/shared/lib/sessionClient';
@@ -29,6 +30,7 @@ export const Route = createFileRoute('/login')({
 
 function LoginRoute() {
   const { redirect: target, deleted, try: tryDemo } = Route.useSearch();
+  useMarkFirstPaint();
   return (
     <LoginPage
       redirect={target}
