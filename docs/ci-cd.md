@@ -30,6 +30,7 @@ releases in [runbooks/release.md](runbooks/release.md).
 | PR | PR: Title check (`pr-title-check.yml`) | PR opened, edited, pushed | `<type>(NSTOCK-0001): <subject>` naming a real issue | Yes |
 | PR | PR: Screenshots (`pr-screenshots.yml`) | PRs that change the UI | Before/after screenshots in the PR body | No |
 | PR | PR: Auto-merge (`pr-auto-merge.yml`) | after CI/CodeQL, label changes, hourly | Squash-merges approved, green PRs into develop | — |
+| PR | PR: Clear needs-human (`pr-clear-needs-human.yml`) | PR pushed | Removes `needs-human` so agents resume | — |
 | Deploy | Deploy: Web hosting (`deploy-web-hosting.yml`) | PRs that change the app, green CI on develop/production, dispatch | Preview channel per PR; development; live site; smoke tests | No |
 | Release | Release: Promote to production (`release-promote-to-production.yml`) | dispatch only | Gate, then moves `production` to develop's head and tags it | — |
 | Agent | Agent: Spec planner, Story developer, PR reviewer, PR fixer, Merge conflict resolver (`agent-*.yml`) | labels, PR events, CI results, pushes to develop | The LLM agents ([agent-workflow.md](agent-workflow.md)) | PR reviewer's label gates auto-merge |

@@ -3,8 +3,10 @@ name: 'PR: Auto-merge'
 # Not an LLM agent: plain automation. Squash-merges a PR into develop once the Reviewer has labelled it ready-to-merge and every check
 # on its head commit is green. Owner decision 2026-09-26 (ADR 0006): agent PRs no longer wait for
 # a manual merge. Skipped: PRs without ready-to-merge, drafts, forks, Dependabot, spec PRs (the
-# owner still approves specs), PRs that change .github/**, .claude/** or CLAUDE.md (agent and CI
-# config needs the owner), and any PR labelled needs-human, agent:fix-needed or do-not-merge.
+# owner still approves specs), and any PR labelled needs-human, agent:fix-needed or do-not-merge.
+# Agent and CI config (.github/**, .claude/**, CLAUDE.md) merges like any other change (owner
+# decision 2026-10-29). Only real risks are held for the owner with needs-human: the production
+# release and deploy workflows, a committed .env file, and a migration that drops or truncates data.
 # Add do-not-merge to hold a PR. Only PRs into develop merge; production moves by promotion
 # (ADR 0011).
 
@@ -62,12 +64,25 @@ jobs:
             fi
             pr '[.labels[].name] | index("ready-to-merge") != null' | grep -qx true \
               || { echo "#$num: no ready-to-merge label from the Reviewer, skipping"; continue; }
-            # Agent and CI config is merged by the owner only.
+            # Held for the owner: only what could take production down, leak a secret or lose data.
             files=$(gh api "repos/$repo/pulls/$num/files" --paginate --jq '.[].filename') \
               || { echo "#$num: could not list changed files, skipping"; continue; }
-            protected=$(echo "$files" | grep -E '^(\.github/|\.claude/|CLAUDE\.md$)' || true)
-            if [ -n "$protected" ]; then
-              echo "#$num: changes agent or CI config ($(echo "$protected" | head -3 | tr '\n' ' ')), left for the owner"; continue
+            risk=""
+            held=$(echo "$files" | grep -E '^\.github/workflows/(release-promote-to-production|deploy-web-hosting)\.yml$' || true)
+            [ -z "$held" ] || risk="it changes the production release or deploy workflow ($(echo "$held" | tr '\n' ' '))"
+            held=$(echo "$files" | grep -E '(^|/)\.env(\.[^/]*)?$' | grep -vE '\.env\.example$' || true)
+            [ -z "$held" ] || risk="it adds an environment file that may hold secrets ($(echo "$held" | tr '\n' ' '))"
+            sql=$(gh api "repos/$repo/pulls/$num/files" --paginate \
+              --jq '.[] | select(.filename | test("^apps/api/drizzle/.*\\.sql$")) | .patch // ""') \
+              || { echo "#$num: could not read migration diffs, skipping"; continue; }
+            if grep -iqE '^\+.*\b(drop[[:space:]]+(table|column|schema)|truncate)\b' <<< "$sql"; then
+              risk="a migration drops or truncates data"
+            fi
+            if [ -n "$risk" ]; then
+              echo "#$num: held for the owner: $risk"
+              gh pr edit "$num" --repo "$repo" --add-label needs-human
+              gh pr comment "$num" --repo "$repo" --body "Auto-merge is holding this PR because $risk. Everything else merges on its own; this is one of the few changes (production, secrets, data loss) that waits for the owner. Merge it by hand once checked."
+              continue
             fi
             [ "$(pr .mergeable)" = "MERGEABLE" ] || { echo "#$num: not mergeable ($(pr .mergeable)), skipping"; continue; }
             sha=$(pr .headRefOid)
