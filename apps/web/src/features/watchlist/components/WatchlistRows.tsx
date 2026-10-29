@@ -168,7 +168,19 @@ export function WatchlistRows({
 
   const onMove = (item: WatchlistItem, delta: -1 | 1) => {
     const index = items.indexOf(item);
+    if (index < 0) return;
     move(index, index + delta);
+  };
+
+  // Menu Remove: focus the row that takes its place, as the Delete key does (WCAG 2.4.3).
+  const onMenuRemove = (item: WatchlistItem) => {
+    const index = items.indexOf(item);
+    const next = items[index + 1] ?? items[index - 1];
+    if (next) {
+      focusPending.current = next.token;
+      setActiveToken(next.token);
+    }
+    onRemove(item);
   };
 
   const onRowFocus = useCallback((item: WatchlistItem) => setActiveToken(item.token), []);
@@ -215,7 +227,7 @@ export function WatchlistRows({
                 onRowKeyDown={onRowKeyDown}
                 onRowFocus={onRowFocus}
                 onTrade={onTrade}
-                onRemove={onRemove}
+                onRemove={touch ? onMenuRemove : onRemove}
                 touch={touch}
                 onMove={onMove}
                 canMoveUp={row.index > 0}

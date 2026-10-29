@@ -49,6 +49,9 @@ export type WatchlistRowProps = {
   canMoveDown?: boolean;
 };
 
+/** The menu only renders on touch screens, so every item takes the 44 px touch size (§6.3). */
+const MENU_ITEM = 'min-h-11';
+
 /**
  * The touch row's actions (NSTOCK-0470): one 44 px button that opens Buy, Sell, Move up, Move down
  * (custom order only) and Remove, so every action is one visible tap and reordering needs no drag
@@ -85,25 +88,33 @@ function RowActionsMenu({
         />
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
-        <DropdownMenuItem onSelect={() => onTrade(item, 'BUY')}>
+        <DropdownMenuItem className={MENU_ITEM} onSelect={() => onTrade(item, 'BUY')}>
           {strings.row.buyLabel(symbol)}
         </DropdownMenuItem>
-        <DropdownMenuItem onSelect={() => onTrade(item, 'SELL')}>
+        <DropdownMenuItem className={MENU_ITEM} onSelect={() => onTrade(item, 'SELL')}>
           {strings.row.sellLabel(symbol)}
         </DropdownMenuItem>
         {reorderable && onMove ? (
           <>
             <DropdownMenuSeparator />
-            <DropdownMenuItem disabled={!canMoveUp} onSelect={() => onMove(item, -1)}>
+            <DropdownMenuItem
+              className={MENU_ITEM}
+              disabled={!canMoveUp}
+              onSelect={() => onMove(item, -1)}
+            >
               <IconChevronUp size={16} /> {strings.row.moveUp}
             </DropdownMenuItem>
-            <DropdownMenuItem disabled={!canMoveDown} onSelect={() => onMove(item, 1)}>
+            <DropdownMenuItem
+              className={MENU_ITEM}
+              disabled={!canMoveDown}
+              onSelect={() => onMove(item, 1)}
+            >
               <IconChevronDown size={16} /> {strings.row.moveDown}
             </DropdownMenuItem>
           </>
         ) : null}
         <DropdownMenuSeparator />
-        <DropdownMenuItem onSelect={() => onRemove(item)}>
+        <DropdownMenuItem className={MENU_ITEM} onSelect={() => onRemove(item)}>
           <IconTrash size={16} /> {strings.row.remove}
         </DropdownMenuItem>
       </DropdownMenuContent>
