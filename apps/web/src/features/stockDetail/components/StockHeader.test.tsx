@@ -108,7 +108,7 @@ describe('stock detail header (T-106)', () => {
     expect(screen.getByRole('heading', { level: 1, name: 'SENSEX' })).toBeInTheDocument();
     // Only the tracking fund trades (NSTOCK-0440), never the index.
     expect(screen.queryByRole('button', { name: 'Buy SENSEX' })).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Buy SENSEX ETF' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Buy ETF, SENSEX ETF' })).toBeInTheDocument();
     expect(screen.getByRole('radio', { name: 'BSE' })).toHaveAttribute('aria-checked', 'true');
   });
 

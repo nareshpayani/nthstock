@@ -105,7 +105,7 @@ export function IndexChartCard({ range, onRangeChange }: IndexChartCardProps) {
     NIFTY.exchange,
     candles.data?.candles ?? NO_CANDLES,
     marketOpen && candles.data !== undefined && !candles.isPlaceholderData,
-    candles.data?.interval,
+    candles.data?.interval ?? '1m',
   );
 
   return (

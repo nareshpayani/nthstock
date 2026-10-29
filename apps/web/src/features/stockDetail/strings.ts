@@ -161,8 +161,8 @@ export const strings = {
     tradeLabel: (fund: string) => `Trade ${fund}`,
     buy: 'Buy ETF',
     sell: 'Sell ETF',
-    buyLabel: (fund: string) => `Buy ${fund}`,
-    sellLabel: (fund: string) => `Sell ${fund}`,
+    buyLabel: (fund: string) => `Buy ETF, ${fund}`,
+    sellLabel: (fund: string) => `Sell ETF, ${fund}`,
   },
   /** The phone layout (T12, SPEC-TFC-1 §9.4). */
   phone: {

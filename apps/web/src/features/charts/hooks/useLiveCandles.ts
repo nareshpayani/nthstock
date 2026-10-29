@@ -29,8 +29,12 @@ export function useLiveCandles(
   // Derived during render (React's "adjust state when a prop changes"), not in an effect, so the
   // chart never draws a frame behind the price cell.
   let next = track.base === candles ? track : { base: candles, bars: candles, quote: undefined };
-  if (enabled && quote && quote !== next.quote) {
-    next = { ...next, bars: applyTick(next.bars, quoteToTick(quote, next.quote), interval), quote };
+  if (quote && quote !== next.quote) {
+    // While disabled the quote is still remembered, so the first fold after the market opens adds
+    // only the volume traded since, not the whole day's.
+    next = enabled
+      ? { ...next, bars: applyTick(next.bars, quoteToTick(quote, next.quote), interval), quote }
+      : { ...next, quote };
   }
   if (next !== track) setTrack(next);
   return enabled ? next.bars : candles;

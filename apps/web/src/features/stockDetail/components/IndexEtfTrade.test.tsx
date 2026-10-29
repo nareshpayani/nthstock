@@ -44,7 +44,7 @@ describe('trading an index through its ETF (NSTOCK-0440)', () => {
   it('Buy ETF opens the order ticket for the fund, not the index', async () => {
     signIn();
     await open('/stocks/NIFTY50?exchange=NSE');
-    fireEvent.click(await screen.findByRole('button', { name: 'Buy NIFTY 50 ETF' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Buy ETF, NIFTY 50 ETF' }));
     await waitFor(() =>
       expect(useTicketIntentStore.getState().intent).toMatchObject({
         symbol: 'NIFTYETF',
