@@ -47,6 +47,23 @@ describe('NumberInput hold to repeat (A15)', () => {
     expect(input).toHaveValue('500');
   });
 
+  it('stops a hold when the field becomes disabled mid-press', () => {
+    vi.useFakeTimers();
+    const onChange = vi.fn();
+    const { rerender } = render(
+      <NumberInput mode="integer" value={1} onChange={onChange} aria-label="Quantity" />,
+    );
+    fireEvent.pointerDown(screen.getByRole('button', { name: 'Increase quantity' }), {
+      button: 0,
+    });
+    expect(onChange).toHaveBeenCalledTimes(1);
+    rerender(
+      <NumberInput mode="integer" value={1} onChange={onChange} disabled aria-label="Quantity" />,
+    );
+    act(() => vi.advanceTimersByTime(5000));
+    expect(onChange).toHaveBeenCalledTimes(1);
+  });
+
   it('speeds up to a floor; quantities grow their step, prices keep one tick', () => {
     expect(holdRepeat(0, 'integer').waitMs).toBeGreaterThan(holdRepeat(5, 'integer').waitMs);
     expect(holdRepeat(100, 'integer').waitMs).toBe(40);

@@ -88,13 +88,27 @@ export function NumberInput({
   useLayoutEffect(() => {
     valueRef.current = value;
   }, [value]);
+  // The latest props, so a hold that outlives a render never steps with stale ones.
+  const latest = useRef({ onChange, min, max, step, disabled, mode });
+  useLayoutEffect(() => {
+    latest.current = { onChange, min, max, step, disabled, mode };
+  });
   const stepBy = (direction: 1 | -1, times = 1) => {
+    const live = latest.current;
+    if (live.disabled) {
+      stopHold();
+      return false;
+    }
+    const liveClamp = (n: number) => Math.min(live.max, Math.max(live.min, n));
     const current = valueRef.current;
-    const next = current === null ? min : clamp(snap(current) + direction * step * times);
+    const next =
+      current === null
+        ? live.min
+        : liveClamp(Math.round(current / live.step) * live.step + direction * live.step * times);
     valueRef.current = next;
-    onChange(next);
+    live.onChange(next);
     setDraft(null);
-    return next !== current && next !== (direction > 0 ? max : min);
+    return next !== current && next !== (direction > 0 ? live.max : live.min);
   };
 
   // Hold to repeat (A15): a press steps once, and holding keeps stepping, faster the longer it is
@@ -105,6 +119,9 @@ export function NumberInput({
     holdRef.current = undefined;
   };
   useEffect(() => stopHold, []);
+  useEffect(() => {
+    if (disabled) stopHold();
+  }, [disabled]);
   const directionOf = (button: HTMLButtonElement): 1 | -1 =>
     button.dataset.direction === 'up' ? 1 : -1;
   const startHold = (event: PointerEvent<HTMLButtonElement>) => {
