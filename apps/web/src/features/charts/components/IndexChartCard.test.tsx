@@ -67,7 +67,8 @@ describe('IndexChartCard (T-095)', () => {
     expect(await screen.findByRole('heading', { name: /NIFTY 50/ })).toBeInTheDocument();
     await screen.findByTestId('chart-host');
     expect(screen.getByRole('figure', { name: 'NIFTY 50 line chart over 1 year' })).toBeVisible();
-    expect(chartsMock.charts[0]?.series[0]?.setData).toHaveBeenCalled();
+    // The line series takes its bars a moment after the host mounts, so wait for them.
+    await waitFor(() => expect(chartsMock.charts[0]?.series[0]?.setData).toHaveBeenCalled());
     expect(api.requestsTo('/NIFTY50/candles').map((u) => u.searchParams.get('range'))).toEqual([
       '1Y',
     ]);
