@@ -150,6 +150,7 @@ export function PriceChartCanvas({
     chart: IChartApi;
     candles: readonly Candle[];
     keys: string;
+    lines: readonly StudyLine[];
   } | null>(null);
   // The running tick glide (A16), so a new tick or a rebuild can stop it.
   const glideRef = useRef<number | null>(null);
@@ -297,13 +298,19 @@ export function PriceChartCanvas({
     // throttled phone (T25 perf check).
     const keys = [...wanted].sort().join(',');
     const drawn = studyDrawnRef.current;
-    studyDrawnRef.current = { chart, candles, keys };
+    studyDrawnRef.current = { chart, candles, keys, lines };
     const tail =
       drawn?.chart === chart && drawn.keys === keys
         ? trailingChanges(drawn.candles, candles)
         : null;
-    if (tail) {
-      const from = candles.length - tail.length;
+    const from = tail ? candles.length - tail.length : 0;
+    // A value before the tail can still change: VWAP has none until a session's second bar, then
+    // gains one on the first. Any such change redraws the whole line.
+    const prefixSame = lines.every((line, n) => {
+      const before = drawn?.lines[n]?.values;
+      return before !== undefined && line.values.slice(0, from).every((v, i) => v === before[i]);
+    });
+    if (tail && prefixSame) {
       for (let i = from; i < candles.length; i += 1) {
         const candle = candles[i];
         if (!candle) continue;

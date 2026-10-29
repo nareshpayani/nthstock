@@ -71,6 +71,16 @@ describe('PriceChart studies (NSTOCK-0460)', () => {
     expect(sma?.update).toHaveBeenCalledTimes(1);
   });
 
+  it('redraws VWAP whole when a session gains its second bar and the first bar gets a value', async () => {
+    const [first, second] = makeCandles({ count: 2 });
+    if (!first || !second) throw new Error('no candles');
+    const view = render(<PriceChart candles={[first]} label="c" studies={['vwap']} />);
+    await chartMounted();
+    await waitFor(() => expect(seriesOf('Line')).toHaveLength(1));
+    view.rerender(<PriceChart candles={[first, second]} label="c" studies={['vwap']} />);
+    expect(seriesOf('Line')[0]?.setData.mock.calls.at(-1)?.[0]).toHaveLength(2);
+  });
+
   it('keeps the last bar in the legend when the crosshair time matches no candle', async () => {
     const candles = makeCandles({ count: 4 });
     render(<PriceChart candles={candles} label="c" legend studies={['volume']} />);
