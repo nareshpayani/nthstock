@@ -13,7 +13,8 @@ const frame = (
  * The Demo 2 tab (NSTOCK-0448): Paytm Money's second round, the craft round of 28 to 30 Oct
  * 2026, for the reviewer who saw the round 1 demo. It is the one link they open, so it carries
  * the brief line by line, before and after frames, what went past the brief, the numbers and the
- * AI note. Keep it in step with DESIGN.md and docs/specs/craft-round.md. Documentation may name
+ * AI note. It is part of the guide's copy (`strings.ts` includes it as a tab), kept in its own file
+ * for length; copy belongs here or in `strings.ts`, nowhere else. Keep it in step with DESIGN.md and docs/specs/craft-round.md. Documentation may name
  * the AI tools used (owner decision, 2026-10-24).
  */
 export const demoTwoTab: GuideTab = {
@@ -32,6 +33,7 @@ export const demoTwoTab: GuideTab = {
       label: 'Demo 2 at a glance',
       items: [
         { term: 'Live site', value: 'nthstock-a13a5.web.app (open it on a phone)' },
+        { term: 'Reviewer link', value: 'nthstock-a13a5.web.app/login?try=1' },
         { term: 'Demo login', value: 'Tap Try demo, or 9000000001 with OTP 123456' },
         { term: 'Round 1 demo', value: 'The production build of 25 Oct 2026' },
         { term: 'Round 2 built', value: '28 to 30 Oct 2026, about 40 pull requests' },
@@ -43,17 +45,17 @@ export const demoTwoTab: GuideTab = {
     {
       kind: 'steps',
       items: [
-        'Open the live site on your phone from a cold load, go to the login page and tap Try demo. It signs you in to a ready-made account with holdings and opens a stock with the demo simulator on.',
+        'Open nthstock-a13a5.web.app/login?try=1 on your phone from a cold load. It signs you in to a ready-made demo account and opens RELIANCE with a live 10-share position and a 1% trailing stop already on the chart. Tapping Try demo on the login page does the same.',
         'Look at the page before touching it: the price, the whole chart and Sell and Buy are on screen without scrolling, and NIFTY 50 and SENSEX both fit in the header.',
         'Tap Buy. The short sheet shows side, quantity, price type and value, with Buy pinned at its foot. Drag the grabber down to dismiss it, or flick it.',
         'Tap the strip beside the price axis to place a limit order there. Its line slides in from the rail.',
         'Press and drag the order line anywhere along its row: the line follows your thumb, the loupe above it shows price, distance from the last price and order value, and the chart’s crosshair stays asleep. On Android you feel a tick on each price step.',
-        'Tap the position chip to add a trailing stop, then use Rally +1% in the simulator: the marigold stop glides up and leaves a short trace of where it was.',
-        'In the simulator’s States row, tap Loading, Empty, Error and Offline to see every state without breaking anything.',
+        'Tap the position chip to add a trailing stop, then open Demo controls and use Rally +1%: the marigold stop glides up and leaves a short trace of where it was.',
+        'In Demo controls, under States, tap Loading, Empty, Error and Offline to see every state without breaking anything.',
         'Open the chart type menu and switch between Line, Area, Candles, OHLC and Heikin-Ashi.',
       ],
     },
-    { kind: 'loginCta', label: 'Open the demo' },
+    { kind: 'loginCta', label: 'Open the demo', href: '/login?try=1' },
     { kind: 'heading', text: 'What the brief asked, and how each ask was met' },
     {
       kind: 'table',
@@ -112,8 +114,8 @@ export const demoTwoTab: GuideTab = {
         ],
         [
           'Complete the state set: loading, empty, error, offline',
-          'Skeletons in the page’s final shape fade in over 160 ms with no layout shift. Empty and error states for the chart, orders and ticket. Offline, the price says Stale with its time, the chart says Paused, lines show a lock and Buy says why it is off. The demo’s States row forces each one.',
-          'The simulator’s States row',
+          'Skeletons in the page’s final shape fade in over 160 ms with no layout shift. Empty and error states for the chart, orders and ticket. Offline, the price says Stale with its time, the chart says Paused, lines show a lock and Buy says why it is off. The States row in Demo controls forces each one.',
+          'Demo controls, States',
         ],
         [
           'Respect prefers-reduced-motion',
@@ -307,6 +309,106 @@ export const demoTwoTab: GuideTab = {
         },
       ],
     },
+    { kind: 'heading', text: 'After our own client review' },
+    {
+      kind: 'text',
+      text: 'On 29 Oct we reviewed the build the way a Paytm Money reviewer would, on phones from 320 px up, and rated it 7 out of 10. These are the fixes that review led to. Each pair shows the same screen before and after.',
+    },
+    {
+      kind: 'compare',
+      label: 'Client review fixes, before and after',
+      captions: { before: 'Before: at the review, 29 Oct', after: 'After: the fixes' },
+      items: [
+        {
+          title: 'The order confirmation, 390 × 844',
+          body: 'Before, “Order executed” covered Sell, Buy and the new position strip at the moment the order landed. After, on phones confirmations drop in from the top, and the position strip under the chart shows the new position.',
+          before: {
+            file: 'review-toast-before',
+            alt: 'An Order executed toast at the bottom of a phone screen covering the Sell and Buy buttons',
+            width: 390,
+            height: 844,
+          },
+          after: {
+            file: 'review-toast-after',
+            alt: 'An Order executed toast at the top of a phone screen, with Sell, Buy and the position strip visible below the chart',
+            width: 390,
+            height: 844,
+          },
+        },
+        {
+          title: 'Index pages, 390 × 844',
+          body: 'Before, an index page still used the round 1 card layout. After, it uses the same phone layout as a stock: a full-bleed chart above the fold, one control row, no NSE/BSE switch for an index, and Sell ETF and Buy ETF in the dock.',
+          before: {
+            file: 'review-indexPage-before',
+            alt: 'The NIFTY 50 page in the old card layout',
+            width: 390,
+            height: 844,
+          },
+          after: {
+            file: 'review-indexPage-after',
+            alt: 'The NIFTY 50 page in the phone instrument layout with Sell ETF and Buy ETF at the foot',
+            width: 390,
+            height: 844,
+          },
+        },
+        {
+          title: 'Funds, 320 × 568',
+          body: 'Before, the figures overlapped at 320 px. After, they stack.',
+          before: {
+            file: 'review-funds-before',
+            alt: 'Funds at 320 px with figures overlapping',
+            width: 320,
+            height: 568,
+          },
+          after: {
+            file: 'review-funds-after',
+            alt: 'Funds at 320 px with each figure on its own line',
+            width: 320,
+            height: 568,
+          },
+        },
+        {
+          title: 'Positions, 320 × 568',
+          body: 'Before, the table’s columns were cut off. After, Positions and Portfolio are three-line lists on phones, as Orders already was.',
+          before: {
+            file: 'review-positions-before',
+            alt: 'Positions at 320 px with table columns cut off at the right',
+            width: 320,
+            height: 568,
+          },
+          after: {
+            file: 'review-positions-after',
+            alt: 'Positions at 320 px as a list, each row with quantity, average, last price, P&L, Edit and Exit',
+            width: 320,
+            height: 568,
+          },
+        },
+        {
+          title: 'One direction rule, 1440 × 900',
+          body: 'Before, a green up arrow from the last tick sat next to a red day change, and a mid-tick frame could catch a rolling digit. After, the price arrow and the 1D line colour both follow the day’s change, and price-rail tick labels that a tag would half cover are hidden.',
+          before: {
+            file: 'review-desktop-before',
+            alt: 'Desktop stock page with a green up arrow beside a red day-change pill',
+            width: 1440,
+            height: 900,
+          },
+          after: {
+            file: 'review-desktop-after',
+            alt: 'Desktop stock page where the arrow and the day change agree',
+            width: 1440,
+            height: 900,
+          },
+        },
+      ],
+    },
+    {
+      kind: 'list',
+      items: [
+        'The 1D chart in the first hour of a session leads with the previous session, so it is full from the opening bell instead of a two-point line.',
+        'The reviewer link, /login?try=1, signs in and opens RELIANCE with a live position and a trailing stop already on the chart.',
+        'The demo simulator folds into one Demo controls button on phones, so it no longer sits in the middle of the page.',
+      ],
+    },
     { kind: 'heading', text: 'What is distinctive now' },
     {
       kind: 'list',
@@ -439,7 +541,7 @@ export const demoTwoTab: GuideTab = {
         'It drew three visual directions as mock-ups. Naresh chose Instrument and approved the spec, the plan and 17 recorded decisions (Q&A round 10) before any code was written.',
         'Naresh added requirements the AI had not proposed: every screen size, not only iPhones; the five chart types; the new logo; and Buy in brand blue everywhere.',
         'The work ran as about 40 small pull requests. The repository’s agent team on GitHub Actions reviewed each one, and CI had to be green before it merged.',
-        'What went wrong and was fixed: several merges broke the develop branch (a hook timeout, a benchmark timeout and a chart snapshot), each fixed in its own pull request; container sizes in rem were wrong because the app’s root font is 14 px; and our own review as the client found a near-empty 1D chart in the morning, a demo link that opened signed out and a toast covering Buy, which were fixed before this demo.',
+        'What went wrong and was fixed: several merges broke the develop branch (a hook timeout, a benchmark timeout and a chart snapshot), each fixed in its own pull request; container sizes in rem were wrong because the app’s root font is 14 px; and our own review as the client found a near-empty 1D chart in the morning, a demo link that opened signed out, arrows that disagreed and pages cut at 320 px, which were fixed before this demo (see “After our own client review”).',
       ],
     },
     {
