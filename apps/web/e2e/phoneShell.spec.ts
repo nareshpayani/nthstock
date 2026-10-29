@@ -32,7 +32,7 @@ test.describe('the phone app shell reaches every feature (NSTOCK-0466)', () => {
     await expect(page.getByRole('heading', { level: 1, name: 'Portfolio value' })).toBeVisible();
     await expect(page.getByRole('link', { name: 'Add funds' })).toBeVisible();
     await expect(page.getByRole('button', { name: 'Place order' })).toBeVisible();
-    const feed = page.getByRole('tablist', { name: 'Stocks' });
+    const feed = page.getByRole('tablist', { name: 'Stocks', exact: true });
     await expect(feed.getByRole('tab')).toHaveText(['Watchlist', 'Gainers', 'Losers']);
     await expect(page.getByRole('tabpanel').getByRole('link').first()).toBeVisible();
     await feed.getByRole('tab', { name: 'Gainers' }).click();
@@ -60,7 +60,7 @@ test.describe('the phone app shell reaches every feature (NSTOCK-0466)', () => {
 
     await tab(page, 'Orders').click();
     await expect(page).toHaveURL(/\/orders/);
-    await expect(page.getByRole('tablist', { name: /orders/i })).toBeVisible();
+    await expect(page.getByRole('tablist', { name: 'Order status' })).toBeVisible();
 
     // Notifications and price alerts live in the bell, as on the desktop.
     await page
@@ -97,7 +97,7 @@ test.describe('the phone app shell reaches every feature (NSTOCK-0466)', () => {
 
     await tab(page, 'Account').click();
     await page.getByRole('button', { name: 'Log out' }).click();
-    await expect(page.getByRole('link', { name: 'Log in' }).first()).toBeVisible();
+    await expect(page).toHaveURL(/\/login/);
   });
 
   test('Trade: search, then the stock page with the ticket up, then back', async ({ page }) => {

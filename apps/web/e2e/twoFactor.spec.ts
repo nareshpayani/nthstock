@@ -58,8 +58,15 @@ for (const viewport of VIEWPORTS) {
     await expect(page.getByText('Two-factor authentication is on', { exact: true })).toBeVisible();
 
     // Log out and back in: after the OTP comes the code step. A recovery code works once.
-    await page.getByRole('button', { name: /account: /i }).click();
-    await page.getByRole('menuitem', { name: 'Log out' }).click();
+    if (viewport.name === 'phone') {
+      // The phone has no profile menu: Log out sits on the Account tab (NSTOCK-0466).
+      const tabBar = page.getByRole('navigation', { name: 'Main' }).last();
+      await tabBar.getByRole('link', { name: 'Account', exact: true }).click();
+      await page.getByRole('button', { name: 'Log out' }).click();
+    } else {
+      await page.getByRole('button', { name: /account: /i }).click();
+      await page.getByRole('menuitem', { name: 'Log out' }).click();
+    }
     await expect(page).toHaveURL(/\/login/);
     await page.waitForTimeout(31_000); // the OTP resend throttle
     const field = page.getByRole('textbox', { name: 'Mobile number' });

@@ -59,7 +59,8 @@ function dashboardReady(page: Page, skipChart = false): Promise<boolean> {
         main.querySelectorAll('[aria-busy="true"]').length === 0 &&
         banner.querySelectorAll('[aria-busy="true"]').length === 0 &&
         stockLinks('Stocks lists') === 5 &&
-        stockLinks('Market movers') > 0
+        // A phone's Home lists movers only under the Gainers and Losers tabs.
+        (window.innerWidth < 768 || stockLinks('Market movers') > 0)
       );
     }, skipChart)
     .catch(() => false); // the page is still navigating
