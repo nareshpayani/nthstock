@@ -7,6 +7,7 @@ export { ChartWorkspace, DrawGlyph, ExpandGlyph } from './components/ChartWorksp
 export { DrawingLayer } from './components/DrawingLayer';
 export { ToolRail } from './components/ToolRail';
 export { useChartStudies } from './model/studiesStore';
+export { ChartZoomControls } from './components/ChartZoomControls';
 export { LiveBadge } from './components/LiveBadge';
 export { candlesQuery } from './api/candlesQuery';
 export {

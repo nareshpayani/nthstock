@@ -19,15 +19,22 @@ const force = (state: PageState) =>
     useConnectivityStore.getState().setForced(state);
   });
 
-function setup(withQuotes: boolean) {
+function setup(withQuotes: boolean, all = false) {
   const quotes = createTestQuoteStore();
   if (withQuotes) {
     quotes.push(
       testQuote('NIFTY50', 2_400_000, { prevClose: 2_390_000 }),
       testQuote('SENSEX', 7_900_000, { exchange: 'BSE', prevClose: 7_890_000 }),
     );
+    if (all) {
+      quotes.push(
+        testQuote('NIFTYBANK', 5_000_000, { prevClose: 4_990_000 }),
+        testQuote('NIFTYIT', 3_800_000, { prevClose: 3_790_000 }),
+        testQuote('NIFTYMIDCAP100', 5_500_000, { prevClose: 5_490_000 }),
+      );
+    }
   }
-  renderWithProviders(<HeaderTickers />, { quoteStore: quotes.store });
+  renderWithProviders(<HeaderTickers all={all} />, { quoteStore: quotes.store });
 }
 
 describe('HeaderTickers states (CR-T18, SPEC-CR-1 §7)', () => {
@@ -61,9 +68,29 @@ describe('HeaderTickers states (CR-T18, SPEC-CR-1 §7)', () => {
     force('offline');
     expect(screen.getByTestId('tickers-stale')).toHaveTextContent('Stale');
     expect(group).toHaveAttribute('data-stale', 'true');
+    // Pinned, so a drifting strip never scrolls the text cue away.
+    expect(screen.getByTestId('tickers-stale')).toHaveClass('sticky', 'left-0');
     expect(group).toHaveTextContent('NIFTY');
     force('live');
     expect(screen.queryByTestId('tickers-stale')).not.toBeInTheDocument();
+  });
+});
+
+describe('HeaderTickers all (A21)', () => {
+  it('the default render shows only Nifty 50 and Sensex', async () => {
+    setup(true, false);
+    await screen.findByRole('link', { name: /^NIFTY 50/ });
+    expect(screen.getAllByRole('link')).toHaveLength(2);
+    expect(screen.queryByRole('link', { name: /NIFTY BANK/ })).not.toBeInTheDocument();
+  });
+
+  it('all shows every index as a link', async () => {
+    setup(true, true);
+    await screen.findByRole('link', { name: /^NIFTY 50/ });
+    for (const name of [/^SENSEX/, /^NIFTY BANK/, /^NIFTY IT/, /^NIFTY MIDCAP 100/]) {
+      expect(screen.getByRole('link', { name })).toBeInTheDocument();
+    }
+    expect(screen.getAllByRole('link')).toHaveLength(5);
   });
 });
 

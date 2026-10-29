@@ -19,6 +19,7 @@ import {
   type ChartHandle,
   ChartTypeMenu,
   IndicatorsMenu,
+  ChartZoomControls,
   LiveBadge,
   PriceChart,
   candlesQuery,
@@ -192,6 +193,7 @@ export function StockChartCard({
       ) : (
         <ChartSkeleton height={plotHeight} label={strings.chart.loading} />
       )}
+      {chart && loaded && !failed ? <ChartZoomControls chart={chart.chart} /> : null}
       {offline && loaded && !failed ? (
         <span
           role="status"
@@ -264,7 +266,8 @@ export function StockChartCard({
         className="grid grid-cols-[minmax(0,1fr)] gap-2"
         data-part="phone-chart"
       >
-        <div className="flex items-center gap-2">
+        {/* Wraps rather than pushing the page sideways on a 320 px phone. */}
+        <div className="flex flex-wrap items-center gap-2">
           <h2 id={headingId} className="sr-only">
             {strings.chart.title}
           </h2>

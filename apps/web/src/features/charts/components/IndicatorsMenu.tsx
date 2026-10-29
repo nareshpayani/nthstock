@@ -54,8 +54,9 @@ export function IndicatorsMenu({ touch: touchProp = false }: IndicatorsMenuProps
         )}
       >
         <IndicatorsGlyph />
-        {/* On a phone the drawing and the count say it; the name would push the row off screen. */}
+        {/* On a phone the drawing and the count say it; the word would push the row off screen. */}
         <span className={touch ? 'sr-only' : undefined}>{strings.studies.button}</span>
+        {/* A real space, so the visible text reads "Indicators 2", as the name starts. */}{' '}
         {studies.length > 0 ? (
           <span className="rounded-pill bg-brand-soft px-1.5 text-label text-brand">
             {studies.length}

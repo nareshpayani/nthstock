@@ -21,6 +21,7 @@ import { toAreaData, toCandleData, toChartTime, toHeikinAshi } from '../model/ch
 import { trailingChanges } from '../model/liveCandles';
 import { GLIDE_MS, closeOf, glidePoint } from '../model/tickGlide';
 import { visibleTickLabels } from '../model/axisTags';
+import { installDirectionLock } from '../model/directionLock';
 import { formatChartValue, type ChartDirection, type ChartValueFormat } from '../model/chartFormat';
 import {
   TRADING_INTERACTION,
@@ -226,9 +227,12 @@ export function PriceChartCanvas({
       setLegendTime(param.point && param.time !== undefined ? Number(param.time) : null);
     };
     if (legend) chart.subscribeCrosshairMove(onLegendMove);
+    // One direction per swipe (A13): up/down scrolls the page, sideways pans the chart.
+    const unlockDirection = interactive ? installDirectionLock(host, chart) : undefined;
     onReadyRef.current?.({ chart, series, host });
 
     return () => {
+      unlockDirection?.();
       if (glideRef.current !== null) cancelAnimationFrame(glideRef.current);
       glideRef.current = null;
       glideTargetRef.current = null;
@@ -402,10 +406,10 @@ export function PriceChartCanvas({
     if (series?.seriesType() === 'Line') series.applyOptions(lineSeriesOptions(direction, format));
   }, [direction, format, type, intraday, height]);
 
-  const legendIndex =
-    legendTime === null
-      ? candles.length - 1
-      : candles.findIndex((candle) => toChartTime(candle.t) === legendTime);
+  // A crosshair time that matches no candle (after a range change, say) shows the last bar.
+  const hoveredIndex =
+    legendTime === null ? -1 : candles.findIndex((candle) => toChartTime(candle.t) === legendTime);
+  const legendIndex = hoveredIndex === -1 ? candles.length - 1 : hoveredIndex;
   const legendView = legend
     ? legendContent(candles, legendIndex, lines, { format, volume: showVolume })
     : null;

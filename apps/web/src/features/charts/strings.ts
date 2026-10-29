@@ -49,8 +49,9 @@ export const strings = {
   /** Indicators menu (NSTOCK-0460). */
   studies: {
     button: 'Indicators',
+    // Starts with the visible text ("Indicators 2"), so voice control can name it (WCAG 2.5.3).
     buttonLabel: (count: number) =>
-      count === 0 ? 'Indicators: none on' : `Indicators: ${String(count)} on`,
+      count === 0 ? 'Indicators, none on' : `Indicators ${String(count)} on`,
     heading: 'Show on the chart',
     names: {
       volume: 'Volume',
@@ -62,10 +63,10 @@ export const strings = {
     },
     hints: {
       volume: 'Shares traded in each bar, under the price',
-      sma20: 'Average close of the last 20 bars; solid blue line',
-      sma50: 'Average close of the last 50 bars; dashed blue line',
-      ema20: 'Like the 20 average, but recent bars count more; solid dark line',
-      vwap: 'Average price weighted by volume since the open; dashed dark line',
+      sma20: 'Average close of the last 20 bars; solid dark line',
+      sma50: 'Average close of the last 50 bars; dashed grey line',
+      ema20: 'Like the 20 average, but recent bars count more; dashed dark line',
+      vwap: 'Average price weighted by volume since the open; dotted dark line',
       bollinger: 'A band two deviations around the 20 average; dotted grey lines',
     },
   },

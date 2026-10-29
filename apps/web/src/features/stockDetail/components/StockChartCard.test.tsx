@@ -1,6 +1,7 @@
 import { fixedClock, formatInr, fromIst } from '@nthstock/utils';
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { useChartStudies } from '@/features/charts';
 import { chartsMock } from '@/test/chartsMock';
 import { createMockApi } from '@/test/mockApi';
 import { createTestQuoteStore, testQuote } from '@/test/quotes';
@@ -22,6 +23,7 @@ afterEach(() => {
   vi.unstubAllGlobals();
   resetSession();
   window.localStorage.clear();
+  useChartStudies.setState({ studies: ['volume'] });
 });
 
 const candleRanges = () =>
@@ -37,6 +39,37 @@ describe('stock price chart (T-107)', () => {
       handleScale: { mouseWheel: true, pinch: true },
     });
     expect(screen.queryByTestId('chart-overlay')).not.toBeInTheDocument();
+  });
+
+  it('the zoom buttons narrow, widen and reset the bars on screen, and are absent while loading (NSTOCK-0452)', async () => {
+    renderApp('/stocks/INFY', { apiClient: api.apiClient });
+    // Loading: the skeleton shows and there are no zoom buttons yet.
+    expect(screen.queryByRole('group', { name: 'Zoom' })).not.toBeInTheDocument();
+    await screen.findByTestId('chart-host');
+    const chart = await waitFor(() => {
+      const found = chartsMock.active()[0];
+      expect(found).toBeDefined();
+      return found;
+    });
+    fireEvent.click(await screen.findByRole('button', { name: 'Zoom in' }));
+    expect(chart?.logicalRange).toEqual({ from: 20, to: 60 });
+    fireEvent.click(screen.getByRole('button', { name: 'Zoom out' }));
+    expect(chart?.logicalRange).toEqual({ from: 0, to: 60 });
+    fireEvent.click(screen.getByRole('button', { name: 'Reset zoom' }));
+    expect(chart?.fitContent).toHaveBeenCalled();
+  });
+
+  it('has no zoom buttons when the candles fail (NSTOCK-0452)', async () => {
+    const { http, HttpResponse } = await import('msw');
+    api.server.use(
+      http.get('*/v1/market/instruments/:symbol/candles', () =>
+        HttpResponse.json({ error: { code: 'INTERNAL_ERROR', message: 'boom' } }, { status: 500 }),
+      ),
+    );
+    renderApp('/stocks/INFY', { apiClient: api.apiClient });
+    expect(await screen.findByRole('alert')).toHaveTextContent('Chart unavailable');
+    expect(screen.queryByRole('button', { name: 'Zoom in' })).not.toBeInTheDocument();
+    expect(screen.queryByTestId('chart-zoom')).not.toBeInTheDocument();
   });
 
   it('opens on the 1D area chart when the URL names no range', async () => {
@@ -134,6 +167,18 @@ describe('stock price chart (T-107)', () => {
     const legend = screen.getByTestId('chart-legend');
     expect(legend).toHaveTextContent('H');
     expect(legend).not.toHaveTextContent('9,999.00');
+  });
+
+  it('draws volume by default and a picked indicator adds a line (NSTOCK-0460)', async () => {
+    renderApp('/stocks/INFY?range=1Y', { apiClient: api.apiClient });
+    await screen.findByTestId('chart-host');
+    const count = (type: string) =>
+      chartsMock.active()[0]?.series.filter((s) => s.type === type).length ?? 0;
+    await waitFor(() => expect(count('Histogram')).toBe(1));
+    const lines = count('Line');
+    fireEvent.keyDown(screen.getByRole('button', { name: /^Indicators/ }), { key: 'Enter' });
+    fireEvent.click(await screen.findByRole('menuitemcheckbox', { name: /Moving average 20/ }));
+    await waitFor(() => expect(count('Line')).toBe(lines + 1));
   });
 
   it('offers 1m to 1h bars on 1D, keeps the choice in the URL and fetches those bars (NSTOCK-0343)', async () => {

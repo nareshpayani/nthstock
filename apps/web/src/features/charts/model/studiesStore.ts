@@ -10,7 +10,9 @@ export function readStudies(): StudyId[] {
   if (raw === null) return [...DEFAULT_STUDIES];
   try {
     const parsed: unknown = JSON.parse(raw);
-    return Array.isArray(parsed) ? STUDY_IDS.filter((id) => parsed.includes(id)) : [];
+    return Array.isArray(parsed)
+      ? STUDY_IDS.filter((id) => parsed.includes(id))
+      : [...DEFAULT_STUDIES];
   } catch {
     return [...DEFAULT_STUDIES];
   }

@@ -9,6 +9,7 @@ import { createTestQuoteStore, testQuote } from '@/test/quotes';
 import { renderWithProviders } from '@/test/renderWithProviders';
 import { installResizeObserver } from '@/test/resizeObserver';
 import type { PriceChartType } from '../model/chartTypes';
+import { useChartStudies } from '../model/studiesStore';
 import { IndexChartCard } from './IndexChartCard';
 
 vi.mock('lightweight-charts', () => import('@/test/chartsMock'));
@@ -23,6 +24,8 @@ beforeEach(() => {
 });
 afterEach(() => {
   vi.unstubAllGlobals();
+  window.localStorage.clear();
+  useChartStudies.setState({ studies: ['volume'] });
 });
 
 // Friday 25 Sep 2026, 11:00 IST (open) and Friday 2 Oct 2026, 11:00 IST (Gandhi Jayanti).
@@ -78,6 +81,19 @@ describe('IndexChartCard (T-095)', () => {
     expect(screen.getByText('+212.45, up 0.84 percent')).toBeInTheDocument();
   });
 
+  it('shows an OHLC legend with the bar change, and a picked indicator adds a line (NSTOCK-0460)', async () => {
+    renderCard();
+    await screen.findByTestId('chart-host');
+    const legend = await screen.findByTestId('chart-legend');
+    expect(legend).toHaveTextContent(/O.*H.*L.*C/);
+    expect(legend).toHaveTextContent(/[+-]?\d+(\.\d+)?%/);
+    const lines = () => chartsMock.active()[0]?.series.filter((s) => s.type === 'Line').length;
+    const before = lines();
+    fireEvent.keyDown(screen.getByRole('button', { name: /^Indicators/ }), { key: 'Enter' });
+    fireEvent.click(screen.getByRole('menuitemcheckbox', { name: /Moving average 20/ }));
+    await waitFor(() => expect(lines()).toBe((before ?? 0) + 1));
+  });
+
   it('shows the LIVE badge beside the heading while NSE is open', async () => {
     renderCard(tradingClock);
     // The badge is not part of the heading, so the section keeps the plain name "NIFTY 50".
@@ -123,13 +139,14 @@ describe('IndexChartCard (T-095)', () => {
 
   const press = (
     plot: HTMLElement,
-    down: { x?: number; id?: number; button?: number; at?: number },
+    down: { x?: number; id?: number; button?: number; at?: number; type?: string },
     up: { x?: number; id?: number; at?: number } = {},
   ) => {
     const now = vi.spyOn(performance, 'now').mockReturnValue(down.at ?? 0);
     fireEvent.pointerDown(plot, {
       pointerId: down.id ?? 1,
       isPrimary: true,
+      pointerType: down.type ?? 'mouse',
       button: down.button ?? 0,
       clientX: down.x ?? 100,
       clientY: 50,
@@ -137,6 +154,7 @@ describe('IndexChartCard (T-095)', () => {
     now.mockReturnValue(up.at ?? down.at ?? 0);
     fireEvent.pointerUp(plot, {
       pointerId: up.id ?? down.id ?? 1,
+      pointerType: down.type ?? 'mouse',
       button: down.button ?? 0,
       clientX: up.x ?? down.x ?? 100,
       clientY: 50,
@@ -193,6 +211,32 @@ describe('IndexChartCard (T-095)', () => {
     press(plotOf(), { x: 100, at: 0 }, { x: 102, at: 120 });
     expect(await screen.findByRole('heading', { name: 'Stock NIFTY50' })).toBeInTheDocument();
     expect(router.state.location.search).toEqual({ exchange: 'NSE', range: '1Y', chart: 'line' });
+  });
+
+  it('a touch tap opens the page after the double-tap window, not at once (NSTOCK-0452)', async () => {
+    const { router } = renderCard();
+    await screen.findByTestId('chart-host');
+    press(plotOf(), { x: 100, at: 0, type: 'touch' }, { x: 101, at: 80 });
+    await stillOnDashboard(router);
+    expect(await screen.findByRole('heading', { name: 'Stock NIFTY50' })).toBeInTheDocument();
+  });
+
+  it('a second press inside the double-tap window cancels the open, so the zoom can start (NSTOCK-0452)', async () => {
+    const { router } = renderCard();
+    await screen.findByTestId('chart-host');
+    const plot = plotOf();
+    press(plot, { x: 100, at: 0, type: 'touch' }, { x: 101, at: 80 });
+    // The second press of a double-tap goes down and is held for the slide.
+    fireEvent.pointerDown(plot, {
+      pointerId: 2,
+      isPrimary: true,
+      pointerType: 'touch',
+      button: 0,
+      clientX: 102,
+      clientY: 50,
+    });
+    await act(() => new Promise((resolve) => setTimeout(resolve, 450)));
+    expect(router.state.location.pathname).toBe('/');
   });
 
   it('opens as a line of 1-minute bars on 1D and offers every 1D bar size (NSTOCK-0443)', async () => {

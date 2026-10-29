@@ -59,6 +59,10 @@ const istDay = (iso: string): number => Math.floor((Date.parse(iso) + IST_OFFSET
  * times volume over the sum of volume. Bars with no volume (an index) leave it null.
  */
 export function vwap(candles: readonly Candle[]): (number | null)[] {
+  // On daily or weekly bars every bar is its own session, so the line would only be the typical
+  // price under another name: draw nothing unless some day holds more than one bar.
+  const days = new Set(candles.map((candle) => istDay(candle.t)));
+  if (days.size === candles.length) return candles.map(() => null);
   let day: number | null = null;
   let priceVolume = 0;
   let volume = 0;

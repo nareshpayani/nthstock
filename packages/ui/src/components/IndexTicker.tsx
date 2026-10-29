@@ -61,7 +61,12 @@ export function IndexTicker({
           {name}
         </span>
         <span aria-hidden="true" className="flex items-baseline gap-1.5">
-          <span className="font-mono text-label font-medium text-ink tabular-nums">
+          <span
+            className={cn(
+              'font-mono text-label font-medium tabular-nums',
+              pct.direction === 'flat' ? 'text-ink' : tone,
+            )}
+          >
             {formatIndexLevel(level)}
           </span>
           <span className={cn('font-mono text-label tabular-nums', tone)}>{pct.text}</span>
@@ -78,7 +83,13 @@ export function IndexTicker({
       <span aria-hidden="true" className="text-label font-semibold text-ink-muted">
         {name}
       </span>
-      <span aria-hidden="true" className="font-mono text-body font-medium text-ink tabular-nums">
+      <span
+        aria-hidden="true"
+        className={cn(
+          'font-mono text-body font-medium tabular-nums',
+          pct.direction === 'flat' ? 'text-ink' : tone,
+        )}
+      >
         {formatIndexLevel(level)}
       </span>
       <span aria-hidden="true" className={cn('font-mono text-label tabular-nums', tone)}>

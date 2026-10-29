@@ -27,7 +27,19 @@ describe('chart studies (NSTOCK-0460)', () => {
   });
 
   it('leaves VWAP empty when nothing traded', () => {
-    expect(vwap([bar('2026-10-28T04:00:00Z', 100, 0)])).toEqual([null]);
+    expect(
+      vwap([bar('2026-10-28T04:00:00Z', 100, 0), bar('2026-10-28T05:00:00Z', 100, 0)]),
+    ).toEqual([null, null]);
+  });
+
+  it('leaves VWAP empty on daily bars, where each bar is its own session', () => {
+    expect(
+      vwap([
+        bar('2026-10-26T03:45:00Z', 100, 5),
+        bar('2026-10-27T03:45:00Z', 200, 5),
+        bar('2026-10-28T03:45:00Z', 300, 5),
+      ]),
+    ).toEqual([null, null, null]);
   });
 
   it('puts Bollinger bands two deviations either side of the average', () => {

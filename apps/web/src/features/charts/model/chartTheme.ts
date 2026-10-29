@@ -251,8 +251,9 @@ export function volumeSeriesOptions(): HistogramSeriesPartialOptions {
 }
 
 /**
- * Indicator lines (NSTOCK-0460) in the palette, not the library's defaults (A6): blue and ink,
- * told apart by solid or dashed as well as colour, so no line relies on colour alone. Marigold
+ * Indicator lines (NSTOCK-0460) in the palette, not the library's defaults (A6): ink and muted
+ * ink, never brand blue (the price line and actions, DESIGN.md decision 1), told apart by dash
+ * and weight as well as colour, so no line relies on colour alone. Marigold
  * stays the trailing stop's own colour; green and red stay price direction.
  */
 // The library's LineStyle enum values, spelled out so this module needs only its types.
@@ -261,11 +262,11 @@ const DOTTED = 1 as LineStyle;
 const DASHED = 2 as LineStyle;
 
 export const STUDY_LINE_STYLES = {
-  sma20: { color: colors.brand, lineStyle: SOLID },
-  sma50: { color: colors.brand, lineStyle: DASHED },
-  ema20: { color: colors.ink, lineStyle: SOLID },
-  vwap: { color: colors.ink, lineStyle: DASHED },
-  bollinger: { color: colors['ink-muted'], lineStyle: DOTTED },
+  sma20: { color: colors.ink, lineStyle: SOLID, lineWidth: 2 },
+  sma50: { color: colors['ink-muted'], lineStyle: DASHED, lineWidth: 2 },
+  ema20: { color: colors.ink, lineStyle: DASHED, lineWidth: 2 },
+  vwap: { color: colors.ink, lineStyle: DOTTED, lineWidth: 2 },
+  bollinger: { color: colors['ink-muted'], lineStyle: DOTTED, lineWidth: 1 },
 } as const;
 
 export function studyLineOptions(
@@ -274,7 +275,6 @@ export function studyLineOptions(
 ): LineSeriesPartialOptions {
   return {
     ...STUDY_LINE_STYLES[study],
-    lineWidth: 1,
     lastValueVisible: false,
     priceLineVisible: false,
     crosshairMarkerVisible: false,
