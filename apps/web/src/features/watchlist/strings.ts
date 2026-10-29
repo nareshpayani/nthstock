@@ -63,7 +63,7 @@ export const strings = {
     moveDown: 'Move down',
     firstAlready: 'Already first',
     lastAlready: 'Already last',
-    reorderHow: 'Reorder: choose Custom order in Sort',
+    reorderHow: 'To reorder, choose Custom order in Sort',
     keyHint: 'On a stock: B buy, S sell, Alt+↑/↓ move, Delete remove.',
   },
   /** Live-region announcements. */

@@ -122,8 +122,8 @@ function RowActionsMenu({
         {!reorderable && onReorderBlocked ? (
           <>
             <DropdownMenuSeparator />
-            {/* Says why there is no Move here, as Alt+arrow does from the keyboard. */}
-            <DropdownMenuItem className={ITEM} onSelect={onReorderBlocked}>
+            {/* Says why there is no Move here: a hint, not an action. */}
+            <DropdownMenuItem className={ITEM} disabled>
               {strings.row.reorderHow}
             </DropdownMenuItem>
           </>
@@ -195,7 +195,7 @@ export const WatchlistRow = memo(function WatchlistRow({
         className={cn(
           'flex h-full min-w-0 flex-1 items-center gap-2 rounded-md py-2 pr-3 outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-inset',
           reorderable && !touch ? 'pl-1' : 'pl-3',
-          touch && 'pr-1',
+          touch && 'pr-2',
         )}
       >
         <span className="grid min-w-0 flex-1">

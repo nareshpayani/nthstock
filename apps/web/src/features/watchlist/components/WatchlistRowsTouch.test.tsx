@@ -112,15 +112,15 @@ describe('watchlist rows on a touch screen (NSTOCK-0470)', () => {
   });
 
   it('on a sorted list keeps Buy, Sell and Remove and says how to reorder', async () => {
-    const { onReorderBlocked } = renderRows({ reorderable: false });
+    renderRows({ reorderable: false });
     const menu = await tapActions('INFY');
     expect(within(menu).queryByRole('menuitem', { name: /Move/ })).toBeNull();
     for (const name of ['Buy INFY', 'Sell INFY', 'Remove INFY'])
       expect(within(menu).getByRole('menuitem', { name })).toBeInTheDocument();
-    await userEvent.click(
-      within(menu).getByRole('menuitem', { name: 'Reorder: choose Custom order in Sort' }),
-    );
-    expect(onReorderBlocked).toHaveBeenCalled();
+    // A hint, not an action.
+    expect(
+      within(menu).getByRole('menuitem', { name: 'To reorder, choose Custom order in Sort' }),
+    ).toHaveAttribute('aria-disabled', 'true');
   });
 
   it('after Remove, focuses the row that takes its place', async () => {
