@@ -15,6 +15,7 @@ function routerWith(chunk: Promise<void>) {
   const route = { id: '/page' };
   return {
     latestLocation: { pathname: '/page' },
+    state: { status: 'idle', matches: [] },
     matchRoutes: () => [{ routeId: '/page' }],
     routesById: { '/page': route },
     loadRouteChunk: (loaded: unknown) => (loaded === route ? chunk : undefined),
@@ -40,6 +41,23 @@ describe('afterFirstPaint (NSTOCK-0469)', () => {
     await vi.advanceTimersByTimeAsync(100);
     expect(done).not.toHaveBeenCalled();
     loadChunk();
+    await vi.advanceTimersByTimeAsync(100);
+    expect(done).toHaveBeenCalledTimes(1);
+  });
+
+  it('waits for the router to show the page, or to wait on a loader for data', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'requestAnimationFrame'] });
+    const { afterFirstPaint, useMarkFirstPaint } = await load();
+    const router = routerWith(Promise.resolve()) as unknown as {
+      state: { status: string; matches: { status: string; isFetching: string | false }[] };
+    };
+    router.state = { status: 'pending', matches: [{ status: 'pending', isFetching: false }] };
+    const done = vi.fn();
+    void afterFirstPaint(router as unknown as AnyRouter, 1000).then(done);
+    render(<Page mark={useMarkFirstPaint} />);
+    await vi.advanceTimersByTimeAsync(200);
+    expect(done).not.toHaveBeenCalled();
+    router.state = { status: 'pending', matches: [{ status: 'pending', isFetching: 'loader' }] };
     await vi.advanceTimersByTimeAsync(100);
     expect(done).toHaveBeenCalledTimes(1);
   });
