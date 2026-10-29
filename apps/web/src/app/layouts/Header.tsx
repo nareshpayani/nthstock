@@ -16,6 +16,7 @@ import { Link } from '@tanstack/react-router';
 import { ProfileMenu } from '@/features/auth';
 import { HeaderTickers, MarketStatusPill } from '@/features/marketTicker';
 import { NotificationBell } from '@/features/notifications';
+import { useAutoScroll } from '@/shared/hooks/useAutoScroll';
 import { usePhoneLayout } from '@/shared/hooks/usePhoneLayout';
 import { strings } from '../strings';
 import { navItems } from './navItems';
@@ -34,6 +35,8 @@ export type HeaderProps = {
  */
 export function Header({ onOpenMenu, onOpenHelp }: HeaderProps) {
   const phone = usePhoneLayout();
+  // The strip drifts so every index gets seen on a narrow phone (A21).
+  const stripRef = useAutoScroll<HTMLDivElement>();
   return (
     <header className="sticky top-0 z-(--nth-z-header) border-b border-line bg-surface pt-[env(safe-area-inset-top)]">
       <div className="flex h-14 items-center gap-2 px-3 sm:gap-3 lg:gap-5 lg:px-6">
@@ -105,13 +108,14 @@ export function Header({ onOpenMenu, onOpenHelp }: HeaderProps) {
       {/* Scrolls sideways on narrow screens, so it takes focus for keyboard scrolling (WCAG 2.1.1,
           axe scrollable-region-focusable). */}
       <div
+        ref={stripRef}
         role="region"
         aria-label={strings.header.statusStrip}
         tabIndex={0}
         className="relative flex h-10 items-center gap-4 overflow-x-auto border-t border-line px-3 max-[359px]:mask-r-from-85% lg:px-6 min-[1360px]:hidden"
       >
         <MarketStatusPill compact={!phone} dot={phone} className="shrink-0" />
-        <HeaderTickers compact stacked={phone} className="shrink-0" />
+        <HeaderTickers compact stacked={phone} all={phone} className="shrink-0" />
       </div>
     </header>
   );
