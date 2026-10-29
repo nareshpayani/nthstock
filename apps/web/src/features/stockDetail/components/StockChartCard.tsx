@@ -136,7 +136,7 @@ export function StockChartCard({
   const typeControl = (
     <>
       <ChartTypeMenu value={chartType} onValueChange={onChartTypeChange} touch={touch} />
-      <IndicatorsMenu touch={touch} />
+      <IndicatorsMenu touch={touch} volume={instrument.type !== 'INDEX'} />
     </>
   );
   const showIntervals = intervals.length > 1 && onIntervalChange !== undefined;

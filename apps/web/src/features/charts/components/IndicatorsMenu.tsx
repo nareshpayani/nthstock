@@ -34,15 +34,19 @@ function IndicatorsGlyph() {
 export type IndicatorsMenuProps = {
   /** 44 px trigger on phones. */
   touch?: boolean;
+  /** False on an index, which trades no shares: Volume is shown off and greyed, with why. */
+  volume?: boolean;
 };
 
 /**
  * The indicators picker (NSTOCK-0460): volume, moving averages, VWAP and Bollinger bands, each a
  * checkbox with a line on what it shows. One choice for every chart, remembered on this device.
  */
-export function IndicatorsMenu({ touch: touchProp = false }: IndicatorsMenuProps) {
+export function IndicatorsMenu({ touch: touchProp = false, volume = true }: IndicatorsMenuProps) {
   const touch = useTouchTargets() || touchProp;
-  const studies = useChartStudies((state) => state.studies);
+  const chosen = useChartStudies((state) => state.studies);
+  // What this chart draws: the choice stays for stock charts, but an index has no volume to show.
+  const studies = volume ? chosen : chosen.filter((study) => study !== 'volume');
   const toggleStudy = useChartStudies((state) => state.toggleStudy);
   return (
     <DropdownMenu>
@@ -66,21 +70,27 @@ export function IndicatorsMenu({ touch: touchProp = false }: IndicatorsMenuProps
       </DropdownMenuTrigger>
       <DropdownMenuContent className="w-72">
         <DropdownMenuLabel>{strings.studies.heading}</DropdownMenuLabel>
-        {STUDY_IDS.map((study) => (
-          <DropdownMenuCheckboxItem
-            key={study}
-            checked={studies.includes(study)}
-            onCheckedChange={() => toggleStudy(study)}
-            // Keep the menu open, so several can be picked in one go.
-            onSelect={(event) => event.preventDefault()}
-            className={cn('items-start', touch && 'min-h-11')}
-          >
-            <span className="grid">
-              <span className="font-medium">{strings.studies.names[study]}</span>
-              <span className="text-label text-ink-muted">{strings.studies.hints[study]}</span>
-            </span>
-          </DropdownMenuCheckboxItem>
-        ))}
+        {STUDY_IDS.map((study) => {
+          const unavailable = study === 'volume' && !volume;
+          return (
+            <DropdownMenuCheckboxItem
+              key={study}
+              checked={studies.includes(study)}
+              disabled={unavailable}
+              onCheckedChange={() => toggleStudy(study)}
+              // Keep the menu open, so several can be picked in one go.
+              onSelect={(event) => event.preventDefault()}
+              className={cn('items-start', touch && 'min-h-11')}
+            >
+              <span className="grid">
+                <span className="font-medium">{strings.studies.names[study]}</span>
+                <span className="text-label text-ink-muted">
+                  {unavailable ? strings.studies.noVolume : strings.studies.hints[study]}
+                </span>
+              </span>
+            </DropdownMenuCheckboxItem>
+          );
+        })}
       </DropdownMenuContent>
     </DropdownMenu>
   );

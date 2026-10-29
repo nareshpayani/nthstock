@@ -53,6 +53,7 @@ export const strings = {
     buttonLabel: (count: number) =>
       count === 0 ? 'Indicators, none on' : `Indicators ${String(count)} on`,
     heading: 'Show on the chart',
+    noVolume: 'An index trades no shares, so it has no volume',
     names: {
       volume: 'Volume',
       sma20: 'Moving average 20',

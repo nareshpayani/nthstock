@@ -191,7 +191,7 @@ export function IndexChartCard({
           {onChartTypeChange ? (
             <ChartTypeMenu value={chartType} onValueChange={onChartTypeChange} touch />
           ) : null}
-          <IndicatorsMenu touch />
+          <IndicatorsMenu touch volume={false} />
           {showIntervals ? (
             <select
               aria-label={strings.intervalLabel}
@@ -307,7 +307,7 @@ export function IndexChartCard({
           {onChartTypeChange ? (
             <ChartTypeMenu value={chartType} onValueChange={onChartTypeChange} touch={phone} />
           ) : null}
-          <IndicatorsMenu touch={phone} />
+          <IndicatorsMenu touch={phone} volume={false} />
           <IconButton
             label={strings.fullscreen.open}
             icon={<ExpandGlyph />}
