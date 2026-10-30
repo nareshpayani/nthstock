@@ -1,5 +1,7 @@
+import { createTradingStore } from '@nthstock/apiClient';
+import type { AccountState, Position } from '@nthstock/contracts';
 import { fixedClock, fromIst } from '@nthstock/utils';
-import { fireEvent, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { chartsMock } from '@/test/chartsMock';
@@ -55,6 +57,64 @@ describe('dashboard URL state', () => {
         side: 'SELL',
       }),
     );
+  });
+
+  it('Home chart shows the open position for the charted stock, and nothing while flat', async () => {
+    const hdfc = await api.apiClient.request('instrument', {
+      params: { symbol: 'HDFCBANK' },
+      query: { exchange: 'NSE' },
+    });
+    const position: Position = {
+      token: hdfc.token,
+      symbol: 'HDFCBANK',
+      exchange: 'NSE',
+      product: 'INTRADAY',
+      netQty: 5,
+      buyQty: 5,
+      sellQty: 0,
+      avgBuyPrice: 160_000,
+      avgSellPrice: 0,
+      ltp: 160_000,
+      realisedPnl: 0,
+      unrealisedPnl: 0,
+    };
+    const account = (positions: Position[]): AccountState => ({
+      seq: 1,
+      orders: [],
+      positions,
+      trailingStops: [],
+      funds: {
+        openingBalance: 100_000_000,
+        balance: 100_000_000,
+        blocked: 0,
+        available: 100_000_000,
+        realisedPnlToday: 0,
+        asOf: '2026-09-25T10:30:00.000Z',
+      },
+    });
+    const render = async (positions: Position[]) => {
+      const tradingStore = createTradingStore({
+        loadState: () => Promise.resolve(account(positions)),
+        schedule: (flush) => queueMicrotask(flush),
+      });
+      signIn(testSession());
+      const view = renderApp('/dashboard', { apiClient: api.apiClient, tradingStore });
+      const home = await screen.findByRole('region', { name: 'Trade HDFCBANK from the chart' });
+      await act(() => tradingStore.start());
+      return { view, home, tradingStore };
+    };
+
+    const open = await render([position]);
+    expect(
+      await within(open.home).findByRole('region', { name: 'Your HDFCBANK position' }),
+    ).toHaveTextContent('+5');
+    open.view.unmount();
+    open.tradingStore.dispose();
+
+    const flat = await render([]);
+    expect(within(flat.home).queryByTestId('position-strip')).not.toBeInTheDocument();
+    flat.view.unmount();
+    flat.tradingStore.dispose();
   });
 
   it('reads the Home stock from the URL, drops an unknown one, and switches back', async () => {
