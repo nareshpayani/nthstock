@@ -1,12 +1,15 @@
+import { join } from 'node:path';
 import { expect, type Locator, type Page } from '@playwright/test';
 import { centreOf, touchscreen, type Point, type Touch } from '../../support/touch';
-import { clip, MONDAY_10_00_IST } from '../support/clip';
+import { clip, CLIPS_DIR, MONDAY_10_00_IST } from '../support/clip';
 import { dot, say } from '../support/narration';
+import { startScreencast } from '../support/screencast';
 
 // The round 2 phone recording (docs/design/recordingScript.md, CR-T24), taken by script instead of
-// by hand: a 390 × 844 touch phone from a cold load of the reviewer link, through the short
-// ticket, the line drag with its loupe, the trailing stop, the chart tools and the offline state,
-// back to the tradeable Home chart. Captions sit in the bar at the top; a dot marks each touch.
+// by hand: an iPhone 16 Pro Max screen (440 × 956 at 3×, recorded at its full 1320 × 2868) from a
+// cold load of the reviewer link, through the short ticket, the line drag with its loupe, the
+// trailing stop, the chart tools and the offline state, back to the tradeable Home chart. Captions
+// sit in the bar at the top; a dot marks each touch.
 
 function fingers(page: Page, touch: Touch) {
   const tapAt = async (at: Point, pauseMs = 600) => {
@@ -35,6 +38,7 @@ clip('craftRecording', 'the round 2 phone recording', async (page) => {
   const touch = await touchscreen(page);
   const finger = fingers(page, touch);
   await page.clock.setFixedTime(MONDAY_10_00_IST);
+  const stopRecording = await startScreencast(page, join(CLIPS_DIR, 'craftRecording.hd.mp4'));
 
   // 1. Cold load of the reviewer link: signs in and opens RELIANCE with a position.
   await page.goto('/login?try=1');
@@ -177,4 +181,5 @@ clip('craftRecording', 'the round 2 phone recording', async (page) => {
   await say(page, 'Paytm is now in My Watchlist', 2400);
   await page.evaluate(() => window.scrollTo({ top: 0, behavior: 'smooth' }));
   await say(page, 'nthstock · paper trading, virtual cash', 3000);
+  await stopRecording();
 });

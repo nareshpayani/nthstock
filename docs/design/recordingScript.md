@@ -6,20 +6,18 @@ length 1:50, hard limit 2:00.
 
 ## Recorded by script
 
-The take that ships (1:22, `apps/web/public/demo/craftRecording.mp4`, served at
+The take that ships (1:38, `apps/web/public/demo/craftRecording.mp4`, served at
 `/demo/craftRecording.mp4` and played on the guide's Demo 2 tab) is this shot list played by a
-Playwright touch script on a 390 × 844 phone: `apps/web/e2e/walkthrough/phone/craftRecording.walkthrough.ts`.
-It starts from a cold load of the reviewer link (`/login?try=1`) on the production build with the
-clock on a Monday at 10:00 IST, so orders fill whenever it is recorded. It puts the captions below
-on screen, with a WebVTT track beside the video, and a dot where each finger lands. Haptics can't be
-shown in a screen video. To record it again:
+Playwright touch script, `apps/web/e2e/walkthrough/phone/craftRecording.walkthrough.ts`, on an
+iPhone 16 Pro Max screen in Chrome's device mode: 440 × 956 at 3×. The clip records Chrome's own
+frames at that density, so the video is a native 1320 × 2868, the size a screen recording on the
+phone would be. It starts from a cold load of the reviewer link (`/login?try=1`) on the production
+build with the clock on a Monday at 10:00 IST, so orders fill whenever it is recorded. It puts the
+captions below on screen, with a WebVTT track beside the video, and a dot where each finger lands.
+Haptics can't be shown in a screen video. To record it again:
 
 ```sh
 bash tools/demo/recordWalkthrough.sh -g craftRecording
-# Scale the 390 px take to 780 px for a phone screen; the recorder's own encode stays 390 px.
-cd apps/web && ffmpeg -y -i test-results/walkthrough/clips/craftRecording.webm \
-  -vf scale=780:1688:flags=lanczos -c:v libx264 -preset slow -crf 20 -pix_fmt yuv420p \
-  -movflags +faststart -an public/demo/craftRecording.mp4
 ```
 
 The handheld take below is still the way to show a real device.

@@ -7,7 +7,7 @@ what is now distinctive, before and after frames at every screen size, the numbe
 
 - **Live:** https://nthstock-a13a5.web.app/login?try=1 (signs in to the demo and opens RELIANCE with a position and a trailing stop on the chart)
 - **Spec and plan:** [SPEC-CR-1](docs/specs/craft-round.md), [PLAN-CR-1](docs/specs/craft-round-tasks.md)
-- **Recording (1:22):** https://nthstock-a13a5.web.app/demo/craftRecording.mp4 (also played on the guide's Demo 2 tab), recorded from the shot list in [docs/design/recordingScript.md](docs/design/recordingScript.md)
+- **Recording (1:38, iPhone 16 Pro Max screen, 1320 × 2868):** https://nthstock-a13a5.web.app/demo/craftRecording.mp4 (also played on the guide's Demo 2 tab), recorded from the shot list in [docs/design/recordingScript.md](docs/design/recordingScript.md)
 - **Frames:** [before](docs/design/before/README.md) and [after](docs/design/after/README.md)
 
 ## 1. What the brief asked, and what we found

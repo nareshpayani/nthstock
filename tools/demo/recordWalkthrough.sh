@@ -56,8 +56,13 @@ compgen -G "$clips/*.webm" >/dev/null || { echo "no clip recorded under $clips" 
 mkdir -p public/demo
 for video in "$clips"/*.webm; do
   name="$(basename "$video" .webm)"
-  ffmpeg -v error -y -i "$video" -c:v libx264 -preset slow -crf 28 -pix_fmt yuv420p \
-    -movflags +faststart -an "public/demo/$name.mp4"
+  # A clip that records itself at full device density (support/screencast.ts) ships that video.
+  if [ -f "$clips/$name.hd.mp4" ]; then
+    cp "$clips/$name.hd.mp4" "public/demo/$name.mp4"
+  else
+    ffmpeg -v error -y -i "$video" -c:v libx264 -preset slow -crf 28 -pix_fmt yuv420p \
+      -movflags +faststart -an "public/demo/$name.mp4"
+  fi
   # The captions track, and a poster frame from 40% in for the guide's player.
   [ -f "$clips/$name.vtt" ] || { echo "$name has no captions track ($clips/$name.vtt)" >&2; exit 1; }
   cp "$clips/$name.vtt" "public/demo/$name.vtt"

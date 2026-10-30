@@ -10,6 +10,7 @@ const executablePath = process.env['PW_CHROMIUM_PATH'];
 const launch = executablePath ? { launchOptions: { executablePath } } : {};
 const PHONE = { width: 390, height: 844 };
 const DESKTOP = { width: 1440, height: 900 };
+const IPHONE = { width: 440, height: 956 };
 
 export default defineConfig({
   testDir: './e2e/walkthrough',
@@ -24,12 +25,31 @@ export default defineConfig({
     {
       name: 'phone',
       testMatch: ['demoWalkthrough.walkthrough.ts', 'phone/*.walkthrough.ts'],
+      testIgnore: 'phone/craftRecording.walkthrough.ts',
       use: {
         ...devices['Pixel 7'],
         viewport: PHONE,
         screen: PHONE,
         video: { mode: 'on', size: PHONE },
         ...launch,
+      },
+    },
+    {
+      // The round 2 phone recording (docs/design/recordingScript.md): an iPhone 16 Pro Max screen
+      // in Chrome's device mode, the whole screen as the page, recorded at 3× by the clip itself.
+      name: 'iphone',
+      testMatch: 'phone/craftRecording.walkthrough.ts',
+      use: {
+        ...devices['iPhone 16 Pro Max'],
+        defaultBrowserType: 'chromium',
+        viewport: IPHONE,
+        screen: IPHONE,
+        video: { mode: 'on', size: IPHONE },
+        // Without it, Chrome's screencast sends CSS-pixel frames whatever the emulated density.
+        launchOptions: {
+          ...(executablePath ? { executablePath } : {}),
+          args: ['--force-device-scale-factor=3'],
+        },
       },
     },
     {
