@@ -42,6 +42,11 @@ export type SearchBoxProps = {
    * trade sheet (NSTOCK-0466), where the results are the sheet's content.
    */
   inline?: boolean;
+  /**
+   * Choosing a stock adds it to `addTo` instead of opening its page, and the list stays open for
+   * the next one: the phone's Add to watchlist sheet, where a row is the biggest target.
+   */
+  chooseAdds?: boolean;
 };
 
 type Group = { key: 'results' | 'recent' | 'popular'; title: string | null; hits: SearchHit[] };
@@ -52,7 +57,14 @@ type Group = { key: 'results' | 'recent' | 'popular'; title: string | null; hits
  * shows recent searches, then popular ones. ↑/↓ move, Enter opens /stocks/<symbol>, Esc closes the
  * list and returns focus to where it was before the search.
  */
-export function SearchBox({ ref, onNavigate, onChoose, addTo, inline = false }: SearchBoxProps) {
+export function SearchBox({
+  ref,
+  onNavigate,
+  onChoose,
+  addTo,
+  inline = false,
+  chooseAdds = false,
+}: SearchBoxProps) {
   const api = useApiClient();
   const queryClient = useQueryClient();
   const navigate = useNavigate();
@@ -127,6 +139,11 @@ export function SearchBox({ ref, onNavigate, onChoose, addTo, inline = false }: 
   );
 
   const choose = (hit: SearchHit) => {
+    if (chooseAdds && addTo) {
+      setRecent(addRecentSearch(hit));
+      addTo.add(hit);
+      return;
+    }
     setRecent(addRecentSearch(hit));
     setQuery('');
     setActive(-1);
@@ -313,7 +330,7 @@ export function SearchBox({ ref, onNavigate, onChoose, addTo, inline = false }: 
         </div>
         {addTo && options.length > 0 ? (
           <p className="border-t border-line px-3 pt-2 pb-1 text-label text-ink-muted">
-            {strings.addHint(addTo.listName)}
+            {chooseAdds ? strings.tapToAdd(addTo.listName) : strings.addHint(addTo.listName)}
           </p>
         ) : null}
       </div>

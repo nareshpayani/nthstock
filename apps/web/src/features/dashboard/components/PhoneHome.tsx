@@ -164,6 +164,7 @@ export function PhoneHome({
   onMoversIndexChange,
 }: PhoneHomeProps) {
   const requestSearch = useSearchFocusStore((s) => s.requestSearch);
+  const requestAdd = useSearchFocusStore((s) => s.requestAddToWatchlist);
   const { status } = useSession();
   return (
     <div className="grid grid-cols-[minmax(0,1fr)] gap-4">
@@ -204,7 +205,20 @@ export function PhoneHome({
             ))}
           </TabsList>
           <TabsContent value="watchlist" className="pt-0">
-            <WatchlistSection bare onAddStock={requestSearch} />
+            {status === 'authenticated' ? (
+              <div className="flex justify-end py-2">
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  icon={<IconPlus size={16} />}
+                  onClick={requestAdd}
+                  className="min-h-11"
+                >
+                  {strings.phone.addStock}
+                </Button>
+              </div>
+            ) : null}
+            <WatchlistSection bare onAddStock={requestAdd} />
           </TabsContent>
           {(['gainers', 'losers'] as const satisfies readonly MoverDirection[]).map((direction) => (
             <TabsContent key={direction} value={direction} className="pt-1">

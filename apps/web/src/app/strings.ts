@@ -51,6 +51,8 @@ export const strings = {
     },
     tradeTitle: 'Trade',
     tradeHint: 'Pick a stock: its page opens with the order ticket up.',
+    addTitle: (list: string) => `Add to ${list}`,
+    addHint: 'Search, then tap a stock or its + to add it. Add as many as you like.',
   },
   shortcuts: {
     title: 'Keyboard shortcuts',

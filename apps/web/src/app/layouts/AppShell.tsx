@@ -23,7 +23,7 @@ import { LeftRail } from './LeftRail';
 import { navItems } from './navItems';
 import { phoneTabFor } from './phoneNav';
 import { ShortcutHelpDialog } from './ShortcutHelpDialog';
-import { TradeSheet } from './TradeSheet';
+import { TradeSheet, type TradeSheetMode } from './TradeSheet';
 import { InShellContext } from './shellContext';
 
 export type AppShellProps = {
@@ -58,6 +58,12 @@ export function AppShell({ children, rail = true }: AppShellProps) {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const tabBar = phoneShell && phoneTabFor(pathname) !== null;
   const [tradeOpen, setTradeOpen] = useState(false);
+  // The phone sheet either trades (a pick opens the ticket) or adds to the open watchlist.
+  const [sheetMode, setSheetMode] = useState<TradeSheetMode>('trade');
+  const openSheet = (mode: TradeSheetMode) => {
+    setSheetMode(mode);
+    setTradeOpen(true);
+  };
   // Only a phone has the trade sheet: one left open closes when the window grows past 767 px.
   const tradeSheetOpen = phoneShell && tradeOpen;
   // Below 1024 px the rail column is hidden, so it is not rendered at all: its watchlist and live
@@ -66,9 +72,9 @@ export function AppShell({ children, rail = true }: AppShellProps) {
   const railSearch = useRef<HTMLInputElement>(null);
   const drawerSearch = useRef<HTMLInputElement>(null);
 
-  const focusSearch = () => {
+  const focusSearch = (mode: TradeSheetMode = 'trade') => {
     if (phoneShell) {
-      setTradeOpen(true);
+      openSheet(mode);
       return;
     }
     const input = railSearch.current;
@@ -87,7 +93,17 @@ export function AppShell({ children, rail = true }: AppShellProps) {
     focusSearch();
   });
 
-  useShortcut('/', focusSearch, { enabled: !helpOpen && !tradeSheetOpen });
+  // "Add stock" on a watchlist: the rail's search (whose results carry +) or, on a phone, the
+  // sheet in its add mode.
+  const addRequests = useSearchFocusStore((s) => s.addRequests);
+  const handledAdds = useRef(addRequests);
+  useEffect(() => {
+    if (addRequests === handledAdds.current) return;
+    handledAdds.current = addRequests;
+    focusSearch('watchlist');
+  });
+
+  useShortcut('/', () => focusSearch(), { enabled: !helpOpen && !tradeSheetOpen });
   useShortcut('?', () => setHelpOpen(true), { enabled: !helpOpen });
 
   return (
@@ -108,7 +124,7 @@ export function AppShell({ children, rail = true }: AppShellProps) {
             className="hidden w-80 shrink-0 border-r border-line bg-surface lg:block"
           >
             <div className="sticky top-(--header-h) h-[calc(100dvh-var(--header-h))] overflow-y-auto">
-              <LeftRail searchRef={railSearch} onAddStock={focusSearch} />
+              <LeftRail searchRef={railSearch} onAddStock={() => focusSearch()} />
             </div>
           </aside>
         ) : null}
@@ -157,8 +173,10 @@ export function AppShell({ children, rail = true }: AppShellProps) {
           />
         </Sheet>
       )}
-      {tabBar ? <BottomTabBar onTrade={() => setTradeOpen(true)} /> : null}
-      {phoneShell ? <TradeSheet open={tradeSheetOpen} onOpenChange={setTradeOpen} /> : null}
+      {tabBar ? <BottomTabBar onTrade={() => openSheet('trade')} /> : null}
+      {phoneShell ? (
+        <TradeSheet open={tradeSheetOpen} onOpenChange={setTradeOpen} mode={sheetMode} />
+      ) : null}
       <ShortcutHelpDialog open={helpOpen} onOpenChange={setHelpOpen} />
       <OrderTicketHost />
       <TrailingStopSheetHost />

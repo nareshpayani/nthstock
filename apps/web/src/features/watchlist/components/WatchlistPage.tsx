@@ -1,3 +1,5 @@
+import { Button, IconPlus } from '@nthstock/ui';
+import { useSession } from '@/shared/hooks/useSession';
 import { useSearchFocusStore } from '@/shared/lib/searchFocusStore';
 import { strings } from '../strings';
 import { WatchlistSection } from './WatchlistSection';
@@ -9,15 +11,29 @@ import { WatchlistSortMenu } from './WatchlistSortMenu';
  * desktop).
  */
 export function WatchlistPage() {
-  const requestSearch = useSearchFocusStore((s) => s.requestSearch);
+  const requestAdd = useSearchFocusStore((s) => s.requestAddToWatchlist);
+  const { status } = useSession();
   return (
     <div className="mx-auto grid w-full max-w-xl gap-3">
       <div className="flex items-center justify-between gap-2">
         {/* The top bar's switch names the page on a phone. */}
         <h1 className="text-title text-ink max-[767px]:sr-only">{strings.pageTitle}</h1>
-        <WatchlistSortMenu />
+        <div className="flex items-center gap-2">
+          {/* Always in reach, not only on an empty list: a phone has no rail search. */}
+          {status === 'authenticated' ? (
+            <Button
+              size="sm"
+              icon={<IconPlus size={16} />}
+              onClick={requestAdd}
+              className="[@media(pointer:coarse)]:min-h-11"
+            >
+              {strings.addStock}
+            </Button>
+          ) : null}
+          <WatchlistSortMenu />
+        </div>
       </div>
-      <WatchlistSection onAddStock={requestSearch} />
+      <WatchlistSection onAddStock={requestAdd} />
     </div>
   );
 }
