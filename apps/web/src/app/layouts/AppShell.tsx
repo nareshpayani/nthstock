@@ -23,6 +23,7 @@ import { LeftRail } from './LeftRail';
 import { navItems } from './navItems';
 import { phoneTabFor } from './phoneNav';
 import { ShortcutHelpDialog } from './ShortcutHelpDialog';
+import { OrderCelebrationOverlay } from './OrderCelebrationOverlay';
 import { TradeSheet, type TradeSheetMode } from './TradeSheet';
 import { InShellContext } from './shellContext';
 
@@ -179,6 +180,7 @@ export function AppShell({ children, rail = true }: AppShellProps) {
       ) : null}
       <ShortcutHelpDialog open={helpOpen} onOpenChange={setHelpOpen} />
       <OrderTicketHost />
+      <OrderCelebrationOverlay />
       <TrailingStopSheetHost />
       <PositionEditorHost />
       <OrderUpdatesBridge />

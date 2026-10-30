@@ -9,7 +9,7 @@ export {
 export { TouchTargets, useTouchTargets } from './lib/touchTargets.js';
 export { createIcon, type IconComponent, type IconProps } from './icons/createIcon.js';
 export * from './icons/icons.js';
-export { Logo, type LogoProps } from './icons/Logo.js';
+export { LOGO_MARK, Logo, type LogoProps } from './icons/Logo.js';
 export { Button, buttonVariants, type ButtonProps } from './components/Button.js';
 export { IconButton, iconButtonVariants, type IconButtonProps } from './components/IconButton.js';
 export { RulerSlider, type RulerSliderProps } from './components/RulerSlider.js';
