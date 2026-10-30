@@ -19,8 +19,10 @@ import { PinSetupStep } from './PinSetupStep';
 import { TotpStep } from './TotpStep';
 import { TryDemo } from './TryDemo';
 
-/** Long link labels wrap on a 320 px phone instead of widening the card (NSTOCK-0435). */
-const WRAP = 'h-auto min-h-10 py-2 text-center whitespace-normal';
+/** Long link labels wrap on a 320 px phone instead of widening the card (NSTOCK-0435). On a phone
+    they are quiet text links, so the whole step fits one screen (NSTOCK-0481). */
+const WRAP =
+  'h-auto min-h-10 py-2 text-center whitespace-normal max-sm:min-h-11 max-sm:border-0 max-sm:bg-transparent max-sm:py-1 max-sm:text-brand max-sm:underline max-sm:underline-offset-2 max-sm:hover:bg-transparent';
 
 type Step =
   | { kind: 'mobile'; purpose: LoginOtpPurpose; notice?: string; mobile?: string }
@@ -148,12 +150,14 @@ export function LoginPage({
   }
 
   return (
-    <main className="grid min-h-dvh grid-cols-[minmax(0,1fr)] place-items-center bg-canvas p-4">
-      <div className="grid w-full max-w-sm grid-cols-[minmax(0,1fr)] gap-6 rounded-lg border border-line bg-surface p-6 max-[359px]:p-4">
+    // A card on a wide screen; on a phone the step is the whole screen, edge to edge from the top,
+    // clear of the notch and the home indicator, like a native sign-in (NSTOCK-0481).
+    <main className="grid min-h-dvh grid-cols-[minmax(0,1fr)] place-items-center bg-canvas p-4 max-sm:place-items-stretch max-sm:bg-surface max-sm:p-0">
+      <div className="grid w-full max-w-sm grid-cols-[minmax(0,1fr)] gap-6 rounded-lg border border-line bg-surface p-6 max-sm:max-w-none max-sm:content-start max-sm:gap-5 max-sm:rounded-none max-sm:border-0 max-sm:px-5 max-sm:pt-[max(1.5rem,env(safe-area-inset-top))] max-sm:pb-[max(1rem,env(safe-area-inset-bottom))] max-[359px]:px-4">
         {content}
         {devOtp ? <TryDemo devOtp={devOtp} autoStart={autoStartDemo} /> : null}
         <p className="text-label text-ink-muted">{strings.paperNote}</p>
-        <div className="grid gap-3">
+        <div className="grid gap-3 max-sm:gap-0">
           {/* Before logging in: what the app does and how to trade, then back here (NSTOCK-0280). */}
           <Link
             to="/guide"
