@@ -111,6 +111,7 @@ export const strings = {
       startPlaced: (time: string, price: string) =>
         `Start placed at ${time}, ${price}. Move to the end and press Enter`,
       placed: (tool: string) => `${tool} placed`,
+      tooClose: 'The two points are too close to zoom to. Move the end further away',
     },
     list: {
       button: (count: number) => `Drawings on this chart (${String(count)})`,

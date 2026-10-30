@@ -156,19 +156,20 @@ export function DrawingLayer({ handle, candles, symbol, format }: DrawingLayerPr
     return magnet ? snapToBar(point, candles) : point;
   };
 
-  const finish = (from: ChartPoint, to: ChartPoint) => {
+  /** True when the tool acted; a zoom between points under two bars apart does nothing. */
+  const finish = (from: ChartPoint, to: ChartPoint): boolean => {
     if (tool === 'measure') {
       setMeasured({ from, to });
     } else if (tool === 'zoom') {
       const a = timeToLogical(candles, from.time);
       const b = timeToLogical(candles, to.time);
-      if (Math.abs(b - a) >= 2) {
-        chart.timeScale().setVisibleLogicalRange({ from: Math.min(a, b), to: Math.max(a, b) });
-      }
+      if (Math.abs(b - a) < 2) return false;
+      chart.timeScale().setVisibleLogicalRange({ from: Math.min(a, b), to: Math.max(a, b) });
     } else if (tool === 'trend' || tool === 'ray' || tool === 'fib') {
       add(symbol, { id: newId(), kind: tool, from, to });
     }
     setTool(null);
+    return true;
   };
 
   const onPointerDown = (event: PointerEvent<SVGSVGElement>) => {
@@ -268,7 +269,11 @@ export function DrawingLayer({ handle, candles, symbol, format }: DrawingLayerPr
       setSaid(strings.drawing.keyboard.startPlaced(time, price));
       return;
     }
-    finish(first, point);
+    if (!finish(first, point)) {
+      // Too close to zoom to: the tool stays armed with its start where it was.
+      setSaid(strings.drawing.keyboard.tooClose);
+      return;
+    }
     // The measure read-out speaks for the measure tool.
     if (tool !== 'measure') setSaid(strings.drawing.keyboard.placed(name));
   };
@@ -404,7 +409,7 @@ export function DrawingLayer({ handle, candles, symbol, format }: DrawingLayerPr
               x2={x(keyboardPoint.time)}
               y1={0}
               y2={height}
-              stroke={colors.brand}
+              stroke={colors.ink}
               strokeDasharray="4 3"
             />
             <line
@@ -412,7 +417,7 @@ export function DrawingLayer({ handle, candles, symbol, format }: DrawingLayerPr
               x2={width}
               y1={y(keyboardPoint.price)}
               y2={y(keyboardPoint.price)}
-              stroke={colors.brand}
+              stroke={colors.ink}
               strokeDasharray="4 3"
             />
             <circle
@@ -420,7 +425,7 @@ export function DrawingLayer({ handle, candles, symbol, format }: DrawingLayerPr
               cy={y(keyboardPoint.price)}
               r={5}
               fill={colors.surface}
-              stroke={colors.brand}
+              stroke={colors.ink}
               strokeWidth={2}
             />
           </g>

@@ -6,7 +6,9 @@ import {
   formatSpan,
   logicalToTime,
   measure,
+  keepsEscape,
   parseDrawings,
+  priceStep,
   snapToBar,
   timeToLogical,
 } from './drawings';
@@ -75,5 +77,39 @@ describe('chart drawings (NSTOCK-0461)', () => {
       ]).map((d) => d.id),
     ).toEqual(['a', 'b']);
     expect(parseDrawings('nope')).toEqual([]);
+  });
+});
+
+describe('keyboard point helpers (NSTOCK-0468)', () => {
+  it('never steps under one 5-paise tick, even for no span or a bad one', () => {
+    expect(priceStep(0)).toBe(5);
+    expect(priceStep(Number.NaN)).toBe(5);
+    expect(priceStep(Number.POSITIVE_INFINITY)).toBe(5);
+    expect(priceStep(100)).toBe(5);
+  });
+
+  it('rounds a fiftieth of the span up to 1, 2 or 5 times a power of ten', () => {
+    expect(priceStep(500)).toBe(10); // 10 -> 1 x 10
+    expect(priceStep(1_100)).toBe(50); // 22 -> 5 x 10
+    expect(priceStep(2_500)).toBe(50); // 50 -> 5 x 10
+    expect(priceStep(5_200)).toBe(200); // 104 -> 2 x 100
+    expect(priceStep(-5_200)).toBe(200); // a span is a distance
+    expect(priceStep(100_000)).toBe(2_000);
+  });
+
+  it('keeps Escape for fields, selects, open menus and their items', () => {
+    const input = document.createElement('input');
+    const select = document.createElement('select');
+    const expanded = document.createElement('button');
+    expanded.setAttribute('aria-expanded', 'true');
+    const menu = document.createElement('div');
+    menu.setAttribute('role', 'menu');
+    const item = document.createElement('div');
+    menu.append(item);
+    const plain = document.createElement('div');
+    for (const element of [input, select, expanded, item]) expect(keepsEscape(element)).toBe(true);
+    expect(keepsEscape(plain)).toBe(false);
+    expect(keepsEscape(window)).toBe(false);
+    expect(keepsEscape(null)).toBe(false);
   });
 });

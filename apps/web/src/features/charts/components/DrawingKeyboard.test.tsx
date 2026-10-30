@@ -1,5 +1,5 @@
 import type { Candle } from '@nthstock/contracts';
-import { act, fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { installResizeObserver } from '@/test/resizeObserver';
@@ -194,6 +194,16 @@ describe('placing drawings from the keyboard (NSTOCK-0468)', () => {
     expect(setVisibleLogicalRange).toHaveBeenCalledWith({ from: 0, to: 29 });
   });
 
+  it('says so and keeps the zoom tool when the two points are under two bars apart', () => {
+    const { setVisibleLogicalRange } = renderTools();
+    pickAndFocus('Zoom to an area');
+    press('Enter');
+    press('Enter');
+    expect(setVisibleLogicalRange).not.toHaveBeenCalled();
+    expect(useDrawings.getState().tool).toBe('zoom');
+    expect(screen.getByTestId('keyboard-readout')).toHaveTextContent(/too close/);
+  });
+
   it('opens a note box at the point and returns focus to the plot after it', () => {
     renderTools();
     pickAndFocus('Text note');
@@ -228,7 +238,7 @@ describe('placing drawings from the keyboard (NSTOCK-0468)', () => {
   it('lists the drawings in the rail and removes one by keyboard', async () => {
     renderTools();
     const list = screen.getByRole('button', { name: 'Drawings on this chart (0)' });
-    expect(list).toBeDisabled();
+    expect(list).toBeEnabled();
     pickAndFocus('Horizontal line');
     press('Enter');
     pickAndFocus('Trend line');
@@ -245,6 +255,26 @@ describe('placing drawings from the keyboard (NSTOCK-0468)', () => {
     fireEvent.click(items[0] as HTMLElement);
     expect(stored()).toEqual([expect.objectContaining({ kind: 'trend' })]);
     expect(screen.getByText('Removed Horizontal line, ₹1,505.00')).toBeInTheDocument();
+  });
+
+  it('says there are no drawings when the list is opened empty', async () => {
+    renderTools();
+    fireEvent.keyDown(screen.getByRole('button', { name: 'Drawings on this chart (0)' }), {
+      key: 'Enter',
+    });
+    expect(await screen.findByRole('menuitem', { name: 'No drawings yet' })).toBeInTheDocument();
+  });
+
+  it('keeps the drawings button enabled after the last drawing is removed, so focus has a home', async () => {
+    renderTools();
+    pickAndFocus('Horizontal line');
+    press('Enter');
+    const trigger = screen.getByRole('button', { name: 'Drawings on this chart (1)' });
+    fireEvent.keyDown(trigger, { key: 'Enter' });
+    fireEvent.click(await screen.findByRole('menuitem'));
+    const empty = screen.getByRole('button', { name: 'Drawings on this chart (0)' });
+    expect(empty).toBeEnabled();
+    await waitFor(() => expect(document.body).not.toBe(document.activeElement));
   });
 
   it('names index levels in points on the index chart', async () => {

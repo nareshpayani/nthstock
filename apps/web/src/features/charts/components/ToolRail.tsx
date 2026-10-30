@@ -205,10 +205,9 @@ export function ToolRail({
         </RailButton>
         {/* Every drawing by name, each removable from the keyboard (NSTOCK-0468). */}
         <DropdownMenu modal={false}>
-          <DropdownMenuTrigger asChild disabled={count === 0}>
+          <DropdownMenuTrigger asChild>
             <RailButton
               label={strings.drawing.list.button(count)}
-              disabled={count === 0}
               touch={touch}
               data-testid="drawings-list"
             >
@@ -216,6 +215,9 @@ export function ToolRail({
             </RailButton>
           </DropdownMenuTrigger>
           <DropdownMenuContent side="right" align="end">
+            {count === 0 ? (
+              <DropdownMenuItem disabled>{strings.drawing.list.empty}</DropdownMenuItem>
+            ) : null}
             {drawings.map((drawing) => {
               const name = drawingName(drawing, format);
               return (

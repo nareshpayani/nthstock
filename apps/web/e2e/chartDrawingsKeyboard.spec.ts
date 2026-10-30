@@ -50,6 +50,8 @@ test('keyboard only: draw a trend line on the full-screen chart and remove it', 
   const item = page.getByRole('menuitem', { name: /^Remove Trend line, ₹[\d,.]+ to ₹[\d,.]+$/ });
   await expect(item).toBeFocused();
   await page.keyboard.press('Enter');
-  await expect(rail.getByRole('button', { name: 'Drawings on this chart (0)' })).toBeDisabled();
+  const emptied = rail.getByRole('button', { name: 'Drawings on this chart (0)' });
+  await expect(emptied).toBeEnabled();
+  await expect(emptied).toBeFocused();
   await expectNoSeriousA11yViolations(page, 'full-screen chart after drawing', '[role="dialog"]');
 });
