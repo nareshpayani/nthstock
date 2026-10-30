@@ -75,8 +75,8 @@ export function SearchOption({
             }}
             className={
               add.added
-                ? 'flex size-7 shrink-0 items-center justify-center rounded-md text-up'
-                : 'flex size-7 shrink-0 items-center justify-center rounded-md border border-line text-brand hover:bg-brand-soft'
+                ? 'flex size-7 shrink-0 items-center justify-center rounded-md text-up [@media(pointer:coarse)]:size-11'
+                : 'flex size-7 shrink-0 items-center justify-center rounded-md border border-line text-brand hover:bg-brand-soft [@media(pointer:coarse)]:size-11'
             }
           >
             {add.added ? <IconCheck size={16} /> : <IconPlus size={16} />}

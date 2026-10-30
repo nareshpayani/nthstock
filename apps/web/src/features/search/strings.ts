@@ -12,5 +12,8 @@ export const strings = {
   addTo: (list: string) => `Add to ${list}`,
   inList: (list: string) => `In ${list}`,
   addHint: (list: string) => `Shift+Enter adds the highlighted stock to ${list}`,
+  tapToAdd: (list: string) => `Tap a stock to add it to ${list}`,
+  added: (symbol: string, list: string) => `${symbol} added to ${list}`,
+  alreadyIn: (symbol: string, list: string) => `${symbol} is already in ${list}`,
   resultCount: (count: number) => (count === 1 ? '1 result' : `${String(count)} results`),
 } as const;

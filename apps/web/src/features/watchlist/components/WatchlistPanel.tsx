@@ -71,7 +71,12 @@ export function WatchlistPanel({ list, onAddStock }: WatchlistPanelProps) {
         title={strings.emptyTitle}
         description={strings.emptyBody}
         action={
-          <Button size="sm" icon={<IconPlus size={16} />} onClick={onAddStock}>
+          <Button
+            size="sm"
+            icon={<IconPlus size={16} />}
+            onClick={onAddStock}
+            className="[@media(pointer:coarse)]:min-h-11"
+          >
             {strings.addStock}
           </Button>
         }

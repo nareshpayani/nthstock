@@ -29,27 +29,42 @@ test(`watchlist row actions by touch: buy, reorder and remove (NSTOCK-0470) ${TO
   page,
 }) => {
   test.setTimeout(90_000);
-  // Stocks are added from the desktop rail's search, whose results carry a + button; the rest of
-  // the journey is on the phone.
-  await page.setViewportSize({ width: 1440, height: 900 });
-  await page.goto('/login?redirect=%2Fdashboard');
+  await page.goto('/login?redirect=%2Fwatchlist');
   await logIn(page, uniqueMobile());
-  await expect(page).toHaveURL(/\/dashboard$/);
-  const rail = page.getByRole('complementary', { name: 'Watchlist and search' });
-  const search = rail.getByRole('combobox', { name: 'Search stocks' });
-  for (const symbol of ['INFY', 'TCS']) {
-    await search.fill(symbol.toLowerCase());
-    const add = rail.locator(`[data-add-to-watchlist="${symbol}"]`);
-    await expect(add).toBeVisible();
-    const added = nextChange(page);
-    await add.click();
-    await added;
-  }
-
-  await page.setViewportSize({ width: 390, height: 844 });
-  await page.goto('/watchlist');
+  await expect(page).toHaveURL(/\/watchlist$/);
   const touch = await touchscreen(page);
   const panel = page.getByRole('region', { name: 'Watchlists' });
+
+  // Add stock opens the add sheet on the phone: INFY with its +, TCS by tapping its row.
+  const addStock = page.getByRole('button', { name: 'Add stock' }).first();
+  expect(await heightOf(addStock)).toBeGreaterThanOrEqual(44);
+  await tap(touch, addStock);
+  const sheet = page.getByRole('dialog', { name: /^Add to / });
+  await expect(sheet).toBeVisible();
+  const search = sheet.getByRole('combobox', { name: 'Search stocks' });
+  await search.fill('infy');
+  const plus = sheet.locator('[data-add-to-watchlist="INFY"]');
+  await expect(plus).toBeVisible();
+  expect(await heightOf(plus)).toBeGreaterThanOrEqual(44);
+  let added = nextChange(page);
+  await tap(touch, plus);
+  await added;
+  await search.fill('tcs');
+  const tcs = sheet.getByRole('option', { name: /^TCS/ });
+  await expect(tcs).toBeVisible();
+  added = nextChange(page);
+  await tap(touch, tcs);
+  await added;
+  await expect(sheet.getByRole('status')).toHaveText('TCS added to My Watchlist');
+  // Adding keeps the sheet open on the list, for the next stock.
+  await expect(page).toHaveURL(/\/watchlist$/);
+  await expect(sheet).toBeVisible();
+  await tap(touch, sheet.getByRole('button', { name: 'Close' }));
+  await expect(sheet).toBeHidden();
+  // With stocks in the list, the header's Add stock is the way in, and a 44 px target too.
+  const headerAdd = page.getByRole('button', { name: 'Add stock' });
+  await expect(headerAdd).toHaveCount(1);
+  expect(await heightOf(headerAdd)).toBeGreaterThanOrEqual(44);
 
   const rows = panel.getByRole('list', { name: /^Stocks in / });
   const symbols = () =>

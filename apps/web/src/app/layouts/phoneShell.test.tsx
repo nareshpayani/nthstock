@@ -366,4 +366,19 @@ describe('phone app shell (NSTOCK-0466)', () => {
     expect(await screen.findByRole('heading', { level: 1, name: 'Watchlist' })).toBeInTheDocument();
     expect(screen.getByRole('region', { name: 'Watchlists' })).toBeInTheDocument();
   });
+
+  it('has no Add stock button when signed out', async () => {
+    renderPhone('/watchlist', { signedIn: false });
+    await screen.findByRole('heading', { level: 1, name: 'Watchlist' });
+    expect(screen.queryByRole('button', { name: 'Add stock' })).toBeNull();
+  });
+
+  it('says the lists are not loaded instead of falling back to Trade', async () => {
+    renderPhone('/watchlist', { data: true });
+    await screen.findByRole('heading', { level: 1, name: 'Watchlist' });
+    act(() => useSearchFocusStore.getState().requestAddToWatchlist());
+    const sheet = await screen.findByRole('dialog', { name: 'Add to watchlist' });
+    expect(within(sheet).getByRole('status')).toHaveTextContent('not loaded yet');
+    expect(within(sheet).queryByRole('combobox')).toBeNull();
+  });
 });
