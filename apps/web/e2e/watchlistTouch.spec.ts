@@ -68,7 +68,7 @@ test(`watchlist row actions by touch: buy, reorder and remove (NSTOCK-0470) ${TO
   const actions = (symbol: string) => rows.getByRole('button', { name: `${symbol} actions` });
   expect(await heightOf(actions('INFY'))).toBeGreaterThanOrEqual(44);
 
-  // Buy: one tap opens the menu, one more the order ticket.
+  // Every target in the menu is at least 44 px.
   await tap(touch, actions('INFY'));
   const menu = page.getByRole('menu');
   await expect(menu).toBeVisible();
@@ -78,15 +78,10 @@ test(`watchlist row actions by touch: buy, reorder and remove (NSTOCK-0470) ${TO
   );
   for (const item of await menu.getByRole('menuitem').all())
     expect(await heightOf(item)).toBeGreaterThanOrEqual(44);
-  await tap(touch, menu.getByRole('menuitem', { name: 'Buy INFY' }));
-  const ticket = page.getByRole('dialog', { name: 'Trade INFY' });
-  await expect(ticket).toBeVisible();
-  await page.goto('/watchlist');
 
-  // Move INFY down below TCS.
+  // Move INFY down below TCS, from the menu already open.
   const moved = nextChange(page);
-  await tap(touch, actions('INFY'));
-  await tap(touch, page.getByRole('menu').getByRole('menuitem', { name: /Move down/ }));
+  await tap(touch, menu.getByRole('menuitem', { name: /Move down/ }));
   await moved;
   await expect.poll(symbols).toEqual(['TCS', 'INFY']);
 
@@ -96,4 +91,9 @@ test(`watchlist row actions by touch: buy, reorder and remove (NSTOCK-0470) ${TO
   await tap(touch, page.getByRole('menu').getByRole('menuitem', { name: 'Remove TCS' }));
   await removed;
   await expect.poll(symbols).toEqual(['INFY']);
+
+  // Buy last: it opens the order ticket, which leaves the list, so nothing comes after it.
+  await tap(touch, actions('INFY'));
+  await tap(touch, page.getByRole('menu').getByRole('menuitem', { name: 'Buy INFY' }));
+  await expect(page.getByRole('dialog', { name: 'Trade INFY' })).toBeVisible();
 });
