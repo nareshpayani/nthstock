@@ -6,6 +6,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } 
 import { createMockServer } from '@/mocks/node';
 import { useOpenTicket } from '@/shared/hooks/useOpenTicket';
 import { useConnectivityStore } from '@/shared/lib/connectivity';
+import { subscribeOrderCelebrations } from '@/shared/motion/orderCelebration';
 import { orderCue } from '@/shared/motion/orderCues';
 import type { MarketSession } from '@/shared/lib/marketSessionContext';
 import { initialTicketIntentState, useTicketIntentStore } from '@/shared/lib/ticketIntentStore';
@@ -323,6 +324,8 @@ describe('order ticket with the market open', () => {
       animationEnd(slide, 'nth-step-back');
       expect(slide).not.toHaveClass('animate-step-back');
 
+      const celebrated: string[] = [];
+      const stopListening = subscribeOrderCelebrations(({ kind }) => celebrated.push(kind));
       fireEvent.click(screen.getByRole('button', { name: 'Buy INFY' }));
       const confirm = await screen.findByRole('button', { name: 'Confirm' });
       fireEvent.click(confirm);
@@ -331,6 +334,9 @@ describe('order ticket with the market open', () => {
       expect(await screen.findByTestId('success-check')).toBeInTheDocument();
       expect(screen.getByRole('dialog', { name: 'Trade INFY' })).toBeInTheDocument();
       expect(orderCue).toHaveBeenCalledExactlyOnceWith('filledBuy');
+      // A market order fills at once: the order-placed moment says "filled" (NSTOCK-0475).
+      expect(celebrated).toEqual(['filled']);
+      stopListening();
       await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
       expect(useTicketIntentStore.getState().intent).toBeNull();
       expect((await screen.findAllByText('Order executed')).length).toBeGreaterThan(0);

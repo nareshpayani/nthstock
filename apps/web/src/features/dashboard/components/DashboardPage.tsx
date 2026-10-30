@@ -1,20 +1,16 @@
 import { getRouteApi } from '@tanstack/react-router';
 import { useContext, type ReactNode } from 'react';
-import {
-  DEFAULT_CHART_RANGE,
-  DEFAULT_INDEX_CHART_TYPE,
-  IndexChartCard,
-  keepInterval,
-} from '@/features/charts';
+import { DEFAULT_CHART_RANGE, DEFAULT_INDEX_CHART_TYPE, keepInterval } from '@/features/charts';
 import { StocksListsCard } from '@/features/collections';
 import { IndicesRow } from '@/features/indices';
 import { DEFAULT_MOVERS_DIRECTION, MarketMoversCard } from '@/features/movers';
 import { SectionBoundary } from '@/shared/components/SectionBoundary';
 import { usePhoneShell } from '@/shared/hooks/usePhoneLayout';
 import { MarketSessionContext } from '@/shared/lib/marketSessionContext';
-import type { DashboardSearch } from '../model/dashboardSearch';
+import { DEFAULT_HOME_CHART_SYMBOL, type DashboardSearch } from '../model/dashboardSearch';
 import { strings } from '../strings';
 import { Hero } from './Hero';
+import { HomeChartCard } from './HomeChartCard';
 import { PhoneHome } from './PhoneHome';
 
 const route = getRouteApi('/_app/dashboard');
@@ -54,7 +50,9 @@ export function DashboardPage({ now }: DashboardPageProps) {
 
   const chart = (
     <Section label={strings.sections.chart}>
-      <IndexChartCard
+      <HomeChartCard
+        symbol={search.stock ?? DEFAULT_HOME_CHART_SYMBOL}
+        onSymbolChange={(stock) => setSearch({ stock })}
         range={search.range ?? DEFAULT_CHART_RANGE}
         interval={search.interval}
         chartType={search.chart ?? DEFAULT_INDEX_CHART_TYPE}

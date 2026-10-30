@@ -58,6 +58,12 @@ export const strings = {
     sellLabel: (symbol: string) => `Sell ${symbol}`,
     removeLabel: (symbol: string) => `Remove ${symbol}`,
     dragLabel: (symbol: string) => `Drag to reorder ${symbol}`,
+    actionsLabel: (symbol: string) => `${symbol} actions`,
+    moveUp: 'Move up',
+    moveDown: 'Move down',
+    firstAlready: 'Already first',
+    lastAlready: 'Already last',
+    reorderHow: 'To reorder, choose Custom order in Sort',
     keyHint: 'On a stock: B buy, S sell, Alt+↑/↓ move, Delete remove.',
   },
   /** Live-region announcements. */

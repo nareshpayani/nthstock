@@ -17,7 +17,7 @@ import type { ReactNode } from 'react';
 import { fundsSummaryQuery } from '@/features/funds';
 import { holdingsQuery, useLiveHoldings } from '@/features/holdings';
 import { MoversIndexPicker, MoversList } from '@/features/movers';
-import { WatchlistSection } from '@/features/watchlist';
+import { WatchlistAddButton, WatchlistSection } from '@/features/watchlist';
 import { PnlAmount } from '@/shared/components/PnlAmount';
 import { useSession } from '@/shared/hooks/useSession';
 import { useApiClient } from '@/shared/lib/apiClientContext';
@@ -164,6 +164,7 @@ export function PhoneHome({
   onMoversIndexChange,
 }: PhoneHomeProps) {
   const requestSearch = useSearchFocusStore((s) => s.requestSearch);
+  const requestAdd = useSearchFocusStore((s) => s.requestAddToWatchlist);
   const { status } = useSession();
   return (
     <div className="grid grid-cols-[minmax(0,1fr)] gap-4">
@@ -204,7 +205,10 @@ export function PhoneHome({
             ))}
           </TabsList>
           <TabsContent value="watchlist" className="pt-0">
-            <WatchlistSection bare onAddStock={requestSearch} />
+            <div className="flex justify-end empty:hidden py-2">
+              <WatchlistAddButton />
+            </div>
+            <WatchlistSection bare onAddStock={requestAdd} />
           </TabsContent>
           {(['gainers', 'losers'] as const satisfies readonly MoverDirection[]).map((direction) => (
             <TabsContent key={direction} value={direction} className="pt-1">

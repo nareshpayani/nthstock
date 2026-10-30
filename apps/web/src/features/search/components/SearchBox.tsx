@@ -42,6 +42,12 @@ export type SearchBoxProps = {
    * trade sheet (NSTOCK-0466), where the results are the sheet's content.
    */
   inline?: boolean;
+  /**
+   * Choosing a stock adds it to `addTo` instead of opening its page, and the list stays open for
+   * the next one: the phone's Add to watchlist sheet, where a row is the biggest target. The
+   * box's own status line says what each add did. Without `addTo`, choosing does nothing.
+   */
+  chooseAdds?: boolean;
 };
 
 type Group = { key: 'results' | 'recent' | 'popular'; title: string | null; hits: SearchHit[] };
@@ -52,7 +58,14 @@ type Group = { key: 'results' | 'recent' | 'popular'; title: string | null; hits
  * shows recent searches, then popular ones. ↑/↓ move, Enter opens /stocks/<symbol>, Esc closes the
  * list and returns focus to where it was before the search.
  */
-export function SearchBox({ ref, onNavigate, onChoose, addTo, inline = false }: SearchBoxProps) {
+export function SearchBox({
+  ref,
+  onNavigate,
+  onChoose,
+  addTo,
+  inline = false,
+  chooseAdds = false,
+}: SearchBoxProps) {
   const api = useApiClient();
   const queryClient = useQueryClient();
   const navigate = useNavigate();
@@ -67,6 +80,9 @@ export function SearchBox({ ref, onNavigate, onChoose, addTo, inline = false }: 
   const [dismissed, setDismissed] = useState(false);
   const [active, setActive] = useState(-1);
   const [recent, setRecent] = useState<SearchHit[]>([]);
+  // In the phone add sheet the watchlist's own live region sits behind the modal, so the box
+  // says what an add did (NSTOCK-0474). Cleared when the query changes.
+  const [addNote, setAddNote] = useState('');
 
   const trimmed = query.trim().slice(0, SEARCH_QUERY_MAX);
   const debounced = useDebouncedValue(trimmed, SEARCH_DEBOUNCE_MS);
@@ -109,6 +125,7 @@ export function SearchBox({ ref, onNavigate, onChoose, addTo, inline = false }: 
     if (settled && !results.isError) announcement = strings.resultCount(options.length);
     if (results.isError) announcement = strings.error;
   }
+  if (addNote) announcement = addNote;
   const expanded = listening && (options.length > 0 || message !== null);
   const activeId = expanded && activeIndex >= 0 ? optionId(activeIndex) : undefined;
 
@@ -126,8 +143,24 @@ export function SearchBox({ ref, onNavigate, onChoose, addTo, inline = false }: 
     [ref],
   );
 
+  const add = (hit: SearchHit) => {
+    if (!addTo) return;
+    // In a sheet (inline) the watchlist's own live region is behind the modal, so say it here.
+    if (chooseAdds || inline)
+      setAddNote(
+        addTo.has(hit)
+          ? strings.alreadyIn(hit.symbol, addTo.listName)
+          : strings.added(hit.symbol, addTo.listName),
+      );
+    addTo.add(hit);
+  };
+
   const choose = (hit: SearchHit) => {
     setRecent(addRecentSearch(hit));
+    if (chooseAdds) {
+      add(hit);
+      return;
+    }
     setQuery('');
     setActive(-1);
     setDismissed(true);
@@ -185,7 +218,7 @@ export function SearchBox({ ref, onNavigate, onChoose, addTo, inline = false }: 
         event.preventDefault();
         const hit = expanded ? options[activeIndex] : undefined;
         if (event.shiftKey && addTo) {
-          if (hit) addTo.add(hit);
+          if (hit) add(hit);
           return;
         }
         if (hit) choose(hit);
@@ -236,6 +269,7 @@ export function SearchBox({ ref, onNavigate, onChoose, addTo, inline = false }: 
           value={query}
           onChange={(event) => {
             setQuery(event.target.value);
+            setAddNote('');
             setActive(-1);
             setDismissed(false);
           }}
@@ -289,7 +323,7 @@ export function SearchBox({ ref, onNavigate, onChoose, addTo, inline = false }: 
                       ? {
                           listName: addTo.listName,
                           added: addTo.has(hit),
-                          onAdd: () => addTo.add(hit),
+                          onAdd: () => add(hit),
                         }
                       : undefined
                   }
@@ -313,7 +347,11 @@ export function SearchBox({ ref, onNavigate, onChoose, addTo, inline = false }: 
         </div>
         {addTo && options.length > 0 ? (
           <p className="border-t border-line px-3 pt-2 pb-1 text-label text-ink-muted">
-            {strings.addHint(addTo.listName)}
+            {chooseAdds
+              ? strings.tapToAdd(addTo.listName)
+              : inline
+                ? strings.plusToAdd(addTo.listName)
+                : strings.addHint(addTo.listName)}
           </p>
         ) : null}
       </div>

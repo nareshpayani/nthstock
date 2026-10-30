@@ -1,4 +1,9 @@
-import { createApiClient, type ApiClient, type QuoteStore } from '@nthstock/apiClient';
+import {
+  createApiClient,
+  type ApiClient,
+  type QuoteStore,
+  type TradingStore,
+} from '@nthstock/apiClient';
 import { createMemoryHistory, RouterProvider } from '@tanstack/react-router';
 import { render } from '@testing-library/react';
 import { AppProviders } from '@/app/providers/AppProviders';
@@ -19,6 +24,7 @@ export type RenderAppOptions = {
   apiClient?: ApiClient;
   marketSession?: MarketSession;
   orderUpdates?: OrderUpdateSource;
+  tradingStore?: TradingStore;
 };
 
 /** Renders the real app (providers + file routes) at a URL, for route and shell tests. */
@@ -42,6 +48,7 @@ export function renderApp(url: string, options: RenderAppOptions = {}) {
       {...(options.quoteStore ? { quoteStore: options.quoteStore } : {})}
       {...(options.marketSession ? { marketSession: options.marketSession } : {})}
       {...(options.orderUpdates ? { orderUpdates: options.orderUpdates } : {})}
+      {...(options.tradingStore ? { tradingStore: options.tradingStore } : {})}
     >
       <RouterProvider router={router} />
     </AppProviders>,

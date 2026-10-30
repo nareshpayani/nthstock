@@ -21,6 +21,18 @@ const TH_PATH = 'M58 12V48a9.5 9.5 0 0 0 9.5 9.5H71M88 6.5V57.5M88 36a13.5 13.5 
 /** The crossbar of the "t", drawn as a small rising price line. */
 const RISE_PATH = 'M48 35L55 29L60.5 32.5L72 20';
 
+/**
+ * The brand mark's strokes, for a drawing of the mark outside this component (the order-placed
+ * moment draws the rising line in). 64-unit body, round caps and joins.
+ */
+export const LOGO_MARK = {
+  n: N_PATH,
+  th: TH_PATH,
+  rise: RISE_PATH,
+  stroke: STROKE,
+  riseStroke: RISE_STROKE,
+} as const;
+
 function Stroke({
   d,
   className,

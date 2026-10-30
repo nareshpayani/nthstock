@@ -13,6 +13,8 @@ import { DashboardPage, prefetchDashboard } from '@/features/dashboard';
 // than failing the route; the sections apply their defaults. Kept here, not imported from the
 // feature, so the feature's code stays out of the initial chunk.
 const dashboardSearch = z.object({
+  // The same list as HOME_CHART_SYMBOLS in the feature (a test keeps them in step).
+  stock: z.enum(['HDFCBANK', 'PAYTM', 'RELIANCE', 'NIFTY50']).optional().catch(undefined),
   range: CandleRange.optional().catch(undefined),
   interval: CandleInterval.optional().catch(undefined),
   chart: z.enum(['line', 'area', 'candle', 'bar', 'heikin']).optional().catch(undefined),

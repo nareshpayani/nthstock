@@ -14,7 +14,9 @@ afterEach(() => {
 });
 afterAll(() => api.close());
 
-async function renderSearch(props: Pick<SearchBoxProps, 'onNavigate' | 'addTo'> = {}) {
+async function renderSearch(
+  props: Pick<SearchBoxProps, 'onNavigate' | 'addTo' | 'chooseAdds'> = {},
+) {
   const view = renderWithProviders(
     <div>
       <button type="button">Before</button>
@@ -248,6 +250,35 @@ describe('SearchBox add to watchlist (T-121)', () => {
 
     fireEvent.change(input(), { target: { value: 'tcs' } });
     await waitFor(() => expect(options()[0]).toHaveTextContent('In Banks'));
+  });
+
+  it('with chooseAdds, a tap or Enter on a result adds it and the list stays open (phone add sheet)', async () => {
+    const { added, addTo } = adder();
+    const { input, router } = await renderSearch({ addTo, chooseAdds: true });
+    await typeAndWait(input(), 'infy');
+    expect(listbox().parentElement).toHaveTextContent('Tap a stock to add it to Banks');
+    fireEvent.click(options()[0] as HTMLElement);
+    expect(added).toEqual(['INFY']);
+    expect(router.state.location.pathname).toBe('/');
+    expect(input()).toHaveAttribute('aria-expanded', 'true');
+    fireEvent.keyDown(input(), { key: 'ArrowDown' });
+    fireEvent.keyDown(input(), { key: 'Enter' });
+    expect(added).toEqual(['INFY', 'INFY']);
+    expect(router.state.location.pathname).toBe('/');
+  });
+
+  it('with chooseAdds, says in its own status line what each add did', async () => {
+    const { addTo } = adder(['TCS']);
+    const { input } = await renderSearch({ addTo, chooseAdds: true });
+    await typeAndWait(input(), 'infy');
+    fireEvent.click(options()[0] as HTMLElement);
+    expect(screen.getByRole('status')).toHaveTextContent('INFY added to Banks');
+
+    fireEvent.change(input(), { target: { value: 'tcs' } });
+    expect(screen.getByRole('status')).not.toHaveTextContent('added');
+    await waitFor(() => expect(options()[0]).toHaveTextContent('TCS'));
+    fireEvent.click(options()[0] as HTMLElement);
+    expect(screen.getByRole('status')).toHaveTextContent('TCS is already in Banks');
   });
 
   it('Shift+Enter with no watchlist does nothing special', async () => {

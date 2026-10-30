@@ -1,5 +1,6 @@
 import { useSearchFocusStore } from '@/shared/lib/searchFocusStore';
 import { strings } from '../strings';
+import { WatchlistAddButton } from './WatchlistAddButton';
 import { WatchlistSection } from './WatchlistSection';
 import { WatchlistSortMenu } from './WatchlistSortMenu';
 
@@ -9,15 +10,19 @@ import { WatchlistSortMenu } from './WatchlistSortMenu';
  * desktop).
  */
 export function WatchlistPage() {
-  const requestSearch = useSearchFocusStore((s) => s.requestSearch);
+  const requestAdd = useSearchFocusStore((s) => s.requestAddToWatchlist);
   return (
     <div className="mx-auto grid w-full max-w-xl gap-3">
       <div className="flex items-center justify-between gap-2">
         {/* The top bar's switch names the page on a phone. */}
         <h1 className="text-title text-ink max-[767px]:sr-only">{strings.pageTitle}</h1>
-        <WatchlistSortMenu />
+        {/* Right-aligned like Home's: the page title is visually hidden on a phone. */}
+        <div className="ml-auto flex items-center gap-2">
+          <WatchlistAddButton />
+          <WatchlistSortMenu />
+        </div>
       </div>
-      <WatchlistSection onAddStock={requestSearch} />
+      <WatchlistSection onAddStock={requestAdd} />
     </div>
   );
 }

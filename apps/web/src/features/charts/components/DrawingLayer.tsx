@@ -1,7 +1,17 @@
 import type { Candle } from '@nthstock/contracts';
 import { colors } from '@nthstock/tokens';
-import { formatChange } from '@nthstock/utils';
-import { useEffect, useReducer, useRef, useState, type PointerEvent } from 'react';
+import { formatChange, formatIstDate, formatIstTime } from '@nthstock/utils';
+import {
+  useEffect,
+  useId,
+  useReducer,
+  useRef,
+  useState,
+  type FocusEvent,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type PointerEvent,
+} from 'react';
+import { toChartTime } from '../model/chartData';
 import { formatChartValue, type ChartValueFormat } from '../model/chartFormat';
 import {
   TWO_POINT_TOOLS,
@@ -10,6 +20,7 @@ import {
   keepsEscape,
   logicalToTime,
   measure,
+  priceStep,
   snapToBar,
   timeToLogical,
   type ChartPoint,
@@ -33,6 +44,10 @@ const DRAG_PX = 8;
 // A user's drawings are ink, not brand blue: blue is for actions, and the Buy order lines are blue
 // on the same chart (DESIGN.md).
 const LINE = colors.ink;
+/** Bars or price steps one Shift+arrow press moves the keyboard point. */
+const FAST = 10;
+/** Bars at least a day apart are named by date alone. */
+const DAY = 86_400;
 
 let nextId = 0;
 const newId = () => `${Date.now().toString(36)}-${String((nextId += 1))}`;
@@ -62,10 +77,21 @@ export function DrawingLayer({ handle, candles, symbol, format }: DrawingLayerPr
   // that would hand them the state. `armed` means the first tap is down and released.
   const startRef = useRef<ChartPoint | null>(null);
   const armedRef = useRef(false);
+  // The keyboard point (NSTOCK-0468): a bar by its index and a price. `keyboard` is true while the
+  // plot (or the note box opened from it) has focus, so the plot stays a tab stop until focus leaves.
+  const [cursor, setCursor] = useState<{ index: number; price: number } | null>(null);
+  const [keyboard, setKeyboard] = useState(false);
+  const [said, setSaid] = useState('');
+  // The same words twice in a row (the first or last bar, two lines of one kind) are said again:
+  // a zero-width space makes the second differ.
+  const announce = (text: string) => setSaid((last) => (last === text ? `${text}\u200b` : text));
+  const surfaceRef = useRef<HTMLDivElement>(null);
+  const howToId = useId();
 
   // With nothing drawn, no tool picked and no read-out, the layer does not follow the chart, so a
   // chart without drawings costs no extra render per pan or crosshair move.
-  const active = tool !== null || drawings.length > 0 || note !== null || measured !== null;
+  const active =
+    tool !== null || drawings.length > 0 || note !== null || measured !== null || keyboard;
   useEffect(() => {
     if (!active) return undefined;
     const timeScale = chart.timeScale();
@@ -197,6 +223,135 @@ export function DrawingLayer({ handle, candles, symbol, format }: DrawingLayerPr
     }
   };
 
+  const last = candles.length - 1;
+  const clampIndex = (index: number) => Math.min(Math.max(0, index), Math.max(0, last));
+  const cursorPoint = (at: { index: number; price: number }): ChartPoint | null => {
+    const bar = candles[clampIndex(at.index)];
+    if (!bar) return null;
+    const point = { time: toChartTime(bar.t), price: at.price };
+    return magnet ? snapToBar(point, candles) : point;
+  };
+  // The keyboard point starts on the right-most bar in view, at its close.
+  const firstCursor = () => {
+    const range = chart.timeScale().getVisibleLogicalRange?.();
+    const index = clampIndex(range ? Math.floor(range.to) : last);
+    return { index, price: candles[index]?.c ?? 0 };
+  };
+  const describePoint = (point: ChartPoint) => {
+    const date = new Date(point.time * 1000);
+    const daily =
+      candles.length > 1 &&
+      toChartTime(candles[1]?.t ?? '') - toChartTime(candles[0]?.t ?? '') >= DAY;
+    const time = daily ? formatIstDate(date) : `${formatIstDate(date)} ${formatIstTime(date)}`;
+    return { time, price: formatChartValue(point.price, format) };
+  };
+
+  // Enter at the keyboard point: what a tap there does, with the step said out loud.
+  const placeFromKeyboard = (point: ChartPoint) => {
+    if (tool === null) return;
+    const name = strings.drawing.tools[tool];
+    if (tool === 'horizontal') {
+      add(symbol, { id: newId(), kind: 'horizontal', at: point });
+      setTool(null);
+      announce(strings.drawing.keyboard.placed(name));
+      return;
+    }
+    if (tool === 'text') {
+      setNote(point);
+      setTool(null);
+      return;
+    }
+    const first = startRef.current;
+    if (!first) {
+      startRef.current = point;
+      armedRef.current = true;
+      setStart(point);
+      setEnd(point);
+      const { time, price } = describePoint(point);
+      announce(strings.drawing.keyboard.startPlaced(time, price));
+      return;
+    }
+    // A zoom needs two bars between its ends; the first point stays for another try.
+    if (
+      tool === 'zoom' &&
+      Math.abs(timeToLogical(candles, point.time) - timeToLogical(candles, first.time)) < 2
+    ) {
+      announce(strings.drawing.keyboard.tooClose);
+      return;
+    }
+    finish(first, point);
+    // The measure read-out speaks for the measure tool.
+    if (tool !== 'measure') announce(strings.drawing.keyboard.placed(name));
+  };
+
+  const onKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
+    if (tool === null || event.altKey || event.ctrlKey || event.metaKey) return;
+    const at = cursor ?? firstCursor();
+    const bars = event.shiftKey ? FAST : 1;
+    const step = () => {
+      const top = series.coordinateToPrice(0);
+      const bottom = series.coordinateToPrice(height);
+      return priceStep(top === null || bottom === null ? 0 : top - bottom) * bars;
+    };
+    let next: typeof at;
+    switch (event.key) {
+      case 'ArrowLeft':
+        next = { ...at, index: clampIndex(at.index - bars) };
+        break;
+      case 'ArrowRight':
+        next = { ...at, index: clampIndex(at.index + bars) };
+        break;
+      case 'ArrowUp':
+        next = { ...at, price: at.price + step() };
+        break;
+      case 'ArrowDown':
+        next = { ...at, price: Math.max(0, at.price - step()) };
+        break;
+      case 'Home':
+        next = { ...at, index: 0 };
+        break;
+      case 'End':
+        next = { ...at, index: clampIndex(last) };
+        break;
+      case 'Enter':
+      case ' ': {
+        event.preventDefault();
+        const point = cursorPoint(at);
+        if (point) placeFromKeyboard(point);
+        return;
+      }
+      default:
+        return;
+    }
+    // The arrows move the point, not the page.
+    event.preventDefault();
+    setCursor(next);
+    const point = cursorPoint(next);
+    if (!point) return;
+    if (startRef.current) setEnd(point);
+    const { time, price } = describePoint(point);
+    announce(strings.drawing.keyboard.at(time, price));
+  };
+
+  const onSurfaceFocus = () => {
+    setKeyboard(true);
+    if (tool === null) return;
+    const at = cursor ?? firstCursor();
+    setCursor(at);
+    const point = cursorPoint(at);
+    if (!point) return;
+    if (startRef.current) setEnd(point);
+    const { time, price } = describePoint(point);
+    announce(strings.drawing.keyboard.at(time, price));
+  };
+  const onSurfaceBlur = (event: FocusEvent<HTMLDivElement>) => {
+    // Focus going to the note box opened from here keeps the plot a tab stop to come back to.
+    const to = event.relatedTarget;
+    if (to instanceof Node && event.currentTarget.parentElement?.contains(to)) return;
+    setKeyboard(false);
+  };
+  const keyboardPoint = keyboard && tool !== null && cursor ? cursorPoint(cursor) : null;
+
   const preview: Drawing | null =
     start && end && tool && (tool === 'trend' || tool === 'ray' || tool === 'fib')
       ? { id: 'preview', kind: tool, from: start, to: end }
@@ -253,7 +408,65 @@ export function DrawingLayer({ handle, candles, symbol, format }: DrawingLayerPr
         {measured && !liveMeasure ? (
           <MeasureBox {...measured} candles={candles} x={x} y={y} format={format} zoom={false} />
         ) : null}
+        {keyboardPoint ? (
+          <g data-testid="keyboard-point">
+            <line
+              x1={x(keyboardPoint.time)}
+              x2={x(keyboardPoint.time)}
+              y1={0}
+              y2={height}
+              stroke={colors['ink-muted']}
+              strokeDasharray="4 3"
+            />
+            <line
+              x1={0}
+              x2={width}
+              y1={y(keyboardPoint.price)}
+              y2={y(keyboardPoint.price)}
+              stroke={colors['ink-muted']}
+              strokeDasharray="4 3"
+            />
+            <circle
+              cx={x(keyboardPoint.time)}
+              cy={y(keyboardPoint.price)}
+              r={5}
+              fill={colors.surface}
+              stroke={LINE}
+              strokeWidth={2}
+            />
+          </g>
+        ) : null}
       </svg>
+      {/* eslint-disable jsx-a11y-x/no-noninteractive-element-interactions, jsx-a11y-x/no-noninteractive-tabindex --
+          role="application" is the WAI-ARIA role for a surface that takes its own arrow keys. */}
+      {tool !== null || keyboard ? (
+        <div
+          ref={surfaceRef}
+          role="application"
+          tabIndex={0}
+          aria-label={
+            tool === null
+              ? strings.drawing.keyboard.plot
+              : `${strings.drawing.keyboard.plot}: ${strings.drawing.tools[tool]}`
+          }
+          aria-describedby={howToId}
+          data-testid="drawing-keyboard"
+          onKeyDown={onKeyDown}
+          onFocus={onSurfaceFocus}
+          onBlur={onSurfaceBlur}
+          // Under the drawing surface and not hit by the pointer: taps still go to the SVG.
+          className="pointer-events-none absolute top-0 left-0 z-10 rounded-sm focus-visible:ring-3 focus-visible:ring-brand focus-visible:outline-none focus-visible:ring-inset"
+          style={{ width, height }}
+        >
+          <span id={howToId} className="sr-only">
+            {tool === null ? strings.drawing.keyboard.noTool : strings.drawing.keyboard.howTo}
+          </span>
+        </div>
+      ) : null}
+      {/* eslint-enable jsx-a11y-x/no-noninteractive-element-interactions, jsx-a11y-x/no-noninteractive-tabindex */}
+      <p role="status" data-testid="keyboard-readout" className="sr-only">
+        {keyboard ? said : ''}
+      </p>
       {readout}
       {measured && !liveMeasure ? (
         <button
@@ -272,6 +485,8 @@ export function DrawingLayer({ handle, candles, symbol, format }: DrawingLayerPr
             if (text.trim())
               add(symbol, { id: newId(), kind: 'text', at: note, text: text.trim() });
             setNote(null);
+            // A note placed from the keyboard hands focus back to the plot.
+            if (keyboard) surfaceRef.current?.focus();
           }}
         />
       ) : null}

@@ -22,7 +22,8 @@ test('index cards, header tickers and the dashboard chart open the index pages',
   await expect(page).toHaveURL(/\/stocks\/SENSEX\?exchange=BSE$/);
   await expect(page.getByRole('heading', { level: 1, name: 'SENSEX' })).toBeVisible();
 
-  await page.goto('/dashboard');
+  // The Home chart opens on a stock (NSTOCK-0476); NIFTY 50 is one pick away.
+  await page.goto('/dashboard?stock=NIFTY50');
   const plot = page.getByTestId('dashboard-chart');
   await expect(plot.locator('canvas').first()).toBeVisible();
   const box = await plot.boundingBox();
@@ -37,7 +38,10 @@ test('index cards, header tickers and the dashboard chart open the index pages',
   await page.getByRole('button', { name: 'Reset zoom' }).click();
   await expect(page).toHaveURL(/\/dashboard/);
   // A tap opens the full NIFTY 50 page on the same range and chart type (a line by default).
-  await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+  // Read the box again: the zoom buttons can scroll the page to reach them.
+  const now = await plot.boundingBox();
+  if (!now) throw new Error('no chart');
+  await page.mouse.click(now.x + now.width / 2, now.y + now.height / 2);
   await expect(page).toHaveURL(/\/stocks\/NIFTY50\?exchange=NSE&range=1D&chart=line$/);
   await expect(page.getByRole('heading', { level: 1, name: 'NIFTY 50' })).toBeVisible();
 });

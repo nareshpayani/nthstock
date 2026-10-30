@@ -24,6 +24,8 @@ export const strings = {
     paperBody: 'Practise with ₹10,00,000 of virtual cash. No real money moves.',
   },
   drawer: { title: 'Menu' },
+  /** The order-placed moment (decoration; the toast carries the words for screen readers). */
+  celebration: { placed: 'Order placed', filled: 'Order filled' },
   /** The phone app shell (NSTOCK-0466): bottom tabs, the top bar's switches and the trade sheet. */
   phone: {
     tabs: {
@@ -51,6 +53,13 @@ export const strings = {
     },
     tradeTitle: 'Trade',
     tradeHint: 'Pick a stock: its page opens with the order ticket up.',
+    addTitle: (list: string) => `Add to ${list}`,
+    addTitleNoList: 'Add to watchlist',
+    addUnavailable:
+      'Your watchlists are not loaded yet. They appear here as soon as they are; if not, close this and try again.',
+    logInToAdd: 'Log in to add stocks to your watchlist',
+    switchToAdd: (list: string) => `Add stocks to ${list}`,
+    addHint: 'Search, then tap a stock or its + to add it. Add as many as you like.',
   },
   shortcuts: {
     title: 'Keyboard shortcuts',

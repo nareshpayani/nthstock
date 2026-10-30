@@ -136,6 +136,26 @@ export function logicalToTime(candles: readonly Candle[], logical: number): numb
   return Math.round(at + (logical - index) * (next - at));
 }
 
+/**
+ * How far one arrow press moves the keyboard point up or down (NSTOCK-0468): about a fiftieth of
+ * the prices on screen, rounded to 1, 2 or 5 times a power of ten, and never under one 5-paise
+ * tick (or 0.05 of an index point).
+ */
+export function priceStep(span: number): number {
+  const raw = Math.abs(span) / 50;
+  if (!Number.isFinite(raw) || raw <= 5) return 5;
+  const power = 10 ** Math.floor(Math.log10(raw));
+  const nice = [1, 2, 5, 10].find((step) => step * power >= raw) ?? 10;
+  return nice * power;
+}
+
+/** The prices a drawing sits on, for its name in the drawings list. */
+export function drawingPrices(drawing: Drawing): number[] {
+  return drawing.kind === 'horizontal' || drawing.kind === 'text'
+    ? [drawing.at.price]
+    : [drawing.from.price, drawing.to.price];
+}
+
 /** Drawings in storage are user data: keep only well-formed ones. */
 export function parseDrawings(raw: unknown): Drawing[] {
   if (!Array.isArray(raw)) return [];

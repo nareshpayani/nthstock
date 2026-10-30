@@ -3,3 +3,4 @@ export { WatchlistSortMenu } from './components/WatchlistSortMenu';
 export { WatchlistStar } from './components/WatchlistStar';
 export { useWatchlistAdder } from './hooks/useWatchlistAdder';
 export { WatchlistPage } from './components/WatchlistPage';
+export { WatchlistAddButton } from './components/WatchlistAddButton';
