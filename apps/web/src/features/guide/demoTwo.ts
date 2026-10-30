@@ -149,9 +149,22 @@ export const demoTwoTab: GuideTab = {
         ],
         [
           'A phone recording of 2 minutes or less',
-          'Recorded on a real iPhone from the shot list in docs/design/recordingScript.md and sent with the submission.',
+          'A 1:22 recording at 390 × 844 from a cold load, played from the shot list in docs/design/recordingScript.md by a Playwright touch script, with captions on screen. It plays below.',
         ],
         ['A one-line AI note', 'The last section of this tab, and section 7 of DESIGN.md.'],
+      ],
+    },
+    {
+      kind: 'videos',
+      label: 'The phone recording',
+      items: [
+        {
+          id: 'craftRecording',
+          title: 'The mobile flow in one take',
+          device: 'Phone',
+          length: '1:22',
+          body: 'From a cold load of the reviewer link: the short ticket, the order line arriving on the chart, the line drag with its loupe, the near miss that pans, the trailing stop gliding up, an indicator and a drawing in full screen, offline and back, then the tradeable Home chart and adding Paytm to the watchlist from the Trade sheet.',
+        },
       ],
     },
     { kind: 'heading', text: 'Before and after' },
