@@ -2,10 +2,11 @@ import { expect, test, type Page } from '@playwright/test';
 import { logIn, uniqueMobile } from './support/auth';
 import { TOUCH_TAG } from './support/env';
 
-// NSTOCK-0479: a phone browser zooms the page into a focused text field under 16 px and leaves it
+// NSTOCK-0480: a phone browser zooms the page into a focused text field under 16 px and leaves it
 // zoomed and cut off. The fields that take focus on their own (login, the Trade search, the
-// ticket's quantity) and every other text field on the way must be 16 px or more on a touch
-// screen. Runs on the touch projects (Chromium as a Pixel, WebKit as an iPhone when installed).
+// ticket's quantity) are checked here, with every other field on those screens; the CSS rule in
+// styles/app.css covers the rest. Runs on the touch projects (Chromium as a Pixel, WebKit as an
+// iPhone when installed).
 
 const MONDAY_10_IST = new Date('2026-09-28T04:30:00.000Z');
 
@@ -20,8 +21,9 @@ function smallFields(page: Page): Promise<string[]> {
         return box.width > 0 && box.height > 0;
       })
       .map((field) => ({
-        label:
-          field.getAttribute('aria-label') ?? field.getAttribute('name') ?? field.id ?? 'field',
+        label: `<${field.tagName.toLowerCase()}> ${
+          field.getAttribute('aria-label') || field.getAttribute('name') || field.id || 'unnamed'
+        }`,
         size: Number.parseFloat(getComputedStyle(field).fontSize),
       }))
       .filter(({ size }) => size < 16)
@@ -29,7 +31,7 @@ function smallFields(page: Page): Promise<string[]> {
   );
 }
 
-test(`text fields never make a phone zoom in (NSTOCK-0479) ${TOUCH_TAG}`, async ({ page }) => {
+test(`text fields never make a phone zoom in (NSTOCK-0480) ${TOUCH_TAG}`, async ({ page }) => {
   test.setTimeout(90_000);
   await page.clock.setFixedTime(MONDAY_10_IST);
   expect(await page.evaluate(() => matchMedia('(pointer: coarse)').matches)).toBe(true);
@@ -58,9 +60,11 @@ test(`text fields never make a phone zoom in (NSTOCK-0479) ${TOUCH_TAG}`, async 
   // The Trade sheet focuses its search box.
   await page.goto('/dashboard');
   await page.getByRole('button', { name: /^Trade: search a stock/ }).click();
-  await expect(page.getByRole('dialog').last().getByRole('combobox').first()).toBeFocused();
+  await expect(
+    page.getByRole('dialog', { name: 'Trade', exact: true }).getByRole('combobox').first(),
+  ).toBeFocused();
   expect(await smallFields(page), 'Trade sheet').toEqual([]);
 
-  // The viewport was never zoomed.
-  expect(await page.evaluate(() => window.visualViewport?.scale ?? 1)).toBe(1);
+  // The viewport was never zoomed (only WebKit zooms on focus, so this bites on webkit-iphone).
+  expect(await page.evaluate(() => window.visualViewport?.scale)).toBe(1);
 });
