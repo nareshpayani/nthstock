@@ -24,6 +24,7 @@ import { useQuote } from '@/shared/hooks/useQuote';
 import { useApiClient } from '@/shared/lib/apiClientContext';
 import { claimFillToast } from '@/shared/lib/fillToasts';
 import { fillCue, orderCue, useSuccessHold } from '@/shared/motion/orderCues';
+import { celebrateOrder } from '@/shared/motion/orderCelebration';
 import { MarketSessionContext } from '@/shared/lib/marketSessionContext';
 import { useQuoteStore } from '@/shared/lib/quoteStoreContext';
 import type { TicketIntent } from '@/shared/lib/ticketIntentStore';
@@ -256,6 +257,7 @@ function TicketFlow({
   };
 
   const onPlaced = (order: Order) => {
+    celebrateOrder(order.status === 'EXECUTED' ? 'filled' : 'placed');
     // An immediate fill may already have been toasted from its orderUpdate (T-147).
     if (order.status === 'EXECUTED' && !claimFillToast(order.id)) {
       // The live fill already toasted and played its cue.

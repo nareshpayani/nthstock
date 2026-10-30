@@ -1,7 +1,7 @@
 import { safeStorage } from '../lib/safeStorage';
 
 /**
- * Order sounds (A17): a short, soft cue when an order is placed, fills, a trailing stop is set or
+ * Order sounds (A17): a short, clear cue when an order is placed, fills, a trailing stop is set or
  * an order is refused. Synthesised with the Web Audio API, so there is nothing to download. A buy
  * fill rises, a sell fill falls, a refusal is two low notes. Like haptics they never carry meaning
  * alone: every cue marks something already shown in words. The user can mute them
@@ -16,7 +16,7 @@ type Note = { readonly hz: number; readonly at: number; readonly length: number 
 
 /** Each cue's notes: pitch in Hz, start and length in seconds. All under 0.4 s. */
 export const ORDER_SOUND_NOTES: Readonly<Record<OrderSound, readonly Note[]>> = {
-  placed: [{ hz: 880, at: 0, length: 0.14 }],
+  placed: [{ hz: 880, at: 0, length: 0.2 }],
   filledBuy: [
     { hz: 784, at: 0, length: 0.11 },
     { hz: 1175, at: 0.09, length: 0.24 },
@@ -35,9 +35,13 @@ export const ORDER_SOUND_NOTES: Readonly<Record<OrderSound, readonly Note[]>> = 
   ],
 };
 
-/** Peak gain: quiet enough not to startle in a meeting, loud enough to hear in a pocket. */
-const PEAK_GAIN = 0.12;
-const ATTACK_S = 0.012;
+/**
+ * Peak gain per note. Phone speakers are weak at these pitches, so the cue is a triangle (its
+ * overtones carry on a small speaker) through a compressor that lets it sit near full scale
+ * without clipping. Raised from 0.12 (a pure sine) after it was hard to hear on a phone.
+ */
+const PEAK_GAIN = 0.7;
+const ATTACK_S = 0.008;
 
 const STORAGE_KEY = 'nthstock.sounds';
 
@@ -63,6 +67,23 @@ export function subscribeOrderSounds(listener: () => void): () => void {
 }
 
 let context: AudioContext | undefined;
+/** Where every note goes: a compressor in front of the speakers, made once per context. */
+let output: AudioNode | undefined;
+
+function outputFor(audio: AudioContext): AudioNode {
+  if (output) return output;
+  // Deliberate fallback: a context without a compressor plays straight to the speakers.
+  if (typeof audio.createDynamicsCompressor !== 'function') return audio.destination;
+  const compressor = audio.createDynamicsCompressor();
+  compressor.threshold.value = -18;
+  compressor.knee.value = 6;
+  compressor.ratio.value = 4;
+  compressor.attack.value = 0.002;
+  compressor.release.value = 0.12;
+  compressor.connect(audio.destination);
+  output = compressor;
+  return output;
+}
 
 function audioContextClass(): typeof AudioContext | undefined {
   if (typeof window === 'undefined') return undefined;
@@ -119,15 +140,15 @@ export function playOrderSound(sound: OrderSound): boolean {
     for (const note of ORDER_SOUND_NOTES[sound]) {
       const oscillator = context.createOscillator();
       const gain = context.createGain();
-      // A refusal is a softer, rounder triangle; everything else a pure sine.
-      oscillator.type = sound === 'rejected' ? 'triangle' : 'sine';
+      // A triangle's overtones carry on a phone speaker, where a pure sine is nearly lost.
+      oscillator.type = 'triangle';
       oscillator.frequency.value = note.hz;
       const at = start + note.at;
       gain.gain.setValueAtTime(0, at);
       gain.gain.linearRampToValueAtTime(PEAK_GAIN, at + ATTACK_S);
       gain.gain.exponentialRampToValueAtTime(0.0001, at + note.length);
       oscillator.connect(gain);
-      gain.connect(context.destination);
+      gain.connect(outputFor(context));
       oscillator.start(at);
       oscillator.stop(at + note.length + 0.02);
     }
@@ -140,6 +161,7 @@ export function playOrderSound(sound: OrderSound): boolean {
 /** Test seam: forget the context and the setting. */
 export function resetOrderSoundsForTests(): void {
   context = undefined;
+  output = undefined;
   enabledSetting = undefined;
   listeners.clear();
 }

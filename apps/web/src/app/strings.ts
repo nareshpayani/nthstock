@@ -25,6 +25,8 @@ export const strings = {
   },
   drawer: { title: 'Menu' },
   /** The phone app shell (NSTOCK-0466): bottom tabs, the top bar's switches and the trade sheet. */
+  /** The order-placed moment (decoration; the toast carries the words for screen readers). */
+  celebration: { placed: 'Order placed', filled: 'Order filled' },
   phone: {
     tabs: {
       label: 'Main',
