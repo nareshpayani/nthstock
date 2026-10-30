@@ -2,6 +2,7 @@ import type { OrderSide, Quote, WatchlistItem } from '@nthstock/contracts';
 import { quoteKey } from '@nthstock/apiClient';
 import { defaultRangeExtractor, useVirtualizer, type Range } from '@tanstack/react-virtual';
 import { useCallback, useEffect, useRef, useState, type KeyboardEvent } from 'react';
+import { useTouchScreen } from '@/shared/hooks/usePhoneLayout';
 import { isTypingTarget } from '@/shared/hooks/useShortcut';
 import { usePointerReorder } from '../hooks/usePointerReorder';
 import { ROW_HEIGHT, WatchlistRow } from './WatchlistRow';
@@ -45,6 +46,7 @@ export function WatchlistRows({
   onRemove,
 }: WatchlistRowsProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
+  const touch = useTouchScreen();
   const [activeToken, setActiveToken] = useState<number | null>(null);
   const [focusInside, setFocusInside] = useState(false);
   const focusPending = useRef<number | null>(null);
@@ -164,6 +166,27 @@ export function WatchlistRows({
     }
   };
 
+  // From the touch menu: focus goes back to the moved row's actions button (the menu's own
+  // return), so Move can be tapped again; it does not jump to the row's link as Alt+arrow does.
+  const onMove = (item: WatchlistItem, delta: -1 | 1) => {
+    const from = items.indexOf(item);
+    const to = from + delta;
+    if (from < 0 || to < 0 || to >= items.length) return;
+    onReorder(from, to);
+    virtualizer.scrollToIndex(to, { align: 'auto' });
+  };
+
+  // From the touch menu, as Delete does: focus the row that takes its place.
+  const onMenuRemove = (item: WatchlistItem) => {
+    const index = items.indexOf(item);
+    const next = items[index + 1] ?? items[index - 1];
+    if (next) {
+      focusPending.current = next.token;
+      setActiveToken(next.token);
+    }
+    onRemove(item);
+  };
+
   const onRowFocus = useCallback((item: WatchlistItem) => setActiveToken(item.token), []);
 
   const height = Math.min(items.length, VISIBLE_ROWS) * ROW_HEIGHT;
@@ -208,7 +231,12 @@ export function WatchlistRows({
                 onRowKeyDown={onRowKeyDown}
                 onRowFocus={onRowFocus}
                 onTrade={onTrade}
-                onRemove={onRemove}
+                onRemove={touch ? onMenuRemove : onRemove}
+                touch={touch}
+                onMove={onMove}
+                onReorderBlocked={onReorderBlocked}
+                canMoveUp={row.index > 0}
+                canMoveDown={row.index < items.length - 1}
               />
             </li>
           );
