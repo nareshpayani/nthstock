@@ -24,9 +24,9 @@ export const strings = {
     paperBody: 'Practise with ₹10,00,000 of virtual cash. No real money moves.',
   },
   drawer: { title: 'Menu' },
-  /** The phone app shell (NSTOCK-0466): bottom tabs, the top bar's switches and the trade sheet. */
   /** The order-placed moment (decoration; the toast carries the words for screen readers). */
   celebration: { placed: 'Order placed', filled: 'Order filled' },
+  /** The phone app shell (NSTOCK-0466): bottom tabs, the top bar's switches and the trade sheet. */
   phone: {
     tabs: {
       label: 'Main',

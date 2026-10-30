@@ -15,7 +15,14 @@ let nextId = 1;
 
 export function celebrateOrder(kind: OrderCelebrationKind): void {
   const celebration = { id: nextId++, kind };
-  for (const listener of listeners) listener(celebration);
+  for (const listener of listeners) {
+    // Decoration must never stop the order flow that called it (the toast, the sheet closing).
+    try {
+      listener(celebration);
+    } catch (error) {
+      console.error('The order-placed moment failed', error);
+    }
+  }
 }
 
 /** Returns the unsubscribe. */

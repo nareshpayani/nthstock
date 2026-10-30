@@ -9,7 +9,8 @@ import { strings } from '../strings';
 
 /** How long the moment stays on screen, in ms. Short enough not to hold up the next trade. */
 export const CELEBRATION_MS = 1400;
-const REDUCED_MS = 700;
+/** With reduced motion, a fade of this length, in ms. */
+export const REDUCED_MS = 700;
 const EASE_OUT = 'cubic-bezier(0.2, 0.8, 0.2, 1)';
 /** The rising line's length in its own units, so it can be drawn in with a dash offset. */
 const RISE_LENGTH = 40;

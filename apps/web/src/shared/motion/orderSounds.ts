@@ -67,6 +67,9 @@ export function subscribeOrderSounds(listener: () => void): () => void {
 }
 
 let context: AudioContext | undefined;
+
+/** A refused resume (no gesture yet) leaves the cue silent, which is the intended fallback. */
+const ignoreRefusal = () => undefined;
 /** Where every note goes: a compressor in front of the speakers, made once per context. */
 let output: AudioNode | undefined;
 
@@ -104,7 +107,7 @@ export function unlockOrderSounds(): void {
       if (!Context) return;
       context = new Context();
     }
-    if (context.state === 'suspended') void context.resume();
+    if (context.state === 'suspended') context.resume().catch(ignoreRefusal);
     const silent = context.createBufferSource();
     silent.buffer = context.createBuffer(1, 1, 22050);
     silent.connect(context.destination);
@@ -135,7 +138,7 @@ export function installOrderSoundUnlock(target: Window = window): () => void {
 export function playOrderSound(sound: OrderSound): boolean {
   if (!orderSoundsEnabled() || !context) return false;
   try {
-    if (context.state === 'suspended') void context.resume();
+    if (context.state === 'suspended') context.resume().catch(ignoreRefusal);
     const start = context.currentTime + 0.01;
     for (const note of ORDER_SOUND_NOTES[sound]) {
       const oscillator = context.createOscillator();
