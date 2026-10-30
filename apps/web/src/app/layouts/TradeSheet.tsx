@@ -56,7 +56,7 @@ export function TradeSheet({ open, onOpenChange, mode = 'trade' }: TradeSheetPro
             <SearchBox ref={searchRef} inline addTo={addTo} chooseAdds />
           ) : (
             // Lists still loading, failed or the session lapsed: say so, and never trade from here.
-            // The search appears by itself once the lists load.
+            // The search replaces this as soon as the lists load; after a failure, closing retries.
             <p role="status" className="py-6 text-center text-body text-ink-muted">
               {strings.phone.addUnavailable}
             </p>

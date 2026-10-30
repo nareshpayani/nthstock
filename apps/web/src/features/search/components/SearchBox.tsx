@@ -44,7 +44,8 @@ export type SearchBoxProps = {
   inline?: boolean;
   /**
    * Choosing a stock adds it to `addTo` instead of opening its page, and the list stays open for
-   * the next one: the phone's Add to watchlist sheet, where a row is the biggest target.
+   * the next one: the phone's Add to watchlist sheet, where a row is the biggest target. The
+   * box's own status line says what each add did. Without `addTo`, choosing does nothing.
    */
   chooseAdds?: boolean;
 };
@@ -79,6 +80,9 @@ export function SearchBox({
   const [dismissed, setDismissed] = useState(false);
   const [active, setActive] = useState(-1);
   const [recent, setRecent] = useState<SearchHit[]>([]);
+  // In the phone add sheet the watchlist's own live region sits behind the modal, so the box
+  // says what an add did (NSTOCK-0474). Cleared when the query changes.
+  const [addNote, setAddNote] = useState('');
 
   const trimmed = query.trim().slice(0, SEARCH_QUERY_MAX);
   const debounced = useDebouncedValue(trimmed, SEARCH_DEBOUNCE_MS);
@@ -121,6 +125,7 @@ export function SearchBox({
     if (settled && !results.isError) announcement = strings.resultCount(options.length);
     if (results.isError) announcement = strings.error;
   }
+  if (addNote) announcement = addNote;
   const expanded = listening && (options.length > 0 || message !== null);
   const activeId = expanded && activeIndex >= 0 ? optionId(activeIndex) : undefined;
 
@@ -138,10 +143,21 @@ export function SearchBox({
     [ref],
   );
 
+  const add = (hit: SearchHit) => {
+    if (!addTo) return;
+    if (chooseAdds)
+      setAddNote(
+        addTo.has(hit)
+          ? strings.alreadyIn(hit.symbol, addTo.listName)
+          : strings.added(hit.symbol, addTo.listName),
+      );
+    addTo.add(hit);
+  };
+
   const choose = (hit: SearchHit) => {
     setRecent(addRecentSearch(hit));
-    if (chooseAdds && addTo) {
-      addTo.add(hit);
+    if (chooseAdds) {
+      add(hit);
       return;
     }
     setQuery('');
@@ -201,7 +217,7 @@ export function SearchBox({
         event.preventDefault();
         const hit = expanded ? options[activeIndex] : undefined;
         if (event.shiftKey && addTo) {
-          if (hit) addTo.add(hit);
+          if (hit) add(hit);
           return;
         }
         if (hit) choose(hit);
@@ -252,6 +268,7 @@ export function SearchBox({
           value={query}
           onChange={(event) => {
             setQuery(event.target.value);
+            setAddNote('');
             setActive(-1);
             setDismissed(false);
           }}
@@ -305,7 +322,7 @@ export function SearchBox({
                       ? {
                           listName: addTo.listName,
                           added: addTo.has(hit),
-                          onAdd: () => addTo.add(hit),
+                          onAdd: () => add(hit),
                         }
                       : undefined
                   }

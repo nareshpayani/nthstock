@@ -267,6 +267,20 @@ describe('SearchBox add to watchlist (T-121)', () => {
     expect(router.state.location.pathname).toBe('/');
   });
 
+  it('with chooseAdds, says in its own status line what each add did', async () => {
+    const { addTo } = adder(['TCS']);
+    const { input } = await renderSearch({ addTo, chooseAdds: true });
+    await typeAndWait(input(), 'infy');
+    fireEvent.click(options()[0] as HTMLElement);
+    expect(screen.getByRole('status')).toHaveTextContent('INFY added to Banks');
+
+    fireEvent.change(input(), { target: { value: 'tcs' } });
+    expect(screen.getByRole('status')).not.toHaveTextContent('added');
+    await waitFor(() => expect(options()[0]).toHaveTextContent('TCS'));
+    fireEvent.click(options()[0] as HTMLElement);
+    expect(screen.getByRole('status')).toHaveTextContent('TCS is already in Banks');
+  });
+
   it('Shift+Enter with no watchlist does nothing special', async () => {
     const { input, router } = await renderSearch();
     await typeAndWait(input(), 'infy');

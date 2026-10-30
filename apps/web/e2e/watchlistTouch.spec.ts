@@ -55,11 +55,16 @@ test(`watchlist row actions by touch: buy, reorder and remove (NSTOCK-0470) ${TO
   added = nextChange(page);
   await tap(touch, tcs);
   await added;
+  await expect(sheet.getByRole('status')).toHaveText('TCS added to My Watchlist');
   // Adding keeps the sheet open on the list, for the next stock.
   await expect(page).toHaveURL(/\/watchlist$/);
   await expect(sheet).toBeVisible();
   await tap(touch, sheet.getByRole('button', { name: 'Close' }));
   await expect(sheet).toBeHidden();
+  // With stocks in the list, the header's Add stock is the way in, and a 44 px target too.
+  const headerAdd = page.getByRole('button', { name: 'Add stock' });
+  await expect(headerAdd).toHaveCount(1);
+  expect(await heightOf(headerAdd)).toBeGreaterThanOrEqual(44);
 
   const rows = panel.getByRole('list', { name: /^Stocks in / });
   const symbols = () =>

@@ -57,6 +57,7 @@ describe('phone add to watchlist (NSTOCK-0474)', () => {
       fireEvent.focus(input);
       fireEvent.change(input, { target: { value: 'tcs' } });
       fireEvent.click(await within(sheet).findByRole('option', { name: /^TCS/ }));
+      expect(within(sheet).getByRole('status')).toHaveTextContent('TCS added to My Watchlist');
 
       await waitFor(async () => {
         const { items } = await apiClient.request('watchlistsList');
