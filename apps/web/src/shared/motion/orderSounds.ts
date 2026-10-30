@@ -117,18 +117,22 @@ export function unlockOrderSounds(): void {
   }
 }
 
-/** Unlocks audio on the first tap or key press, then stops listening. Returns the teardown. */
+/**
+ * Unlocks audio on a tap or key press. It keeps listening while the context is not running:
+ * iPhone Safari may only unlock on `touchend` or `click`, and it suspends audio again after a
+ * call or a trip to the background, so the next gesture opens it again. A gesture while audio is
+ * already running does nothing. Returns the teardown.
+ */
 export function installOrderSoundUnlock(target: Window = window): () => void {
-  const events = ['pointerdown', 'keydown'] as const;
-  const remove = () => {
-    for (const event of events) target.removeEventListener(event, onGesture, true);
-  };
+  const events = ['pointerdown', 'touchend', 'click', 'keydown'] as const;
   function onGesture() {
+    if (context?.state === 'running') return;
     unlockOrderSounds();
-    remove();
   }
   for (const event of events) target.addEventListener(event, onGesture, true);
-  return remove;
+  return () => {
+    for (const event of events) target.removeEventListener(event, onGesture, true);
+  };
 }
 
 /**

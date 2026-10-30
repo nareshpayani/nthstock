@@ -24,7 +24,11 @@ function fakeAudioContext({ compressor = true } = {}) {
     linearRampToValueAtTime: vi.fn(),
     exponentialRampToValueAtTime: vi.fn(),
   });
+  const contexts: FakeContext[] = [];
   class FakeContext {
+    constructor() {
+      contexts.push(this);
+    }
     state = 'running';
     currentTime = 0;
     destination = speakers;
@@ -62,7 +66,7 @@ function fakeAudioContext({ compressor = true } = {}) {
       return oscillator;
     });
   }
-  return { FakeContext, oscillators, gains, compressors, speakers };
+  return { FakeContext, oscillators, gains, compressors, speakers, contexts };
 }
 
 describe('order sounds (A17)', () => {
@@ -142,6 +146,26 @@ describe('order sounds (A17)', () => {
     expect(fake.gains).toHaveLength(2);
     for (const gain of fake.gains) expect(gain.connect).toHaveBeenCalledWith(fake.speakers);
     expect(fake.compressors).toHaveLength(0);
+  });
+
+  it('keeps listening: a later tap wakes audio that the phone suspended', () => {
+    const teardown = installOrderSoundUnlock(window);
+    window.dispatchEvent(new Event('touchend'));
+    const context = fake.contexts[0];
+    expect(context).toBeDefined();
+    expect(fake.contexts).toHaveLength(1);
+    // A gesture while audio runs does no work. (Earlier tests' listeners are still on the window,
+    // so counts are compared, not fixed.)
+    const unlocks = () => context?.createBufferSource.mock.calls.length ?? 0;
+    const before = unlocks();
+    window.dispatchEvent(new Event('click'));
+    expect(unlocks()).toBe(before);
+    // iPhone Safari suspends audio after a call; the next tap resumes it.
+    if (context) context.state = 'suspended';
+    window.dispatchEvent(new Event('click'));
+    expect(context?.resume).toHaveBeenCalled();
+    expect(unlocks()).toBeGreaterThan(before);
+    teardown();
   });
 
   it('does nothing where the browser has no Web Audio', () => {

@@ -1,5 +1,5 @@
 import { LOGO_MARK } from '@nthstock/ui';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import {
   subscribeOrderCelebrations,
   type OrderCelebration,
@@ -27,7 +27,8 @@ export function OrderCelebrationOverlay() {
 
   useEffect(() => subscribeOrderCelebrations(setCurrent), []);
 
-  useEffect(() => {
+  // Before paint, so the finished mark never shows for a frame before its animation takes over.
+  useLayoutEffect(() => {
     const root = rootRef.current;
     if (!current || !root) return;
     const reduced = prefersReducedMotion();
