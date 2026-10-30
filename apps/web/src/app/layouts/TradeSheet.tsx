@@ -24,8 +24,7 @@ export function TradeSheet({ open, onOpenChange, mode = 'trade' }: TradeSheetPro
   const searchRef = useRef<HTMLInputElement>(null);
   const openTicket = useOpenTicket();
   const addTo = useWatchlistAdder();
-  // Signed out there is no list to add to, so the sheet trades as usual.
-  const adding = mode === 'watchlist' && addTo !== null;
+  const adding = mode === 'watchlist';
   const choose = (hit: SearchHit) => {
     onOpenChange(false);
     // The search box opens the stock's page; signed out, login returns there, not to this tab.
@@ -38,7 +37,13 @@ export function TradeSheet({ open, onOpenChange, mode = 'trade' }: TradeSheetPro
   return (
     <Sheet
       side="bottom"
-      title={adding ? strings.phone.addTitle(addTo.listName) : strings.phone.tradeTitle}
+      title={
+        adding
+          ? addTo
+            ? strings.phone.addTitle(addTo.listName)
+            : strings.phone.addTitleNoList
+          : strings.phone.tradeTitle
+      }
       description={adding ? strings.phone.addHint : strings.phone.tradeHint}
       open={open}
       onOpenChange={onOpenChange}
@@ -47,7 +52,15 @@ export function TradeSheet({ open, onOpenChange, mode = 'trade' }: TradeSheetPro
     >
       <div className="p-4">
         {adding ? (
-          <SearchBox ref={searchRef} inline addTo={addTo} chooseAdds />
+          addTo ? (
+            <SearchBox ref={searchRef} inline addTo={addTo} chooseAdds />
+          ) : (
+            // Lists still loading, failed or the session lapsed: say so, and never trade from here.
+            // The search appears by itself once the lists load.
+            <p role="status" className="py-6 text-center text-body text-ink-muted">
+              {strings.phone.addUnavailable}
+            </p>
+          )
         ) : (
           <SearchBox ref={searchRef} inline onChoose={choose} />
         )}

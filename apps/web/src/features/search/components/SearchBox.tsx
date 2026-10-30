@@ -139,12 +139,11 @@ export function SearchBox({
   );
 
   const choose = (hit: SearchHit) => {
+    setRecent(addRecentSearch(hit));
     if (chooseAdds && addTo) {
-      setRecent(addRecentSearch(hit));
       addTo.add(hit);
       return;
     }
-    setRecent(addRecentSearch(hit));
     setQuery('');
     setActive(-1);
     setDismissed(true);

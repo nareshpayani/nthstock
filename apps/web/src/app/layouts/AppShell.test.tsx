@@ -105,6 +105,20 @@ describe('search requests (T-153)', () => {
       expect(within(drawer).getByRole('combobox', { name: 'Search stocks' })).toHaveFocus(),
     );
   });
+
+  it('an add-to-watchlist request focuses the same search on desktop (NSTOCK-0474)', async () => {
+    await renderDashboard();
+    const before = useSearchFocusStore.getState().requests;
+    act(() => {
+      useSearchFocusStore.getState().requestAddToWatchlist();
+    });
+    const drawer = await screen.findByRole('dialog', { name: 'Menu' });
+    await waitFor(() =>
+      expect(within(drawer).getByRole('combobox', { name: 'Search stocks' })).toHaveFocus(),
+    );
+    expect(screen.queryByRole('dialog', { name: /^Add to / })).toBeNull();
+    expect(useSearchFocusStore.getState().requests).toBe(before);
+  });
 });
 
 describe('drawer and more menu', () => {

@@ -20,7 +20,6 @@ export const strings = {
   },
   /** Home on a phone (NSTOCK-0466). */
   phone: {
-    addStock: 'Add stock',
     valueLabel: 'Portfolio value',
     signedOutLabel: 'Virtual cash',
     valueLoading: 'Loading your portfolio value',

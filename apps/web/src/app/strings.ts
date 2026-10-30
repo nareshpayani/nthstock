@@ -52,6 +52,9 @@ export const strings = {
     tradeTitle: 'Trade',
     tradeHint: 'Pick a stock: its page opens with the order ticket up.',
     addTitle: (list: string) => `Add to ${list}`,
+    addTitleNoList: 'Add to watchlist',
+    addUnavailable:
+      'Your watchlists are not loaded yet. They appear here as soon as they are; if not, close this and try again.',
     addHint: 'Search, then tap a stock or its + to add it. Add as many as you like.',
   },
   shortcuts: {
