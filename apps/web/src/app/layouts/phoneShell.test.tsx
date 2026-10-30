@@ -382,7 +382,7 @@ describe('phone app shell (NSTOCK-0466)', () => {
     expect(within(sheet).queryByRole('combobox')).toBeNull();
   });
 
-  it('signed out, the Trade sheet offers a log in to start a watchlist (NSTOCK-0477)', async () => {
+  it('signed out, the Trade sheet offers a log in to start a watchlist (NSTOCK-0476)', async () => {
     renderPhone('/dashboard', { signedIn: false });
     fireEvent.click(await screen.findByRole('button', { name: /^Trade:/ }));
     const sheet = await screen.findByRole('dialog', { name: 'Trade' });

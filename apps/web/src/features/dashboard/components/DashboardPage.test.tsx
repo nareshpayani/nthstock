@@ -6,7 +6,10 @@ import { chartsMock } from '@/test/chartsMock';
 import { createMockApi } from '@/test/mockApi';
 import { renderApp } from '@/test/renderApp';
 import { installResizeObserver } from '@/test/resizeObserver';
+import { initialTicketIntentState, useTicketIntentStore } from '@/shared/lib/ticketIntentStore';
 import { resetSession, signIn, testSession } from '@/test/session';
+import { HOME_CHART_SYMBOLS } from '../model/dashboardSearch';
+import { strings } from '../strings';
 
 vi.mock('lightweight-charts', () => import('@/test/chartsMock'));
 
@@ -21,6 +24,7 @@ beforeEach(() => {
 afterEach(() => {
   vi.unstubAllGlobals();
   resetSession();
+  useTicketIntentStore.setState(initialTicketIntentState);
 });
 
 /** A market session whose clock reads the given IST time on Friday 25 Sep 2026. */
@@ -37,6 +41,50 @@ const candleRanges = () =>
   api.requestsTo('/NIFTY50/candles').map((url) => url.searchParams.get('range'));
 
 describe('dashboard URL state', () => {
+  it('Home chart Buy and Sell open the ticket for the charted stock, with chart trading on', async () => {
+    signIn(testSession());
+    renderApp('/dashboard', { apiClient: api.apiClient });
+    const home = await screen.findByRole('region', { name: 'Trade HDFCBANK from the chart' });
+    // The trading overlay (order lines, drag to price) is on the Home chart (NSTOCK-0476).
+    await waitFor(() => expect(home.querySelector('[data-testid="chart-overlay"]')).not.toBeNull());
+    fireEvent.click(within(home).getByRole('button', { name: 'Sell HDFCBANK' }));
+    await waitFor(() =>
+      expect(useTicketIntentStore.getState().intent).toMatchObject({
+        symbol: 'HDFCBANK',
+        exchange: 'NSE',
+        side: 'SELL',
+      }),
+    );
+  });
+
+  it('reads the Home stock from the URL, drops an unknown one, and switches back', async () => {
+    const view = renderApp('/dashboard?stock=RELIANCE', { apiClient: api.apiClient });
+    await screen.findByRole('region', { name: 'Trade RELIANCE from the chart' });
+    fireEvent.click(screen.getByRole('radio', { name: 'HDFC Bank' }));
+    await waitFor(() => expect(view.router.state.location.search).toEqual({ stock: 'HDFCBANK' }));
+    expect(
+      await screen.findByRole('region', { name: 'Trade HDFCBANK from the chart' }),
+    ).toBeInTheDocument();
+    view.unmount();
+
+    const unknown = renderApp('/dashboard?stock=FOO', { apiClient: api.apiClient });
+    expect(
+      await screen.findByRole('region', { name: 'Trade HDFCBANK from the chart' }),
+    ).toBeInTheDocument();
+    expect(unknown.router.state.location.search).toEqual({});
+  });
+
+  it('the route keeps every Home chart symbol in the URL', async () => {
+    for (const stock of HOME_CHART_SYMBOLS) {
+      const view = renderApp(`/dashboard?stock=${stock}`, { apiClient: api.apiClient });
+      expect(
+        await screen.findByRole('radio', { name: strings.homeChart.symbolNames[stock] }),
+      ).toBeChecked();
+      expect(view.router.state.location.search).toEqual({ stock });
+      view.unmount();
+    }
+  });
+
   it('opens on HDFCBANK to trade from the chart; the picker swaps to Paytm (NSTOCK-0476)', async () => {
     const { router } = renderApp('/dashboard', { apiClient: api.apiClient });
     await screen.findByRole('region', { name: 'Trade HDFCBANK from the chart' });

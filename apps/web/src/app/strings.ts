@@ -58,6 +58,7 @@ export const strings = {
     addUnavailable:
       'Your watchlists are not loaded yet. They appear here as soon as they are; if not, close this and try again.',
     logInToAdd: 'Log in to add stocks to your watchlist',
+    switchToAdd: (list: string) => `Add stocks to ${list}`,
     addHint: 'Search, then tap a stock or its + to add it. Add as many as you like.',
   },
   shortcuts: {

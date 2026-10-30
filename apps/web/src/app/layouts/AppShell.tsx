@@ -176,7 +176,12 @@ export function AppShell({ children, rail = true }: AppShellProps) {
       )}
       {tabBar ? <BottomTabBar onTrade={() => openSheet('trade')} /> : null}
       {phoneShell ? (
-        <TradeSheet open={tradeSheetOpen} onOpenChange={setTradeOpen} mode={sheetMode} />
+        <TradeSheet
+          open={tradeSheetOpen}
+          onOpenChange={setTradeOpen}
+          mode={sheetMode}
+          onModeChange={setSheetMode}
+        />
       ) : null}
       <ShortcutHelpDialog open={helpOpen} onOpenChange={setHelpOpen} />
       <OrderTicketHost />

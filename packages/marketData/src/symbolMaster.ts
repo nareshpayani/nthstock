@@ -252,9 +252,12 @@ export function generateSymbolMaster(options: SymbolMasterOptions = {}): SymbolM
     instrument: equityInstrument(rank + 1, symbol, name, rest.sector),
   }));
   // Late listings: their own stream and tokens, after the ranked equities (see LATE_LISTINGS).
-  const late = listedDrafts(mulberry32(hashSeed(seed, 'late')), LATE_LISTINGS).filter(
-    (draft) => !taken.has(draft.symbol),
-  );
+  const late = listedDrafts(mulberry32(hashSeed(seed, 'late')), LATE_LISTINGS);
+  for (const draft of late) {
+    // A late listing must be new: a clash would give one symbol two tokens.
+    if (taken.has(draft.symbol)) throw new Error(`Late listing ${draft.symbol} is already listed`);
+    taken.add(draft.symbol);
+  }
   late.forEach(({ symbol, name, ...rest }, i) => {
     equities.push({
       ...rest,

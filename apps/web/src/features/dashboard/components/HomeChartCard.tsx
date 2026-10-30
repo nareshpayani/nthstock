@@ -91,7 +91,7 @@ function TradeableChart({
   if (instrument.isError && !instrument.data) {
     return (
       <ErrorState
-        title={strings.homeChart.errorTitle(symbol)}
+        title={strings.homeChart.errorTitle(strings.homeChart.symbolNames[symbol])}
         description={strings.homeChart.errorBody}
         retryLabel={strings.sectionError.retry}
         onRetry={() => void instrument.refetch()}
@@ -124,7 +124,9 @@ function TradeableChart({
         >
           {stock.name}
         </Link>
-        <span className="shrink-0 text-label text-ink-muted">{strings.homeChart.hint}</span>
+        <span className="hidden shrink-0 text-label text-ink-muted sm:inline">
+          {strings.homeChart.hint}
+        </span>
       </div>
       <StockChartCard
         instrument={stock}

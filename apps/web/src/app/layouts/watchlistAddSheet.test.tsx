@@ -91,9 +91,9 @@ describe('phone add to watchlist (NSTOCK-0474)', () => {
   );
 
   it(
-    'the Trade sheet gives every row a + that adds it without leaving (NSTOCK-0477)',
+    'the Trade sheet gives every row a + that adds it without leaving (NSTOCK-0476)',
     async () => {
-      const { apiClient, router } = await renderPhoneWithList('/dashboard', '9000000743');
+      const { apiClient, router } = await renderPhoneWithList('/watchlist', '9000000743');
       fireEvent.click(await screen.findByRole('button', { name: /^Trade:/ }));
       const sheet = await screen.findByRole('dialog', { name: 'Trade' });
       const input = within(sheet).getByRole('combobox', { name: 'Search stocks' });
@@ -107,8 +107,14 @@ describe('phone add to watchlist (NSTOCK-0474)', () => {
         const { items } = await apiClient.request('watchlistsList');
         expect(items[0]?.items.map((item) => item.symbol)).toEqual(['INFY', 'TCS']);
       });
-      expect(router.state.location.pathname).toBe('/dashboard');
+      expect(router.state.location.pathname).toBe('/watchlist');
       expect(screen.getByRole('dialog', { name: 'Trade' })).toBeInTheDocument();
+      // The real control for every user (the + is a tap shortcut): switch to the add sheet.
+      fireEvent.click(within(sheet).getByRole('button', { name: 'Add stocks to My Watchlist' }));
+      const adding = await screen.findByRole('dialog', { name: 'Add to My Watchlist' });
+      await waitFor(() =>
+        expect(within(adding).getByRole('combobox', { name: 'Search stocks' })).toHaveFocus(),
+      );
     },
     HEAVY,
   );

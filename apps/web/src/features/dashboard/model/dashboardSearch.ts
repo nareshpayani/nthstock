@@ -14,9 +14,9 @@ export type DashboardSearch = {
   /** The first chart's instrument; HDFCBANK when absent. */
   stock?: HomeChartSymbol | undefined;
   range?: CandleRange | undefined;
-  /** NIFTY 50 bar size (NSTOCK-0443); the range's own when absent or not offered. */
+  /** The first chart's bar size (NSTOCK-0443); the range's own when absent or not offered. */
   interval?: CandleInterval | undefined;
-  /** NIFTY 50 chart type; a line when absent. */
+  /** The first chart's type; a line when absent. */
   chart?: PriceChartType | undefined;
   /** Curated list id, e.g. `best-returns`. */
   list?: string | undefined;
