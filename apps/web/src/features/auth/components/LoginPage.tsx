@@ -22,7 +22,7 @@ import { TryDemo } from './TryDemo';
 /** Long link labels wrap on a 320 px phone instead of widening the card (NSTOCK-0435). On a phone
     they are quiet text links, so the whole step fits one screen (NSTOCK-0481). */
 const WRAP =
-  'h-auto min-h-10 py-2 text-center whitespace-normal max-sm:min-h-11 max-sm:border-0 max-sm:bg-transparent max-sm:py-1 max-sm:text-brand';
+  'h-auto min-h-10 py-2 text-center whitespace-normal max-sm:min-h-11 max-sm:border-0 max-sm:bg-transparent max-sm:py-1 max-sm:text-brand max-sm:underline max-sm:underline-offset-2 max-sm:hover:bg-transparent';
 
 type Step =
   | { kind: 'mobile'; purpose: LoginOtpPurpose; notice?: string; mobile?: string }

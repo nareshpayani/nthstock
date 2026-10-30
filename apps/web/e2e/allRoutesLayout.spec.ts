@@ -167,6 +167,39 @@ test.describe('the login page fits phones and tablets (NSTOCK-0435)', () => {
   });
 });
 
+test.describe('the login step is the whole phone screen (NSTOCK-0481)', () => {
+  // 390 x 664 is an iPhone with Safari's toolbars showing: the step fits without a scroll, edge to
+  // edge, and its text links keep a 44 px target.
+  for (const size of [
+    { width: 360, height: 740 },
+    { width: 390, height: 664 },
+    { width: 430, height: 932 },
+  ]) {
+    test(`login at ${String(size.width)} x ${String(size.height)}`, async ({ page }) => {
+      await page.clock.setFixedTime(MONDAY_10_IST);
+      await page.setViewportSize(size);
+      await page.goto('/login');
+      await expect(page.getByRole('textbox', { name: 'Mobile number' })).toBeVisible();
+      const fit = await page.evaluate(() => {
+        const card = document.querySelector('main > div');
+        if (!card) return null;
+        const style = getComputedStyle(card);
+        return {
+          scrolls: document.documentElement.scrollHeight > window.innerHeight,
+          left: card.getBoundingClientRect().left,
+          width: card.getBoundingClientRect().width,
+          border: style.borderTopWidth,
+        };
+      });
+      expect(fit).toEqual({ scrolls: false, left: 0, width: size.width, border: '0px' });
+      for (const name of [/^Documentation/, /^Explore the markets/]) {
+        const box = await page.getByRole('link', { name }).boundingBox();
+        expect(box?.height ?? 0).toBeGreaterThanOrEqual(44);
+      }
+    });
+  }
+});
+
 test.describe('every signed-in route fits phones and tablets (NSTOCK-0435)', () => {
   test.beforeEach(async ({ page }) => {
     await page.clock.setFixedTime(MONDAY_10_IST);
