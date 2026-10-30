@@ -195,7 +195,7 @@ export const strings = {
             },
             {
               name: 'Phone app',
-              body: 'Below 768 px nthstock works like a native trading app. A bottom tab bar in thumb reach: Home, Portfolio, a raised blue Trade button (search a stock, and its page opens with the order ticket up), Orders and Account. The top bar has the avatar, a switch between sibling pages (Market or Watchlist, Holdings or Positions) and the bell, over the live index strip. Home leads with the portfolio value and the day’s P&L, then the NIFTY 50 chart, Add funds and Place order, and Watchlist, Gainers and Losers. Account holds funds, positions, watchlists, security and privacy, this guide and Log out. A stock’s page is pushed over the tabs with a back button and its own Sell, Buy and Scalp bar. Tablets keep the menu drawer and desktops the header tabs. An end-to-end test walks from the tabs to every feature.',
+              body: 'Below 768 px nthstock works like a native trading app. A bottom tab bar in thumb reach: Home, Portfolio, a raised blue Trade button (search a stock, and its page opens with the order ticket up), Orders and Account. The top bar has the avatar, a switch between sibling pages (Market or Watchlist, Holdings or Positions) and the bell, over the live index strip. Home leads with the portfolio value and the day’s P&L, then the tradeable Home chart (HDFCBANK, Paytm, Reliance or NIFTY 50), Add funds and Place order, and Watchlist, Gainers and Losers. Account holds funds, positions, watchlists, security and privacy, this guide and Log out. A stock’s page is pushed over the tabs with a back button and its own Sell, Buy and Scalp bar. Tablets keep the menu drawer and desktops the header tabs. An end-to-end test walks from the tabs to every feature.',
             },
             {
               name: 'Live prices',
@@ -207,7 +207,11 @@ export const strings = {
             },
             {
               name: 'Watchlists',
-              body: 'Several lists with live prices. Add from search, reorder, remove, and trade from a row.',
+              body: 'Several lists with live prices. Add from search, or on a phone with Add stock or the + on any row of the Trade sheet; reorder, remove, and trade from a row.',
+            },
+            {
+              name: 'Home chart',
+              body: 'The dashboard’s first chart is a stock you can trade on the spot: HDFCBANK, with Paytm, Reliance and NIFTY 50 one tap away. It has the stock page’s order lines (drag one to set a price), the position strip and Buy and Sell, so trading from the chart starts on the first screen.',
             },
             {
               name: 'Stock detail',
@@ -283,7 +287,7 @@ export const strings = {
           items: [
             {
               title: 'Home',
-              body: 'The portfolio value and the day’s P&L lead, then the NIFTY 50 chart, Add funds and Place order, and Watchlist, Gainers and Losers under one switch.',
+              body: 'The portfolio value and the day’s P&L lead, then the tradeable Home chart, Add funds and Place order, and Watchlist, Gainers and Losers under one switch.',
               before: phoneShot(
                 'home',
                 'before',

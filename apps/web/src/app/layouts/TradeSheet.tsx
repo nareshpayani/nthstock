@@ -1,9 +1,11 @@
 import type { SearchHit } from '@nthstock/contracts';
 import { Sheet } from '@nthstock/ui';
+import { Link } from '@tanstack/react-router';
 import { useRef } from 'react';
 import { SearchBox } from '@/features/search';
 import { useWatchlistAdder } from '@/features/watchlist';
 import { useOpenTicket } from '@/shared/hooks/useOpenTicket';
+import { useSession } from '@/shared/hooks/useSession';
 import { strings } from '../strings';
 
 /** Trade: a pick opens the stock with its ticket. Watchlist: a pick (or its +) adds it to the open list. */
@@ -25,6 +27,7 @@ export function TradeSheet({ open, onOpenChange, mode = 'trade' }: TradeSheetPro
   const openTicket = useOpenTicket();
   const addTo = useWatchlistAdder();
   const adding = mode === 'watchlist';
+  const { status } = useSession();
   const choose = (hit: SearchHit) => {
     onOpenChange(false);
     // The search box opens the stock's page; signed out, login returns there, not to this tab.
@@ -62,7 +65,23 @@ export function TradeSheet({ open, onOpenChange, mode = 'trade' }: TradeSheetPro
             </p>
           )
         ) : (
-          <SearchBox ref={searchRef} inline onChoose={choose} />
+          <>
+            {/* A row opens the stock with its ticket; its + adds it to the open watchlist
+                (NSTOCK-0477). Signed out there is no list yet, so say how to get one. */}
+            <SearchBox ref={searchRef} inline onChoose={choose} addTo={addTo} />
+            {status === 'anonymous' ? (
+              <p className="pt-3 text-label text-ink-muted">
+                <Link
+                  to="/login"
+                  search={{ redirect: '/watchlist' }}
+                  onClick={() => onOpenChange(false)}
+                  className="font-semibold text-brand underline-offset-2 hover:underline"
+                >
+                  {strings.phone.logInToAdd}
+                </Link>
+              </p>
+            ) : null}
+          </>
         )}
       </div>
     </Sheet>

@@ -11,9 +11,28 @@ export const strings = {
   heroCta: 'View funds',
   heroCtaSignedOut: 'Start paper trading',
   paperTag: 'Paper trading',
+  /** The first chart: a stock to trade on, or NIFTY 50 (NSTOCK-0476). */
+  homeChart: {
+    pickerLabel: 'Chart',
+    symbols: { HDFCBANK: 'HDFC', PAYTM: 'Paytm', RELIANCE: 'Reliance', NIFTY50: 'NIFTY 50' },
+    symbolNames: {
+      HDFCBANK: 'HDFC Bank',
+      PAYTM: 'Paytm',
+      RELIANCE: 'Reliance',
+      NIFTY50: 'NIFTY 50',
+    },
+    sectionLabel: (symbol: string) => `Trade ${symbol} from the chart`,
+    hint: 'Drag a line to set a price',
+    tradeLabel: (symbol: string) => `Trade ${symbol}`,
+    buy: (symbol: string) => `Buy ${symbol}`,
+    sell: (symbol: string) => `Sell ${symbol}`,
+    loading: (symbol: string) => `Loading the ${symbol} chart`,
+    errorTitle: (symbol: string) => `${symbol} could not load`,
+    errorBody: 'The rest of Home still works. Try the chart again.',
+  },
   /** Names of the sections, for the error shown when one of them crashes. */
   sections: {
-    chart: 'NIFTY 50 chart',
+    chart: 'Home chart',
     indices: 'Market indices',
     lists: 'Stocks lists',
     movers: 'Market movers',

@@ -145,7 +145,8 @@ export function SearchBox({
 
   const add = (hit: SearchHit) => {
     if (!addTo) return;
-    if (chooseAdds)
+    // In a sheet (inline) the watchlist's own live region is behind the modal, so say it here.
+    if (chooseAdds || inline)
       setAddNote(
         addTo.has(hit)
           ? strings.alreadyIn(hit.symbol, addTo.listName)
@@ -346,7 +347,11 @@ export function SearchBox({
         </div>
         {addTo && options.length > 0 ? (
           <p className="border-t border-line px-3 pt-2 pb-1 text-label text-ink-muted">
-            {chooseAdds ? strings.tapToAdd(addTo.listName) : strings.addHint(addTo.listName)}
+            {chooseAdds
+              ? strings.tapToAdd(addTo.listName)
+              : inline
+                ? strings.plusToAdd(addTo.listName)
+                : strings.addHint(addTo.listName)}
           </p>
         ) : null}
       </div>

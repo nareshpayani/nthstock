@@ -154,6 +154,15 @@ export const LISTED_COMPANIES: readonly ListedCompany[] = [
   ['PAGEIND', 'Page Industries Ltd', 'Textiles', 44000, 49000, 90, 65],
 ];
 
+/**
+ * Companies added after the master was first seeded (owner request, NSTOCK-0476): PAYTM for the
+ * Home chart. They come after the ranked equities, with their own tokens and random stream, so
+ * every earlier token, price and list stays exactly as it was. Same columns as above.
+ */
+export const LATE_LISTINGS: readonly ListedCompany[] = [
+  ['PAYTM', 'One97 Communications Ltd', 'Financial Services', 1100, 70000, 0, null],
+];
+
 /** Constituents of the hand-built indices (NIFTY MIDCAP 100 is derived from the master). */
 export const NIFTY_50: readonly string[] = LISTED_COMPANIES.slice(0, 50).map(([symbol]) => symbol);
 
