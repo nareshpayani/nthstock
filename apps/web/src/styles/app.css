@@ -27,6 +27,19 @@
   }
 }
 
+/* On a phone (Safari, and Chrome on iPhone, which is WebKit too) focusing a text field under 16 px
+   zooms the page in, and it stays zoomed and cut off until the person pinches out. The login
+   field, the Trade search and the ticket's quantity take focus on their own, so the very first
+   screen arrived zoomed (NSTOCK-0479). Text fields on a touch screen are 16 px: no zoom, and
+   pinch-zoom stays available. Unlayered, so it wins over the size utilities on each field. */
+@media (pointer: coarse) {
+  input:not([type='checkbox'], [type='radio'], [type='range'], [type='color']),
+  select,
+  textarea {
+    font-size: max(16px, 1em);
+  }
+}
+
 @layer base {
   /* The app bar's height (with the index strip under 1360 px), and the width of a trading panel
      docked beside the page from 600 to 1023 px (SPEC-CR-1 §6.2). */
