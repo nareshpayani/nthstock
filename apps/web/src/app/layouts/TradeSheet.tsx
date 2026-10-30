@@ -1,9 +1,11 @@
 import type { SearchHit } from '@nthstock/contracts';
-import { Sheet } from '@nthstock/ui';
-import { useRef } from 'react';
+import { Button, IconPlus, Sheet, buttonVariants } from '@nthstock/ui';
+import { Link } from '@tanstack/react-router';
+import { useEffect, useRef } from 'react';
 import { SearchBox } from '@/features/search';
 import { useWatchlistAdder } from '@/features/watchlist';
 import { useOpenTicket } from '@/shared/hooks/useOpenTicket';
+import { useSession } from '@/shared/hooks/useSession';
 import { strings } from '../strings';
 
 /** Trade: a pick opens the stock with its ticket. Watchlist: a pick (or its +) adds it to the open list. */
@@ -13,6 +15,8 @@ export type TradeSheetProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   mode?: TradeSheetMode;
+  /** Switches the open sheet between trading and adding (the Trade sheet's "Add to" button). */
+  onModeChange?: (mode: TradeSheetMode) => void;
 };
 
 /**
@@ -20,11 +24,19 @@ export type TradeSheetProps = {
  * recent and popular stocks first. Picking one opens its page with the order ticket already up, so
  * a trade is two taps from any tab.
  */
-export function TradeSheet({ open, onOpenChange, mode = 'trade' }: TradeSheetProps) {
+export function TradeSheet({ open, onOpenChange, mode = 'trade', onModeChange }: TradeSheetProps) {
   const searchRef = useRef<HTMLInputElement>(null);
   const openTicket = useOpenTicket();
   const addTo = useWatchlistAdder();
   const adding = mode === 'watchlist';
+  const { status } = useSession();
+  // Switching to the add sheet swaps the search box: put focus in the new one.
+  const shownMode = useRef(mode);
+  useEffect(() => {
+    if (shownMode.current === mode) return;
+    shownMode.current = mode;
+    if (open) searchRef.current?.focus();
+  }, [mode, open]);
   const choose = (hit: SearchHit) => {
     onOpenChange(false);
     // The search box opens the stock's page; signed out, login returns there, not to this tab.
@@ -62,7 +74,38 @@ export function TradeSheet({ open, onOpenChange, mode = 'trade' }: TradeSheetPro
             </p>
           )
         ) : (
-          <SearchBox ref={searchRef} inline onChoose={choose} />
+          <div className="grid gap-3">
+            {/*
+              A row opens the stock with its ticket; its + is a tap shortcut that adds it to the open
+              watchlist (NSTOCK-0476). The + cannot be a control inside a listbox option, so the
+              real control for every user is this button, which turns the sheet into the add sheet
+              (a tap there adds). Signed out there is no list yet, so it offers a log in instead.
+            */}
+            {addTo && onModeChange ? (
+              <Button
+                variant="secondary"
+                icon={<IconPlus size={16} />}
+                onClick={() => onModeChange('watchlist')}
+                className="min-h-11 justify-self-start"
+              >
+                {strings.phone.switchToAdd(addTo.listName)}
+              </Button>
+            ) : null}
+            {status === 'anonymous' ? (
+              <Link
+                to="/login"
+                search={{ redirect: '/watchlist' }}
+                onClick={() => onOpenChange(false)}
+                className={buttonVariants({
+                  variant: 'secondary',
+                  className: 'min-h-11 justify-self-start',
+                })}
+              >
+                {strings.phone.logInToAdd}
+              </Link>
+            ) : null}
+            <SearchBox ref={searchRef} inline onChoose={choose} addTo={addTo} />
+          </div>
         )}
       </div>
     </Sheet>

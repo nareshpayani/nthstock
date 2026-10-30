@@ -9,7 +9,8 @@ import {
   moversQuery,
   resolveMoversIndex,
 } from '@/features/movers';
-import type { DashboardSearch } from './dashboardSearch';
+import { instrumentQuery } from '@/features/stockDetail';
+import { DEFAULT_HOME_CHART_SYMBOL, type DashboardSearch } from './dashboardSearch';
 
 /**
  * Route loader work: start every section's first request while the page chunk downloads. Not
@@ -21,9 +22,12 @@ export function prefetchDashboard(
   api: ApiClient,
   search: DashboardSearch,
 ): void {
+  const stock = search.stock ?? DEFAULT_HOME_CHART_SYMBOL;
+  const charted = stock === 'NIFTY50' ? NIFTY : { symbol: stock, exchange: 'NSE' as const };
+  if (stock !== 'NIFTY50') void queryClient.prefetchQuery(instrumentQuery(api, charted));
   void queryClient.prefetchQuery(
     candlesQuery(api, {
-      ...NIFTY,
+      ...charted,
       range: search.range ?? DEFAULT_CHART_RANGE,
       interval: search.interval,
     }),

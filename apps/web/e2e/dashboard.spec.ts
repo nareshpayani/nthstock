@@ -182,7 +182,7 @@ test('dashboard screenshot at 1440 px (T-100)', async ({ page, browser }, testIn
     .getByRole('complementary', { name: 'Watchlist and search' })
     .boundingBox();
   const hero = await box('Good morning');
-  const chart = await box(/^NIFTY 50/);
+  const chart = await box(/^Trade HDFCBANK/);
   const indices = await box('Market indices');
   const lists = await box('Stocks lists');
   const movers = await box('Market movers');

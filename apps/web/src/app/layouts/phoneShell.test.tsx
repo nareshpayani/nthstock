@@ -381,4 +381,13 @@ describe('phone app shell (NSTOCK-0466)', () => {
     expect(within(sheet).getByRole('status')).toHaveTextContent('not loaded yet');
     expect(within(sheet).queryByRole('combobox')).toBeNull();
   });
+
+  it('signed out, the Trade sheet offers a log in to start a watchlist (NSTOCK-0476)', async () => {
+    renderPhone('/dashboard', { signedIn: false });
+    fireEvent.click(await screen.findByRole('button', { name: /^Trade:/ }));
+    const sheet = await screen.findByRole('dialog', { name: 'Trade' });
+    expect(
+      within(sheet).getByRole('link', { name: 'Log in to add stocks to your watchlist' }),
+    ).toHaveAttribute('href', '/login?redirect=%2Fwatchlist');
+  });
 });

@@ -1,7 +1,15 @@
 import { Faker, base, en, en_IN } from '@faker-js/faker';
 import type { Instrument } from '@nthstock/contracts';
 import { INDEX_ETFS, INDEX_ETF_POINTS_PER_RUPEE, TICK_SIZE_PAISE } from '@nthstock/contracts';
-import { LISTED_COMPANIES, NIFTY_50, NIFTY_BANK, NIFTY_IT, SENSEX_30 } from './largeCaps.js';
+import {
+  LATE_LISTINGS,
+  LISTED_COMPANIES,
+  NIFTY_50,
+  NIFTY_BANK,
+  NIFTY_IT,
+  SENSEX_30,
+  type ListedCompany,
+} from './largeCaps.js';
 import { roundToTick } from './price.js';
 import {
   hashSeed,
@@ -93,6 +101,8 @@ const INDEX_DEFS = [
 
 /** Tokens for indices start here so they never collide with equity tokens. */
 export const INDEX_TOKEN_BASE = 900_001;
+/** Tokens for late listings (`LATE_LISTINGS`) start here, clear of ranked equities and indices. */
+export const LATE_TOKEN_BASE = 800_001;
 /** Tokens for the tracking ETFs start here, clear of equities and indices. */
 export const ETF_TOKEN_BASE = 950_001;
 /** Units of each ETF outstanding: sets its depth and day volume, not its price. */
@@ -148,8 +158,8 @@ type Draft = Omit<MasterEquity, 'rank' | 'instrument'> & {
   name: string;
 };
 
-function listedDrafts(rng: Rng): Draft[] {
-  return LISTED_COMPANIES.map(([symbol, name, sector, priceRupees, capCrore, divBp, pe]) => {
+function listedDrafts(rng: Rng, companies: readonly ListedCompany[] = LISTED_COMPANIES): Draft[] {
+  return companies.map(([symbol, name, sector, priceRupees, capCrore, divBp, pe]) => {
     const basePrice = roundToTick(priceRupees * 100);
     return {
       symbol,
@@ -241,6 +251,20 @@ export function generateSymbolMaster(options: SymbolMasterOptions = {}): SymbolM
     rank,
     instrument: equityInstrument(rank + 1, symbol, name, rest.sector),
   }));
+  // Late listings: their own stream and tokens, after the ranked equities (see LATE_LISTINGS).
+  const late = listedDrafts(mulberry32(hashSeed(seed, 'late')), LATE_LISTINGS);
+  for (const draft of late) {
+    // A late listing must be new: a clash would give one symbol two tokens.
+    if (taken.has(draft.symbol)) throw new Error(`Late listing ${draft.symbol} is already listed`);
+    taken.add(draft.symbol);
+  }
+  late.forEach(({ symbol, name, ...rest }, i) => {
+    equities.push({
+      ...rest,
+      rank: equities.length,
+      instrument: equityInstrument(LATE_TOKEN_BASE + i, symbol, name, rest.sector),
+    });
+  });
   const equityBySymbol = new Map(equities.map((e) => [e.instrument.symbol, e]));
 
   const midcap100 = equities

@@ -1,12 +1,17 @@
+import { createTradingStore } from '@nthstock/apiClient';
+import type { AccountState, Position } from '@nthstock/contracts';
 import { fixedClock, fromIst } from '@nthstock/utils';
-import { fireEvent, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { chartsMock } from '@/test/chartsMock';
 import { createMockApi } from '@/test/mockApi';
 import { renderApp } from '@/test/renderApp';
 import { installResizeObserver } from '@/test/resizeObserver';
+import { initialTicketIntentState, useTicketIntentStore } from '@/shared/lib/ticketIntentStore';
 import { resetSession, signIn, testSession } from '@/test/session';
+import { HOME_CHART_SYMBOLS } from '../model/dashboardSearch';
+import { strings } from '../strings';
 
 vi.mock('lightweight-charts', () => import('@/test/chartsMock'));
 
@@ -21,6 +26,7 @@ beforeEach(() => {
 afterEach(() => {
   vi.unstubAllGlobals();
   resetSession();
+  useTicketIntentStore.setState(initialTicketIntentState);
 });
 
 /** A market session whose clock reads the given IST time on Friday 25 Sep 2026. */
@@ -37,22 +43,139 @@ const candleRanges = () =>
   api.requestsTo('/NIFTY50/candles').map((url) => url.searchParams.get('range'));
 
 describe('dashboard URL state', () => {
+  it('Home chart Buy and Sell open the ticket for the charted stock, with chart trading on', async () => {
+    signIn(testSession());
+    renderApp('/dashboard', { apiClient: api.apiClient });
+    const home = await screen.findByRole('region', { name: 'Trade HDFCBANK from the chart' });
+    // The trading overlay (order lines, drag to price) is on the Home chart (NSTOCK-0476).
+    await waitFor(() => expect(home.querySelector('[data-testid="chart-overlay"]')).not.toBeNull());
+    fireEvent.click(within(home).getByRole('button', { name: 'Sell HDFCBANK' }));
+    await waitFor(() =>
+      expect(useTicketIntentStore.getState().intent).toMatchObject({
+        symbol: 'HDFCBANK',
+        exchange: 'NSE',
+        side: 'SELL',
+      }),
+    );
+  });
+
+  it('Home chart shows the open position for the charted stock, and nothing while flat', async () => {
+    const hdfc = await api.apiClient.request('instrument', {
+      params: { symbol: 'HDFCBANK' },
+      query: { exchange: 'NSE' },
+    });
+    const position: Position = {
+      token: hdfc.token,
+      symbol: 'HDFCBANK',
+      exchange: 'NSE',
+      product: 'INTRADAY',
+      netQty: 5,
+      buyQty: 5,
+      sellQty: 0,
+      avgBuyPrice: 160_000,
+      avgSellPrice: 0,
+      ltp: 160_000,
+      realisedPnl: 0,
+      unrealisedPnl: 0,
+    };
+    const account = (positions: Position[]): AccountState => ({
+      seq: 1,
+      orders: [],
+      positions,
+      trailingStops: [],
+      funds: {
+        openingBalance: 100_000_000,
+        balance: 100_000_000,
+        blocked: 0,
+        available: 100_000_000,
+        realisedPnlToday: 0,
+        asOf: '2026-09-25T10:30:00.000Z',
+      },
+    });
+    const render = async (positions: Position[]) => {
+      const tradingStore = createTradingStore({
+        loadState: () => Promise.resolve(account(positions)),
+        schedule: (flush) => queueMicrotask(flush),
+      });
+      signIn(testSession());
+      const view = renderApp('/dashboard', { apiClient: api.apiClient, tradingStore });
+      const home = await screen.findByRole('region', { name: 'Trade HDFCBANK from the chart' });
+      await act(() => tradingStore.start());
+      return { view, home, tradingStore };
+    };
+
+    const open = await render([position]);
+    expect(
+      await within(open.home).findByRole('region', { name: 'Your HDFCBANK position' }),
+    ).toHaveTextContent('+5');
+    open.view.unmount();
+    open.tradingStore.dispose();
+
+    const flat = await render([]);
+    expect(within(flat.home).queryByTestId('position-strip')).not.toBeInTheDocument();
+    flat.view.unmount();
+    flat.tradingStore.dispose();
+  });
+
+  it('reads the Home stock from the URL, drops an unknown one, and switches back', async () => {
+    const view = renderApp('/dashboard?stock=RELIANCE', { apiClient: api.apiClient });
+    await screen.findByRole('region', { name: 'Trade RELIANCE from the chart' });
+    fireEvent.click(screen.getByRole('radio', { name: 'HDFC Bank' }));
+    await waitFor(() => expect(view.router.state.location.search).toEqual({ stock: 'HDFCBANK' }));
+    expect(
+      await screen.findByRole('region', { name: 'Trade HDFCBANK from the chart' }),
+    ).toBeInTheDocument();
+    view.unmount();
+
+    const unknown = renderApp('/dashboard?stock=FOO', { apiClient: api.apiClient });
+    expect(
+      await screen.findByRole('region', { name: 'Trade HDFCBANK from the chart' }),
+    ).toBeInTheDocument();
+    expect(unknown.router.state.location.search).toEqual({});
+  });
+
+  it('the route keeps every Home chart symbol in the URL', async () => {
+    for (const stock of HOME_CHART_SYMBOLS) {
+      const view = renderApp(`/dashboard?stock=${stock}`, { apiClient: api.apiClient });
+      expect(
+        await screen.findByRole('radio', { name: strings.homeChart.symbolNames[stock] }),
+      ).toBeChecked();
+      expect(view.router.state.location.search).toEqual({ stock });
+      view.unmount();
+    }
+  });
+
+  it('opens on HDFCBANK to trade from the chart; the picker swaps to Paytm (NSTOCK-0476)', async () => {
+    const { router } = renderApp('/dashboard', { apiClient: api.apiClient });
+    await screen.findByRole('region', { name: 'Trade HDFCBANK from the chart' });
+    fireEvent.click(screen.getByRole('radio', { name: 'Paytm' }));
+    await waitFor(() => expect(router.state.location.search).toEqual({ stock: 'PAYTM' }));
+    const paytm = await screen.findByRole('region', { name: 'Trade PAYTM from the chart' });
+    expect(within(paytm).getByRole('link', { name: 'One97 Communications Ltd' })).toHaveAttribute(
+      'href',
+      '/stocks/PAYTM',
+    );
+    expect(within(paytm).getByRole('button', { name: 'Sell PAYTM' })).toBeInTheDocument();
+  });
+
   it('drops an invalid range from the URL and falls back to 1 day', async () => {
-    const { router } = renderApp('/dashboard?range=2Y', { apiClient: api.apiClient });
+    const { router } = renderApp('/dashboard?stock=NIFTY50&range=2Y', { apiClient: api.apiClient });
     expect(
       await screen.findByRole('figure', { name: 'NIFTY 50 line chart over 1 day' }),
     ).toBeInTheDocument();
-    expect(router.state.location.search).toEqual({});
+    expect(router.state.location.search).toEqual({ stock: 'NIFTY50' });
   });
 
   it('reads the chart range from the URL and writes it back when a range is picked', async () => {
-    const { router } = renderApp('/dashboard?range=1M', { apiClient: api.apiClient });
+    const { router } = renderApp('/dashboard?stock=NIFTY50&range=1M', { apiClient: api.apiClient });
     expect(
       await screen.findByRole('figure', { name: 'NIFTY 50 line chart over 1 month' }),
     ).toBeInTheDocument();
     expect(candleRanges()).toContain('1M');
     fireEvent.click(screen.getByRole('radio', { name: '5Y' }));
-    await waitFor(() => expect(router.state.location.search).toEqual({ range: '5Y' }));
+    await waitFor(() =>
+      expect(router.state.location.search).toEqual({ stock: 'NIFTY50', range: '5Y' }),
+    );
     await waitFor(() => expect(candleRanges()).toContain('5Y'));
   });
 
@@ -60,7 +183,9 @@ describe('dashboard URL state', () => {
     api.requestsTo('/NIFTY50/candles').map((url) => url.searchParams.get('interval'));
 
   it('reads the bar size and chart type from the URL (NSTOCK-0443)', async () => {
-    renderApp('/dashboard?range=1D&interval=5m&chart=candle', { apiClient: api.apiClient });
+    renderApp('/dashboard?stock=NIFTY50&range=1D&interval=5m&chart=candle', {
+      apiClient: api.apiClient,
+    });
     expect(
       await screen.findByRole('figure', {
         name: 'NIFTY 50 candlestick chart over 1 day, 5-minute bars',
@@ -73,15 +198,21 @@ describe('dashboard URL state', () => {
   });
 
   it('writes a picked bar size and chart type back to the URL (NSTOCK-0443)', async () => {
-    const { router } = renderApp('/dashboard', { apiClient: api.apiClient });
+    const { router } = renderApp('/dashboard?stock=NIFTY50', { apiClient: api.apiClient });
     await screen.findByRole('figure', { name: 'NIFTY 50 line chart over 1 day' });
     fireEvent.click(screen.getByRole('radio', { name: '15-minute bars' }));
-    await waitFor(() => expect(router.state.location.search).toEqual({ interval: '15m' }));
+    await waitFor(() =>
+      expect(router.state.location.search).toEqual({ stock: 'NIFTY50', interval: '15m' }),
+    );
     await waitFor(() => expect(candleIntervals()).toContain('15m'));
     fireEvent.keyDown(screen.getByRole('button', { name: 'Chart type: Line' }), { key: 'Enter' });
     fireEvent.click(await screen.findByRole('menuitemradio', { name: /^OHLC/ }));
     await waitFor(() =>
-      expect(router.state.location.search).toEqual({ interval: '15m', chart: 'bar' }),
+      expect(router.state.location.search).toEqual({
+        stock: 'NIFTY50',
+        interval: '15m',
+        chart: 'bar',
+      }),
     );
     expect(
       await screen.findByRole('figure', {
@@ -91,25 +222,33 @@ describe('dashboard URL state', () => {
   });
 
   it('drops an invalid bar size and chart type (NSTOCK-0443)', async () => {
-    const { router } = renderApp('/dashboard?interval=7m&chart=pie', {
+    const { router } = renderApp('/dashboard?stock=NIFTY50&interval=7m&chart=pie', {
       apiClient: api.apiClient,
     });
     expect(
       await screen.findByRole('figure', { name: 'NIFTY 50 line chart over 1 day' }),
     ).toBeInTheDocument();
-    expect(router.state.location.search).toEqual({});
+    expect(router.state.location.search).toEqual({ stock: 'NIFTY50' });
     expect(candleIntervals()).toEqual(['1m']);
   });
 
   it('keeps a bar size the next range offers and drops one it does not (NSTOCK-0443)', async () => {
-    const { router } = renderApp('/dashboard?interval=15m', { apiClient: api.apiClient });
+    const { router } = renderApp('/dashboard?stock=NIFTY50&interval=15m', {
+      apiClient: api.apiClient,
+    });
     await screen.findByRole('figure', { name: /NIFTY 50 line chart over 1 day/ });
     fireEvent.click(screen.getByRole('radio', { name: '1W' }));
     await waitFor(() =>
-      expect(router.state.location.search).toEqual({ range: '1W', interval: '15m' }),
+      expect(router.state.location.search).toEqual({
+        stock: 'NIFTY50',
+        range: '1W',
+        interval: '15m',
+      }),
     );
     fireEvent.click(screen.getByRole('radio', { name: '1Y' }));
-    await waitFor(() => expect(router.state.location.search).toEqual({ range: '1Y' }));
+    await waitFor(() =>
+      expect(router.state.location.search).toEqual({ stock: 'NIFTY50', range: '1Y' }),
+    );
   });
 
   it('opens the curated list named in the URL and writes the tab back', async () => {
@@ -150,9 +289,11 @@ describe('dashboard URL state', () => {
 describe('dashboard on MSW data (T-100)', () => {
   it('renders every section from the mock API with no errors', async () => {
     renderApp('/dashboard', { apiClient: api.apiClient, marketSession: at(16) });
-    expect(
-      await screen.findByRole('figure', { name: 'NIFTY 50 line chart over 1 day' }),
-    ).toBeInTheDocument();
+    // The first chart is a stock to trade on: HDFCBANK unless the URL picks another (NSTOCK-0476).
+    const homeChart = await screen.findByRole('region', { name: 'Trade HDFCBANK from the chart' });
+    expect(await within(homeChart).findByRole('figure')).toBeInTheDocument();
+    expect(within(homeChart).getByRole('button', { name: 'Buy HDFCBANK' })).toBeInTheDocument();
+    expect(screen.getByRole('radio', { name: 'HDFC Bank' })).toBeChecked();
     const indices = await screen.findByRole('region', { name: 'Market indices' });
     await waitFor(() =>
       expect(within(indices).getAllByRole('listitem').length).toBeGreaterThanOrEqual(5),
@@ -207,7 +348,7 @@ describe('section error isolation (T-099)', () => {
         ),
       ),
     );
-    renderApp('/dashboard', { apiClient: api.apiClient, marketSession: at(16) });
+    renderApp('/dashboard?stock=NIFTY50', { apiClient: api.apiClient, marketSession: at(16) });
     const alert = await screen.findByRole('alert');
     expect(alert).toHaveTextContent('Movers unavailable');
     expect(section('Market movers')).toContainElement(alert);
@@ -226,7 +367,7 @@ describe('section error isolation (T-099)', () => {
   it('shows a skeleton per section while its data loads', async () => {
     // Hold every market request so the sections stay in their loading state.
     api.server.use(http.get('*/v1/market/*', () => new Promise<never>(() => undefined)));
-    renderApp('/dashboard', { apiClient: api.apiClient, marketSession: at(16) });
+    renderApp('/dashboard?stock=NIFTY50', { apiClient: api.apiClient, marketSession: at(16) });
     expect(await screen.findByRole('status', { name: 'Loading chart' })).toBeInTheDocument();
     expect(screen.getByRole('status', { name: /^Loading .*indices/i })).toBeInTheDocument();
     expect(screen.getByRole('status', { name: /^Loading .*Market Giants/ })).toBeInTheDocument();

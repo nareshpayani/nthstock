@@ -1,12 +1,13 @@
 import { Instrument } from '@nthstock/contracts';
 import { describe, expect, it } from 'vitest';
-import { LISTED_COMPANIES } from './largeCaps.js';
+import { LATE_LISTINGS, LISTED_COMPANIES } from './largeCaps.js';
 import {
   DEFAULT_SEED,
   INDEX_TOKEN_BASE,
   allInstruments,
   generateSymbolMaster,
   marketCapBucket,
+  LATE_TOKEN_BASE,
 } from './symbolMaster.js';
 
 // This package is isomorphic (no Node types); the timing test only needs process.cpuUsage.
@@ -80,9 +81,11 @@ describe('generateSymbolMaster', () => {
   });
 
   it('orders equities by market cap with tokens following rank, indices on their own range', () => {
+    const ranked = master.equities.length - LATE_LISTINGS.length;
     master.equities.forEach((e, i) => {
       expect(e.rank).toBe(i);
-      expect(e.instrument.token).toBe(i + 1);
+      // Late listings follow the ranked equities on their own token range.
+      expect(e.instrument.token).toBe(i < ranked ? i + 1 : LATE_TOKEN_BASE + i - ranked);
     });
     expect(master.indices[0]?.instrument.token).toBe(INDEX_TOKEN_BASE);
     expect(master.indexBySymbol.get('SENSEX')?.instrument.exchange).toBe('BSE');
@@ -100,10 +103,25 @@ describe('generateSymbolMaster', () => {
     );
   });
 
+  it('adds late listings after the ranked equities without moving any earlier token', () => {
+    const master = generateSymbolMaster({ equityCount: 300 });
+    const paytm = master.equityBySymbol.get('PAYTM');
+    expect(paytm?.instrument).toMatchObject({
+      token: LATE_TOKEN_BASE,
+      name: 'One97 Communications Ltd',
+      type: 'EQUITY',
+    });
+    expect(paytm?.rank).toBe(300);
+    const ranked = master.equities.slice(0, 300);
+    expect(ranked.map((e) => e.instrument.token)).toEqual(ranked.map((_, i) => i + 1));
+  });
+
   it('honours a smaller equity count but never drops the hand-listed companies', () => {
-    expect(generateSymbolMaster({ equityCount: 300 }).equities).toHaveLength(300);
+    expect(generateSymbolMaster({ equityCount: 300 }).equities).toHaveLength(
+      300 + LATE_LISTINGS.length,
+    );
     expect(generateSymbolMaster({ equityCount: 10 }).equities).toHaveLength(
-      LISTED_COMPANIES.length,
+      LISTED_COMPANIES.length + LATE_LISTINGS.length,
     );
   });
 });
