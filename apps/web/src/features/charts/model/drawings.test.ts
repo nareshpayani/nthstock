@@ -2,11 +2,12 @@ import type { Candle } from '@nthstock/contracts';
 import { describe, expect, it } from 'vitest';
 import {
   barIndex,
+  drawingPrices,
   fibPrices,
   formatSpan,
+  keepsEscape,
   logicalToTime,
   measure,
-  keepsEscape,
   parseDrawings,
   priceStep,
   snapToBar,
@@ -80,35 +81,42 @@ describe('chart drawings (NSTOCK-0461)', () => {
   });
 });
 
-describe('keyboard point helpers (NSTOCK-0468)', () => {
-  it('never steps under one 5-paise tick, even for no span or a bad one', () => {
+describe('keyboard placement helpers (NSTOCK-0468)', () => {
+  it('steps prices by about a fiftieth of the view, in 1, 2 or 5 times a power of ten', () => {
+    expect(priceStep(15_000)).toBe(500);
+    expect(priceStep(5_000)).toBe(100);
+    expect(priceStep(7_000)).toBe(200);
+    expect(priceStep(60_000)).toBe(2_000);
+    expect(priceStep(-15_000)).toBe(500);
+  });
+
+  it('never steps under one 5-paise tick, nor on an empty or broken span', () => {
+    expect(priceStep(100)).toBe(5);
     expect(priceStep(0)).toBe(5);
     expect(priceStep(Number.NaN)).toBe(5);
     expect(priceStep(Number.POSITIVE_INFINITY)).toBe(5);
-    expect(priceStep(100)).toBe(5);
   });
 
-  it('rounds a fiftieth of the span up to 1, 2 or 5 times a power of ten', () => {
-    expect(priceStep(500)).toBe(10); // 10 -> 1 x 10
-    expect(priceStep(1_100)).toBe(50); // 22 -> 5 x 10
-    expect(priceStep(2_500)).toBe(50); // 50 -> 5 x 10
-    expect(priceStep(5_200)).toBe(200); // 104 -> 2 x 100
-    expect(priceStep(-5_200)).toBe(200); // a span is a distance
-    expect(priceStep(100_000)).toBe(2_000);
+  it('names the prices each drawing sits on', () => {
+    const at = { time: T0, price: 10_000 };
+    const to = { time: T0 + 300, price: 10_500 };
+    expect(drawingPrices({ id: 'a', kind: 'horizontal', at })).toEqual([10_000]);
+    expect(drawingPrices({ id: 'b', kind: 'text', at, text: 'x' })).toEqual([10_000]);
+    expect(drawingPrices({ id: 'c', kind: 'trend', from: at, to })).toEqual([10_000, 10_500]);
   });
+});
 
-  it('keeps Escape for fields, selects, open menus and their items', () => {
-    const input = document.createElement('input');
-    const select = document.createElement('select');
-    const expanded = document.createElement('button');
-    expanded.setAttribute('aria-expanded', 'true');
-    const menu = document.createElement('div');
-    menu.setAttribute('role', 'menu');
-    const item = document.createElement('div');
-    menu.append(item);
-    const plain = document.createElement('div');
-    for (const element of [input, select, expanded, item]) expect(keepsEscape(element)).toBe(true);
-    expect(keepsEscape(plain)).toBe(false);
+describe('keepsEscape', () => {
+  it('leaves Escape to text fields, selects, open menus and expanded controls', () => {
+    document.body.innerHTML = `
+      <input id="field" /><textarea id="area"></textarea><select id="pick"></select>
+      <button id="open" aria-expanded="true"></button>
+      <div role="menu"><button id="item"></button></div>
+      <div role="listbox"><div id="option"></div></div>
+      <button id="plain"></button>`;
+    for (const id of ['field', 'area', 'pick', 'open', 'item', 'option'])
+      expect(keepsEscape(document.getElementById(id))).toBe(true);
+    expect(keepsEscape(document.getElementById('plain'))).toBe(false);
     expect(keepsEscape(window)).toBe(false);
     expect(keepsEscape(null)).toBe(false);
   });

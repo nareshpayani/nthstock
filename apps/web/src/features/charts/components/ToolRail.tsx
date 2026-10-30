@@ -6,7 +6,7 @@ import {
   cn,
   useTouchTargets,
 } from '@nthstock/ui';
-import { forwardRef, useState, type ComponentPropsWithoutRef, type ReactNode } from 'react';
+import { forwardRef, useRef, useState, type ComponentPropsWithoutRef, type ReactNode } from 'react';
 import { formatChartValue, type ChartValueFormat } from '../model/chartFormat';
 import { DRAWING_TOOLS, drawingPrices, type Drawing, type DrawingTool } from '../model/drawings';
 import { isUnprotected, useDrawings, useSymbolDrawings } from '../model/drawingsStore';
@@ -145,6 +145,9 @@ export function ToolRail({
   const drawings = useSymbolDrawings(symbol);
   const count = drawings.length;
   const [removed, setRemoved] = useState('');
+  // Removing the last drawing disables the list button, so focus goes to the crosshair instead.
+  const cursorRef = useRef<HTMLButtonElement>(null);
+  const emptiedRef = useRef(false);
   const canRestore = useDrawings((state) => state.cleared[symbol] !== undefined);
   // Shown from the first read when the stored value can't be kept safe, before any edit.
   const unsaved = useDrawings((state) => state.unsaved[symbol] === true) || isUnprotected(symbol);
@@ -160,6 +163,7 @@ export function ToolRail({
         style={height ? { maxHeight: height } : undefined}
       >
         <RailButton
+          ref={cursorRef}
           label={strings.drawing.cursor}
           pressed={tool === null}
           touch={touch}
@@ -205,27 +209,37 @@ export function ToolRail({
         </RailButton>
         {/* Every drawing by name, each removable from the keyboard (NSTOCK-0468). */}
         <DropdownMenu modal={false}>
-          <DropdownMenuTrigger asChild>
+          <DropdownMenuTrigger asChild disabled={count === 0}>
             <RailButton
               label={strings.drawing.list.button(count)}
+              disabled={count === 0}
               touch={touch}
               data-testid="drawings-list"
             >
               {GLYPHS.list}
             </RailButton>
           </DropdownMenuTrigger>
-          <DropdownMenuContent side="right" align="end">
-            {count === 0 ? (
-              <DropdownMenuItem disabled>{strings.drawing.list.empty}</DropdownMenuItem>
-            ) : null}
+          <DropdownMenuContent
+            side="right"
+            align="end"
+            onCloseAutoFocus={(event) => {
+              if (!emptiedRef.current) return;
+              emptiedRef.current = false;
+              event.preventDefault();
+              cursorRef.current?.focus();
+            }}
+          >
             {drawings.map((drawing) => {
               const name = drawingName(drawing, format);
               return (
                 <DropdownMenuItem
                   key={drawing.id}
                   onSelect={() => {
+                    emptiedRef.current = count === 1;
                     remove(symbol, drawing.id);
-                    setRemoved(strings.drawing.list.removed(name));
+                    const text = strings.drawing.list.removed(name);
+                    // Said again when two drawings of the same name go in a row.
+                    setRemoved((last) => (last === text ? `${text}\u200b` : text));
                   }}
                 >
                   {strings.drawing.list.remove(name)}

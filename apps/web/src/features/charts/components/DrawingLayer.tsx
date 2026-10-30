@@ -82,6 +82,9 @@ export function DrawingLayer({ handle, candles, symbol, format }: DrawingLayerPr
   const [cursor, setCursor] = useState<{ index: number; price: number } | null>(null);
   const [keyboard, setKeyboard] = useState(false);
   const [said, setSaid] = useState('');
+  // The same words twice in a row (the first or last bar, two lines of one kind) are said again:
+  // a zero-width space makes the second differ.
+  const announce = (text: string) => setSaid((last) => (last === text ? `${text}\u200b` : text));
   const surfaceRef = useRef<HTMLDivElement>(null);
   const howToId = useId();
 
@@ -156,20 +159,19 @@ export function DrawingLayer({ handle, candles, symbol, format }: DrawingLayerPr
     return magnet ? snapToBar(point, candles) : point;
   };
 
-  /** True when the tool acted; a zoom between points under two bars apart does nothing. */
-  const finish = (from: ChartPoint, to: ChartPoint): boolean => {
+  const finish = (from: ChartPoint, to: ChartPoint) => {
     if (tool === 'measure') {
       setMeasured({ from, to });
     } else if (tool === 'zoom') {
       const a = timeToLogical(candles, from.time);
       const b = timeToLogical(candles, to.time);
-      if (Math.abs(b - a) < 2) return false;
-      chart.timeScale().setVisibleLogicalRange({ from: Math.min(a, b), to: Math.max(a, b) });
+      if (Math.abs(b - a) >= 2) {
+        chart.timeScale().setVisibleLogicalRange({ from: Math.min(a, b), to: Math.max(a, b) });
+      }
     } else if (tool === 'trend' || tool === 'ray' || tool === 'fib') {
       add(symbol, { id: newId(), kind: tool, from, to });
     }
     setTool(null);
-    return true;
   };
 
   const onPointerDown = (event: PointerEvent<SVGSVGElement>) => {
@@ -251,7 +253,7 @@ export function DrawingLayer({ handle, candles, symbol, format }: DrawingLayerPr
     if (tool === 'horizontal') {
       add(symbol, { id: newId(), kind: 'horizontal', at: point });
       setTool(null);
-      setSaid(strings.drawing.keyboard.placed(name));
+      announce(strings.drawing.keyboard.placed(name));
       return;
     }
     if (tool === 'text') {
@@ -266,16 +268,20 @@ export function DrawingLayer({ handle, candles, symbol, format }: DrawingLayerPr
       setStart(point);
       setEnd(point);
       const { time, price } = describePoint(point);
-      setSaid(strings.drawing.keyboard.startPlaced(time, price));
+      announce(strings.drawing.keyboard.startPlaced(time, price));
       return;
     }
-    if (!finish(first, point)) {
-      // Too close to zoom to: the tool stays armed with its start where it was.
-      setSaid(strings.drawing.keyboard.tooClose);
+    // A zoom needs two bars between its ends; the first point stays for another try.
+    if (
+      tool === 'zoom' &&
+      Math.abs(timeToLogical(candles, point.time) - timeToLogical(candles, first.time)) < 2
+    ) {
+      announce(strings.drawing.keyboard.tooClose);
       return;
     }
+    finish(first, point);
     // The measure read-out speaks for the measure tool.
-    if (tool !== 'measure') setSaid(strings.drawing.keyboard.placed(name));
+    if (tool !== 'measure') announce(strings.drawing.keyboard.placed(name));
   };
 
   const onKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
@@ -324,7 +330,7 @@ export function DrawingLayer({ handle, candles, symbol, format }: DrawingLayerPr
     if (!point) return;
     if (startRef.current) setEnd(point);
     const { time, price } = describePoint(point);
-    setSaid(strings.drawing.keyboard.at(time, price));
+    announce(strings.drawing.keyboard.at(time, price));
   };
 
   const onSurfaceFocus = () => {
@@ -336,7 +342,7 @@ export function DrawingLayer({ handle, candles, symbol, format }: DrawingLayerPr
     if (!point) return;
     if (startRef.current) setEnd(point);
     const { time, price } = describePoint(point);
-    setSaid(strings.drawing.keyboard.at(time, price));
+    announce(strings.drawing.keyboard.at(time, price));
   };
   const onSurfaceBlur = (event: FocusEvent<HTMLDivElement>) => {
     // Focus going to the note box opened from here keeps the plot a tab stop to come back to.
@@ -409,7 +415,7 @@ export function DrawingLayer({ handle, candles, symbol, format }: DrawingLayerPr
               x2={x(keyboardPoint.time)}
               y1={0}
               y2={height}
-              stroke={colors.ink}
+              stroke={colors['ink-muted']}
               strokeDasharray="4 3"
             />
             <line
@@ -417,7 +423,7 @@ export function DrawingLayer({ handle, candles, symbol, format }: DrawingLayerPr
               x2={width}
               y1={y(keyboardPoint.price)}
               y2={y(keyboardPoint.price)}
-              stroke={colors.ink}
+              stroke={colors['ink-muted']}
               strokeDasharray="4 3"
             />
             <circle
@@ -425,7 +431,7 @@ export function DrawingLayer({ handle, candles, symbol, format }: DrawingLayerPr
               cy={y(keyboardPoint.price)}
               r={5}
               fill={colors.surface}
-              stroke={colors.ink}
+              stroke={LINE}
               strokeWidth={2}
             />
           </g>

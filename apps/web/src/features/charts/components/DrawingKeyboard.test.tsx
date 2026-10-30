@@ -52,9 +52,13 @@ const stored = () => JSON.parse(window.localStorage.getItem(drawingsStorageKey('
 let resizer: ReturnType<typeof installResizeObserver>;
 beforeAll(() => {
   resizer = installResizeObserver();
+  // jsdom has no pointer capture; put a stub in and take it out again after.
   Element.prototype.setPointerCapture = vi.fn();
 });
-afterAll(() => vi.unstubAllGlobals());
+afterAll(() => {
+  Reflect.deleteProperty(Element.prototype, 'setPointerCapture');
+  vi.unstubAllGlobals();
+});
 
 beforeEach(() => {
   window.localStorage.clear();
@@ -194,14 +198,31 @@ describe('placing drawings from the keyboard (NSTOCK-0468)', () => {
     expect(setVisibleLogicalRange).toHaveBeenCalledWith({ from: 0, to: 29 });
   });
 
-  it('says so and keeps the zoom tool when the two points are under two bars apart', () => {
+  it('says when the zoom ends are too close and keeps the first point', () => {
     const { setVisibleLogicalRange } = renderTools();
     pickAndFocus('Zoom to an area');
     press('Enter');
+    press('ArrowLeft');
     press('Enter');
     expect(setVisibleLogicalRange).not.toHaveBeenCalled();
+    expect(said()).toMatch(/^Too close to zoom/);
     expect(useDrawings.getState().tool).toBe('zoom');
-    expect(screen.getByTestId('keyboard-readout')).toHaveTextContent(/too close/);
+    press('ArrowLeft');
+    press('Enter');
+    expect(setVisibleLogicalRange).toHaveBeenCalledWith({ from: 27, to: 29 });
+  });
+
+  it('says the point again at the last bar, where a move changes nothing', () => {
+    renderTools();
+    pickAndFocus('Horizontal line');
+    // Focus said the last bar already; each further press at the edge must still change the text.
+    const before = said();
+    press('ArrowRight');
+    const after = said();
+    expect(after).not.toBe(before);
+    expect(after.replace('\u200b', '')).toBe(before.replace('\u200b', ''));
+    press('ArrowRight');
+    expect(said()).not.toBe(after);
   });
 
   it('opens a note box at the point and returns focus to the plot after it', () => {
@@ -238,7 +259,7 @@ describe('placing drawings from the keyboard (NSTOCK-0468)', () => {
   it('lists the drawings in the rail and removes one by keyboard', async () => {
     renderTools();
     const list = screen.getByRole('button', { name: 'Drawings on this chart (0)' });
-    expect(list).toBeEnabled();
+    expect(list).toBeDisabled();
     pickAndFocus('Horizontal line');
     press('Enter');
     pickAndFocus('Trend line');
@@ -257,24 +278,15 @@ describe('placing drawings from the keyboard (NSTOCK-0468)', () => {
     expect(screen.getByText('Removed Horizontal line, ₹1,505.00')).toBeInTheDocument();
   });
 
-  it('says there are no drawings when the list is opened empty', async () => {
-    renderTools();
-    fireEvent.keyDown(screen.getByRole('button', { name: 'Drawings on this chart (0)' }), {
-      key: 'Enter',
-    });
-    expect(await screen.findByRole('menuitem', { name: 'No drawings yet' })).toBeInTheDocument();
-  });
-
-  it('keeps the drawings button enabled after the last drawing is removed, so focus has a home', async () => {
+  it('moves focus to the crosshair when the last drawing is removed', async () => {
     renderTools();
     pickAndFocus('Horizontal line');
     press('Enter');
     const trigger = screen.getByRole('button', { name: 'Drawings on this chart (1)' });
+    act(() => trigger.focus());
     fireEvent.keyDown(trigger, { key: 'Enter' });
     fireEvent.click(await screen.findByRole('menuitem'));
-    const empty = screen.getByRole('button', { name: 'Drawings on this chart (0)' });
-    expect(empty).toBeEnabled();
-    await waitFor(() => expect(document.body).not.toBe(document.activeElement));
+    await waitFor(() => expect(screen.getByRole('button', { name: /^Crosshair/ })).toHaveFocus());
   });
 
   it('names index levels in points on the index chart', async () => {
