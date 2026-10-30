@@ -156,7 +156,7 @@ dragged and the page scrolled; `e2e/chartTradingPerf.spec.ts`):
 | --------------------------------------- | --------------------------------------------------------------------------------- | --------------------------- |
 | Frame time p50 / p95 / p99, unthrottled | 16.7 / 16.7 / 16.8 ms (607 frames in 10 s)                                        | p95 within one 60 fps frame |
 | Price updates on screen                 | 31 a second                                                                       | n/a                         |
-| Longest animation frame at 4× CPU       | Enforced in CI's "Web vitals and render budgets" job; it sits near the budget and a slow runner has gone 2 to 12 ms over (#744) | 50 ms                       |
+| Longest animation frame at 4× CPU       | Enforced in CI; near the budget, a slow runner has gone 2 to 12 ms over (#744)    | 50 ms                       |
 
 The drag moves the line, tab and loupe with transforms only. No React render runs per pointer
 move, so the drag itself never makes a long frame.
