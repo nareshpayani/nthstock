@@ -61,6 +61,8 @@ export type DrawingsState = {
   toggleMagnet: () => void;
   drawingsFor: (symbol: string) => Drawing[];
   add: (symbol: string, drawing: Drawing) => void;
+  /** Removes one drawing, by id (the drawings list, NSTOCK-0468). */
+  remove: (symbol: string, id: string) => void;
   undo: (symbol: string) => void;
   clear: (symbol: string) => void;
 };
@@ -98,6 +100,14 @@ export const useDrawings = create<DrawingsState>()((set, get) => {
         set({ cleared: without(get().cleared, symbol) });
       }
       save(symbol, [...get().drawingsFor(symbol), drawing]);
+    },
+    remove: (symbol, id) => {
+      save(
+        symbol,
+        get()
+          .drawingsFor(symbol)
+          .filter((drawing) => drawing.id !== id),
+      );
     },
     undo: (symbol) => {
       const drawings = get().drawingsFor(symbol);

@@ -101,6 +101,26 @@ export const strings = {
     noteLabel: 'Note text',
     bars: 'bars',
     draw: 'Draw',
+    /** Placing points from the keyboard (NSTOCK-0468). */
+    keyboard: {
+      plot: 'Chart plot',
+      noTool: 'Pick a drawing tool, then come back here to place it with the keyboard',
+      howTo:
+        'Arrow keys move the point by a bar or a price step, Shift moves faster, Home and End go to the first and last bar. Enter places the point, Escape drops the tool.',
+      at: (time: string, price: string) => `${time}, ${price}`,
+      startPlaced: (time: string, price: string) =>
+        `Start placed at ${time}, ${price}. Move to the end and press Enter`,
+      placed: (tool: string) => `${tool} placed`,
+      tooClose: 'Too close to zoom: move at least two bars from the first point, then press Enter',
+    },
+    list: {
+      button: (count: number) => `Drawings on this chart (${String(count)})`,
+      empty: 'No drawings yet',
+      remove: (name: string) => `Remove ${name}`,
+      line: (tool: string, prices: string) => `${tool}, ${prices}`,
+      note: (text: string, price: string) => `note "${text}" at ${price}`,
+      removed: (name: string) => `Removed ${name}`,
+    },
   },
   /** The full-screen chart (NSTOCK-0461). */
   fullscreen: {

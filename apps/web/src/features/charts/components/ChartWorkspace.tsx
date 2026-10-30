@@ -1,6 +1,7 @@
 import { IconButton, IconClose } from '@nthstock/ui';
 import { useEffect, useRef, useState, type ReactNode, type RefObject } from 'react';
 import { createPortal } from 'react-dom';
+import type { ChartValueFormat } from '../model/chartFormat';
 import { keepsEscape } from '../model/drawings';
 import { useDrawings } from '../model/drawingsStore';
 import { strings } from '../strings';
@@ -40,6 +41,8 @@ export type ChartWorkspaceProps = {
   name: string;
   /** The symbol whose drawings the rail edits. */
   symbol: string;
+  /** Rupees or index points, for the drawings list. */
+  format?: ChartValueFormat;
   /** Chart type, indicators and bar size, in the header row. */
   controls: ReactNode;
   /** The ranges, under the chart. */
@@ -64,6 +67,7 @@ export type ChartWorkspaceProps = {
 export function ChartWorkspace({
   name,
   symbol,
+  format = 'inr',
   controls,
   footer,
   onClose,
@@ -135,7 +139,7 @@ export function ChartWorkspace({
         </div>
       </div>
       <div className="flex min-h-0 flex-1 gap-1">
-        <ToolRail symbol={symbol} touch height={height} className="shrink-0" />
+        <ToolRail symbol={symbol} touch height={height} format={format} className="shrink-0" />
         <div ref={bodyRef} className="relative min-h-0 min-w-0 flex-1">
           {height > 0 ? children(height) : null}
         </div>

@@ -191,6 +191,7 @@ export function IndexChartCard({
     <ChartWorkspace
       name={strings.niftyTitle}
       symbol={NIFTY.symbol}
+      format="index"
       controls={
         <>
           {onChartTypeChange ? (
@@ -362,7 +363,7 @@ export function IndexChartCard({
       </div>
       {/* The drawing tools down the plot's left side on desktop; phones get them full screen. */}
       <div className="flex gap-2">
-        {phone ? null : <ToolRail symbol={NIFTY.symbol} height={CHART_HEIGHT} />}
+        {phone ? null : <ToolRail symbol={NIFTY.symbol} height={CHART_HEIGHT} format="index" />}
         <div aria-busy={candles.isFetching} className="relative min-w-0 flex-1">
           {chart && candles.data && !expanded ? <ChartZoomControls chart={chart.chart} /> : null}
           {candles.isError && !candles.data ? (
