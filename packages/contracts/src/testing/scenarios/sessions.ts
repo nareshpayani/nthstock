@@ -9,7 +9,7 @@ import type { CookieSnapshot } from '../cookieJar.js';
  * first device's cookies are kept to check that a revoked session really ends.
  */
 
-const T0 = '2026-11-03T04:00:00.000Z';
+const T0 = '2030-11-05T04:00:00.000Z';
 const PIN = '4821';
 
 type Device = { cookies: CookieSnapshot; session: Session };

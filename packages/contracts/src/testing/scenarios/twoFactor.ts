@@ -17,7 +17,7 @@ import { defineScenarios, type ScenarioClient } from '../harness.js';
  * are the ones the backend expects; `advanceTime` moves both on together.
  */
 
-const T0 = '2026-11-02T04:00:00.000Z';
+const T0 = '2030-11-04T04:00:00.000Z';
 const PIN = '482105';
 
 /** The scenario's view of the backend clock (it runs on from `setTime`; codes allow ±1 step). */

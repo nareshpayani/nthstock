@@ -14,7 +14,7 @@ import { defineScenarios, type ScenarioClient } from '../harness.js';
  * its data is erased.
  */
 
-const T0 = '2026-11-04T04:00:00.000Z';
+const T0 = '2030-11-06T04:00:00.000Z';
 const PIN = '4821';
 const DAY_MS = 24 * 60 * 60 * 1000;
 
