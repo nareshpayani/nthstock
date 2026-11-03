@@ -655,7 +655,7 @@ editing secrets or generated files).
 | Issues | `NSTOCK-0001 : create login flow`, one counter for epics, stories and bugs; stories are sub-issues of their epic. T-181 = NSTOCK-0181; epics E1 to E21 = NSTOCK-0245 to 0265 |
 | Commits and PR titles | `feat(NSTOCK-0001): create login flow` (also `fix`, `docs`, `chore`, `perf`, `test`, `refactor`); squash merge makes the PR title the commit |
 | PR body | `.github/pull_request_template.md`: before/after, how tested, one `Closes #N` per completed issue (`Refs #N` otherwise); UI PRs get screenshots at 1440 and 390 px automatically |
-| Attribution | Work is credited to Naresh Payani. No AI tool names, co-author trailers or "Generated with" footers in commits, branch names, PR text, comments, issues or deploy messages. Exceptions: `WRITEUP.md`, `DESIGN.md`'s AI note and documentation pages may name the tools used |
+| Attribution | Work is credited to Naresh Payani. No AI tool names, co-author trailers or "Generated with" footers in commits, branch names, PR text, comments, issues or deploy messages. Exceptions that may name the AI tools used: `WRITEUP.md` (TFC-05, 22 Oct), the `/guide` documentation page (owner, 24 Oct) and `DESIGN.md`'s one-line AI note (asked for by the craft-round brief) |
 | Quality gate | `npm run check` (format, lint, typecheck, tests, build) before every PR |
 | Dependencies | Exact versions; no paid service or dependency outside the approved stack without asking; close Dependabot PRs that bump TypeScript a major version |
 
