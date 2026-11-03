@@ -4,7 +4,8 @@ An Indian stock-market investing and paper-trading platform on mock NSE/BSE data
 Fastify API and a realtime WebSocket server. Paper trading only; no real money.
 
 Start with [CLAUDE.md](./CLAUDE.md) for scope, decisions and conventions, and
-[docs/README.md](./docs/README.md) for the product, architecture, ADRs, specs and runbooks.
+[docs/README.md](./docs/README.md) for the product, architecture, ADRs, specs and runbooks. For
+the whole application in one file, read [docs/application-context.md](./docs/application-context.md).
 
 ## Getting started
 

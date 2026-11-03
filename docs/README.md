@@ -2,6 +2,7 @@
 
 | Document | What it covers |
 |---|---|
+| [application-context.md](application-context.md) | **Start here.** One-file context for the whole application: product, architecture, domain, data, security, design, CI/CD, agents, conventions, status |
 | [product.md](product.md) | Vision, scope, non-functional targets, phased plan, compliance notes |
 | [architecture.md](architecture.md) | Architecture, stacks, security baseline, repository map |
 | [adr/](adr/) | Architecture decision records, one per decision |
