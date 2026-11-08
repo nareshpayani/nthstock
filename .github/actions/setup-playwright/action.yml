@@ -16,7 +16,9 @@ runs:
       uses: actions/cache@v6
       with:
         path: ~/.cache/ms-playwright
-        key: playwright-${{ runner.os }}-${{ steps.version.outputs.playwright }}-${{ inputs.browsers }}
+        # ImageOS (ubuntu24, ubuntu26...) is in the key because Playwright downloads a WebKit build per
+        # distro; a build cached on an older ubuntu-latest image fails to load libicudata on a newer one.
+        key: playwright-${{ runner.os }}-${{ env.ImageOS }}-${{ steps.version.outputs.playwright }}-${{ inputs.browsers }}
     # A cache hit still needs the OS packages, which live outside the cache.
     - if: steps.cache.outputs.cache-hit == 'true'
       shell: bash
