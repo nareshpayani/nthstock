@@ -275,11 +275,12 @@ describe('dashboard URL state', () => {
         api.requestsTo('/market/movers').map((url) => url.searchParams.get('index')),
       ).toContain('NIFTYIT'),
     );
-    fireEvent.click(screen.getByRole('radio', { name: 'Bank' }));
+    fireEvent.click(await screen.findByRole('radio', { name: 'Bank' }));
     await waitFor(() =>
       expect(router.state.location.search).toEqual({ movers: 'losers', moversIndex: 'NIFTYBANK' }),
     );
-    fireEvent.mouseDown(screen.getByRole('tab', { name: 'Top gainers' }));
+    // The route may show its pending skeleton while the new search loads, so wait for the tabs.
+    fireEvent.mouseDown(await screen.findByRole('tab', { name: 'Top gainers' }));
     await waitFor(() =>
       expect(router.state.location.search).toEqual({ movers: 'gainers', moversIndex: 'NIFTYBANK' }),
     );
