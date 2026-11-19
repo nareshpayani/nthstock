@@ -22,7 +22,18 @@ runs:
     # A cache hit still needs the OS packages, which live outside the cache.
     - if: steps.cache.outputs.cache-hit == 'true'
       shell: bash
-      run: npx playwright install-deps ${{ inputs.browsers }}
+      run: |
+        # Ubuntu mirrors drop connections now and then ("Could not wait for server fd"); retry the apt step.
+        for attempt in 1 2 3; do
+          npx playwright install-deps ${{ inputs.browsers }} && exit 0
+          echo "::warning::install-deps attempt $attempt failed"; sleep $((attempt * 10))
+        done
+        exit 1
     - if: steps.cache.outputs.cache-hit != 'true'
       shell: bash
-      run: npx playwright install --with-deps ${{ inputs.browsers }}
+      run: |
+        for attempt in 1 2 3; do
+          npx playwright install --with-deps ${{ inputs.browsers }} && exit 0
+          echo "::warning::playwright install attempt $attempt failed"; sleep $((attempt * 10))
+        done
+        exit 1
